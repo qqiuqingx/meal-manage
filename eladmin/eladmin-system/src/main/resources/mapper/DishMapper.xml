@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="me.zhengjie.modules.meal.mapper.DishMapper">
+    <resultMap id="BaseResultMap" type="me.zhengjie.modules.meal.domain.Dish">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="cooking_method" property="cookingMethod"/>
+        <result column="ingredients" property="ingredients"/>
+        <result column="image_url" property="imageUrl"/>
+        <result column="dish_type" property="dishType"/>
+        <result column="meal_types" property="mealTypes" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="meal_packages" property="mealPackages" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="schedule" property="schedule" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="sort" property="sort"/>
+        <result column="enabled" property="enabled"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, name, cooking_method, ingredients, image_url, dish_type, meal_types, meal_packages, schedule, sort, enabled, create_time, update_time
+    </sql>
+
+    <select id="findAll" resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from dish
+        <where>
+            <if test="criteria.name != null">
+                and name like concat('%',#{criteria.name},'%')
+            </if>
+            <if test="criteria.dishType != null">
+                and dish_type = #{criteria.dishType}
+            </if>
+            <if test="criteria.mealType != null">
+                and JSON_CONTAINS(meal_types, CONCAT('"', #{criteria.mealType}, '"')) = 1
+            </if>
+            <if test="criteria.mealPackage != null">
+                and JSON_CONTAINS(meal_packages, CONCAT('"', #{criteria.mealPackage}, '"')) = 1
+            </if>
+            <if test="criteria.enabled != null">
+                and enabled = #{criteria.enabled}
+            </if>
+        </where>
+        order by sort asc, id desc
+    </select>
+
+    <select id="findBySchedule" resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from dish
+        where enabled = 1
+        <if test="week != null and day != null">
+            and JSON_CONTAINS(schedule, CONCAT('"', #{week}, '-', #{day}, '"')) = 1
+        </if>
+        <if test="mealType != null">
+            and JSON_CONTAINS(meal_types, CONCAT('"', #{mealType}, '"')) = 1
+        </if>
+        order by sort asc
+    </select>
+
+    <select id="findAvailableByCustomerId" resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from dish
+        where enabled = 1
+        <if test="mealType != null">
+            and JSON_CONTAINS(meal_types, CONCAT('"', #{mealType}, '"')) = 1
+        </if>
+        <if test="week != null and day != null">
+            and JSON_CONTAINS(schedule, CONCAT('"', #{week}, '-', #{day}, '"')) = 1
+        </if>
+        order by sort asc
+    </select>
+</mapper>
