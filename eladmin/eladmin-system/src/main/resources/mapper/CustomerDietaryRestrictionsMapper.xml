@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="me.zhengjie.modules.meal.mapper.CustomerDietaryRestrictionsMapper">
+    <resultMap id="BaseResultMap" type="me.zhengjie.modules.meal.domain.CustomerDietaryRestrictions">
+        <id column="id" property="id"/>
+        <result column="customer_name" property="customerName"/>
+        <result column="special_needs" property="specialNeeds"/>
+        <result column="restrictions" property="restrictions" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="update_date" property="updateDate"/>
+        <result column="created_at" property="createAt"/>
+        <result column="updated_at" property="updateAt"/>
+        <result column="create_time" property="createTime"/>
+        <result column="num" property="num"/>
+        <result column="start_date" property="startDate"/>
+        <result column="end_date" property="endDate"/>
+        <result column="customer_address" property="customerAddress"/>
+        <result column="phone" property="phone"/>
+        <result column="remaining_meals" property="remainingMeals"/>
+        <result column="meal_package" property="mealPackage"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, customer_name, special_needs, restrictions, update_date, created_at, updated_at, create_time, num, start_date, end_date, customer_address, phone, remaining_meals, meal_package
+    </sql>
+
+    <select id="findAll" resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from customer_dietary_restrictions
+        <where>
+            <if test="criteria.customerName != null">
+                and customer_name like concat('%',#{criteria.customerName},'%')
+            </if>
+            <if test="criteria.specialNeeds != null">
+                and special_needs like concat('%',#{criteria.specialNeeds},'%')
+            </if>
+            <if test="criteria.restrictions != null">
+                and restrictions like concat('%',#{criteria.restrictions},'%')
+            </if>
+            <if test="criteria.num != null">
+                and num = #{criteria.num}
+            </if>
+            <if test="criteria.customerAddress != null">
+                and customer_address like concat('%',#{criteria.customerAddress},'%')
+            </if>
+            <if test="criteria.phone != null">
+                and phone like concat('%',#{criteria.phone},'%')
+            </if>
+            <if test="criteria.remainingMeals != null">
+                and remaining_meals = #{criteria.remainingMeals}
+            </if>
+            <if test="criteria.mealPackage != null">
+                and meal_package = #{criteria.mealPackage}
+            </if>
+            <if test="criteria.startDate != null">
+                and start_date &gt;= #{criteria.startDate}
+            </if>
+            <if test="criteria.endDate != null">
+                and end_date &lt;= #{criteria.endDate}
+            </if>
+        </where>
+        order by id desc
+    </select>
+</mapper>
