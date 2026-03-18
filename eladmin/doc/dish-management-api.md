@@ -1,0 +1,856 @@
+# 菜品管理接口文档
+
+## 概述
+
+菜品管理模块用于管理菜品基本信息，支持按餐次、类型、套餐筛选，并提供根据客户忌口自动过滤菜品的接口。
+
+## 数据模型
+
+### 实体：Dish
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | Integer | 否 | 主键，自增 |
+| name | String | 是 | 菜品名称 |
+| cookingMethod | String | 否 | 做法/流程 |
+| ingredients | String | 否 | 配料（自由文本） |
+| ingredientList | List<DishIngredientDto> | 否 | 配料列表（含用量和单位） |
+| imageUrl | String | 否 | 图片路径 |
+| dishType | String | 是 | 菜品类型：MAIN(主菜)、SIDE(副菜)、SOUP(汤)、VEGETABLE(素菜)、RICE(米饭) |
+| mealTypes | List<String> | 是 | 餐次：LUNCH(午餐)、DINNER(晚餐) |
+| mealPackages | List<String> | 否 | 所属套餐：yuezi、yunqi、xiaoyuezi、yingyang、fenmian |
+| schedule | List<String> | 否 | 排期，格式如 ["1-1", "1-2", "2-3"] 表示第1周周一、第1周周二、第2周周三 |
+| sort | Integer | 否 | 排序，数字越小越靠前 |
+| enabled | Boolean | 否 | 是否启用，默认 true |
+| createTime | Timestamp | 否 | 创建时间 |
+| updateTime | Timestamp | 否 | 更新时间 |
+
+### 实体：DishIngredientDto（菜品配料关联）
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| ingredientId | Integer | 是 | 配料ID |
+| ingredientName | String | 否 | 配料名称 |
+| quantity | Double | 否 | 用量 |
+| unit | String | 否 | 单位（克、毫升、个） |
+| remark | String | 否 | 备注 |
+
+---
+
+## 接口列表
+
+### 1. 菜品列表查询
+
+```
+GET /api/dishes
+```
+
+**请求参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | String | 否 | 菜品名称（模糊匹配） |
+| dishType | String | 否 | 菜品类型 |
+| mealType | String | 否 | 餐次：LUNCH / DINNER |
+| mealPackage | String | 否 | 套餐代码 |
+| enabled | Boolean | 否 | 是否启用 |
+| page | Integer | 否 | 页码，默认 0 |
+| size | Integer | 否 | 每页数量，默认 10 |
+
+**响应示例：**
+
+```json
+{
+  "content": [
+    {
+      "id": 1,
+      "name": "红烧肉",
+      "cookingMethod": "五花肉切块，先炒糖色，再加酱油炖煮1小时",
+      "ingredients": "五花肉、冰糖、酱油、葱姜蒜、八角",
+      "imageUrl": "/uploads/dish/2026/03/14/red-pork.jpg",
+      "dishType": "MAIN",
+      "mealTypes": ["LUNCH", "DINNER"],
+      "mealPackages": ["yuezi", "yingyang"],
+      "schedule": ["1-1", "1-2", "2-1", "2-2"],
+      "sort": 1,
+      "enabled": true,
+      "ingredientList": [
+        {
+          "ingredientId": 2,
+          "ingredientName": "五花肉",
+          "quantity": 300,
+          "unit": "克",
+          "remark": "带皮的"
+        },
+        {
+          "ingredientId": 6,
+          "ingredientName": "冰糖",
+          "quantity": 30,
+          "unit": "克",
+          "remark": ""
+        }
+      ],
+      "createTime": "2026-03-14T10:00:00Z",
+      "updateTime": "2026-03-14T10:00:00Z"
+    }
+  ],
+  "totalElements": 1
+}
+```
+
+---
+
+### 2. 菜品详情
+
+```
+GET /api/dishes/{id}
+```
+
+**路径参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | Integer | 菜品ID |
+
+**响应示例：**
+
+```json
+{
+  "id": 1,
+  "name": "红烧肉",
+  "cookingMethod": "五花肉切块，先炒糖色，再加酱油炖煮1小时",
+  "ingredients": "五花肉、冰糖、酱油、葱姜蒜、八角",
+  "imageUrl": "/uploads/dish/2026/03/14/red-pork.jpg",
+  "dishType": "MAIN",
+  "mealTypes": ["LUNCH", "DINNER"],
+  "mealPackages": ["yuezi", "yingyang"],
+  "schedule": ["1-1", "1-2", "2-1", "2-2"],
+  "sort": 1,
+  "enabled": true,
+  "ingredientList": [
+    {
+      "ingredientId": 2,
+      "ingredientName": "五花肉",
+      "quantity": 300,
+      "unit": "克",
+      "remark": "带皮的"
+    },
+    {
+      "ingredientId": 6,
+      "ingredientName": "冰糖",
+      "quantity": 30,
+      "unit": "克",
+      "remark": ""
+    }
+  ],
+  "createTime": "2026-03-14T10:00:00Z",
+  "updateTime": "2026-03-14T10:00:00Z"
+}
+```
+
+---
+
+### 3. 新增菜品
+
+```
+POST /api/dishes
+```
+
+**请求体：**
+
+```json
+{
+  "name": "清蒸鲈鱼",
+  "cookingMethod": "鲈鱼洗净，加葱姜丝，蒸10分钟",
+  "ingredients": "鲈鱼、葱、姜、蒸鱼豉油",
+  "imageUrl": "/uploads/dish/2026/03/14/steamed-fish.jpg",
+  "dishType": "MAIN",
+  "mealTypes": ["LUNCH", "DINNER"],
+  "mealPackages": ["yuezi", "yunqi", "yingyang"],
+  "schedule": ["1-3", "2-3", "3-3", "4-3"],
+  "sort": 5,
+  "enabled": true,
+  "ingredientList": [
+    {
+      "ingredientId": 1,
+      "ingredientName": "鲈鱼",
+      "quantity": 500,
+      "unit": "克",
+      "remark": "新鲜的"
+    },
+    {
+      "ingredientId": 5,
+      "ingredientName": "葱",
+      "quantity": 20,
+      "unit": "克",
+      "remark": ""
+    }
+  ]
+}
+```
+
+**字段说明：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| ingredientList | List | 否 | 配料列表，支持设置每个配料的用量 |
+
+**响应：** 201 Created，返回菜品详情
+
+---
+
+### 4. 更新菜品
+
+```
+PUT /api/dishes/{id}
+```
+
+**路径参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | Integer | 菜品ID |
+
+**请求体：** 同新增
+
+**响应：** 200 OK，返回更新后的菜品详情
+
+---
+
+### 5. 删除菜品
+
+```
+DELETE /api/dishes
+```
+
+**请求体：**
+
+```json
+[1, 2, 3]
+```
+
+**响应：** 204 No Content
+
+---
+
+### 6. 获取客户可用菜品（根据忌口过滤）
+
+```
+GET /api/dishes/available
+```
+
+**请求参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| customerId | Integer | 是 | 客户ID |
+| mealType | String | 是 | 餐次：LUNCH / DINNER |
+| week | Integer | 否 | 周数：1-4 |
+| day | Integer | 否 | 星期：1-7 |
+
+**逻辑说明：**
+
+1. 根据 customerId 查询客户忌口列表（`customer_dietary_restrictions.restrictions`）
+2. 过滤规则：菜品的 `ingredients` 字段中若包含任一忌口词，则不返回该菜品
+3. 若传了 week 和 day，则额外按排期筛选
+
+**响应示例：**
+
+```json
+[
+  {
+    "id": 1,
+    "name": "清蒸鲈鱼",
+    "dishType": "MAIN",
+    "mealTypes": ["LUNCH", "DINNER"],
+    "ingredients": "鲈鱼、葱、姜、蒸鱼豉油",
+    "imageUrl": "/uploads/dish/2026/03/14/steamed-fish.jpg"
+  }
+]
+```
+
+---
+
+### 7. 按排期查询菜品
+
+```
+GET /api/dishes/schedule
+```
+
+**请求参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| week | Integer | 是 | 周数：1-4 |
+| day | Integer | 是 | 星期：1-7 |
+| mealType | String | 否 | 餐次：LUNCH / DINNER |
+
+**响应示例：**
+
+```json
+[
+  {
+    "id": 1,
+    "name": "红烧肉",
+    "dishType": "MAIN",
+    "mealTypes": ["LUNCH", "DINNER"],
+    "imageUrl": "/uploads/dish/2026/03/14/red-pork.jpg"
+  },
+  {
+    "id": 2,
+    "name": "炒青菜",
+    "dishType": "VEGETABLE",
+    "mealTypes": ["DINNER"],
+    "imageUrl": "/uploads/dish/2026/03/14/vegetables.jpg"
+  }
+]
+```
+
+---
+
+### 8. 生成排餐结果并保存记录
+
+```
+POST /api/dishes/schedule/{date}?mealType=ALL&customerId=1
+```
+
+**路径参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| date | String | 是 | 日期，格式：yyyy-MM-dd（如：2026-03-16） |
+
+**请求参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| mealType | String | 否 | 餐次：LUNCH（午餐）、DINNER（晚餐）、ALL（全部，默认） |
+| customerId | Integer | 否 | 客户ID，不传则为所有生效客户，传入则只为指定客户排餐 |
+
+**功能说明：**
+
+1. 根据日期计算周数和星期
+2. 查找对应套餐的菜品菜单
+3. 若传入 customerId，则只为指定客户排餐；否则为所有生效客户排餐
+4. 处理忌口替换
+5. **保存排餐记录到数据库**
+
+**错误情况：**
+
+- 若没有生效的客户（剩余餐数为0或日期不在服务范围内），返回 400 错误：
+  ```json
+  {
+    "status": 400,
+    "message": "该日期没有生效的客户，无法生成排餐计划"
+  }
+  ```
+- 若指定了 customerId 但该客户在该日期不生效：
+  ```json
+  {
+    "status": 400,
+    "message": "客户ID 123 在该日期没有生效的餐食计划"
+  }
+  ```
+
+**响应示例：**
+
+```json
+{
+  "date": "2026-03-16",
+  "week": 2,
+  "day": 1,
+  "menuByPackage": {
+    "yuezi": {
+      "lunch": {
+        "MAIN": { "id": 1, "name": "红烧肉", "ingredients": "五花肉、冰糖、酱油", "replaced": false },
+        "SIDE": { "id": 2, "name": "炒土豆丝", "replaced": false },
+        "SOUP": { "id": 3, "name": "玉米排骨汤", "replaced": false },
+        "VEGETABLE": { "id": 4, "name": "炒青菜", "replaced": false },
+        "RICE": { "id": 5, "name": "米饭", "replaced": false }
+      },
+      "dinner": { ... }
+    },
+    "yunqi": { ... }
+  },
+  "customers": [
+    {
+      "customerId": 1,
+      "customerName": "张三",
+      "mealPackage": "yuezi",
+      "restrictions": ["虾", "辣"],
+      "menu": {
+        "lunch": {
+          "MAIN": { "id": 6, "name": "清蒸鲈鱼", "replaced": true, "originalId": 1, "reason": "忌口虾" },
+          ...
+        },
+        "dinner": { ... }
+      }
+    }
+  ]
+}
+```
+
+---
+
+### 11. 获取首页排餐统计数据
+
+```
+GET /api/dishes/schedule/stats/{date}
+```
+
+**路径参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| date | String | 是 | 日期，格式：yyyy-MM-dd（如：2026-03-16） |
+
+**响应示例：**
+
+```json
+{
+  "date": "2026-03-16",
+  "lunch": {
+    "customerCount": 25,
+    "replacedCount": 2,
+    "menu": {
+      "MAIN": { "dishId": 1, "dishName": "红烧肉", "replacedCount": 1 },
+      "SIDE": { "dishId": 2, "dishName": "炒土豆丝", "replacedCount": 0 },
+      "SOUP": { "dishId": 3, "dishName": "玉米排骨汤", "replacedCount": 0 },
+      "VEGETABLE": { "dishId": 4, "dishName": "炒青菜", "replacedCount": 1 },
+      "RICE": { "dishId": 5, "dishName": "米饭", "replacedCount": 0 }
+    }
+  },
+  "dinner": {
+    "customerCount": 20,
+    "replacedCount": 1,
+    "menu": { ... }
+  }
+}
+```
+
+---
+
+### 12. 排餐记录列表查询（分页）
+
+```
+GET /api/dishes/schedule/list
+```
+
+**请求参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| startDate | String | 否 | 开始日期，格式：yyyy-MM-dd |
+| endDate | String | 否 | 结束日期，格式：yyyy-MM-dd |
+| customerId | Integer | 否 | 客户ID |
+| customerName | String | 否 | 客户名称（模糊查询） |
+| mealTypes | List<String> | 否 | 餐次列表：LUNCH / DINNER（可传多个） |
+| dishType | String | 否 | 套餐类型/菜品类型 |
+| page | Integer | 否 | 页码，默认 0 |
+| size | Integer | 否 | 每页数量，默认 10 |
+
+**响应示例：**
+
+```json
+{
+  "content": [
+    {
+      "recordId": 1,
+      "recordDate": "2026-03-16",
+      "mealType": "LUNCH",
+      "weekNum": 2,
+      "dayOfWeek": 1,
+      "customerCount": 25,
+      "createTime": "2026-03-16T08:00:00Z",
+      "customerMenus": [
+        {
+          "id": 1,
+          "customerId": 101,
+          "customerName": "张三",
+          "dishType": "MAIN",
+          "dishId": 1,
+          "dishName": "红烧肉",
+          "dishIngredients": "五花肉、冰糖、酱油",
+          "isReplaced": false,
+          "originalDishId": null,
+          "replacementReason": null
+        },
+        {
+          "id": 2,
+          "customerId": 101,
+          "customerName": "张三",
+          "dishType": "SIDE",
+          "dishId": 2,
+          "dishName": "炒土豆丝",
+          "dishIngredients": "土豆、辣椒",
+          "isReplaced": true,
+          "originalDishId": 3,
+          "replacementReason": "忌口辣"
+        }
+      ]
+    },
+    {
+      "recordId": 2,
+      "recordDate": "2026-03-16",
+      "mealType": "DINNER",
+      "weekNum": 2,
+      "dayOfWeek": 1,
+      "customerCount": 20,
+      "createTime": "2026-03-16T15:00:00Z",
+      "customerMenus": []
+    }
+  ],
+  "totalElements": 15
+}
+```
+
+**字段说明：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| recordId | Integer | 排餐记录ID |
+| recordDate | String | 排餐日期 |
+| mealType | String | 餐次：LUNCH（午餐）/ DINNER（晚餐） |
+| weekNum | Integer | 周数 |
+| dayOfWeek | Integer | 星期（1-7） |
+| customerCount | Integer | 客户数量 |
+| createTime | Timestamp | 创建时间 |
+| customerMenus | List | 客户菜单列表 |
+
+**CustomerMenuVO 字段说明：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | Integer | 客户菜单记录ID |
+| customerId | Integer | 客户ID |
+| customerName | String | 客户名称 |
+| dishType | String | 套餐类型/菜品类型 |
+| dishId | Integer | 菜品ID |
+| dishName | String | 菜品名称 |
+| dishIngredients | String | 配料 |
+| isReplaced | Boolean | 是否被替换 |
+| originalDishId | Integer | 原菜品ID（替换后有值） |
+| replacementReason | String | 替换原因 |
+
+---
+
+### 13. 菜品图片上传
+
+```
+POST /api/dishes/upload
+```
+
+**请求参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| file | File | 是 | 图片文件 |
+
+**响应：**
+
+```json
+{
+  "url": "/uploads/dish/2026/03/14/xxx.jpg"
+}
+```
+
+---
+
+## 枚举值参考
+
+### DishType（菜品类型）
+
+| 值 | 说明 |
+|------|------|
+| MAIN | 主菜 |
+| SIDE | 副菜 |
+| SOUP | 汤 |
+| VEGETABLE | 素菜 |
+| RICE | 米饭 |
+
+### MealType（餐次）
+
+| 值 | 说明 |
+|------|------|
+| LUNCH | 午餐 |
+| DINNER | 晚餐 |
+
+### MealPackage（套餐）
+
+| 值 | 说明 |
+|------|------|
+| yuezi | 月子餐 |
+| yunqi | 孕期餐 |
+| xiaoyuezi | 小月子 |
+| yingyang | 营养餐 |
+| fenmian | 分娩餐 |
+
+### Schedule（排期格式）
+
+| 格式 | 说明 |
+|------|------|
+| 1-1 | 第1周周一 |
+| 1-2 | 第1周周二 |
+| ... | ... |
+| 4-7 | 第4周周日 |
+
+---
+
+## 错误码
+
+| 码 | 说明 |
+|------|------|
+| 400 | 请求参数错误 |
+| 404 | 菜品不存在 |
+| 500 | 服务器内部错误 |
+
+---
+
+# 配料管理接口
+
+## 概述
+
+配料管理模块用于管理菜品配料信息，采用配料表+关联表的设计，支持配料独立管理、热量计算等功能。
+
+## 数据模型
+
+### 实体：DishIngredient
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | Integer | 否 | 主键，自增 |
+| name | String | 是 | 配料名称 |
+| category | String | 否 | 分类：MEAT(肉类)、VEGETABLE(蔬菜)、SEAFOOD(海鲜)、TOFU(豆制品)、SPICE(调料)、OTHER(其他) |
+| unit | String | 否 | 单位：克g、毫升ml、个 |
+| calories | Integer | 否 | 每单位热量（卡路里） |
+| remark | String | 否 | 备注 |
+| enabled | Boolean | 否 | 是否启用，默认 true |
+| createTime | Timestamp | 否 | 创建时间 |
+| updateTime | Timestamp | 否 | 更新时间 |
+
+### 实体：DishIngredientRelation
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | Integer | 否 | 主键，自增 |
+| dishId | Integer | 是 | 菜品ID |
+| ingredientId | Integer | 是 | 配料ID |
+| ingredientName | String | 否 | 配料名称（查询时返回） |
+| unit | String | 否 | 单位（查询时返回） |
+| quantity | Double | 否 | 用量 |
+| remark | String | 否 | 备注 |
+| createTime | Timestamp | 否 | 创建时间 |
+
+---
+
+## 接口列表
+
+### 1. 配料列表查询
+
+```
+GET /api/dish-ingredients
+```
+
+**请求参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | String | 否 | 配料名称（模糊匹配） |
+| category | String | 否 | 分类 |
+| enabled | Boolean | 否 | 是否启用 |
+| page | Integer | 否 | 页码，默认 0 |
+| size | Integer | 否 | 每页数量，默认 10 |
+
+**响应示例：**
+
+```json
+{
+  "content": [
+    {
+      "id": 1,
+      "name": "五花肉",
+      "category": "MEAT",
+      "unit": "克",
+      "calories": 240,
+      "remark": "",
+      "enabled": true,
+      "createTime": "2026-03-15T10:00:00Z",
+      "updateTime": "2026-03-15T10:00:00Z"
+    }
+  ],
+  "totalElements": 1
+}
+```
+
+---
+
+### 2. 配料详情
+
+```
+GET /api/dish-ingredients/{id}
+```
+
+**路径参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | Integer | 配料ID |
+
+**响应示例：**
+
+```json
+{
+  "id": 1,
+  "name": "五花肉",
+  "category": "MEAT",
+  "unit": "克",
+  "calories": 240,
+  "remark": "",
+  "enabled": true,
+  "createTime": "2026-03-15T10:00:00Z",
+  "updateTime": "2026-03-15T10:00:00Z"
+}
+```
+
+---
+
+### 3. 根据菜品ID查询配料
+
+```
+GET /api/dish-ingredients/dish/{dishId}
+```
+
+**路径参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| dishId | Integer | 菜品ID |
+
+**响应示例：**
+
+```json
+[
+  {
+    "id": 1,
+    "name": "五花肉",
+    "category": "MEAT",
+    "unit": "克",
+    "calories": 240,
+    "remark": "带皮",
+    "enabled": true
+  },
+  {
+    "id": 5,
+    "name": "冰糖",
+    "category": "SPICE",
+    "unit": "克",
+    "calories": 400,
+    "remark": "",
+    "enabled": true
+  }
+]
+```
+
+---
+
+### 4. 新增配料
+
+```
+POST /api/dish-ingredients
+```
+
+**请求体：**
+
+```json
+{
+  "name": "鸡胸肉",
+  "category": "MEAT",
+  "unit": "克",
+  "calories": 165,
+  "remark": "去皮",
+  "enabled": true
+}
+```
+
+**响应：** 201 Created
+
+---
+
+### 5. 更新配料
+
+```
+PUT /api/dish-ingredients
+```
+
+**请求体：**
+
+```json
+{
+  "id": 2,
+  "name": "鸡胸肉",
+  "category": "MEAT",
+  "unit": "克",
+  "calories": 165,
+  "remark": "去皮，建议使用",
+  "enabled": true
+}
+```
+
+**响应：** 204 No Content
+
+---
+
+### 6. 删除配料
+
+```
+DELETE /api/dish-ingredients
+```
+
+**请求体：**
+
+```json
+[1, 2, 3]
+```
+
+**响应：** 204 No Content
+
+---
+
+### 7. 导出配料数据
+
+```
+GET /api/dish-ingredients/download
+```
+
+**请求参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | String | 否 | 配料名称（模糊匹配） |
+| category | String | 否 | 分类 |
+| enabled | Boolean | 否 | 是否启用 |
+
+**响应：** Excel 文件下载
+
+---
+
+## 枚举值参考（配料）
+
+### IngredientCategory（配料分类）
+
+| 值 | 说明 |
+|------|------|
+| MEAT | 肉类 |
+| VEGETABLE | 蔬菜 |
+| SEAFOOD | 海鲜 |
+| TOFU | 豆制品 |
+| SPICE | 调料 |
+| OTHER | 其他 |
+
+### IngredientUnit（配料单位）
+
+| 值 | 说明 |
+|------|------|
+| 克 / g | 重量单位 |
+| 毫升 / ml | 体积单位 |
+| 个 | 数量单位 |
