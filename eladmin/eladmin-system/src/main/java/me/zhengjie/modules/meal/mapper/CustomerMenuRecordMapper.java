@@ -1,0 +1,14 @@
+package me.zhengjie.modules.meal.mapper;
+
+import me.zhengjie.modules.meal.domain.CustomerMenuRecord;
+import org.apache.ibatis.annotations.Mapper;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+
+/**
+ * 客户菜单记录 Mapper 接口
+ * @author qqx
+ * @date 2026-03-14
+ **/
+@Mapper
+public interface CustomerMenuRecordMapper extends BaseMapper<CustomerMenuRecord> {
+}
