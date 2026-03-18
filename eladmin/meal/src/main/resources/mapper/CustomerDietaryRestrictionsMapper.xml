@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="me.zhengjie.modules.mapper.CustomerDietaryRestrictionsMapper">
+    <resultMap id="BaseResultMap" type="me.zhengjie.modules.domain.CustomerDietaryRestrictions">
+        <id column="id" property="id"/>
+        <result column="customer_name" property="customerName"/>
+        <result column="special_needs" property="specialNeeds"/>
+        <result column="restrictions" property="restrictions"/>
+        <result column="order_date" property="orderDate"/>
+        <result column="update_date" property="updateDate"/>
+        <result column="created_at" property="createTime"/>
+        <result column="updated_at" property="updateTime"/>
+        <result column="created_by" property="createdBy"/>
+        <result column="updated_by" property="updatedBy"/>
+        <result column="num" property="num"/>
+        <result column="start_date" property="startDate"/>
+        <result column="end_date" property="endDate"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, customer_name, special_needs, restrictions, order_date, update_date, created_at, updated_at, created_by, updated_by, num, start_date, end_date
+    </sql>
+
+    <select id="findAll" resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from customer_dietary_restrictions
+        <where>
+            <if test="criteria.customerName != null">
+                and customer_name like concat('%',#{criteria.customerName},'%')
+            </if>
+            <if test="criteria.specialNeeds != null">
+                and special_needs like concat('%',#{criteria.specialNeeds},'%')
+            </if>
+            <if test="criteria.restrictions != null">
+                and restrictions like concat('%',#{criteria.restrictions},'%')
+            </if>
+            <if test="criteria.num != null">
+                and num = #{criteria.num}
+            </if>
+        </where>
+        order by id desc
+    </select>
+</mapper>
