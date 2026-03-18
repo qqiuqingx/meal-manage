@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="me.zhengjie.modules.meal.mapper.DishIngredientMapper">
+    <resultMap id="BaseResultMap" type="me.zhengjie.modules.meal.domain.DishIngredient">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="category" property="category"/>
+        <result column="unit" property="unit"/>
+        <result column="calories" property="calories"/>
+        <result column="remark" property="remark"/>
+        <result column="enabled" property="enabled"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <resultMap id="RelationResultMap" type="me.zhengjie.modules.meal.domain.DishIngredientRelation">
+        <id column="id" property="id"/>
+        <result column="dish_id" property="dishId"/>
+        <result column="ingredient_id" property="ingredientId"/>
+        <result column="quantity" property="quantity"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <!-- 配料详情 -->
+        <result column="ingredient_name" property="ingredientName"/>
+        <result column="unit" property="unit"/>
+    </resultMap>
+
+    <sql id="Relation_Column_List">
+        dir.id, dir.dish_id, dir.ingredient_id, dir.quantity, dir.remark, dir.create_time,
+        di.name as ingredient_name, di.unit
+    </sql>
+
+    <sql id="Base_Column_List">
+        id, name, category, unit, calories, remark, enabled, create_time, update_time
+    </sql>
+
+    <select id="findAll" resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from dish_ingredient
+        <where>
+            <if test="criteria.name != null">
+                and name like concat('%',#{criteria.name},'%')
+            </if>
+            <if test="criteria.category != null">
+                and category = #{criteria.category}
+            </if>
+            <if test="criteria.enabled != null">
+                and enabled = #{criteria.enabled}
+            </if>
+        </where>
+        order by id desc
+    </select>
+
+    <select id="findById" resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from dish_ingredient
+        where id = #{id}
+    </select>
+
+    <select id="findByDishId" resultMap="BaseResultMap">
+        select di.*
+        from dish_ingredient di
+        inner join dish_ingredient_relation dir on di.id = dir.ingredient_id
+        where dir.dish_id = #{dishId}
+        order by dir.id
+    </select>
+
+    <select id="findRelationsByDishId" resultMap="RelationResultMap">
+        select
+        <include refid="Relation_Column_List"/>
+        from dish_ingredient_relation dir
+        inner join dish_ingredient di on dir.ingredient_id = di.id
+        where dir.dish_id = #{dishId}
+        order by dir.id
+    </select>
+
+    <insert id="insertRelation" parameterType="me.zhengjie.modules.meal.domain.dto.DishIngredientDto">
+        insert into dish_ingredient_relation (dish_id, ingredient_id, quantity, remark, create_time)
+        values (#{dishId}, #{dto.ingredientId}, #{dto.quantity}, #{dto.remark}, now())
+    </insert>
+
+    <delete id="deleteRelationsByDishId">
+        delete from dish_ingredient_relation where dish_id = #{dishId}
+    </delete>
+</mapper>
