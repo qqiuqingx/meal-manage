@@ -17,6 +17,8 @@ mybatis-plus:
     cache-enabled: false
     # 设置本地缓存作用域
     local-cache-scope: SESSION
+  # 类型处理器所在包
+  type-handlers-package: com.baomidou.mybatisplus.extension.handlers
 
 spring:
   freemarker:
@@ -35,8 +37,8 @@ spring:
     #数据库索引
     database: ${REDIS_DB:1}
     host: ${REDIS_HOST:127.0.0.1}
-    port: ${REDIS_PORT:6379}
-    password: ${REDIS_PWD:}
+    port: ${REDIS_PORT:16379}
+    password: ${REDIS_PWD:change-me}
     #连接超时时间
     timeout: 5000
     # 连接池配置
