@@ -542,30 +542,42 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
      * - nextIndex: 下一个可分配候选在列表中的索引（递增式分配，保证不重复）
      */
     private static class ReplacementCacheEntry {
-        final List<Dish> candidates;
-        int nextIndex = 0;
-        ReplacementCacheEntry(List<Dish> candidates) { this.candidates = candidates; }
+        // 按排期距离升序排序的完整候选菜列表（不过滤忌口，供所有用户共享）
+        final List<Dish> sortedAll;
+        // 已分配给各忌口组的菜品 ID 集合（key = 排序后的 restrictionsKey，追踪该组已分配的菜品，避免重复）
+        final Map<String, Set<Integer>> takenDishIds = new LinkedHashMap<>();
+        ReplacementCacheEntry(List<Dish> sortedAll) { this.sortedAll = sortedAll; }
     }
 
     /**
-     * 生成替换菜品缓存的 Key
+     * 生成替换菜品缓存的 Key（不含忌口，所有用户共享同一份候选菜列表）
      */
-    private String makeReplacementCacheKey(int week, int day, String dishType, List<String> restrictions) {
-        String restrictionsKey = restrictions == null || restrictions.isEmpty()
+    private String makeReplacementCacheKey(int week, int day, String dishType) {
+        return week + "|" + day + "|" + dishType;
+    }
+
+    /**
+     * 为当前用户从缓存中分配一个可用的候选菜
+     * @return 分配的菜品（已从缓存中移除），如果没有则返回 null
+     */
+    private Dish pickFromCacheAndAssign(Map<String, ReplacementCacheEntry> cache, int week, int day, String dishType, List<String> restrictions) {
+        String cacheKey = makeReplacementCacheKey(week, day, dishType);
+        String restrictionsKey = (restrictions == null || restrictions.isEmpty())
             ? "" : restrictions.stream().sorted().collect(Collectors.joining(","));
-        return week + "|" + day + "|" + dishType + "|" + restrictionsKey;
-    }
-
-    /**
-     * 从缓存中获取下一个可用的候选菜（递增索引，保证不重复分配）
-     * @return 下一个候选菜，如果没有则返回 null
-     */
-    private Dish pickFromCache(Map<String, ReplacementCacheEntry> cache, String cacheKey) {
         ReplacementCacheEntry entry = cache.get(cacheKey);
-        if (entry == null || entry.nextIndex >= entry.candidates.size()) {
+        if (entry == null || entry.sortedAll.isEmpty()) {
             return null;
         }
-        return entry.candidates.get(entry.nextIndex++);
+        // 获取或初始化该忌口组的已分配记录
+        Set<Integer> taken = entry.takenDishIds.computeIfAbsent(restrictionsKey, k -> new HashSet<>());
+        // 过滤：排除含忌口的 + 已被本忌口组分配过的
+        for (Dish dish : entry.sortedAll) {
+            if (taken.contains(dish.getId())) continue;
+            if (containsRestriction(dish, restrictions)) continue;
+            taken.add(dish.getId());
+            return dish;
+        }
+        return null;
     }
 
     /**
@@ -573,14 +585,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
      * 优先选择排期最接近目标日的菜品（同一周内先检查目标日本身，再依次检查相邻天）
      */
     private DishScheduleResult.DishVO findReplacementDish(Dish replacedDish, List<Dish> allDishes, String dishType, int week, int day, List<String> restrictions, Map<String, ReplacementCacheEntry> cache) {
-        String cacheKey = makeReplacementCacheKey(week, day, dishType, restrictions);
+        String cacheKey = makeReplacementCacheKey(week, day, dishType);
 
-        // 优先尝试从缓存中获取下一个候选（索引式分配，同一 cacheKey 不重复分配相同菜品）
-        Dish cachedDish = pickFromCache(cache, cacheKey);
+        // ① 尝试从缓存分配（缓存中的候选菜已按排期排序，按顺序取第一个满足忌口且未被该组占用的菜）
+        Dish cachedDish = pickFromCacheAndAssign(cache, week, day, dishType, restrictions);
         if (cachedDish != null) {
-            log.info("[findReplacementDish] 缓存命中: dishType={}, replacedDish={}, nextIndex={}",
-                    dishType, replacedDish != null ? replacedDish.getName() : "null",
-                    cache.get(cacheKey).nextIndex);
+            log.info("[findReplacementDish] 缓存命中: dishType={}, replacedDish={}", dishType, replacedDish != null ? replacedDish.getName() : "null");
             DishScheduleResult.DishVO vo = DishScheduleResult.DishVO.fromDish(cachedDish);
             if (replacedDish != null) {
                 vo.setReplaced(true);
@@ -590,8 +600,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             return vo;
         }
 
-        // 缓存未命中：从 allDishes 中过滤候选菜（排除被替换菜品本身和含忌口的菜品）
-        // 生成当前周所有天数的 scheduleKey 列表，如 week=4 则 [4-1, 4-2, ..., 4-7]
+        // ② 缓存未命中或候选菜已耗尽：从 allDishes 过滤并排序，再写入缓存
         List<String> weekScheduleKeys = IntStream.rangeClosed(1, 7)
             .mapToObj(d -> week + "-" + d)
             .collect(Collectors.toList());
@@ -604,30 +613,35 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 return schedule.stream().anyMatch(weekScheduleKeys::contains);
             })
             .filter(d -> replacedDish == null || !d.getId().equals(replacedDish.getId()))
-            .filter(d -> !containsRestriction(d, restrictions))
             .collect(Collectors.toList());
 
         if (candidates.isEmpty()) {
             return null;
         }
 
-        // 预计算每个候选菜的排期天（该菜在这一周中第一次排的天），避免在 Comparator 中重复计算
+        // 预计算每个候选菜的排期天
         final int targetDay = day;
         Map<Dish, Integer> scheduleDayMap = candidates.stream()
             .collect(Collectors.toMap(d -> d, d -> firstScheduleDayOfWeek(d.getSchedule(), week)));
 
-        // 按与目标日的距离升序排，距离相同则按菜品ID排（保证同距离下顺序确定）
+        // 按排期距离升序，相同则按菜品ID排
         List<Dish> sorted = candidates.stream()
             .sorted(Comparator
                 .comparingInt((Dish d) -> Math.abs(scheduleDayMap.get(d) - targetDay))
                 .thenComparingInt(Dish::getId))
             .collect(Collectors.toList());
 
-        // 写入缓存（索引从0开始，首次取 sorted.get(0)）
+        // 写入缓存（供后续用户复用）
         cache.put(cacheKey, new ReplacementCacheEntry(sorted));
         log.info("[findReplacementDish] 缓存写入: cacheKey={}, cachedCount={}", cacheKey, sorted.size());
 
-        DishScheduleResult.DishVO vo = DishScheduleResult.DishVO.fromDish(sorted.get(0));
+        // 分配第一个
+        Dish assigned = pickFromCacheAndAssign(cache, week, day, dishType, restrictions);
+        if (assigned == null) {
+            return null;
+        }
+
+        DishScheduleResult.DishVO vo = DishScheduleResult.DishVO.fromDish(assigned);
         if (replacedDish != null) {
             vo.setReplaced(true);
             vo.setOriginalId(replacedDish.getId());
