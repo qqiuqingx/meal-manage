@@ -68,8 +68,14 @@
                 border
                 size="mini"
                 style="width: 90%; margin: 0 auto;"
+                :span-method="(param) => dishSpanMethod(param, scope.row.customerMenus)"
               >
-                <el-table-column label="客户名称" prop="customerName" align="center" width="120" />
+                <el-table-column label="排餐情况" prop="isReplaced" align="center" width="90">
+                  <template slot-scope="inner">
+                    <el-tag v-if="inner.row.isReplaced" type="warning" size="mini">新增替换</el-tag>
+                    <el-tag v-else type="success" size="mini">常规排餐</el-tag>
+                  </template>
+                </el-table-column>
                 <el-table-column label="菜品类型" prop="dishType" align="center" width="100">
                   <template slot-scope="inner">
                     <el-tag :type="dishTypeTag(inner.row.dishType)" size="mini">
@@ -79,12 +85,7 @@
                 </el-table-column>
                 <el-table-column label="菜品名称" prop="dishName" align="center" />
                 <el-table-column label="配料" prop="dishIngredients" align="center" show-overflow-tooltip />
-                <el-table-column label="是否替换" prop="isReplaced" align="center" width="90">
-                  <template slot-scope="inner">
-                    <el-tag v-if="inner.row.isReplaced" type="warning" size="mini">已替换</el-tag>
-                    <el-tag v-else type="success" size="mini">正常</el-tag>
-                  </template>
-                </el-table-column>
+                <el-table-column label="客户名称" prop="customerName" align="center" min-width="120" />
                 <el-table-column label="替换原因" prop="replacementReason" align="center" show-overflow-tooltip />
               </el-table>
               <div v-else class="no-data">暂无客户菜单明细</div>
@@ -218,7 +219,45 @@ export default {
         delete params.mealTypes
       }
       queryScheduleList(params).then(res => {
-        this.recordList = res.content || []
+        const list = res.content || []
+
+        // 优化相同菜品的展示：将具有完全相同菜品的记录合并，把客户名称以顿号隔开
+        list.forEach(record => {
+          if (!record.customerMenus || !record.customerMenus.length) return
+          const dishGroups = {}
+
+          record.customerMenus.forEach(item => {
+            // 以菜品属性作为唯一 Key
+            const key = `${item.dishType}_${item.dishName}_${item.dishIngredients || ''}_${item.isReplaced}_${item.replacementReason || ''}`
+            if (!dishGroups[key]) {
+              dishGroups[key] = { ...item, customerNames: [item.customerName] }
+            } else {
+              if (!dishGroups[key].customerNames.includes(item.customerName)) {
+                dishGroups[key].customerNames.push(item.customerName)
+              }
+            }
+          })
+
+          const newMenus = Object.values(dishGroups).map(g => {
+            return {
+              ...g,
+              customerName: g.customerNames.sort().join('、')
+            }
+          })
+
+          const typeOrder = { 'SOUP': 1, 'MAIN': 2, 'SIDE': 3, 'VEGETABLE': 4, 'RICE': 5 }
+          newMenus.sort((a, b) => {
+            // 优先按照是否替换排序（常规排餐在前，新增替换的在后）
+            const replacedA = a.isReplaced ? 1 : 0
+            const replacedB = b.isReplaced ? 1 : 0
+            if (replacedA !== replacedB) return replacedA - replacedB
+            // 同一排餐情况内，按照菜品类型排序
+            return (typeOrder[a.dishType] || 99) - (typeOrder[b.dishType] || 99)
+          })
+          record.customerMenus = newMenus
+        })
+
+        this.recordList = list
         this.total = res.totalElements || 0
         this.loading = false
       }).catch(() => {
@@ -263,6 +302,23 @@ export default {
             this.generateDialog.loading = false
           })
       })
+    },
+    dishSpanMethod({ row, column, rowIndex, columnIndex }, customerMenus) {
+      if (columnIndex === 0) {
+        if (rowIndex === 0 || customerMenus[rowIndex - 1].isReplaced !== row.isReplaced) {
+          let rowspan = 1
+          for (let i = rowIndex + 1; i < customerMenus.length; i++) {
+            if (customerMenus[i].isReplaced === row.isReplaced) {
+              rowspan++
+            } else {
+              break
+            }
+          }
+          return { rowspan, colspan: 1 }
+        } else {
+          return { rowspan: 0, colspan: 0 }
+        }
+      }
     },
     dishTypeTag(type) {
       const map = {
