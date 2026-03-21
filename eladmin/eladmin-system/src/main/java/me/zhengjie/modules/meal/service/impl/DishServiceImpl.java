@@ -92,6 +92,35 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             .collect(Collectors.joining(", "));
     }
 
+    private List<DishScheduleRecord> findActiveScheduleRecords(String date, String mealType) {
+        QueryWrapper<DishScheduleRecord> wrapper = new QueryWrapper<>();
+        wrapper.eq("record_date", date).eq("meal_type", mealType).eq("deleted", false);
+        return dishScheduleRecordMapper.selectList(wrapper);
+    }
+
+    private void softDeleteCustomerMenus(List<DishScheduleRecord> records, Integer customerId) {
+        for (DishScheduleRecord record : records) {
+            QueryWrapper<CustomerMenuRecord> menuWrapper = new QueryWrapper<>();
+            menuWrapper.eq("record_id", record.getId()).eq("customer_id", customerId).eq("deleted", false);
+            List<CustomerMenuRecord> existingMenus = customerMenuRecordMapper.selectList(menuWrapper);
+            for (CustomerMenuRecord menu : existingMenus) {
+                menu.setDeleted(true);
+                customerMenuRecordMapper.updateById(menu);
+            }
+        }
+    }
+
+    private int countActiveCustomersForRecord(Integer recordId) {
+        QueryWrapper<CustomerMenuRecord> menuWrapper = new QueryWrapper<>();
+        menuWrapper.eq("record_id", recordId).eq("deleted", false);
+        List<CustomerMenuRecord> menuRecords = customerMenuRecordMapper.selectList(menuWrapper);
+        return (int) menuRecords.stream()
+                .map(CustomerMenuRecord::getCustomerId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
+    }
+
     @Override
     public PageResult<Dish> queryAll(DishQueryCriteria criteria, Page<Object> page){
         PageResult<Dish> result = PageUtil.toPage(dishMapper.findAll(criteria, page));
@@ -717,31 +746,36 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
             // 步骤4: 软删除已存在的排餐记录
 
-            QueryWrapper<DishScheduleRecord> deleteWrapper = new QueryWrapper<>();
-            deleteWrapper.eq("record_date", date).eq("meal_type", mt).eq("deleted", false);
-            List<DishScheduleRecord> existingRecords = dishScheduleRecordMapper.selectList(deleteWrapper);
+            List<DishScheduleRecord> existingRecords = findActiveScheduleRecords(date, mt);
+            DishScheduleRecord record = null;
+            boolean reuseExistingRecord = customerId != null && !existingRecords.isEmpty();
+            if (reuseExistingRecord) {
+                record = existingRecords.get(0);
+                softDeleteCustomerMenus(existingRecords, customerId);
+                log.info("[步骤4] 单客户重排，复用排餐记录 ID: {}，仅清理客户 {} 的历史菜单", record.getId(), customerId);
+            } else {
+                for (DishScheduleRecord existingRecord : existingRecords) {
+                    // 软删除关联的客户菜单记录
+                    QueryWrapper<CustomerMenuRecord> menuDeleteWrapper = new QueryWrapper<>();
+                    menuDeleteWrapper.eq("record_id", existingRecord.getId()).eq("deleted", false);
+                    List<CustomerMenuRecord> existingMenus = customerMenuRecordMapper.selectList(menuDeleteWrapper);
 
-
-            for (DishScheduleRecord existingRecord : existingRecords) {
-                // 软删除关联的客户菜单记录
-                QueryWrapper<CustomerMenuRecord> menuDeleteWrapper = new QueryWrapper<>();
-                menuDeleteWrapper.eq("record_id", existingRecord.getId()).eq("deleted", false);
-                List<CustomerMenuRecord> existingMenus = customerMenuRecordMapper.selectList(menuDeleteWrapper);
-
-
-                for (CustomerMenuRecord menu : existingMenus) {
-                    menu.setDeleted(true);
-                    customerMenuRecordMapper.updateById(menu);
+                    for (CustomerMenuRecord menu : existingMenus) {
+                        menu.setDeleted(true);
+                        customerMenuRecordMapper.updateById(menu);
+                    }
+                    // 软删除排餐记录
+                    existingRecord.setDeleted(true);
+                    dishScheduleRecordMapper.updateById(existingRecord);
                 }
-                // 软删除排餐记录
-                existingRecord.setDeleted(true);
-                dishScheduleRecordMapper.updateById(existingRecord);
             }
 
             // 步骤5: 统计该餐次的客户数量
             log.info("[步骤5] 统计餐次客户数量...");
             int customerCount = 0;
-            if (result.getCustomers() != null) {
+            if (reuseExistingRecord) {
+                customerCount = countActiveCustomersForRecord(record.getId());
+            } else if (result.getCustomers() != null) {
                 for (DishScheduleResult.CustomerMenu cm : result.getCustomers()) {
                     if (cm.getMenu() != null) {
                         DishScheduleResult.MenuByPackage menuByPackage = cm.getMenu();
@@ -757,15 +791,23 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
             // 步骤6: 保存排餐记录
             log.info("[步骤6] 保存排餐记录...");
-            DishScheduleRecord record = new DishScheduleRecord();
-            record.setRecordDate(date);
-            record.setMealType(mt);
-            record.setWeekNum(weekNum);
-            record.setDayOfWeek(dayOfWeek);
-            record.setCustomerCount(customerCount);
-            record.setCreateTime(new Timestamp(System.currentTimeMillis()));
-            dishScheduleRecordMapper.insert(record);
-            log.info("[步骤6] 排餐记录保存成功, ID: {}", record.getId());
+            if (reuseExistingRecord) {
+                record.setWeekNum(weekNum);
+                record.setDayOfWeek(dayOfWeek);
+                record.setCustomerCount(customerCount);
+                dishScheduleRecordMapper.updateById(record);
+                log.info("[步骤6] 复用排餐记录成功, ID: {}", record.getId());
+            } else {
+                record = new DishScheduleRecord();
+                record.setRecordDate(date);
+                record.setMealType(mt);
+                record.setWeekNum(weekNum);
+                record.setDayOfWeek(dayOfWeek);
+                record.setCustomerCount(customerCount);
+                record.setCreateTime(new Timestamp(System.currentTimeMillis()));
+                dishScheduleRecordMapper.insert(record);
+                log.info("[步骤6] 排餐记录保存成功, ID: {}", record.getId());
+            }
 
             // 步骤7: 保存客户菜单记录
             log.info("[步骤7] 保存客户菜单记录...");
@@ -820,6 +862,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                         }
                     }
                 }
+            }
+            if (reuseExistingRecord) {
+                int updatedCustomerCount = countActiveCustomersForRecord(record.getId());
+                record.setCustomerCount(updatedCustomerCount);
+                dishScheduleRecordMapper.updateById(record);
+                log.info("[步骤7] 复用排餐记录客户数更新完成: {}", updatedCustomerCount);
             }
             log.info("[步骤7] 客户菜单记录保存完成, 共{}条", menuRecordCount);
             log.info("---------- 餐次 {} 处理完成 ----------", mealTypeCn(mt));
