@@ -2,6 +2,7 @@ package me.zhengjie.modules.meal.domain.dto;
 
 import lombok.Data;
 import io.swagger.annotations.ApiModelProperty;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -51,6 +52,9 @@ public class DishScheduleResult {
         @ApiModelProperty(value = "菜品名称")
         private String name;
 
+        @ApiModelProperty(value = "菜品类型")
+        private String dishType;
+
         @ApiModelProperty(value = "配料")
         private String ingredients;
 
@@ -76,6 +80,7 @@ public class DishScheduleResult {
             vo.setIngredients(dish.getIngredients());
             vo.setIngredientList(dish.getIngredientList());
             vo.setImageUrl(dish.getImageUrl());
+            vo.setDishType(dish.getDishType());
             vo.setReplaced(false);
             return vo;
         }
@@ -100,5 +105,21 @@ public class DishScheduleResult {
 
         @ApiModelProperty(value = "客户菜单")
         private MenuByPackage menu;
+
+        @ApiModelProperty(value = "无法替换的菜品（已记录到表，含忌口但无替代）")
+        private List<DishVO> unableToReplaceDishes;
+    }
+
+    /**
+     * buildCustomerMenuMap 的返回值：包含最终菜单和无法替换的菜品列表
+     */
+    public static class CustomerMenuMapResult {
+        private Map<String, DishVO> menuMap;
+        private List<DishVO> unableToReplaceDishes = new ArrayList<>();
+
+        public Map<String, DishVO> getMenuMap() { return menuMap; }
+        public void setMenuMap(Map<String, DishVO> menuMap) { this.menuMap = menuMap; }
+        public List<DishVO> getUnableToReplaceDishes() { return unableToReplaceDishes; }
+        public void setUnableToReplaceDishes(List<DishVO> unableToReplaceDishes) { this.unableToReplaceDishes = unableToReplaceDishes; }
     }
 }
