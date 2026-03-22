@@ -24,6 +24,8 @@ public interface DishIngredientMapper extends BaseMapper<DishIngredient> {
 
     List<DishIngredientRelation> findRelationsByDishId(@Param("dishId") Integer dishId);
 
+    List<DishIngredientRelation> findRelationsByDishIds(@Param("dishIds") List<Integer> dishIds);
+
     void insertRelation(@Param("dishId") Integer dishId, @Param("dto") DishIngredientDto dto);
 
     void deleteRelationsByDishId(@Param("dishId") Integer dishId);
