@@ -104,4 +104,10 @@ public interface DishService extends IService<Dish> {
      * @return PageResult
      */
     PageResult<DishScheduleRecordVO> queryScheduleRecord(DishScheduleRecordQueryCriteria criteria, Page<Object> page);
+
+    /**
+     * 删除排餐记录（软删除，同时删除关联的客户菜单记录）
+     * @param id 排餐记录ID
+     */
+    void deleteSchedule(Long id);
 }

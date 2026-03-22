@@ -534,7 +534,29 @@ GET /api/dishes/schedule/list
 
 ---
 
-### 13. 菜品图片上传
+### 13. 删除排餐记录
+
+```
+DELETE /api/dishes/schedule/{id}
+```
+
+**路径参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | Long | 是 | 排餐记录ID |
+
+**功能说明：**
+
+1. 查询排餐记录，不存在或已删除则直接返回
+2. 软删除该记录关联的所有客户菜单记录（`customer_menu_record.deleted = true`）
+3. 软删除排餐记录本身（`dish_schedule_record.deleted = true`）
+
+**响应：** 204 No Content
+
+---
+
+### 14. 菜品图片上传
 
 ```
 POST /api/dishes/upload

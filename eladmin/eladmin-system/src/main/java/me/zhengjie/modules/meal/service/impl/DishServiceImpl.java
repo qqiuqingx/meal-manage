@@ -16,6 +16,7 @@ import me.zhengjie.modules.meal.domain.enums.DishTypeEnum;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.meal.mapper.CustomerDietaryRestrictionsMapper;
 import me.zhengjie.modules.meal.mapper.CustomerMenuRecordMapper;
+import me.zhengjie.modules.meal.service.CustomerMenuRecordService;
 import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.modules.meal.mapper.DishScheduleRecordMapper;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
@@ -56,6 +57,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     private final CustomerDietaryRestrictionsMapper customerDietaryRestrictionsMapper;
     private final DishScheduleRecordMapper dishScheduleRecordMapper;
     private final CustomerMenuRecordMapper customerMenuRecordMapper;
+    private final CustomerMenuRecordService customerMenuRecordService;
     private final DishIngredientMapper dishIngredientMapper;
 
     private static final String[] DISH_TYPES = {"MAIN", "SIDE", "SOUP", "VEGETABLE", "RICE"};
@@ -99,14 +101,24 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     }
 
     private void softDeleteCustomerMenus(List<DishScheduleRecord> records, Integer customerId) {
-        for (DishScheduleRecord record : records) {
-            QueryWrapper<CustomerMenuRecord> menuWrapper = new QueryWrapper<>();
-            menuWrapper.eq("record_id", record.getId()).eq("customer_id", customerId).eq("deleted", false);
-            List<CustomerMenuRecord> existingMenus = customerMenuRecordMapper.selectList(menuWrapper);
-            for (CustomerMenuRecord menu : existingMenus) {
-                menu.setDeleted(true);
-                customerMenuRecordMapper.updateById(menu);
-            }
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        // 收集所有 recordId，一次性查询所有相关菜单（消除 N+1）
+        List<Integer> recordIds = records.stream()
+                .map(DishScheduleRecord::getId)
+                .collect(Collectors.toList());
+
+        QueryWrapper<CustomerMenuRecord> menuWrapper = new QueryWrapper<>();
+        menuWrapper.in("record_id", recordIds)
+                .eq("customer_id", customerId)
+                .eq("deleted", false);
+
+        List<CustomerMenuRecord> existingMenus = customerMenuRecordMapper.selectList(menuWrapper);
+
+        if (!existingMenus.isEmpty()) {
+            existingMenus.forEach(menu -> menu.setDeleted(true));
+            customerMenuRecordService.updateBatchById(existingMenus);
         }
     }
 
@@ -745,7 +757,6 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             log.info("---------- 开始处理餐次: {} ----------", mealTypeCn(mt));
 
             // 步骤4: 软删除已存在的排餐记录
-
             List<DishScheduleRecord> existingRecords = findActiveScheduleRecords(date, mt);
             DishScheduleRecord record = null;
             boolean reuseExistingRecord = customerId != null && !existingRecords.isEmpty();
@@ -755,14 +766,13 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 log.info("[步骤4] 单客户重排，复用排餐记录 ID: {}，仅清理客户 {} 的历史菜单", record.getId(), customerId);
             } else {
                 for (DishScheduleRecord existingRecord : existingRecords) {
-                    // 软删除关联的客户菜单记录
+                    // 软删除关联的客户菜单记录（批量更新，避免 N+1）
                     QueryWrapper<CustomerMenuRecord> menuDeleteWrapper = new QueryWrapper<>();
                     menuDeleteWrapper.eq("record_id", existingRecord.getId()).eq("deleted", false);
                     List<CustomerMenuRecord> existingMenus = customerMenuRecordMapper.selectList(menuDeleteWrapper);
-
-                    for (CustomerMenuRecord menu : existingMenus) {
-                        menu.setDeleted(true);
-                        customerMenuRecordMapper.updateById(menu);
+                    if (!existingMenus.isEmpty()) {
+                        existingMenus.forEach(menu -> menu.setDeleted(true));
+                        customerMenuRecordService.updateBatchById(existingMenus);
                     }
                     // 软删除排餐记录
                     existingRecord.setDeleted(true);
@@ -770,20 +780,19 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 }
             }
 
-            // 步骤5: 统计该餐次的客户数量
+            // 步骤5: 统计该餐次的客户数量（从本次生成结果中统计，有当前餐次菜单的客户才计数）
             log.info("[步骤5] 统计餐次客户数量...");
             int customerCount = 0;
-            if (reuseExistingRecord) {
-                customerCount = countActiveCustomersForRecord(record.getId());
-            } else if (result.getCustomers() != null) {
+            if (result.getCustomers() != null) {
                 for (DishScheduleResult.CustomerMenu cm : result.getCustomers()) {
-                    if (cm.getMenu() != null) {
-                        DishScheduleResult.MenuByPackage menuByPackage = cm.getMenu();
-                        if ("LUNCH".equals(mt) && menuByPackage.getLunch() != null && !menuByPackage.getLunch().isEmpty()) {
-                            customerCount++;
-                        } else if ("DINNER".equals(mt) && menuByPackage.getDinner() != null && !menuByPackage.getDinner().isEmpty()) {
-                            customerCount++;
-                        }
+                    if (cm.getMenu() == null) {
+                        continue;
+                    }
+                    DishScheduleResult.MenuByPackage menuByPackage = cm.getMenu();
+                    if ("LUNCH".equals(mt) && menuByPackage.getLunch() != null && !menuByPackage.getLunch().isEmpty()) {
+                        customerCount++;
+                    } else if ("DINNER".equals(mt) && menuByPackage.getDinner() != null && !menuByPackage.getDinner().isEmpty()) {
+                        customerCount++;
                     }
                 }
             }
@@ -809,10 +818,11 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 log.info("[步骤6] 排餐记录保存成功, ID: {}", record.getId());
             }
 
-            // 步骤7: 保存客户菜单记录
+            // 步骤7: 批量保存客户菜单记录
             log.info("[步骤7] 保存客户菜单记录...");
-            int menuRecordCount = 0;
+            List<CustomerMenuRecord> menuRecordsToSave = new ArrayList<>();
             if (result.getCustomers() != null) {
+                Timestamp now = new Timestamp(System.currentTimeMillis());
                 for (DishScheduleResult.CustomerMenu cm : result.getCustomers()) {
                     Map<String, DishScheduleResult.DishVO> menuMap = null;
                     if ("LUNCH".equals(mt) && cm.getMenu() != null && cm.getMenu().getLunch() != null) {
@@ -835,9 +845,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                             menuRecord.setIsReplaced(dishVO.getReplaced());
                             menuRecord.setOriginalDishId(dishVO.getOriginalId());
                             menuRecord.setReplacementReason(dishVO.getReason());
-                            menuRecord.setCreateTime(new Timestamp(System.currentTimeMillis()));
-                            customerMenuRecordMapper.insert(menuRecord);
-                            menuRecordCount++;
+                            menuRecord.setCreateTime(now);
+                            menuRecordsToSave.add(menuRecord);
                         }
                     }
 
@@ -856,12 +865,15 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                             menuRecord.setIsReplaced(dishVO.getReplaced());
                             menuRecord.setOriginalDishId(dishVO.getOriginalId());
                             menuRecord.setReplacementReason(dishVO.getReason());
-                            menuRecord.setCreateTime(new Timestamp(System.currentTimeMillis()));
-                            customerMenuRecordMapper.insert(menuRecord);
-                            menuRecordCount++;
+                            menuRecord.setCreateTime(now);
+                            menuRecordsToSave.add(menuRecord);
                         }
                     }
                 }
+            }
+            if (!menuRecordsToSave.isEmpty()) {
+                customerMenuRecordService.saveBatch(menuRecordsToSave);
+                log.info("[步骤7] 客户菜单记录批量保存完成, 共{}条", menuRecordsToSave.size());
             }
             if (reuseExistingRecord) {
                 int updatedCustomerCount = countActiveCustomersForRecord(record.getId());
@@ -869,7 +881,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 dishScheduleRecordMapper.updateById(record);
                 log.info("[步骤7] 复用排餐记录客户数更新完成: {}", updatedCustomerCount);
             }
-            log.info("[步骤7] 客户菜单记录保存完成, 共{}条", menuRecordCount);
+            log.info("[步骤7] 客户菜单记录保存完成, 共{}条", menuRecordsToSave.size());
             log.info("---------- 餐次 {} 处理完成 ----------", mealTypeCn(mt));
         }
 
@@ -905,18 +917,30 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         recordWrapper.eq("record_date", date).eq("deleted", false);
         List<DishScheduleRecord> records = dishScheduleRecordMapper.selectList(recordWrapper);
 
+        if (records.isEmpty()) {
+            return stats;
+        }
+
+        // 一次性查询所有关联的客户菜单记录（消除 N+1）
+        List<Integer> recordIds = records.stream()
+                .map(DishScheduleRecord::getId)
+                .collect(Collectors.toList());
+        QueryWrapper<CustomerMenuRecord> menuQueryWrapper = new QueryWrapper<>();
+        menuQueryWrapper.in("record_id", recordIds).eq("deleted", false);
+        List<CustomerMenuRecord> allMenuRecords = customerMenuRecordMapper.selectList(menuQueryWrapper);
+
+        // 按 recordId 分组，避免循环内查询
+        Map<Integer, List<CustomerMenuRecord>> menusByRecordId = allMenuRecords.stream()
+                .collect(Collectors.groupingBy(CustomerMenuRecord::getRecordId));
+
         Map<String, DishScheduleStats.MealTypeStats> statsMap = new HashMap<>();
 
         for (DishScheduleRecord record : records) {
             DishScheduleStats.MealTypeStats mealTypeStats = new DishScheduleStats.MealTypeStats();
             mealTypeStats.setCustomerCount(record.getCustomerCount());
 
-            // 查询该餐次的客户菜单记录
-            QueryWrapper<CustomerMenuRecord> menuWrapper = new QueryWrapper<>();
-            menuWrapper.eq("record_id", record.getId()).eq("deleted", false);
-            List<CustomerMenuRecord> menuRecords = customerMenuRecordMapper.selectList(menuWrapper);
+            List<CustomerMenuRecord> menuRecords = menusByRecordId.getOrDefault(record.getId(), Collections.emptyList());
 
-            // 统计替换数量和菜单
             int replacedCount = 0;
             Map<String, DishScheduleStats.DishTypeMenu> menuMap = new LinkedHashMap<>();
 
@@ -926,16 +950,15 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 }
 
                 String dishType = menuRecord.getDishType();
-                if (!menuMap.containsKey(dishType)) {
-                    DishScheduleStats.DishTypeMenu dishTypeMenu = new DishScheduleStats.DishTypeMenu();
-                    dishTypeMenu.setDishId(menuRecord.getDishId());
-                    dishTypeMenu.setDishName(menuRecord.getDishName());
-                    dishTypeMenu.setReplacedCount(0);
-                    menuMap.put(dishType, dishTypeMenu);
-                }
+                DishScheduleStats.DishTypeMenu dtm = menuMap.computeIfAbsent(dishType, k -> {
+                    DishScheduleStats.DishTypeMenu d = new DishScheduleStats.DishTypeMenu();
+                    d.setDishId(menuRecord.getDishId());
+                    d.setDishName(menuRecord.getDishName());
+                    d.setReplacedCount(0);
+                    return d;
+                });
 
                 if (Boolean.TRUE.equals(menuRecord.getIsReplaced())) {
-                    DishScheduleStats.DishTypeMenu dtm = menuMap.get(dishType);
                     dtm.setReplacedCount(dtm.getReplacedCount() + 1);
                 }
             }
@@ -979,9 +1002,42 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         Page<DishScheduleRecord> recordPage = new Page<>(page.getCurrent(), page.getSize());
         Page<DishScheduleRecord> recordResult = dishScheduleRecordMapper.selectPage(recordPage, recordWrapper);
 
-        List<DishScheduleRecordVO> voList = new ArrayList<>();
+        if (recordResult.getRecords().isEmpty()) {
+            return new PageResult<>(new ArrayList<>(), recordResult.getTotal());
+        }
 
-        // 2. 对每条排餐记录，查询关联的客户菜单记录
+        // 2. 一次性查询所有关联的客户菜单记录（消除 N+1）
+        List<Integer> recordIds = recordResult.getRecords().stream()
+                .map(DishScheduleRecord::getId)
+                .collect(Collectors.toList());
+
+        QueryWrapper<CustomerMenuRecord> menuQueryWrapper = new QueryWrapper<>();
+        menuQueryWrapper.in("record_id", recordIds).eq("deleted", false);
+
+        // 客户ID过滤
+        if (criteria.getCustomerId() != null) {
+            menuQueryWrapper.eq("customer_id", criteria.getCustomerId());
+        }
+
+        // 客户名称模糊查询
+        if (criteria.getCustomerName() != null && !criteria.getCustomerName().isEmpty()) {
+            menuQueryWrapper.like("customer_name", criteria.getCustomerName());
+        }
+
+        // 套餐类型/菜品类型过滤
+        if (criteria.getDishType() != null && !criteria.getDishType().isEmpty()) {
+            menuQueryWrapper.eq("dish_type", criteria.getDishType());
+        }
+
+        List<CustomerMenuRecord> allMenuRecords = customerMenuRecordMapper.selectList(menuQueryWrapper);
+
+        // 按 recordId 分组（内存中操作，避免循环查询）
+        Map<Integer, List<CustomerMenuRecord>> menusByRecordId = allMenuRecords.stream()
+                .collect(Collectors.groupingBy(CustomerMenuRecord::getRecordId));
+
+        // 3. 组装 VO
+        List<DishScheduleRecordVO> voList = new ArrayList<>(recordResult.getRecords().size());
+
         for (DishScheduleRecord record : recordResult.getRecords()) {
             DishScheduleRecordVO vo = new DishScheduleRecordVO();
             vo.setRecordId(record.getId());
@@ -992,29 +1048,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             vo.setCustomerCount(record.getCustomerCount());
             vo.setCreateTime(record.getCreateTime());
 
-            // 查询客户菜单记录
-            QueryWrapper<CustomerMenuRecord> menuWrapper = new QueryWrapper<>();
-            menuWrapper.eq("record_id", record.getId()).eq("deleted", false);
-
-            // 客户ID过滤
-            if (criteria.getCustomerId() != null) {
-                menuWrapper.eq("customer_id", criteria.getCustomerId());
-            }
-
-            // 客户名称模糊查询
-            if (criteria.getCustomerName() != null && !criteria.getCustomerName().isEmpty()) {
-                menuWrapper.like("customer_name", criteria.getCustomerName());
-            }
-
-            // 套餐类型/菜品类型过滤
-            if (criteria.getDishType() != null && !criteria.getDishType().isEmpty()) {
-                menuWrapper.eq("dish_type", criteria.getDishType());
-            }
-
-            List<CustomerMenuRecord> menuRecords = customerMenuRecordMapper.selectList(menuWrapper);
-
-            // 转换为 VO
             List<DishScheduleRecordVO.CustomerMenuVO> customerMenus = new ArrayList<>();
+            List<CustomerMenuRecord> menuRecords = menusByRecordId.getOrDefault(record.getId(), Collections.emptyList());
             for (CustomerMenuRecord menuRecord : menuRecords) {
                 DishScheduleRecordVO.CustomerMenuVO customerMenuVO = new DishScheduleRecordVO.CustomerMenuVO();
                 customerMenuVO.setId(menuRecord.getId());
@@ -1033,7 +1068,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             voList.add(vo);
         }
 
-        // 3. 转换为 PageResult
+        // 4. 转换为 PageResult
         return new PageResult<>(voList, recordResult.getTotal());
     }
 
@@ -1051,27 +1086,31 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         result.setWeek(week);
         result.setDay(day);
 
-        // 2. 构建按套餐分组的菜单
-        Map<String, DishScheduleResult.MenuByPackage> menuByPackage = new LinkedHashMap<>();
-        for (MealPackageEnum mealPackage : MealPackageEnum.values()) {
-            String packageCode = mealPackage.getCode();
-            DishScheduleResult.MenuByPackage menuByMealType = new DishScheduleResult.MenuByPackage();
-
-            // 根据 mealType 参数决定处理哪些餐次
-            if (mealType == null || MEAL_TYPE_ALL.equals(mealType) || "LUNCH".equals(mealType)) {
-                menuByMealType.setLunch(buildMenuMap(week, day, "LUNCH", packageCode));
-            }
-            if (mealType == null || MEAL_TYPE_ALL.equals(mealType) || "DINNER".equals(mealType)) {
-                menuByMealType.setDinner(buildMenuMap(week, day, "DINNER", packageCode));
-            }
-            menuByPackage.put(packageCode, menuByMealType);
-        }
-        result.setMenuByPackage(menuByPackage);
-
-        // 3. 查找生效客户并生成客户菜单
+        // 2. 查找生效客户并生成客户菜单
         List<DishScheduleResult.CustomerMenu> customerMenus = buildCustomerMenus(dateStr, week, day, mealType, customerId);
         result.setCustomers(customerMenus);
 
         return result;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteSchedule(Long id) {
+        // 1. 查询排餐记录
+        DishScheduleRecord record = dishScheduleRecordMapper.selectById(id);
+        if (record == null || record.getDeleted()) {
+            return;
+        }
+        // 2. 软删除关联的客户菜单记录
+        QueryWrapper<CustomerMenuRecord> menuWrapper = new QueryWrapper<>();
+        menuWrapper.eq("record_id", id).eq("deleted", false);
+        List<CustomerMenuRecord> existingMenus = customerMenuRecordMapper.selectList(menuWrapper);
+        if (!existingMenus.isEmpty()) {
+            existingMenus.forEach(menu -> menu.setDeleted(true));
+            customerMenuRecordService.updateBatchById(existingMenus);
+        }
+        // 3. 软删除排餐记录
+        record.setDeleted(true);
+        dishScheduleRecordMapper.updateById(record);
     }
 }

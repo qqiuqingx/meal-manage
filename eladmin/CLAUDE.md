@@ -86,7 +86,7 @@ modules/<module>/
 - XML mappers in `eladmin-system/src/main/resources/mapper/`
 
 ### API Documentation
-All new APIs must be documented in `doc/` as Markdown files.
+**IMPORTANT**: Any API change (add, update, delete) MUST be reflected in the corresponding Markdown doc in `doc/` directory immediately after the code change.
 
 ### Security
 - JWT + Spring Security
