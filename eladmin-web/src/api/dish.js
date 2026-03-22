@@ -71,4 +71,11 @@ export function generateSchedule(date, params) {
   })
 }
 
-export default { queryDishes, getDish, addDish, editDish, delDish, queryBySchedule, queryAvailableDishes, queryScheduleList, generateSchedule }
+export function delSchedule(id) {
+  return request({
+    url: `api/dishes/schedule/${id}`,
+    method: 'delete'
+  })
+}
+
+export default { queryDishes, getDish, addDish, editDish, delDish, queryBySchedule, queryAvailableDishes, queryScheduleList, generateSchedule, delSchedule }

@@ -119,6 +119,16 @@
             {{ formatTime(scope.row.createTime) }}
           </template>
         </el-table-column>
+        <el-table-column label="操作" align="center" width="90">
+          <template slot-scope="scope">
+            <el-button
+              type="danger"
+              icon="el-icon-delete"
+              size="mini"
+              @click="handleDelete(scope.row)"
+            />
+          </template>
+        </el-table-column>
       </el-table>
 
       <!-- 分页 -->
@@ -168,7 +178,7 @@
 </template>
 
 <script>
-import { queryScheduleList, generateSchedule } from '@/api/dish'
+import { queryScheduleList, generateSchedule, delSchedule } from '@/api/dish'
 
 export default {
   name: 'ScheduleRecord',
@@ -319,6 +329,18 @@ export default {
           return { rowspan: 0, colspan: 0 }
         }
       }
+    },
+    handleDelete(row) {
+      this.$confirm('确认删除该排餐记录吗？', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        delSchedule(row.recordId).then(() => {
+          this.$message.success('删除成功')
+          this.getList()
+        })
+      }).catch(() => {})
     },
     dishTypeTag(type) {
       const map = {

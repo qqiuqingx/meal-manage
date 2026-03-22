@@ -144,4 +144,13 @@ public class DishController {
         Page<Object> page = new Page<>(criteria.getPage() + 1, criteria.getSize());
         return new ResponseEntity<>(dishService.queryScheduleRecord(criteria, page),HttpStatus.OK);
     }
+
+    @DeleteMapping("/schedule/{id}")
+    @Log("删除排餐记录")
+    @ApiOperation("删除排餐记录")
+    @PreAuthorize("@el.check('dish:del')")
+    public ResponseEntity<Object> deleteSchedule(@PathVariable Long id) {
+        dishService.deleteSchedule(id);
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    }
 }
