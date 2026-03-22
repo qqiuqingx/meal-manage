@@ -133,23 +133,39 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 .count();
     }
 
+    /**
+     * 批量填充菜品配料列表（一次性 IN 查询，消除 N+1）
+     */
+    private void fillIngredientsBatch(List<Dish> dishes) {
+        if (dishes == null || dishes.isEmpty()) return;
+        List<Integer> dishIds = dishes.stream().map(Dish::getId).collect(Collectors.toList());
+        List<DishIngredientRelation> relations = dishIngredientMapper.findRelationsByDishIds(dishIds);
+        Map<Integer, List<DishIngredientDto>> map = new HashMap<>();
+        for (DishIngredientRelation r : relations) {
+            DishIngredientDto dto = new DishIngredientDto();
+            dto.setIngredientId(r.getIngredientId());
+            dto.setIngredientName(r.getIngredientName());
+            dto.setQuantity(r.getQuantity());
+            dto.setUnit(r.getUnit());
+            dto.setRemark(r.getRemark());
+            map.computeIfAbsent(r.getDishId(), k -> new ArrayList<>()).add(dto);
+        }
+        for (Dish dish : dishes) {
+            dish.setIngredientList(map.get(dish.getId()));
+        }
+    }
+
     @Override
     public PageResult<Dish> queryAll(DishQueryCriteria criteria, Page<Object> page){
         PageResult<Dish> result = PageUtil.toPage(dishMapper.findAll(criteria, page));
-        // 填充配料列表
-        for (Dish dish : result.getContent()) {
-            dish.setIngredientList(convertToDtoList(dishIngredientMapper.findRelationsByDishId(dish.getId())));
-        }
+        fillIngredientsBatch(result.getContent());
         return result;
     }
 
     @Override
     public List<Dish> queryAll(DishQueryCriteria criteria){
         List<Dish> list = dishMapper.findAll(criteria);
-        // 填充配料列表
-        for (Dish dish : list) {
-            dish.setIngredientList(convertToDtoList(dishIngredientMapper.findRelationsByDishId(dish.getId())));
-        }
+        fillIngredientsBatch(list);
         return list;
     }
 
@@ -177,6 +193,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     @Transactional(rollbackFor = Exception.class)
     public void create(Dish resources) {
         resources.setCreateTime(new Timestamp(System.currentTimeMillis()));
+        // 回填 ingredients 字符串字段（供兼容读取）
+        resources.setIngredients(buildIngredientsStr(resources.getIngredientList()));
         dishMapper.insert(resources);
 
         // 保存配料关联
@@ -192,6 +210,14 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     public void update(Dish resources) {
         Dish dish = getById(resources.getId());
         dish.copy(resources);
+        // 回填 ingredients 字符串字段（供兼容读取）
+        // 若 ingredientList 为空则从关系表查询已有配料，避免误覆盖
+        List<DishIngredientDto> dtoList = resources.getIngredientList();
+        if (dtoList == null || dtoList.isEmpty()) {
+            List<DishIngredientRelation> existing = dishIngredientMapper.findRelationsByDishId(resources.getId());
+            dtoList = convertToDtoList(existing);
+        }
+        dish.setIngredients(buildIngredientsStr(dtoList));
         dish.setUpdateTime(new Timestamp(System.currentTimeMillis()));
         dishMapper.updateById(dish);
 
@@ -300,10 +326,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         criteria.setMealPackage(mealPackage);
 
         List<Dish> dishes = dishMapper.findAll(criteria);
-        // 填充配料列表
-        for (Dish dish : dishes) {
-            dish.setIngredientList(convertToDtoList(dishIngredientMapper.findRelationsByDishId(dish.getId())));
-        }
+        // 批量填充配料列表
+        fillIngredientsBatch(dishes);
         // 按排期过滤
         final int finalWeek = week;
         final int finalDay = day;
@@ -387,14 +411,15 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 if (!packageAndMealKeys.contains(key)) {
                     packageAndMealKeys.add(key);
                     List<Dish> dishes = dishMapper.findAll(buildCriteria(mt, pkg));
-                    for (Dish dish : dishes) {
-                        dish.setIngredientList(convertToDtoList(dishIngredientMapper.findRelationsByDishId(dish.getId())));
-                    }
                     dishesByPackageAndMeal.put(key, dishes);
                     log.info("[buildCustomerMenus] 预查询菜品: mealType={}, mealPackage={}, count={}", mt, pkg, dishes.size());
                 }
             }
         }
+        // 一次性批量加载所有菜品的配料
+        List<Dish> allDishesForIngredients = new ArrayList<>(dishesByPackageAndMeal.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()));
+        Map<Integer, List<DishIngredientDto>> allDishIngredients = precomputeDishIngredients(allDishesForIngredients);
+        log.info("[buildCustomerMenus] 配料批量加载完成，总菜品={}", allDishesForIngredients.size());
 
         for (CustomerDietaryRestrictions customer : allCustomers) {
             // 检查客户是否生效
@@ -415,10 +440,11 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             List<DishScheduleResult.DishVO> allUnableToReplace = new ArrayList<>();
 
             // 根据 mealType 参数决定处理哪些餐次
+            Set<String> restrictionsSet = customer.getRestrictions() != null ? new HashSet<>(customer.getRestrictions()) : Collections.emptySet();
             if (mealType == null || MEAL_TYPE_ALL.equals(mealType) || "LUNCH".equals(mealType)) {
                 List<Dish> lunchDishes = dishesByPackageAndMeal.get("LUNCH|" + mealPackage);
                 log.info("[客户:{}, 套餐:{}] 构建午餐菜单, 周:{}-{}", customer.getCustomerName(), mealPackage, week, day);
-                DishScheduleResult.CustomerMenuMapResult lunchResult = buildCustomerMenuMap(week, day, "LUNCH", mealPackage, customer.getRestrictions(), lunchDishes != null ? lunchDishes : new ArrayList<>(), cache);
+                DishScheduleResult.CustomerMenuMapResult lunchResult = buildCustomerMenuMap(week, day, "LUNCH", mealPackage, restrictionsSet, lunchDishes != null ? lunchDishes : new ArrayList<>(), allDishIngredients, cache);
                 menuByMealType.setLunch(lunchResult.getMenuMap());
                 allUnableToReplace.addAll(lunchResult.getUnableToReplaceDishes());
                 log.info("[客户:{}] 午餐菜单菜品数: {}", customer.getCustomerName(), lunchResult.getMenuMap().size());
@@ -426,7 +452,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             if (mealType == null || MEAL_TYPE_ALL.equals(mealType) || "DINNER".equals(mealType)) {
                 List<Dish> dinnerDishes = dishesByPackageAndMeal.get("DINNER|" + mealPackage);
                 log.info("[客户:{}, 套餐:{}] 构建晚餐菜单, 周:{}-{}", customer.getCustomerName(), mealPackage, week, day);
-                DishScheduleResult.CustomerMenuMapResult dinnerResult = buildCustomerMenuMap(week, day, "DINNER", mealPackage, customer.getRestrictions(), dinnerDishes != null ? dinnerDishes : new ArrayList<>(), cache);
+                DishScheduleResult.CustomerMenuMapResult dinnerResult = buildCustomerMenuMap(week, day, "DINNER", mealPackage, restrictionsSet, dinnerDishes != null ? dinnerDishes : new ArrayList<>(), allDishIngredients, cache);
                 menuByMealType.setDinner(dinnerResult.getMenuMap());
                 allUnableToReplace.addAll(dinnerResult.getUnableToReplaceDishes());
                 log.info("[客户:{}] 晚餐菜单菜品数: {}", customer.getCustomerName(), dinnerResult.getMenuMap().size());
@@ -472,39 +498,36 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     }
 
     /**
-     * 检查菜品配料是否包含忌口（只查配料关系表，不依赖 ingredients 字符串字段）
+     * 预计算给定菜品的配料集合（用于批量判断是否含忌口）
+     * @return Map: dishId -> DishIngredientDto 列表
      */
-    private boolean containsRestriction(Dish dish, List<String> restrictions) {
-        if (restrictions == null || restrictions.isEmpty()) {
-            return false;
+    private Map<Integer, List<DishIngredientDto>> precomputeDishIngredients(List<Dish> dishes) {
+        if (dishes == null || dishes.isEmpty()) {
+            return Collections.emptyMap();
         }
-        List<DishIngredientDto> ingredientList = dish.getIngredientList();
-        if (ingredientList == null || ingredientList.isEmpty()) {
-            // 配料关系表无数据，不做过滤，但记录日志提醒补充数据
-            log.warn("[containsRestriction] 菜品配料关系为空，请补充数据: dishId={}, dishName={}", dish.getId(), dish.getName());
-            return false;
+        List<Integer> dishIds = dishes.stream().map(Dish::getId).collect(Collectors.toList());
+        List<DishIngredientRelation> relations = dishIngredientMapper.findRelationsByDishIds(dishIds);
+        Map<Integer, List<DishIngredientDto>> result = new HashMap<>();
+        for (DishIngredientRelation r : relations) {
+            DishIngredientDto dto = new DishIngredientDto();
+            dto.setIngredientId(r.getIngredientId());
+            dto.setIngredientName(r.getIngredientName());
+            dto.setQuantity(r.getQuantity());
+            dto.setUnit(r.getUnit());
+            dto.setRemark(r.getRemark());
+            result.computeIfAbsent(r.getDishId(), k -> new ArrayList<>()).add(dto);
         }
-        for (DishIngredientDto dto : ingredientList) {
-            String name = dto.getIngredientName();
-            if (name == null || name.isEmpty()) {
-                continue;
-            }
-            for (String restriction : restrictions) {
-                if (name.contains(restriction)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return result;
     }
 
     /**
      * 为客户构建菜单，处理忌口替换
-     * @param allDishes  该套餐+餐次的所有菜品（已填充配料，由调用方预查询并共享）
-     * @param cache       替换菜品候选缓存（按 dishType+restrictions 缓存已排序的候选菜，索引式分配）
+     * @param allDishes           该套餐+餐次的所有菜品
+     * @param restrictions        客户忌口词集合（用于分组 + 判断是否含忌口）
+     * @param cache               替换菜品候选缓存
      * @return CustomerMenuMapResult 包含最终菜单和无法替换的菜品列表
      */
-    private DishScheduleResult.CustomerMenuMapResult buildCustomerMenuMap(int week, int day, String mealType, String mealPackage, List<String> restrictions, List<Dish> allDishes, Map<String, ReplacementCacheEntry> cache) {
+    private DishScheduleResult.CustomerMenuMapResult buildCustomerMenuMap(int week, int day, String mealType, String mealPackage, Set<String> restrictions, List<Dish> allDishes, Map<Integer, List<DishIngredientDto>> allDishIngredients, Map<String, ReplacementCacheEntry> cache) {
         Map<String, DishScheduleResult.DishVO> menuMap = new LinkedHashMap<>();
         List<DishScheduleResult.DishVO> unableToReplace = new ArrayList<>();
 
@@ -520,10 +543,9 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 String dishType = dish.getDishType();
                 if (!menuMap.containsKey(dishType)) {
                     // 检查是否需要替换
-                    DishScheduleResult.DishVO dishVO = checkAndReplaceDish(dish, allDishes, dishType, week, day, restrictions, cache);
+                    DishScheduleResult.DishVO dishVO = checkAndReplaceDish(dish, allDishes, dishType, week, day, restrictions, allDishIngredients, cache);
                     if (dishVO != null) {
                         if ("忌口：无替换菜品".equals(dishVO.getReason())) {
-                            // 找不到替换菜，记录到无法替换列表（不入菜单）
                             unableToReplace.add(dishVO);
                             log.warn("[buildCustomerMenuMap] 菜品含忌口且无替换菜品，已跳过: {} - {}", dishTypeCn(dishType), dishVO.getName());
                         } else {
@@ -538,7 +560,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         // 补齐缺失的菜品类型
         for (String dishType : DISH_TYPES) {
             if (!menuMap.containsKey(dishType)) {
-                DishScheduleResult.DishVO dishVO = findReplacementDish(null, allDishes, dishType, week, day, restrictions, cache);
+                DishScheduleResult.DishVO dishVO = findReplacementDish(null, allDishes, dishType, week, day, restrictions, allDishIngredients, cache);
                 if (dishVO != null) {
                     menuMap.put(dishType, dishVO);
                     log.info("[buildCustomerMenuMap] 补齐菜品: {} - {}", dishTypeCn(dishType), dishVO.getName());
@@ -555,26 +577,52 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     }
 
     /**
-     * 检查菜品是否需要替换，如果需要则返回替换后的菜品
+     * 检查菜品是否需要替换（使用客户自己的忌口）
      */
-    private DishScheduleResult.DishVO checkAndReplaceDish(Dish dish, List<Dish> allDishes, String dishType, int week, int day, List<String> restrictions, Map<String, ReplacementCacheEntry> cache) {
-        if (dish == null || !containsRestriction(dish, restrictions)) {
+    private DishScheduleResult.DishVO checkAndReplaceDish(Dish dish, List<Dish> allDishes, String dishType, int week, int day, Set<String> restrictions, Map<Integer, List<DishIngredientDto>> allDishIngredients, Map<String, ReplacementCacheEntry> cache) {
+        if (dish == null || !containsRestriction(dish, restrictions, allDishIngredients)) {
             return dish != null ? DishScheduleResult.DishVO.fromDish(dish) : null;
         }
-        // 需要替换：查找同类不含忌口的菜品（缓存保证同 key 不重复分配）
-        DishScheduleResult.DishVO replacement = findReplacementDish(dish, allDishes, dishType, week, day, restrictions, cache);
+        DishScheduleResult.DishVO replacement = findReplacementDish(dish, allDishes, dishType, week, day, restrictions, allDishIngredients, cache);
         if (replacement != null) {
             replacement.setReplaced(true);
             replacement.setOriginalId(dish.getId());
             replacement.setReason("忌口");
         } else {
-            // 找不到替换菜，仍返回原菜品（reason 标注无法替换，由调用方决定是否放入菜单）
             replacement = DishScheduleResult.DishVO.fromDish(dish);
             replacement.setReplaced(true);
             replacement.setOriginalId(dish.getId());
             replacement.setReason("忌口：无替换菜品");
         }
         return replacement;
+    }
+
+    /**
+     * 检查菜品配料是否包含忌口（使用客户自己的忌口列表，O(n) 遍历）
+     */
+    /**
+     * 检查菜品配料是否包含忌口（直接查 Map，不依赖 Dish.ingredientList，避免二次查询覆盖）
+     */
+    private boolean containsRestriction(Dish dish, Set<String> restrictions, Map<Integer, List<DishIngredientDto>> allDishIngredients) {
+        if (restrictions == null || restrictions.isEmpty()) {
+            return false;
+        }
+        List<DishIngredientDto> ingredientList = allDishIngredients.get(dish.getId());
+        if (ingredientList == null || ingredientList.isEmpty()) {
+            log.warn("[containsRestriction] 菜品配料关系为空: dishId={}, dishName={}, restrictions={}", dish.getId(), dish.getName(), restrictions);
+            return false;
+        }
+        for (DishIngredientDto dto : ingredientList) {
+            String name = dto.getIngredientName();
+            if (name == null || name.isEmpty()) continue;
+            for (String restriction : restrictions) {
+                if (name.contains(restriction)) {
+                    log.info("[containsRestriction] 菜品含忌口: dishId={}, dishName={}, 配料={}, 忌口={}", dish.getId(), dish.getName(), name, restriction);
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -598,23 +646,21 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     }
 
     /**
-     * 为当前用户从缓存中分配一个可用的候选菜
-     * @return 分配的菜品（已从缓存中移除），如果没有则返回 null
+     * 为当前用户从缓存中分配一个可用的候选菜（使用客户自己的忌口）
      */
-    private Dish pickFromCacheAndAssign(Map<String, ReplacementCacheEntry> cache, int week, int day, String dishType, List<String> restrictions) {
+    private Dish pickFromCacheAndAssign(Map<String, ReplacementCacheEntry> cache, int week, int day, String dishType, Set<String> restrictions, Map<Integer, List<DishIngredientDto>> allDishIngredients) {
         String cacheKey = makeReplacementCacheKey(week, day, dishType);
-        String restrictionsKey = (restrictions == null || restrictions.isEmpty())
-            ? "" : restrictions.stream().sorted().collect(Collectors.joining(","));
         ReplacementCacheEntry entry = cache.get(cacheKey);
         if (entry == null || entry.sortedAll.isEmpty()) {
             return null;
         }
-        // 获取或初始化该忌口组的已分配记录
-        Set<Integer> taken = entry.takenDishIds.computeIfAbsent(restrictionsKey, k -> new HashSet<>());
-        // 过滤：排除含忌口的 + 已被本忌口组分配过的
+        // 按忌口词组合键分组，同组客户共享已分配记录
+        String takenKey = (restrictions == null || restrictions.isEmpty())
+            ? "" : restrictions.stream().sorted().collect(Collectors.joining(","));
+        Set<Integer> taken = entry.takenDishIds.computeIfAbsent(takenKey, k -> new HashSet<>());
         for (Dish dish : entry.sortedAll) {
             if (taken.contains(dish.getId())) continue;
-            if (containsRestriction(dish, restrictions)) continue;
+            if (containsRestriction(dish, restrictions, allDishIngredients)) continue;
             taken.add(dish.getId());
             return dish;
         }
@@ -623,13 +669,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
     /**
      * 查找替换菜品（当前周所有天中找同类不含忌口的菜品）
-     * 优先选择排期最接近目标日的菜品（同一周内先检查目标日本身，再依次检查相邻天）
      */
-    private DishScheduleResult.DishVO findReplacementDish(Dish replacedDish, List<Dish> allDishes, String dishType, int week, int day, List<String> restrictions, Map<String, ReplacementCacheEntry> cache) {
+    private DishScheduleResult.DishVO findReplacementDish(Dish replacedDish, List<Dish> allDishes, String dishType, int week, int day, Set<String> restrictions, Map<Integer, List<DishIngredientDto>> allDishIngredients, Map<String, ReplacementCacheEntry> cache) {
         String cacheKey = makeReplacementCacheKey(week, day, dishType);
 
-        // ① 尝试从缓存分配（缓存中的候选菜已按排期排序，按顺序取第一个满足忌口且未被该组占用的菜）
-        Dish cachedDish = pickFromCacheAndAssign(cache, week, day, dishType, restrictions);
+        // ① 尝试从缓存分配
+        Dish cachedDish = pickFromCacheAndAssign(cache, week, day, dishType, restrictions, allDishIngredients);
         if (cachedDish != null) {
             log.info("[findReplacementDish] 缓存命中: dishType={}, replacedDish={}", dishType, replacedDish != null ? replacedDish.getName() : "null");
             DishScheduleResult.DishVO vo = DishScheduleResult.DishVO.fromDish(cachedDish);
@@ -641,7 +686,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             return vo;
         }
 
-        // ② 缓存未命中或候选菜已耗尽：从 allDishes 过滤并排序，再写入缓存
+        // ② 缓存未命中：从 allDishes 过滤并排序，再写入缓存
         List<String> weekScheduleKeys = IntStream.rangeClosed(1, 7)
             .mapToObj(d -> week + "-" + d)
             .collect(Collectors.toList());
@@ -660,12 +705,11 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             return null;
         }
 
-        // 预计算每个候选菜的排期天
+        // 按排期距离升序，相同则按菜品ID排
         final int targetDay = day;
         Map<Dish, Integer> scheduleDayMap = candidates.stream()
             .collect(Collectors.toMap(d -> d, d -> firstScheduleDayOfWeek(d.getSchedule(), week)));
 
-        // 按排期距离升序，相同则按菜品ID排
         List<Dish> sorted = candidates.stream()
             .sorted(Comparator
                 .comparingInt((Dish d) -> Math.abs(scheduleDayMap.get(d) - targetDay))
@@ -677,7 +721,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         log.info("[findReplacementDish] 缓存写入: cacheKey={}, cachedCount={}", cacheKey, sorted.size());
 
         // 分配第一个
-        Dish assigned = pickFromCacheAndAssign(cache, week, day, dishType, restrictions);
+        Dish assigned = pickFromCacheAndAssign(cache, week, day, dishType, restrictions, allDishIngredients);
         if (assigned == null) {
             return null;
         }

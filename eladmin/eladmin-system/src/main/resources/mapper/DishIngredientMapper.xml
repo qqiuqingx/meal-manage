@@ -76,6 +76,18 @@
         order by dir.id
     </select>
 
+    <select id="findRelationsByDishIds" resultMap="RelationResultMap">
+        select
+        <include refid="Relation_Column_List"/>
+        from dish_ingredient_relation dir
+        inner join dish_ingredient di on dir.ingredient_id = di.id
+        where dir.dish_id in
+        <foreach collection="dishIds" item="dishId" open="(" separator="," close=")">
+            #{dishId}
+        </foreach>
+        order by dir.dish_id, dir.id
+    </select>
+
     <insert id="insertRelation" parameterType="me.zhengjie.modules.meal.domain.dto.DishIngredientDto">
         insert into dish_ingredient_relation (dish_id, ingredient_id, quantity, remark, create_time)
         values (#{dishId}, #{dto.ingredientId}, #{dto.quantity}, #{dto.remark}, now())

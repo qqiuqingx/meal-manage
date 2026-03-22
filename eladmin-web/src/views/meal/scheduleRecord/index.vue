@@ -234,13 +234,19 @@ export default {
         // 优化相同菜品的展示：将具有完全相同菜品的记录合并，把客户名称以顿号隔开
         list.forEach(record => {
           if (!record.customerMenus || !record.customerMenus.length) return
+          // 按 (dishType, dishName, isReplaced, replacementReason) 分组
+          // 不含 dishIngredients，避免同一道菜因配料字段不一致（如 NULL vs 有值）被拆成多条
           const dishGroups = {}
 
           record.customerMenus.forEach(item => {
-            // 以菜品属性作为唯一 Key
-            const key = `${item.dishType}_${item.dishName}_${item.dishIngredients || ''}_${item.isReplaced}_${item.replacementReason || ''}`
+            const key = `${item.dishType}_${item.dishName}_${item.isReplaced}_${item.replacementReason || ''}`
             if (!dishGroups[key]) {
-              dishGroups[key] = { ...item, customerNames: [item.customerName] }
+              dishGroups[key] = {
+                ...item,
+                customerNames: [item.customerName],
+                // 取第一个非空的 dishIngredients 作为展示值
+                dishIngredients: item.dishIngredients || ''
+              }
             } else {
               if (!dishGroups[key].customerNames.includes(item.customerName)) {
                 dishGroups[key].customerNames.push(item.customerName)
