@@ -86,4 +86,12 @@ export function queryDailyCustomerStats(params) {
   })
 }
 
-export default { queryDishes, getDish, addDish, editDish, delDish, queryBySchedule, queryAvailableDishes, queryScheduleList, generateSchedule, delSchedule, queryDailyCustomerStats }
+export function queryCustomerSourceStats(params) {
+  return request({
+    url: 'api/dishes/schedule/customer-source-stats',
+    method: 'get',
+    params
+  })
+}
+
+export default { queryDishes, getDish, addDish, editDish, delDish, queryBySchedule, queryAvailableDishes, queryScheduleList, generateSchedule, delSchedule, queryDailyCustomerStats, queryCustomerSourceStats }

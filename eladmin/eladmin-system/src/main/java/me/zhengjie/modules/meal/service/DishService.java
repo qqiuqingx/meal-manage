@@ -7,6 +7,7 @@ import me.zhengjie.modules.meal.domain.dto.DishScheduleRecordQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleRecordVO;
 
 import java.util.List;
+import java.util.Map;
 import java.io.IOException;
 import javax.servlet.http.HttpServletResponse;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -118,4 +119,11 @@ public interface DishService extends IService<Dish> {
      * @return DailyCustomerStats
      */
     DailyCustomerStats getDailyCustomerStats(String date);
+
+    /**
+     * 获取当天有效客户按来源分组统计
+     * @param date 日期（yyyy-MM-dd）
+     * @return 来源分组列表
+     */
+    List<Map<String, Object>> getCustomerSourceStats(String date);
 }

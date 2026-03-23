@@ -26,6 +26,7 @@ import me.zhengjie.modules.meal.domain.dto.DishScheduleRecordVO;
 import me.zhengjie.modules.meal.domain.dto.DailyCustomerStats;
 import lombok.RequiredArgsConstructor;
 import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -161,5 +162,13 @@ public class DishController {
     public ResponseEntity<DailyCustomerStats> getDailyCustomerStats(
             @RequestParam(required = false) String date) {
         return new ResponseEntity<>(dishService.getDailyCustomerStats(date), HttpStatus.OK);
+    }
+
+    @GetMapping("/schedule/customer-source-stats")
+    @ApiOperation("获取当天有效客户按来源分组统计")
+    @PreAuthorize("@el.check('dish:list')")
+    public ResponseEntity<List<Map<String, Object>>> getCustomerSourceStats(
+            @RequestParam(required = false) String date) {
+        return new ResponseEntity<>(dishService.getCustomerSourceStats(date), HttpStatus.OK);
     }
 }

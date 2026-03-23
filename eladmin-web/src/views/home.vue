@@ -3,9 +3,10 @@
     <div class="dashboard-editor-container">
       <github-corner class="github-corner" />
 
-      <!-- 当日客户统计 -->
+      <!-- 当日客户统计 + 客户来源统计 并行 -->
       <el-row :gutter="32" style="margin-top: 18px;">
-        <el-col :span="24">
+        <!-- 左侧：当日客户统计 -->
+        <el-col :xs="24" :sm="24" :lg="12">
           <div class="stats-card">
             <div class="stats-card-header">
               <span class="stats-title">当日客户统计</span>
@@ -23,16 +24,32 @@
               <el-tab-pane label="午餐" name="LUNCH" />
               <el-tab-pane label="晚餐" name="DINNER" />
             </el-tabs>
-            <customer-stats-chart
-              v-loading="statsLoading"
-              :chart-data="filteredGroups"
-              :meal-type="activeMealType"
-              :height="'320px'"
-              class="stats-chart"
-            />
-            <div v-if="!statsLoading && filteredGroups.length === 0" style="text-align: center; color: #909399; padding: 40px 0;">
+            <div v-if="!statsLoading && filteredGroups.length === 0" style="text-align: center; color: #909399; padding: 20px 0;">
               暂无数据
             </div>
+            <customer-stats-chart
+              v-if="!statsLoading && filteredGroups.length > 0"
+              :chart-data="filteredGroups"
+              :meal-type="activeMealType"
+              :height="'240px'"
+            />
+          </div>
+        </el-col>
+
+        <!-- 右侧：客户来源统计 -->
+        <el-col :xs="24" :sm="24" :lg="12">
+          <div class="stats-card">
+            <div class="stats-card-header">
+              <span class="stats-title">客户来源统计</span>
+            </div>
+            <div v-if="!sourceLoading && sourceGroups.length === 0" style="text-align: center; color: #909399; padding: 20px 0;">
+              暂无数据
+            </div>
+            <source-stats-chart
+              v-if="!sourceLoading && sourceGroups.length > 0"
+              :chart-data="sourceGroups"
+              :height="'280px'"
+            />
           </div>
         </el-col>
       </el-row>
@@ -43,7 +60,8 @@
 <script>
 import GithubCorner from '@/components/GithubCorner'
 import CustomerStatsChart from './dashboard/CustomerStatsChart'
-import { queryDailyCustomerStats } from '@/api/dish'
+import SourceStatsChart from './dashboard/SourceStatsChart'
+import { queryDailyCustomerStats, queryCustomerSourceStats } from '@/api/dish'
 
 function formatDate(date) {
   const d = date || new Date()
@@ -57,14 +75,17 @@ export default {
   name: 'Dashboard',
   components: {
     GithubCorner,
-    CustomerStatsChart
+    CustomerStatsChart,
+    SourceStatsChart
   },
   data() {
     return {
       statsDate: formatDate(),
       activeMealType: 'LUNCH',
       statsLoading: false,
-      customerStats: null
+      sourceLoading: false,
+      customerStats: null,
+      sourceGroups: []
     }
   },
   computed: {
@@ -79,6 +100,7 @@ export default {
   },
   mounted() {
     this.fetchCustomerStats()
+    this.fetchSourceStats()
   },
   methods: {
     handleTabChange() {
@@ -95,6 +117,19 @@ export default {
         })
         .finally(() => {
           this.statsLoading = false
+        })
+    },
+    fetchSourceStats() {
+      this.sourceLoading = true
+      queryCustomerSourceStats({ date: this.statsDate })
+        .then(data => {
+          this.sourceGroups = data || []
+        })
+        .catch(() => {
+          this.sourceGroups = []
+        })
+        .finally(() => {
+          this.sourceLoading = false
         })
     }
   }
@@ -121,6 +156,7 @@ export default {
     padding: 20px 24px;
     box-shadow: 4px 4px 40px rgba(0, 0, 0, .05);
     border-radius: 8px;
+    height: 100%;
   }
 
   .stats-card-header {
@@ -133,9 +169,5 @@ export default {
     font-size: 16px;
     font-weight: 600;
     color: #303133;
-  }
-
-  .stats-chart {
-    margin-top: 12px;
   }
 </style>
