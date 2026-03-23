@@ -1176,6 +1176,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         if (records.isEmpty()) {
             stats.setTotalCustomerCount(0);
             stats.setGroups(Collections.emptyList());
+            stats.setSourceGroups(Collections.emptyList());
             return stats;
         }
 
@@ -1191,6 +1192,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         if (menuRecords.isEmpty()) {
             stats.setTotalCustomerCount(0);
             stats.setGroups(Collections.emptyList());
+            stats.setSourceGroups(Collections.emptyList());
             return stats;
         }
 
@@ -1263,8 +1265,61 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             groups.add(group);
         }
 
+        // 6. 按来源分组，统计 distinct customerId
+        Map<String, Set<Integer>> sourceCustomerIds = new LinkedHashMap<>();
+        for (CustomerMenuRecord menu : menuRecords) {
+            CustomerDietaryRestrictions customer = customerMap.get(menu.getCustomerId());
+            if (customer == null) continue;
+            String source = (customer.getSource() != null && !customer.getSource().isEmpty())
+                    ? customer.getSource() : "未知来源";
+            sourceCustomerIds.computeIfAbsent(source, k -> new HashSet<>()).add(menu.getCustomerId());
+        }
+
+        List<DailyCustomerStats.SourceGroup> sourceGroups = new ArrayList<>();
+        for (Map.Entry<String, Set<Integer>> entry : sourceCustomerIds.entrySet()) {
+            DailyCustomerStats.SourceGroup sg = new DailyCustomerStats.SourceGroup();
+            sg.setSource(entry.getKey());
+            sg.setSourceDesc(entry.getKey());
+            sg.setCustomerCount(entry.getValue().size());
+            sourceGroups.add(sg);
+        }
+
         stats.setTotalCustomerCount(totalCount);
         stats.setGroups(groups);
+        stats.setSourceGroups(sourceGroups);
         return stats;
+    }
+
+    @Override
+    public List<Map<String, Object>> getCustomerSourceStats(String date) {
+        LocalDate targetDate = LocalDate.parse(date, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+
+        QueryWrapper<CustomerDietaryRestrictions> wrapper = new QueryWrapper<>();
+        // 剩余餐数 > 0
+        wrapper.gt("remaining_meals", 0);
+        // startDate <= targetDate
+        wrapper.le("start_date", date);
+        // endDate >= targetDate
+        wrapper.apply("end_date IS NULL OR end_date >= {0}", date);
+
+        List<CustomerDietaryRestrictions> customers = customerDietaryRestrictionsMapper.selectList(wrapper);
+
+        // 按 source 分组计数
+        Map<String, Integer> sourceCountMap = new LinkedHashMap<>();
+        for (CustomerDietaryRestrictions c : customers) {
+            String source = (c.getSource() != null && !c.getSource().trim().isEmpty())
+                    ? c.getSource().trim() : "未知来源";
+            sourceCountMap.merge(source, 1, Integer::sum);
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : sourceCountMap.entrySet()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("source", entry.getKey());
+            item.put("sourceDesc", entry.getKey());
+            item.put("customerCount", entry.getValue());
+            result.add(item);
+        }
+        return result;
     }
 }

@@ -26,10 +26,6 @@ export default {
     chartData: {
       type: Array,
       default: () => []
-    },
-    mealType: {
-      type: String,
-      default: 'LUNCH'
     }
   },
   data() {
@@ -70,75 +66,52 @@ export default {
     setOption() {
       if (!this.chart) return
 
-      const xData = this.chartData.map(item => item.mealPackageDesc)
-      const yData = this.chartData.map(item => item.customerCount)
+      const pieData = this.chartData.map(item => ({
+        name: item.sourceDesc,
+        value: item.customerCount
+      }))
 
       this.chart.setOption({
         tooltip: {
-          trigger: 'axis',
-          axisPointer: {
-            type: 'shadow'
-          },
+          trigger: 'item',
           formatter: (params) => {
-            const item = params[0]
-            return `${item.name}<br/>客户数：<strong>${item.value}</strong> 人`
+            return `${params.name}<br/>客户数：<strong>${params.value}</strong> 人<br/>占比：${params.percent}%`
           }
         },
-        grid: {
-          top: 20,
-          left: 60,
-          right: 20,
-          bottom: 40,
-          containLabel: true
-        },
-        xAxis: {
-          type: 'category',
-          data: xData,
-          axisTick: {
-            alignWithLabel: true
-          },
-          axisLabel: {
-            interval: 0,
-            rotate: 0,
+        legend: {
+          orient: 'vertical',
+          right: 10,
+          top: 'middle',
+          itemWidth: 12,
+          itemHeight: 12,
+          textStyle: {
             fontSize: 12
-          }
-        },
-        yAxis: {
-          type: 'value',
-          axisTick: {
-            show: false
           },
-          min: 0,
-          minInterval: 1,
-          axisLabel: {
-            fontSize: 12,
-            formatter: '{value} 人'
-          },
-          splitLine: {
-            lineStyle: {
-              type: 'dashed'
-            }
-          }
+          data: this.chartData.map(item => item.sourceDesc)
         },
         series: [{
-          name: '客户数',
-          type: 'bar',
-          barWidth: '50%',
-          data: yData,
+          name: '客户来源',
+          type: 'pie',
+          radius: ['35%', '60%'],
+          center: ['38%', '50%'],
+          avoidLabelOverlap: true,
           itemStyle: {
-            color: function(params) {
-              const colorList = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de']
-              return colorList[params.dataIndex % colorList.length]
-            },
-            borderRadius: [4, 4, 0, 0]
+            borderRadius: 6,
+            borderColor: '#fff',
+            borderWidth: 2
           },
           label: {
             show: true,
-            position: 'top',
+            formatter: '{b}: {c} 人',
             fontSize: 12,
             color: '#666'
           },
-          animationDuration
+          labelLine: {
+            show: true
+          },
+          data: pieData,
+          animationDuration,
+          animationEasing: 'cubicInOut'
         }]
       })
     }

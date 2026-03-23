@@ -21,6 +21,9 @@ public class DailyCustomerStats {
     @ApiModelProperty(value = "按餐次+套餐分组列表")
     private List<MealPackageGroup> groups;
 
+    @ApiModelProperty(value = "按来源分组列表")
+    private List<SourceGroup> sourceGroups;
+
     @Data
     public static class MealPackageGroup {
         @ApiModelProperty(value = "餐次")
@@ -31,6 +34,18 @@ public class DailyCustomerStats {
 
         @ApiModelProperty(value = "套餐名称")
         private String mealPackageDesc;
+
+        @ApiModelProperty(value = "客户数")
+        private Integer customerCount;
+    }
+
+    @Data
+    public static class SourceGroup {
+        @ApiModelProperty(value = "来源")
+        private String source;
+
+        @ApiModelProperty(value = "来源名称")
+        private String sourceDesc;
 
         @ApiModelProperty(value = "客户数")
         private Integer customerCount;
