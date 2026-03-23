@@ -78,4 +78,12 @@ export function delSchedule(id) {
   })
 }
 
-export default { queryDishes, getDish, addDish, editDish, delDish, queryBySchedule, queryAvailableDishes, queryScheduleList, generateSchedule, delSchedule }
+export function queryDailyCustomerStats(params) {
+  return request({
+    url: 'api/dishes/schedule/customer-stats',
+    method: 'get',
+    params
+  })
+}
+
+export default { queryDishes, getDish, addDish, editDish, delDish, queryBySchedule, queryAvailableDishes, queryScheduleList, generateSchedule, delSchedule, queryDailyCustomerStats }

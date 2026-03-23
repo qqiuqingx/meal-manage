@@ -23,6 +23,7 @@ import me.zhengjie.modules.meal.domain.dto.DishScheduleResult;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleStats;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleRecordQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleRecordVO;
+import me.zhengjie.modules.meal.domain.dto.DailyCustomerStats;
 import lombok.RequiredArgsConstructor;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -152,5 +153,13 @@ public class DishController {
     public ResponseEntity<Object> deleteSchedule(@PathVariable Long id) {
         dishService.deleteSchedule(id);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    }
+
+    @GetMapping("/schedule/customer-stats")
+    @ApiOperation("获取当天客户总数按套餐和餐次分组统计")
+    @PreAuthorize("@el.check('dish:list')")
+    public ResponseEntity<DailyCustomerStats> getDailyCustomerStats(
+            @RequestParam(required = false) String date) {
+        return new ResponseEntity<>(dishService.getDailyCustomerStats(date), HttpStatus.OK);
     }
 }

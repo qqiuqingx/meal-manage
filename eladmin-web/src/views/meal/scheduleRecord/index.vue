@@ -85,7 +85,12 @@
                 </el-table-column>
                 <el-table-column label="菜品名称" prop="dishName" align="center" />
                 <el-table-column label="配料" prop="dishIngredients" align="center" show-overflow-tooltip />
-                <el-table-column label="客户名称" prop="customerName" align="center" min-width="120" />
+                <el-table-column label="人数" prop="dishCustomerCount" align="center" width="80">
+                  <template slot-scope="inner">
+                    <el-tag type="info" size="mini">{{ inner.row.dishCustomerCount }} 人</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="客户名称" prop="customerName" align="center" min-width="120" show-overflow-tooltip />
                 <el-table-column label="替换原因" prop="replacementReason" align="center" show-overflow-tooltip />
               </el-table>
               <div v-else class="no-data">暂无客户菜单明细</div>
@@ -93,7 +98,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="排餐日期" prop="recordDate" align="center" width="130" />
+        <el-table-column label="排餐日期" prop="recordDate" align="center" min-width="130" />
         <el-table-column label="餐次" prop="mealType" align="center" width="90">
           <template slot-scope="scope">
             <el-tag :type="scope.row.mealType === 'LUNCH' ? 'primary' : 'warning'">
@@ -114,7 +119,7 @@
             <el-tag type="info">{{ scope.row.customerCount }} 人</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" prop="createTime" align="center" width="180">
+        <el-table-column label="创建时间" prop="createTime" align="center" min-width="180">
           <template slot-scope="scope">
             {{ formatTime(scope.row.createTime) }}
           </template>
@@ -257,7 +262,8 @@ export default {
           const newMenus = Object.values(dishGroups).map(g => {
             return {
               ...g,
-              customerName: g.customerNames.sort().join('、')
+              customerName: g.customerNames.sort().join('、'),
+              dishCustomerCount: g.customerNames.length
             }
           })
 
