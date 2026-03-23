@@ -21,6 +21,8 @@ import me.zhengjie.modules.meal.service.CustomerMenuRecordService;
 import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.modules.meal.mapper.DishScheduleRecordMapper;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
+import me.zhengjie.modules.system.service.DictDetailService;
+import me.zhengjie.modules.system.domain.DictDetail;
 import me.zhengjie.utils.FileUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -60,6 +62,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     private final CustomerMenuRecordMapper customerMenuRecordMapper;
     private final CustomerMenuRecordService customerMenuRecordService;
     private final DishIngredientMapper dishIngredientMapper;
+    private final DictDetailService dictDetailService;
 
     private static final String[] DISH_TYPES = {"MAIN", "SIDE", "SOUP", "VEGETABLE", "RICE"};
     private static final String[] MEAL_TYPES = {"LUNCH", "DINNER"};
@@ -1304,11 +1307,20 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
         List<CustomerDietaryRestrictions> customers = customerDietaryRestrictionsMapper.selectList(wrapper);
 
+        // 构建字典 label 映射
+        Map<String, String> sourceLabelMap = new HashMap<>();
+        List<DictDetail> dictDetails = dictDetailService.getDictByName("customer_source");
+        if (dictDetails != null) {
+            for (DictDetail d : dictDetails) {
+                sourceLabelMap.put(d.getValue(), d.getLabel());
+            }
+        }
+
         // 按 source 分组计数
         Map<String, Integer> sourceCountMap = new LinkedHashMap<>();
         for (CustomerDietaryRestrictions c : customers) {
             String source = (c.getSource() != null && !c.getSource().trim().isEmpty())
-                    ? c.getSource().trim() : "未知来源";
+                    ? c.getSource().trim() : "other";
             sourceCountMap.merge(source, 1, Integer::sum);
         }
 
@@ -1316,7 +1328,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         for (Map.Entry<String, Integer> entry : sourceCountMap.entrySet()) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("source", entry.getKey());
-            item.put("sourceDesc", entry.getKey());
+            item.put("sourceDesc", sourceLabelMap.getOrDefault(entry.getKey(), entry.getKey()));
             item.put("customerCount", entry.getValue());
             result.add(item);
         }
