@@ -12,6 +12,7 @@ import javax.servlet.http.HttpServletResponse;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleStats;
+import me.zhengjie.modules.meal.domain.dto.DailyCustomerStats;
 import me.zhengjie.utils.PageResult;
 
 /**
@@ -110,4 +111,11 @@ public interface DishService extends IService<Dish> {
      * @param id 排餐记录ID
      */
     void deleteSchedule(Long id);
+
+    /**
+     * 获取当天客户总数按套餐和餐次分组统计
+     * @param date 日期（yyyy-MM-dd）
+     * @return DailyCustomerStats
+     */
+    DailyCustomerStats getDailyCustomerStats(String date);
 }

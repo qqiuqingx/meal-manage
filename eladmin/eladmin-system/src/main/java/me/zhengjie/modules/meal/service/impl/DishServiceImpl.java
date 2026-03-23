@@ -7,6 +7,7 @@ import me.zhengjie.modules.meal.domain.DishScheduleRecord;
 import me.zhengjie.modules.meal.domain.dto.DishQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleResult;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleStats;
+import me.zhengjie.modules.meal.domain.dto.DailyCustomerStats;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleRecordQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleRecordVO;
 import me.zhengjie.modules.meal.domain.dto.DishIngredientDto;
@@ -1160,5 +1161,110 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         // 3. 软删除排餐记录
         record.setDeleted(true);
         dishScheduleRecordMapper.updateById(record);
+    }
+
+    @Override
+    public DailyCustomerStats getDailyCustomerStats(String date) {
+        DailyCustomerStats stats = new DailyCustomerStats();
+        stats.setDate(date);
+
+        // 1. 查询指定日期的排餐记录
+        QueryWrapper<DishScheduleRecord> recordWrapper = new QueryWrapper<>();
+        recordWrapper.eq("record_date", date).eq("deleted", false);
+        List<DishScheduleRecord> records = dishScheduleRecordMapper.selectList(recordWrapper);
+
+        if (records.isEmpty()) {
+            stats.setTotalCustomerCount(0);
+            stats.setGroups(Collections.emptyList());
+            return stats;
+        }
+
+        // 2. 收集所有 recordId，一次性查询所有客户菜单记录
+        List<Integer> recordIds = records.stream()
+                .map(DishScheduleRecord::getId)
+                .collect(Collectors.toList());
+
+        QueryWrapper<CustomerMenuRecord> menuWrapper = new QueryWrapper<>();
+        menuWrapper.in("record_id", recordIds).eq("deleted", false);
+        List<CustomerMenuRecord> menuRecords = customerMenuRecordMapper.selectList(menuWrapper);
+
+        if (menuRecords.isEmpty()) {
+            stats.setTotalCustomerCount(0);
+            stats.setGroups(Collections.emptyList());
+            return stats;
+        }
+
+        // 3. 收集所有客户ID，一次性查询客户信息获取套餐
+        Set<Integer> customerIds = menuRecords.stream()
+                .map(CustomerMenuRecord::getCustomerId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<Integer, CustomerDietaryRestrictions> customerMap = new HashMap<>();
+        if (!customerIds.isEmpty()) {
+            QueryWrapper<CustomerDietaryRestrictions> customerWrapper = new QueryWrapper<>();
+            customerWrapper.in("id", customerIds);
+            List<CustomerDietaryRestrictions> customers = customerDietaryRestrictionsMapper.selectList(customerWrapper);
+            for (CustomerDietaryRestrictions c : customers) {
+                customerMap.put(c.getId(), c);
+            }
+        }
+
+        // 4. 按 (mealType, mealPackage) 分组，统计 distinct customerId
+        // 先把 recordId -> mealType 映射
+        Map<Integer, String> recordMealTypeMap = records.stream()
+                .collect(Collectors.toMap(DishScheduleRecord::getId, DishScheduleRecord::getMealType));
+
+        // 复合键: mealType|mealPackage
+        Map<String, Set<Integer>> groupCustomerIds = new LinkedHashMap<>();
+
+        for (CustomerMenuRecord menu : menuRecords) {
+            String mealType = recordMealTypeMap.get(menu.getRecordId());
+            if (mealType == null) continue;
+
+            CustomerDietaryRestrictions customer = customerMap.get(menu.getCustomerId());
+            String mealPackage = (customer != null) ? customer.getMealPackage() : null;
+            if (mealPackage == null) continue;
+
+            String key = mealType + "|" + mealPackage;
+            groupCustomerIds.computeIfAbsent(key, k -> new HashSet<>()).add(menu.getCustomerId());
+        }
+
+        // 5. 组装结果
+        List<DailyCustomerStats.MealPackageGroup> groups = new ArrayList<>();
+        int totalCount = 0;
+
+        // 按 LUNCH -> DINNER 排序，套餐内部排序
+        List<String> sortedKeys = groupCustomerIds.keySet().stream()
+                .sorted((a, b) -> {
+                    String aType = a.split("\\|")[0];
+                    String bType = b.split("\\|")[0];
+                    int typeCmp = aType.compareTo(bType);
+                    if (typeCmp != 0) return typeCmp;
+                    return a.compareTo(b);
+                })
+                .collect(Collectors.toList());
+
+        for (String key : sortedKeys) {
+            String[] parts = key.split("\\|");
+            String mealType = parts[0];
+            String mealPackage = parts[1];
+
+            Set<Integer> customerIdSet = groupCustomerIds.get(key);
+            int count = customerIdSet != null ? customerIdSet.size() : 0;
+            totalCount += count;
+
+            DailyCustomerStats.MealPackageGroup group = new DailyCustomerStats.MealPackageGroup();
+            group.setMealType(mealType);
+            group.setMealPackage(mealPackage);
+            MealPackageEnum pkgEnum = MealPackageEnum.fromCode(mealPackage);
+            group.setMealPackageDesc(pkgEnum != null ? pkgEnum.getDesc() : mealPackage);
+            group.setCustomerCount(count);
+            groups.add(group);
+        }
+
+        stats.setTotalCustomerCount(totalCount);
+        stats.setGroups(groups);
+        return stats;
     }
 }
