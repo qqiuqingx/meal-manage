@@ -108,6 +108,7 @@ public class CustomerDietaryRestrictionsServiceImpl extends ServiceImpl<Customer
             map.put("客户手机号", customerDietaryRestrictions.getPhone());
             map.put("剩余餐数", customerDietaryRestrictions.getRemainingMeals());
             map.put("客户套餐", customerDietaryRestrictions.getMealPackage());
+            map.put("来源", customerDietaryRestrictions.getSource());
             list.add(map);
         }
         FileUtil.downloadExcel(list, response);

@@ -17,10 +17,11 @@
         <result column="phone" property="phone"/>
         <result column="remaining_meals" property="remainingMeals"/>
         <result column="meal_package" property="mealPackage"/>
+        <result column="source" property="source"/>
     </resultMap>
 
     <sql id="Base_Column_List">
-        id, customer_name, special_needs, restrictions, update_date, created_at, updated_at, create_time, num, start_date, end_date, customer_address, phone, remaining_meals, meal_package
+        id, customer_name, special_needs, restrictions, update_date, created_at, updated_at, create_time, num, start_date, end_date, customer_address, phone, remaining_meals, meal_package, source
     </sql>
 
     <select id="findAll" resultMap="BaseResultMap">
@@ -57,6 +58,9 @@
             </if>
             <if test="criteria.endDate != null">
                 and end_date &lt;= #{criteria.endDate}
+            </if>
+            <if test="criteria.source != null and criteria.source != ''">
+                and source = #{criteria.source}
             </if>
         </where>
         order by id desc

@@ -104,6 +104,10 @@ public class CustomerDietaryRestrictions implements Serializable {
     @TableField("meal_package")
     private String mealPackage;
 
+    @ApiModelProperty(value = "来源")
+    @TableField("source")
+    private String source;
+
     public void copy(CustomerDietaryRestrictions source){
         BeanUtil.copyProperties(source,this, CopyOptions.create().setIgnoreNullValue(true));
     }
