@@ -60,4 +60,7 @@ public class CustomerDietaryRestrictionsQueryCriteria{
 
     @ApiModelProperty(value = "结束时间")
     private String endDate;
+
+    @ApiModelProperty(value = "来源")
+    private String source;
 }

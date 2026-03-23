@@ -12,6 +12,10 @@
         <el-date-picker v-model="query.startDate" type="date" value-format="yyyy-MM-dd" clearable placeholder="开始时间" style="width: 185px;" class="filter-item" @change="crud.toQuery" />
         <label class="el-form-item-label">结束时间</label>
         <el-date-picker v-model="query.endDate" type="date" value-format="yyyy-MM-dd" clearable placeholder="结束时间" style="width: 185px;" class="filter-item" @change="crud.toQuery" />
+        <label class="el-form-item-label">来源</label>
+        <el-select v-model="query.source" clearable placeholder="来源" style="width: 185px;" class="filter-item" @change="crud.toQuery">
+          <el-option v-for="item in sourceOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
         <rrOperation :crud="crud" />
       </div>
       <!--如果想在工具栏加入更多按钮，可以使用插槽方式， slot = 'left' or 'right'-->
@@ -63,6 +67,11 @@
           <el-form-item label="手机号">
             <el-input v-model="form.phone" style="width: 370px;" />
           </el-form-item>
+          <el-form-item label="来源">
+            <el-select v-model="form.source" placeholder="请选择来源" style="width: 370px;" clearable>
+              <el-option v-for="item in sourceOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="客户套餐" prop="mealPackage">
             <el-select v-model="form.mealPackage" placeholder="请选择客户套餐" style="width: 370px;">
               <el-option label="月子餐" value="yuezi" />
@@ -99,6 +108,11 @@
             {{ getMealPackageName(scope.row.mealPackage) }}
           </template>
         </el-table-column>
+        <el-table-column prop="source" label="来源">
+          <template slot-scope="scope">
+            {{ getSourceName(scope.row.source) }}
+          </template>
+        </el-table-column>
         <el-table-column v-if="checkPer(['admin','customerDietaryRestrictions:edit','customerDietaryRestrictions:del'])" label="操作" width="150px" align="center">
           <template slot-scope="scope">
             <udOperation
@@ -116,13 +130,14 @@
 
 <script>
 import crudCustomerDietaryRestrictions from '@/api/customerDietaryRestrictions'
+import { getDictMap } from '@/api/system/dictDetail'
 import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
 import udOperation from '@crud/UD.operation'
 import pagination from '@crud/Pagination'
 
-const defaultForm = { id: null, customerName: null, specialNeeds: null, restrictions: [], updateDate: null, createdAt: null, updatedAt: null, num: null, startDate: null, endDate: null, customerAddress: null, phone: null, remainingMeals: null, mealPackage: null }
+const defaultForm = { id: null, customerName: null, specialNeeds: null, restrictions: [], updateDate: null, createdAt: null, updatedAt: null, num: null, startDate: null, endDate: null, customerAddress: null, phone: null, remainingMeals: null, mealPackage: null, source: null }
 export default {
   name: 'CustomerDietaryRestrictions',
   components: { pagination, crudOperation, rrOperation, udOperation },
@@ -161,8 +176,12 @@ export default {
         { key: 'endDate', display_name: '结束时间' }
       ],
       restrictionInputVisible: false,
-      restrictionInputValue: ''
+      restrictionInputValue: '',
+      sourceOptions: []
     }
+  },
+  mounted() {
+    this.loadSourceOptions()
   },
   methods: {
     // 钩子：在获取表格数据之前执行，false 则代表不获取数据
@@ -182,6 +201,19 @@ export default {
     getMealPackageName(code) {
       const map = { yuezi: '月子餐', yunqi: '孕期餐', xiaoyuezi: '小月子', yingyang: '营养餐', fenmian: '分娩餐' }
       return map[code] || code
+    },
+    getSourceName(value) {
+      if (!value) return ''
+      const item = this.sourceOptions.find(opt => opt.value === value)
+      return item ? item.label : value
+    },
+    loadSourceOptions() {
+      getDictMap('customer_source').then(res => {
+        this.sourceOptions = (res.customer_source || []).map(item => ({
+          label: item.label,
+          value: item.value
+        }))
+      })
     },
     removeRestriction(index) {
       this.form.restrictions.splice(index, 1)
