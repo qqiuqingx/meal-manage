@@ -85,9 +85,9 @@ export default {
           }
         },
         grid: {
-          top: 20,
-          left: '2%',
-          right: '2%',
+          top: 30,
+          left: '12%',
+          right: '5%',
           bottom: '3%',
           containLabel: true
         },
@@ -105,12 +105,20 @@ export default {
         },
         yAxis: {
           type: 'value',
-          name: '客户数',
           axisTick: {
             show: false
           },
           min: 0,
-          minInterval: 1
+          minInterval: 1,
+          axisLabel: {
+            fontSize: 12,
+            formatter: '{value} 人'
+          },
+          splitLine: {
+            lineStyle: {
+              type: 'dashed'
+            }
+          }
         },
         series: [{
           name: '客户数',
