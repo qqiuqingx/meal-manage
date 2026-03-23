@@ -580,6 +580,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
      * 检查菜品是否需要替换（使用客户自己的忌口）
      */
     private DishScheduleResult.DishVO checkAndReplaceDish(Dish dish, List<Dish> allDishes, String dishType, int week, int day, Set<String> restrictions, Map<Integer, List<DishIngredientDto>> allDishIngredients, Map<String, ReplacementCacheEntry> cache) {
+        // 填充配料到 Dish 对象，确保 DishVO.fromDish 能拿到
+        dish.setIngredientList(allDishIngredients.get(dish.getId()));
         if (dish == null || !containsRestriction(dish, restrictions, allDishIngredients)) {
             return dish != null ? DishScheduleResult.DishVO.fromDish(dish) : null;
         }
@@ -589,10 +591,11 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             replacement.setOriginalId(dish.getId());
             replacement.setReason("忌口");
         } else {
-            replacement = DishScheduleResult.DishVO.fromDish(dish);
-            replacement.setReplaced(true);
-            replacement.setOriginalId(dish.getId());
-            replacement.setReason("忌口：无替换菜品");
+            DishScheduleResult.DishVO dishVO = DishScheduleResult.DishVO.fromDish(dish);
+            dishVO.setReplaced(true);
+            dishVO.setOriginalId(dish.getId());
+            dishVO.setReason("忌口：无替换菜品");
+            return dishVO;
         }
         return replacement;
     }
@@ -677,6 +680,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         Dish cachedDish = pickFromCacheAndAssign(cache, week, day, dishType, restrictions, allDishIngredients);
         if (cachedDish != null) {
             log.info("[findReplacementDish] 缓存命中: dishType={}, replacedDish={}", dishType, replacedDish != null ? replacedDish.getName() : "null");
+            cachedDish.setIngredientList(allDishIngredients.get(cachedDish.getId()));
             DishScheduleResult.DishVO vo = DishScheduleResult.DishVO.fromDish(cachedDish);
             if (replacedDish != null) {
                 vo.setReplaced(true);
@@ -725,7 +729,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         if (assigned == null) {
             return null;
         }
-
+        assigned.setIngredientList(allDishIngredients.get(assigned.getId()));
         DishScheduleResult.DishVO vo = DishScheduleResult.DishVO.fromDish(assigned);
         if (replacedDish != null) {
             vo.setReplaced(true);
