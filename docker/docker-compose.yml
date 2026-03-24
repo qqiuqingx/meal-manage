@@ -1,0 +1,84 @@
+services:
+
+  # ------------------------------
+  # Backend (Spring Boot JAR)
+  # ------------------------------
+  backend:
+    build:
+      context: ../
+      dockerfile: docker/backend/Dockerfile
+    container_name: eladmin-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-13306}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PWD: ${DB_PWD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT:-16379}
+      REDIS_PASSWORD: ${REDIS_PWD}
+      REDIS_DB: ${REDIS_DB:-1}
+      JWT_BASE64_SECRET: ${JWT_BASE64_SECRET}
+      FILE_STORAGE_PATH: /home/eladmin/file
+      AVATAR_STORAGE_PATH: /home/eladmin/avatar
+      BACKEND_JVM_HEAP_MIN: ${BACKEND_JVM_HEAP_MIN:-256m}
+      BACKEND_JVM_HEAP_MAX: ${BACKEND_JVM_HEAP_MAX:-512m}
+    # 仅内部网络访问，Nginx 通过 docker-eladmin-net 代理，不对外暴露
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - backend_files:/home/eladmin
+    networks:
+      - eladmin-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # ------------------------------
+  # Frontend (Nginx serving Vue SPA)
+  # ------------------------------
+  frontend:
+    build:
+      context: ../
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        VUE_APP_BASE_API: /
+    container_name: eladmin-frontend
+    restart: unless-stopped
+    ports:
+      - "18080:80"
+    depends_on:
+      - backend
+    networks:
+      - eladmin-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+# ------------------------------
+# Networks
+# ------------------------------
+networks:
+  eladmin-net:
+    driver: bridge
+
+# ------------------------------
+# Volumes (persistent data)
+# ------------------------------
+volumes:
+  backend_files:
+    driver: local
