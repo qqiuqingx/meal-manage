@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper">
+
+    <resultMap id="BaseResultMap" type="me.zhengjie.modules.customer.profile.domain.CustomerProfilePackage">
+        <id column="id" property="id"/>
+        <result column="customer_id" property="customerId"/>
+        <result column="parent_package_id" property="parentPackageId"/>
+        <result column="child_package_id" property="childPackageId"/>
+        <result column="breakfast_count" property="breakfastCount"/>
+        <result column="lunch_dinner_count" property="lunchDinnerCount"/>
+        <result column="total_count" property="totalCount"/>
+        <result column="start_date" property="startDate"/>
+        <result column="end_date" property="endDate"/>
+        <result column="active_flag" property="activeFlag"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <!-- 查询客户的当前生效签约 -->
+    <select id="findActiveByCustomerId" resultMap="BaseResultMap">
+        SELECT * FROM customer_profile_package
+        WHERE customer_id = #{customerId}
+          AND active_flag = 1
+        LIMIT 1
+    </select>
+
+</mapper>
