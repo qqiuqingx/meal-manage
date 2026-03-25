@@ -127,13 +127,13 @@ INSERT INTO customer_package_category (category_name, category_code, parent_id, 
 -- Seed Data: Sys Menu (for permission management)
 -- ============================================
 -- Menu structure:
---   客户管理 (directory, id=118)
---     ├── 客户档案管理 (menu, id=119)
+--   客户管理 (directory, id=122)
+--     ├── 客户档案管理 (menu, id=123)
 --     │   ├── 客户档案新增 (button)
 --     │   ├── 客户档案编辑 (button)
 --     │   ├── 客户档案状态 (button)
 --     │   └── 客户档案删除 (button)
---     └── 套餐分类管理 (menu, id=120)
+--     └── 套餐分类管理 (menu, id=124)
 --         ├── 套餐分类新增 (button)
 --         ├── 套餐分类编辑 (button)
 --         ├── 套餐分类删除 (button)
@@ -141,24 +141,24 @@ INSERT INTO customer_package_category (category_name, category_code, parent_id, 
 
 -- 客户管理 (directory)
 INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time)
-VALUES (118, NULL, 2, 0, '客户管理', NULL, NULL, 15, 'peoples', 'customer', b'0', b'0', b'0', NULL, NULL, NULL, NOW(), NULL);
+VALUES (122, NULL, 2, 0, '客户管理', NULL, NULL, 15, 'peoples', 'customer', b'0', b'0', b'0', NULL, NULL, NULL, NOW(), NULL);
 
 -- 客户档案管理 (menu)
 INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time)
-VALUES (119, 118, 4, 1, '客户档案管理', 'CustomerProfile', 'customer/profile/index', 1, 'peoples', 'profile', b'0', b'0', b'0', 'customerProfile:list', NULL, NULL, NOW(), NULL);
+VALUES (123, 122, 4, 1, '客户档案管理', 'CustomerProfile', 'customer/profile/index', 1, 'peoples', 'profile', b'0', b'0', b'0', 'customerProfile:list', NULL, NULL, NOW(), NULL);
 
 -- 套餐分类管理 (menu)
 INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time)
-VALUES (120, 118, 4, 1, '套餐分类管理', 'CustomerPackageCategory', 'customer/packageCategory/index', 2, 'tree-table', 'packageCategory', b'0', b'0', b'0', 'customerPackageCategory:list', NULL, NULL, NOW(), NULL);
+VALUES (124, 122, 4, 1, '套餐分类管理', 'CustomerPackageCategory', 'customer/packageCategory/index', 2, 'tree-table', 'packageCategory', b'0', b'0', b'0', 'customerPackageCategory:list', NULL, NULL, NOW(), NULL);
 
--- 客户档案按钮权限
-INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (121, 119, 0, 2, '客户档案新增', NULL, '', 1, '', '', b'0', b'0', b'0', 'customerProfile:add', NULL, NULL, NOW(), NULL);
-INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (122, 119, 0, 2, '客户档案编辑', NULL, '', 2, '', '', b'0', b'0', b'0', 'customerProfile:edit', NULL, NULL, NOW(), NULL);
-INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (123, 119, 0, 2, '客户档案状态', NULL, '', 3, '', '', b'0', b'0', b'0', 'customerProfile:status', NULL, NULL, NOW(), NULL);
-INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (124, 119, 0, 2, '客户档案删除', NULL, '', 4, '', '', b'0', b'0', b'0', 'customerProfile:del', NULL, NULL, NOW(), NULL);
+-- 客户档案按钮权限 (pid = 123)
+INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (125, 123, 0, 2, '客户档案新增', NULL, '', 1, '', '', b'0', b'0', b'0', 'customerProfile:add', NULL, NULL, NOW(), NULL);
+INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (126, 123, 0, 2, '客户档案编辑', NULL, '', 2, '', '', b'0', b'0', b'0', 'customerProfile:edit', NULL, NULL, NOW(), NULL);
+INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (127, 123, 0, 2, '客户档案状态', NULL, '', 3, '', '', b'0', b'0', b'0', 'customerProfile:status', NULL, NULL, NOW(), NULL);
+INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (128, 123, 0, 2, '客户档案删除', NULL, '', 4, '', '', b'0', b'0', b'0', 'customerProfile:del', NULL, NULL, NOW(), NULL);
 
--- 套餐分类按钮权限
-INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (125, 120, 0, 2, '套餐分类新增', NULL, '', 1, '', '', b'0', b'0', b'0', 'customerPackageCategory:add', NULL, NULL, NOW(), NULL);
-INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (126, 120, 0, 2, '套餐分类编辑', NULL, '', 2, '', '', b'0', b'0', b'0', 'customerPackageCategory:edit', NULL, NULL, NOW(), NULL);
-INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (127, 120, 0, 2, '套餐分类删除', NULL, '', 3, '', '', b'0', b'0', b'0', 'customerPackageCategory:del', NULL, NULL, NOW(), NULL);
-INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (128, 120, 0, 2, '套餐分类状态', NULL, '', 4, '', '', b'0', b'0', b'0', 'customerPackageCategory:status', NULL, NULL, NOW(), NULL);
+-- 套餐分类按钮权限 (pid = 124)
+INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (129, 124, 0, 2, '套餐分类新增', NULL, '', 1, '', '', b'0', b'0', b'0', 'customerPackageCategory:add', NULL, NULL, NOW(), NULL);
+INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (130, 124, 0, 2, '套餐分类编辑', NULL, '', 2, '', '', b'0', b'0', b'0', 'customerPackageCategory:edit', NULL, NULL, NOW(), NULL);
+INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (131, 124, 0, 2, '套餐分类删除', NULL, '', 3, '', '', b'0', b'0', b'0', 'customerPackageCategory:del', NULL, NULL, NOW(), NULL);
+INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (132, 124, 0, 2, '套餐分类状态', NULL, '', 4, '', '', b'0', b'0', b'0', 'customerPackageCategory:status', NULL, NULL, NOW(), NULL);
