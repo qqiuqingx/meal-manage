@@ -16,8 +16,9 @@ WORKDIR /app
 RUN mkdir -p /home/eladmin/file /home/eladmin/avatar && \
     chown -R ubuntu:ubuntu /home/eladmin
 
-# Copy JAR from host build output
-COPY --chown=ubuntu:ubuntu eladmin/eladmin-system/target/eladmin-system-1.1.jar app.jar
+# Copy JAR from deployment root directory
+# Expected path in build context: ./eladmin-system-1.1.jar
+COPY --chown=ubuntu:ubuntu eladmin-system-1.1.jar app.jar
 
 # Copy startup script
 COPY --chown=ubuntu:ubuntu docker/backend/entrypoint.sh /app/entrypoint.sh
