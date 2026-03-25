@@ -4,16 +4,14 @@ set -euo pipefail
 
 # Production deployment script:
 # 1. Clone or update the target Git repository
-# 2. Build the backend JAR with Maven
-# 3. Rebuild and restart Docker Compose services
+# 2. Rebuild Docker images from source
+# 3. Restart Docker Compose services
 
 REPO_URL="${REPO_URL:-git@github.com:qqiuqingx/meal-manage.git}"
 BRANCH="${BRANCH:-master}"
 DEPLOY_BASE_DIR="${DEPLOY_BASE_DIR:-/data/meals/meal-manage}"
 ENV_FILE="${ENV_FILE:-/data/meals/.env}"
 COMPOSE_FILE_REL="${COMPOSE_FILE_REL:-docker/docker-compose.yml}"
-BACKEND_JAR_REL="${BACKEND_JAR_REL:-eladmin/eladmin-system/target/eladmin-system-1.1.jar}"
-BACKEND_JAR_NAME="${BACKEND_JAR_NAME:-eladmin-system-1.1.jar}"
 
 timestamp() {
   date '+%Y-%m-%d %H:%M:%S'
@@ -52,23 +50,11 @@ prepare_repo() {
   fi
 }
 
-build_backend() {
-  log "building backend JAR"
-  (
-    cd "$DEPLOY_BASE_DIR/eladmin"
-    mvn -pl eladmin-system -am clean package -DskipTests
-  )
-
-  require_file "$DEPLOY_BASE_DIR/$BACKEND_JAR_REL"
-  cp -f "$DEPLOY_BASE_DIR/$BACKEND_JAR_REL" "$DEPLOY_BASE_DIR/$BACKEND_JAR_NAME"
-}
-
 deploy_compose() {
   local compose_file="$DEPLOY_BASE_DIR/$COMPOSE_FILE_REL"
 
   require_file "$compose_file"
   require_file "$ENV_FILE"
-  require_file "$DEPLOY_BASE_DIR/$BACKEND_JAR_NAME"
 
   log "rebuilding and starting containers"
   (
@@ -87,7 +73,6 @@ print_summary() {
 
 main() {
   require_cmd git
-  require_cmd mvn
   require_cmd docker
 
   if ! docker compose version >/dev/null 2>&1; then
@@ -96,7 +81,6 @@ main() {
   fi
 
   prepare_repo
-  build_backend
   deploy_compose
   print_summary
 }
