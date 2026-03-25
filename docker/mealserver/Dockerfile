@@ -1,7 +1,31 @@
 # =============================================================================
-# Stage 1: Copy JAR (already built locally, no Maven needed in container)
+# Stage 1: Build backend JAR with Maven
 # =============================================================================
-# Note: use eclipse-temurin:8-jre (non-alpine) for better multi-arch support (including Apple Silicon arm64)
+FROM maven:3.8.8-eclipse-temurin-8 AS builder
+
+WORKDIR /build
+
+# Copy pom files first to maximize Docker layer cache reuse
+COPY eladmin/pom.xml /build/eladmin/pom.xml
+COPY eladmin/eladmin-common/pom.xml /build/eladmin/eladmin-common/pom.xml
+COPY eladmin/eladmin-logging/pom.xml /build/eladmin/eladmin-logging/pom.xml
+COPY eladmin/eladmin-system/pom.xml /build/eladmin/eladmin-system/pom.xml
+COPY eladmin/eladmin-tools/pom.xml /build/eladmin/eladmin-tools/pom.xml
+COPY eladmin/eladmin-generator/pom.xml /build/eladmin/eladmin-generator/pom.xml
+
+WORKDIR /build/eladmin
+RUN mvn -pl eladmin-system -am dependency:go-offline -DskipTests
+
+# Copy source code after dependencies are cached
+WORKDIR /build
+COPY eladmin /build/eladmin
+
+WORKDIR /build/eladmin
+RUN mvn -pl eladmin-system -am clean package -DskipTests
+
+# =============================================================================
+# Stage 2: Runtime image
+# =============================================================================
 FROM eclipse-temurin:8-jre
 
 # Install dumb-init for proper signal handling and wget for healthcheck
@@ -9,30 +33,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     dumb-init wget \
     && rm -rf /var/lib/apt/lists/*
 
-# The base image already has user 'ubuntu' (UID 1000) — use it directly
 WORKDIR /app
 
 # Create file storage directories and set ownership to ubuntu user
 RUN mkdir -p /home/eladmin/file /home/eladmin/avatar && \
     chown -R ubuntu:ubuntu /home/eladmin
 
-# Copy JAR from deployment root directory
-# Expected path in build context: ./eladmin-system-1.1.jar
-COPY --chown=ubuntu:ubuntu eladmin-system-1.1.jar app.jar
+# Copy built JAR from the builder stage
+COPY --from=builder --chown=ubuntu:ubuntu /build/eladmin/eladmin-system/target/eladmin-system-1.1.jar /app/app.jar
 
 # Copy startup script
 COPY --chown=ubuntu:ubuntu docker/mealserver/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# Switch to ubuntu user (non-root)
 USER ubuntu
 
-# Expose backend port
 EXPOSE 8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget -q --spider http://localhost:8000/ || exit 1
 
-# Use dumb-init as PID 1 to handle signals properly
 ENTRYPOINT ["/app/entrypoint.sh"]
