@@ -21,7 +21,7 @@ RUN mkdir -p /home/eladmin/file /home/eladmin/avatar && \
 COPY --chown=ubuntu:ubuntu eladmin-system-1.1.jar app.jar
 
 # Copy startup script
-COPY --chown=ubuntu:ubuntu docker/backend/entrypoint.sh /app/entrypoint.sh
+COPY --chown=ubuntu:ubuntu docker/mealserver/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # Switch to ubuntu user (non-root)

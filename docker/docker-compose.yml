@@ -4,9 +4,10 @@ services:
   # Backend (Spring Boot JAR)
   # ------------------------------
   backend:
+    image: mealserver
     build:
       context: ../
-      dockerfile: docker/backend/Dockerfile
+      dockerfile: docker/mealserver/Dockerfile
     container_name: mealserver
     restart: unless-stopped
     environment:
@@ -49,9 +50,10 @@ services:
   # Frontend (Nginx serving Vue SPA)
   # ------------------------------
   frontend:
+    image: mealweb
     build:
       context: ../
-      dockerfile: docker/frontend/Dockerfile
+      dockerfile: docker/mealweb/Dockerfile
       args:
         VUE_APP_BASE_API: /
     container_name: mealweb

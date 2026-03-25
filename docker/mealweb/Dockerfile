@@ -37,7 +37,7 @@ RUN rm -rf /etc/nginx/conf.d/default.conf /usr/share/nginx/html/*
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy custom Nginx configuration
-COPY docker/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker/mealweb/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Create nginx user with limited privileges
 RUN chown -R nginx:nginx /usr/share/nginx/html && \
