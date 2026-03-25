@@ -7,7 +7,7 @@ services:
     build:
       context: ../
       dockerfile: docker/backend/Dockerfile
-    container_name: eladmin-backend
+    container_name: mealserver
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
@@ -25,9 +25,9 @@ services:
       AVATAR_STORAGE_PATH: /home/eladmin/avatar
       BACKEND_JVM_HEAP_MIN: ${BACKEND_JVM_HEAP_MIN:-256m}
       BACKEND_JVM_HEAP_MAX: ${BACKEND_JVM_HEAP_MAX:-512m}
-    # 仅内部网络访问，Nginx 通过 docker-eladmin-net 代理，不对外暴露
-    ports:
-      - "127.0.0.1:8000:8000"
+    # 仅供 Docker 内部网络访问，Nginx 通过 eladmin-net 代理，不对宿主机暴露
+    expose:
+      - "8000"
     volumes:
       - backend_files:/home/eladmin
     networks:
@@ -54,7 +54,7 @@ services:
       dockerfile: docker/frontend/Dockerfile
       args:
         VUE_APP_BASE_API: /
-    container_name: eladmin-frontend
+    container_name: mealweb
     restart: unless-stopped
     ports:
       - "18080:80"
