@@ -59,7 +59,7 @@ deploy_compose() {
   log "rebuilding and starting containers"
   (
     cd "$DEPLOY_BASE_DIR"
-    docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --build
+    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --build
   )
 }
 

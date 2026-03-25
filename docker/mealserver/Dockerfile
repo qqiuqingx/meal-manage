@@ -1,9 +1,13 @@
+# syntax=docker/dockerfile:1.7
+
 # =============================================================================
 # Stage 1: Build backend JAR with Maven
 # =============================================================================
 FROM maven:3.8.8-eclipse-temurin-8 AS builder
 
 WORKDIR /build
+
+COPY docker/mealserver/settings.xml /root/.m2/settings.xml
 
 # Copy pom files first to maximize Docker layer cache reuse
 COPY eladmin/pom.xml /build/eladmin/pom.xml
@@ -14,14 +18,16 @@ COPY eladmin/eladmin-tools/pom.xml /build/eladmin/eladmin-tools/pom.xml
 COPY eladmin/eladmin-generator/pom.xml /build/eladmin/eladmin-generator/pom.xml
 
 WORKDIR /build/eladmin
-RUN mvn -pl eladmin-system -am dependency:go-offline -DskipTests
+RUN --mount=type=cache,target=/root/.m2/repository \
+    mvn -s /root/.m2/settings.xml -pl eladmin-system -am dependency:go-offline -DskipTests
 
 # Copy source code after dependencies are cached
 WORKDIR /build
 COPY eladmin /build/eladmin
 
 WORKDIR /build/eladmin
-RUN mvn -pl eladmin-system -am clean package -DskipTests
+RUN --mount=type=cache,target=/root/.m2/repository \
+    mvn -s /root/.m2/settings.xml -pl eladmin-system -am clean package -DskipTests
 
 # =============================================================================
 # Stage 2: Runtime image
