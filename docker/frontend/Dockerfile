@@ -12,7 +12,7 @@ COPY eladmin-web/package.json eladmin-web/package-lock.json* ./
 RUN npm ci --prefer-offline || npm install --prefer-offline
 
 # Copy source code
-COPY eladmin-web/ . .
+COPY eladmin-web/ ./
 
 # Override VUE_APP_BASE_API: use relative path so Nginx proxies /api/ to backend
 ARG VUE_APP_BASE_API=/

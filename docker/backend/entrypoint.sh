@@ -22,6 +22,7 @@ echo "=========================================="
 
 exec java ${JAVA_OPTS} -jar app.jar \
   --spring.profiles.active=${SPRING_PROFILES_ACTIVE:-prod} \
+  --spring.datasource.druid.driverClassName=com.mysql.cj.jdbc.Driver \
   --spring.datasource.druid.url="jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?serverTimezone=Asia/Shanghai&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true" \
   --spring.datasource.druid.username=${DB_USER} \
   --spring.datasource.druid.password=${DB_PWD} \
