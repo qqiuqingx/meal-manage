@@ -3,8 +3,8 @@
     <!--工具栏-->
     <div class="head-container">
       <div v-if="crud.props.searchToggle">
-        <el-input v-model="query.categoryName" clearable size="small" placeholder="输入分类名称搜索" style="width: 200px;" class="filter-item" @keyup.enter.native="crud.toQuery" />
-        <el-select v-model="query.enabled" clearable size="small" placeholder="状态" class="filter-item" style="width: 90px" @change="crud.toQuery">
+        <el-input v-model="crud.query.categoryName" clearable size="small" placeholder="输入分类名称搜索" style="width: 200px;" class="filter-item" @keyup.enter.native="handleQuery" />
+        <el-select v-model="crud.query.enabled" clearable size="small" placeholder="状态" class="filter-item" style="width: 90px" @change="handleQuery">
           <el-option label="启用" :value="true" />
           <el-option label="停用" :value="false" />
         </el-select>
@@ -63,6 +63,10 @@
       v-loading="crud.loading"
       :data="crud.data"
       row-key="id"
+      :tree-props="{ children: 'children' }"
+      :default-expand-all="true"
+      @select="crud.selectChange"
+      @select-all="crud.selectAllChange"
       @selection-change="crud.selectionChangeHandler"
     >
       <el-table-column :selectable="checkboxT" type="selection" width="55" />
@@ -70,7 +74,9 @@
       <el-table-column label="分类编码" prop="categoryCode" />
       <el-table-column label="层级">
         <template slot-scope="scope">
-          {{ scope.row.level === 1 ? '父级' : '子级' }}
+          <el-tag :type="scope.row.level === 1 ? 'primary' : 'info'" size="mini">
+            {{ scope.row.level === 1 ? '父级' : '子级' }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="编号前缀">
@@ -129,7 +135,9 @@ export default {
   components: { Treeselect, udOperation, rrOperation, crudOperation },
   mixins: [presenter(), header(), form(defaultForm), crud()],
   cruds() {
-    return CRUD({ title: '套餐分类', url: '/api/customerPackageCategory', idField: 'id', sort: 'sort,asc', crudMethod: { ...api }})
+    return CRUD({ title: '套餐分类', url: '/api/customerPackageCategory', idField: 'id', crudMethod: { ...api },
+      query: { categoryName: '', enabled: null }
+    })
   },
   data() {
     return {
@@ -138,11 +146,8 @@ export default {
         edit: ['admin', 'customerPackageCategory:edit'],
         del: ['admin', 'customerPackageCategory:del']
       },
+      fullTreeData: [],
       parentOptions: [],
-      query: {
-        categoryName: '',
-        enabled: null
-      },
       rules: {
         categoryName: [
           { required: true, message: '请输入分类名称', trigger: 'blur' }
@@ -163,8 +168,56 @@ export default {
   methods: {
     checkPer,
     [CRUD.HOOK.beforeRefresh]() {
-      this.loadParents()
-      return true
+      this.crud.loading = true
+      api.getTree().then(res => {
+        this.fullTreeData = Array.isArray(res) ? res : (res.data || [])
+        this.applyFilter()
+        this.loadParents()
+      }).catch(() => {
+        this.crud.loading = false
+      })
+      return false
+    },
+    handleQuery() {
+      if (this.fullTreeData.length > 0) {
+        this.applyFilter()
+      } else {
+        this.crud.refresh()
+      }
+    },
+    applyFilter() {
+      const name = (this.crud.query.categoryName || '').trim()
+      const enabled = this.crud.query.enabled
+      const hasFilter = name || (enabled !== null && enabled !== undefined && enabled !== '')
+
+      let result
+      if (!hasFilter) {
+        result = this.fullTreeData
+      } else {
+        const filtered = []
+        for (const parent of this.fullTreeData) {
+          const parentMatch = this.matchNode(parent, name, enabled)
+          const matchedChildren = (parent.children || []).filter(child => this.matchNode(child, name, enabled))
+
+          if (parentMatch) {
+            // 父级匹配：保留父级及全部子级
+            filtered.push(parent)
+          } else if (matchedChildren.length > 0) {
+            // 父级不匹配但有匹配子级：保留父级，只展示匹配的子级
+            filtered.push({ ...parent, children: matchedChildren })
+          }
+        }
+        result = filtered
+      }
+      // 深拷贝隔断引用，防止 Element UI 树形表格交互时修改 fullTreeData
+      this.crud.data = JSON.parse(JSON.stringify(result))
+      this.crud.resetDataStatus()
+      this.crud.loading = false
+    },
+    matchNode(node, name, enabled) {
+      const nameMatch = !name || node.categoryName.includes(name)
+      const enabledMatch = enabled === null || enabled === undefined || enabled === '' || node.enabled === enabled
+      return nameMatch && enabledMatch
     },
     normalizer(node) {
       return {
@@ -176,7 +229,7 @@ export default {
     async loadParents() {
       try {
         const res = await api.getParents()
-        this.parentOptions = res.data || []
+        this.parentOptions = Array.isArray(res) ? res : (res.data || [])
       } catch (e) {
         console.error('loadParents error', e)
       }
