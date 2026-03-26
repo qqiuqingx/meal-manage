@@ -31,9 +31,9 @@ public class CustomerPackageCategoryController {
     @PreAuthorize("@el.check('customerPackageCategory:list')")
     public ResponseEntity<PageResult<CustomerPackageCategory>> query(
             CustomerPackageCategoryQueryCriteria criteria,
-            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size) {
-        return ResponseEntity.ok(categoryService.query(criteria, current, size));
+        return ResponseEntity.ok(categoryService.query(criteria, page, size));
     }
 
     /**
