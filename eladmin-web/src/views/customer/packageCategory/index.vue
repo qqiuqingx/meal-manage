@@ -73,7 +73,11 @@
           {{ scope.row.level === 1 ? '父级' : '子级' }}
         </template>
       </el-table-column>
-      <el-table-column v-if="scope.row.level === 1" label="编号前缀" prop="codePrefix" />
+      <el-table-column label="编号前缀">
+        <template slot-scope="scope">
+          <span v-if="scope.row.level === 1">{{ scope.row.codePrefix }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="排序" prop="sort" />
       <el-table-column label="状态" align="center">
         <template slot-scope="scope">
