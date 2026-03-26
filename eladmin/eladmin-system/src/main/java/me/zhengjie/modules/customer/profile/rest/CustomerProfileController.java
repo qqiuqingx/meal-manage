@@ -29,7 +29,7 @@ public class CustomerProfileController {
      * 分页查询客户档案
      */
     @GetMapping
-    @PreAuthorize("hasAuthority('customerProfile:list')")
+    @PreAuthorize("@el.check('customerProfile:list')")
     public ResponseEntity<PageResult<CustomerProfile>> query(
             CustomerProfileQueryCriteria criteria,
             @RequestParam(defaultValue = "1") Integer current,
@@ -41,7 +41,7 @@ public class CustomerProfileController {
      * 获取客户详情
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('customerProfile:list')")
+    @PreAuthorize("@el.check('customerProfile:list')")
     public ResponseEntity<CustomerProfileDetailDto> getDetail(@PathVariable Long id) {
         return ResponseEntity.ok(profileService.getDetail(id));
     }
@@ -51,7 +51,7 @@ public class CustomerProfileController {
      */
     @PostMapping
     @Log("新增客户档案")
-    @PreAuthorize("hasAuthority('customerProfile:add')")
+    @PreAuthorize("@el.check('customerProfile:add')")
     public ResponseEntity<Void> create(@Validated @RequestBody CustomerProfileSaveDto dto) {
         profileService.create(dto);
         return ResponseEntity.status(HttpStatus.CREATED).build();
@@ -62,7 +62,7 @@ public class CustomerProfileController {
      */
     @PutMapping
     @Log("编辑客户档案")
-    @PreAuthorize("hasAuthority('customerProfile:edit')")
+    @PreAuthorize("@el.check('customerProfile:edit')")
     public ResponseEntity<Void> update(@Validated @RequestBody CustomerProfileSaveDto dto) {
         profileService.update(dto);
         return ResponseEntity.ok().build();
@@ -73,7 +73,7 @@ public class CustomerProfileController {
      */
     @PutMapping("/{id}/status")
     @Log("更新客户档案状态")
-    @PreAuthorize("hasAuthority('customerProfile:status')")
+    @PreAuthorize("@el.check('customerProfile:status')")
     public ResponseEntity<Void> updateStatus(
             @PathVariable Long id,
             @Validated @RequestBody CustomerProfileStatusRequestDto dto) {
@@ -85,7 +85,7 @@ public class CustomerProfileController {
      * 生成客户编号
      */
     @GetMapping("/generateCode")
-    @PreAuthorize("hasAuthority('customerProfile:add')")
+    @PreAuthorize("@el.check('customerProfile:add')")
     public ResponseEntity<String> generateCode(@RequestParam Long parentPackageId) {
         return ResponseEntity.ok(profileService.generateCode(parentPackageId));
     }
