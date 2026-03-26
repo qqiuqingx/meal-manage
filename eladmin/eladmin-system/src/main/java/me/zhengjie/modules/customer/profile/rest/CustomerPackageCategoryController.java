@@ -26,7 +26,7 @@ public class CustomerPackageCategoryController {
      * 获取分类树形结构
      */
     @GetMapping("/tree")
-    @PreAuthorize("hasAuthority('customerPackageCategory:list')")
+    @PreAuthorize("@el.check('customerPackageCategory:list')")
     public ResponseEntity<List<CustomerPackageCategory>> getTree() {
         return ResponseEntity.ok(categoryService.getTree());
     }
@@ -35,7 +35,7 @@ public class CustomerPackageCategoryController {
      * 获取父级分类列表(仅启用状态)
      */
     @GetMapping("/parents")
-    @PreAuthorize("hasAuthority('customerPackageCategory:list')")
+    @PreAuthorize("@el.check('customerPackageCategory:list')")
     public ResponseEntity<List<CustomerPackageCategory>> getParents() {
         return ResponseEntity.ok(categoryService.getParents());
     }
@@ -45,7 +45,7 @@ public class CustomerPackageCategoryController {
      */
     @PostMapping
     @Log("新增套餐分类")
-    @PreAuthorize("hasAuthority('customerPackageCategory:add')")
+    @PreAuthorize("@el.check('customerPackageCategory:add')")
     public ResponseEntity<Void> create(@Validated @RequestBody CustomerPackageCategory category) {
         categoryService.create(category);
         return ResponseEntity.status(HttpStatus.CREATED).build();
@@ -56,7 +56,7 @@ public class CustomerPackageCategoryController {
      */
     @PutMapping
     @Log("编辑套餐分类")
-    @PreAuthorize("hasAuthority('customerPackageCategory:edit')")
+    @PreAuthorize("@el.check('customerPackageCategory:edit')")
     public ResponseEntity<Void> update(@Validated @RequestBody CustomerPackageCategory category) {
         categoryService.update(category);
         return ResponseEntity.ok().build();
@@ -67,7 +67,7 @@ public class CustomerPackageCategoryController {
      */
     @PutMapping("/{id}/status")
     @Log("更新套餐分类状态")
-    @PreAuthorize("hasAuthority('customerPackageCategory:status')")
+    @PreAuthorize("@el.check('customerPackageCategory:status')")
     public ResponseEntity<Void> updateStatus(
             @PathVariable Long id,
             @RequestBody StatusRequest request) {
@@ -80,7 +80,7 @@ public class CustomerPackageCategoryController {
      */
     @DeleteMapping("/{id}")
     @Log("删除套餐分类")
-    @PreAuthorize("hasAuthority('customerPackageCategory:del')")
+    @PreAuthorize("@el.check('customerPackageCategory:del')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         categoryService.delete(id);
         return ResponseEntity.ok().build();
