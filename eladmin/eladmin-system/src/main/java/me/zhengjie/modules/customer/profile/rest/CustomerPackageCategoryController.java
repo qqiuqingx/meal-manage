@@ -2,7 +2,9 @@ package me.zhengjie.modules.customer.profile.rest;
 
 import me.zhengjie.annotation.Log;
 import me.zhengjie.modules.customer.profile.domain.CustomerPackageCategory;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerPackageCategoryQueryCriteria;
 import me.zhengjie.modules.customer.profile.service.CustomerPackageCategoryService;
+import me.zhengjie.utils.PageResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +23,18 @@ public class CustomerPackageCategoryController {
 
     @Autowired
     private CustomerPackageCategoryService categoryService;
+
+    /**
+     * 分页查询分类
+     */
+    @GetMapping
+    @PreAuthorize("@el.check('customerPackageCategory:list')")
+    public ResponseEntity<PageResult<CustomerPackageCategory>> query(
+            CustomerPackageCategoryQueryCriteria criteria,
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size) {
+        return ResponseEntity.ok(categoryService.query(criteria, current, size));
+    }
 
     /**
      * 获取分类树形结构

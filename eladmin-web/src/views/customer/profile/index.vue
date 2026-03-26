@@ -68,8 +68,8 @@
       :page-size="crud.page.size"
       :total="crud.page.total"
       layout="total, sizes, prev, pager, next, jumper"
-      @size-change="crud.sizeChange"
-      @current-change="crud.pageChange"
+      @size-change="crud.sizeChangeHandler"
+      @current-change="crud.pageChangeHandler"
     />
 
     <!--表单组件-->
@@ -218,7 +218,6 @@
 import * as profileApi from '@/api/customer/profile'
 import * as categoryApi from '@/api/customer/packageCategory'
 import CRUD, { presenter, header, form, crud } from '@crud/crud'
-import { checkPer } from '@/utils/permission'
 import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
 
@@ -291,48 +290,116 @@ export default {
   },
   created() {
     this.loadParentPackages()
-    this.initForm()
   },
   methods: {
-    checkPer,
+    [CRUD.HOOK.beforeToCU]() {
+      // For edit: map flat defaultAddress to addresses array.
+      // For add: addresses already set by beforeToAdd.
+      if (this.form && this.form.defaultAddress) {
+        this.$set(this.form, 'addresses', [
+          { addressType: 'DEFAULT', addressDetail: this.form.defaultAddress, contactName: '', contactPhone: '' },
+          { addressType: 'WORKDAY', addressDetail: '', contactName: '', contactPhone: '' },
+          { addressType: 'WEEKEND', addressDetail: '', contactName: '', contactPhone: '' }
+        ])
+      }
+    },
+    [CRUD.HOOK.beforeSubmit]() {
+      // Sync form data to crud.form before submit, including address mapping
+      const formData = JSON.parse(JSON.stringify(this.form))
+      // Map flat defaultAddress to addresses array if addresses are empty/default
+      if (!formData.addresses || !formData.addresses[0] || !formData.addresses[0].addressDetail) {
+        formData.addresses = [
+          { addressType: 'DEFAULT', addressDetail: formData.defaultAddress || '', contactName: '', contactPhone: '' },
+          { addressType: 'WORKDAY', addressDetail: '', contactName: '', contactPhone: '' },
+          { addressType: 'WEEKEND', addressDetail: '', contactName: '', contactPhone: '' }
+        ]
+      }
+      Object.keys(formData).forEach(key => {
+        this.crud.form[key] = formData[key]
+      })
+      return true
+    },
     [CRUD.HOOK.beforeRefresh]() {
       return true
     },
     [CRUD.HOOK.beforeToAdd]() {
-      this.initForm()
       this.loadParentPackages()
       return true
     },
-    [CRUD.HOOK.beforeToEdit]() {
-      this.loadParentPackages()
-      this.loadChildPackages(this.form.packageInfo.parentPackageId)
+    [CRUD.HOOK.afterToAdd]() {
+      // Runs AFTER resetForm (which copies empty addresses from defaultForm).
+      // Set addresses here so they persist in the dialog.
+      this.$set(this.form, 'addresses', [
+        { addressType: 'DEFAULT', addressDetail: '', contactName: '', contactPhone: '' },
+        { addressType: 'WORKDAY', addressDetail: '', contactName: '', contactPhone: '' },
+        { addressType: 'WEEKEND', addressDetail: '', contactName: '', contactPhone: '' }
+      ])
+    },
+    [CRUD.HOOK.beforeToEdit](crud, form) {
+      return true
+    },
+    [CRUD.HOOK.afterToEdit]() {
+      this.loadParentPackages().then(() => {
+        // 'this.form' IS 'crud.form' (same reactive object from form mixin)
+        const crudData = JSON.parse(JSON.stringify(this.form))
+        Object.keys(crudData).forEach(key => {
+          this.form[key] = crudData[key]
+        })
+        if (this.form.packageInfo) {
+          if (crudData.parentPackageName) {
+            const parentPkg = this.parentPackages.find(p => p.categoryName === crudData.parentPackageName)
+            if (parentPkg) {
+              this.form.packageInfo.parentPackageId = parentPkg.id
+            }
+          }
+          this.form.packageInfo.startDate = crudData.startDate || this.form.packageInfo.startDate
+          this.form.packageInfo.endDate = crudData.endDate || this.form.packageInfo.endDate
+        }
+        requestAnimationFrame(() => {
+          this.$forceUpdate()
+          this.$nextTick(() => {
+            this.loadChildPackages(this.form.packageInfo ? this.form.packageInfo.parentPackageId : null).then(() => {
+              if (crudData.childPackageName && this.childPackages.length > 0) {
+                const childPkg = this.childPackages.find(c => c.categoryName === crudData.childPackageName)
+                if (childPkg) {
+                  this.form.packageInfo.childPackageId = childPkg.id
+                  this.$forceUpdate()
+                }
+              }
+            })
+          })
+        })
+      })
       return true
     },
     initForm() {
-      this.form = JSON.parse(JSON.stringify(defaultForm))
+      // Use Object.assign to preserve binding to crud.form (not this.form = newObject)
+      // Save and restore addresses since Object.assign overwrites them
+      const savedAddresses = this.form && this.form.addresses
+      Object.assign(this.form, JSON.parse(JSON.stringify(defaultForm)))
+      if (savedAddresses) {
+        this.form.addresses = savedAddresses
+      }
     },
     async loadParentPackages() {
       try {
         const res = await categoryApi.getParents()
-        this.parentPackages = res.data || []
+        const data = res.data || res // Handle both {data: [...]} and [...]
+        this.$nextTick(() => {
+          this.parentPackages = data || []
+        })
       } catch (e) {
         console.error('loadParentPackages error', e)
       }
     },
     async parentPackageChange(parentId) {
       // 加载子套餐
-      this.loadChildPackages(parentId)
+      await this.loadChildPackages(parentId)
       // 清空子套餐选择
       this.form.packageInfo.childPackageId = null
 
       // 自动生成编号
-      if (this.form.id) {
-        // 编辑模式：如果用户未手动修改过编号，则重新生成
-        // 这里简化处理：直接生成
-        this.generateCode(parentId)
-      } else {
-        this.generateCode(parentId)
-      }
+      await this.generateCode(parentId)
     },
     async loadChildPackages(parentId) {
       if (!parentId) {
@@ -341,7 +408,7 @@ export default {
       }
       try {
         const res = await categoryApi.getTree()
-        const tree = res.data || []
+        const tree = res.data || res || []
         const parent = tree.find(p => p.id === parentId)
         this.childPackages = parent ? (parent.children || []) : []
       } catch (e) {
@@ -352,7 +419,8 @@ export default {
       if (!parentId) return
       try {
         const res = await profileApi.generateCode(parentId)
-        this.form.customerCode = res.data
+        const code = res.data || res
+        this.form.customerCode = code
       } catch (e) {
         console.error('generateCode error', e)
       }

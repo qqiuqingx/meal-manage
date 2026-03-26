@@ -1,6 +1,8 @@
 package me.zhengjie.modules.customer.profile.service;
 
 import me.zhengjie.modules.customer.profile.domain.CustomerPackageCategory;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerPackageCategoryQueryCriteria;
+import me.zhengjie.utils.PageResult;
 
 import java.util.List;
 
@@ -8,6 +10,11 @@ import java.util.List;
  * 套餐分类服务接口
  */
 public interface CustomerPackageCategoryService {
+
+    /**
+     * 分页查询分类
+     */
+    PageResult<CustomerPackageCategory> query(CustomerPackageCategoryQueryCriteria criteria, Integer current, Integer size);
 
     /**
      * 获取分类树形结构
