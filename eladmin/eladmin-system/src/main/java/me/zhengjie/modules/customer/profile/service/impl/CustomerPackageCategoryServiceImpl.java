@@ -2,14 +2,18 @@ package me.zhengjie.modules.customer.profile.service.impl;
 
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.profile.domain.CustomerPackageCategory;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerPackageCategoryQueryCriteria;
 import me.zhengjie.modules.customer.profile.mapper.CustomerPackageCategoryMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerPackageCategoryService;
+import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -20,6 +24,34 @@ public class CustomerPackageCategoryServiceImpl implements CustomerPackageCatego
 
     @Autowired
     private CustomerPackageCategoryMapper categoryMapper;
+
+    @Override
+    public PageResult<CustomerPackageCategory> query(CustomerPackageCategoryQueryCriteria criteria, Integer current, Integer size) {
+        List<CustomerPackageCategory> allCategories = categoryMapper.findAllOrderBySort();
+
+        // 过滤查询条件
+        if (criteria != null) {
+            allCategories = allCategories.stream()
+                .filter(c -> criteria.getCategoryName() == null || c.getCategoryName().contains(criteria.getCategoryName()))
+                .filter(c -> criteria.getCategoryCode() == null || c.getCategoryCode().contains(criteria.getCategoryCode()))
+                .filter(c -> criteria.getParentId() == null || Objects.equals(c.getParentId(), criteria.getParentId()))
+                .filter(c -> criteria.getLevel() == null || c.getLevel().equals(criteria.getLevel()))
+                .filter(c -> criteria.getEnabled() == null || c.getEnabled().equals(criteria.getEnabled()))
+                .collect(Collectors.toList());
+        }
+
+        // 分页处理
+        int total = allCategories.size();
+        int fromIndex = (current - 1) * size;
+        int toIndex = Math.min(fromIndex + size, total);
+
+        if (fromIndex >= total) {
+            return new PageResult<>(new ArrayList<>(), total);
+        }
+
+        List<CustomerPackageCategory> pageList = allCategories.subList(fromIndex, toIndex);
+        return new PageResult<>(pageList, total);
+    }
 
     @Override
     public List<CustomerPackageCategory> getTree() {
