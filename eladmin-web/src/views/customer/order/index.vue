@@ -83,144 +83,28 @@
     />
 
     <!--表单组件-->
-    <el-dialog append-to-body :close-on-click-modal="false" :before-close="crud.cancelCU" :visible.sync="crud.status.cu > 0" :title="crud.status.title" width="900px" top="5vh">
+    <el-dialog
+      ref="dialogRef"
+      append-to-body
+      :close-on-click-modal="false"
+      :before-close="handleDialogClose"
+      :visible.sync="dialogVisible"
+      :title="dialogTitle"
+      width="900px"
+      top="5vh"
+    >
       <el-form ref="form" :model="form" :rules="rules" size="small" label-width="110px">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="客户" prop="customerId">
-              <el-select
-                v-model="form.customerId"
-                filterable
-                remote
-                placeholder="输入客户姓名或手机号搜索"
-                :remote-method="searchCustomer"
-                :loading="customerLoading"
-                style="width: 100%;"
-                @change="onCustomerChange"
-              >
-                <el-option v-for="item in customers" :key="item.id" :label="item.customerName + ' - ' + item.phone" :value="item.id" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="订单状态" prop="status">
-              <el-select v-model="form.status" placeholder="请选择状态" style="width: 100%;">
-                <el-option label="进行中" :value="1" />
-                <el-option label="已完成" :value="2" />
-                <el-option label="已取消" :value="0" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-divider content-position="left">金额信息</el-divider>
-
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <el-form-item label="总金额(元)" prop="totalAmount">
-              <el-input-number v-model="form.totalAmount" :min="0" :precision="2" controls-position="right" style="width: 100%;" @change="calcBalance" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="成交金额(元)" prop="finalAmount">
-              <el-input-number v-model="form.finalAmount" :min="0" :precision="2" controls-position="right" style="width: 100%;" @change="calcBalance" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="定金(元)">
-              <el-input-number v-model="form.depositAmount" :min="0" :precision="2" controls-position="right" style="width: 100%;" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-divider content-position="left">餐数信息</el-divider>
-
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <el-form-item label="早餐合计(份)">
-              <el-input-number v-model="form.breakfastCount" :min="0" controls-position="right" style="width: 100%;" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="午餐+晚餐(份)">
-              <el-input-number v-model="form.lunchDinnerCount" :min="0" controls-position="right" style="width: 100%;" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="合计(份)">
-              <el-input-number :value="totalCount" :min="0" disabled controls-position="right" style="width: 100%;" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <el-form-item label="早餐单价(元)">
-              <el-input-number v-model="form.breakfastPrice" :min="0" :precision="2" controls-position="right" style="width: 100%;" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="午餐晚餐单价(元)">
-              <el-input-number v-model="form.lunchDinnerPrice" :min="0" :precision="2" controls-position="right" style="width: 100%;" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-divider content-position="left">核销信息</el-divider>
-
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <el-form-item label="核销餐数(合计)">
-              <el-input-number v-model="form.verifiedCount" :min="0" controls-position="right" style="width: 100%;" @change="calcRemaining" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="核销金额(元)">
-              <el-input-number v-model="form.verifiedAmount" :min="0" :precision="2" controls-position="right" style="width: 100%;" @change="calcBalance" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="剩余餐数">
-              <el-input-number v-model="form.remainingCount" :min="0" disabled controls-position="right" style="width: 100%;" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="餐费余额">
-              <el-input-number v-model="form.mealBalance" :min="0" :precision="2" disabled controls-position="right" style="width: 100%;" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-divider content-position="left">日期信息</el-divider>
-
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <el-form-item label="成交时间">
-              <el-date-picker v-model="form.dealTime" type="datetime" placeholder="选择成交时间" style="width: 100%;" value-format="yyyy-MM-dd HH:mm:ss" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="第一次送餐时间">
-              <el-date-picker v-model="form.firstDeliveryTime" type="datetime" placeholder="选择送餐时间" style="width: 100%;" value-format="yyyy-MM-dd HH:mm:ss" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="订单开始日期">
-              <el-date-picker v-model="form.startDate" type="date" placeholder="选择开始日期" style="width: 100%;" value-format="yyyy-MM-dd" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="订单结束日期">
-              <el-date-picker v-model="form.endDate" type="date" placeholder="选择结束日期" style="width: 100%;" value-format="yyyy-MM-dd" />
-            </el-form-item>
-          </el-col>
-        </el-row>
+        <OrderForm
+          ref="orderFormRef"
+          v-model="form"
+          mode="order"
+          :readonly="false"
+          :customer-disabled="!!form.id"
+          :current-customer="{ id: form.customerId, customerName: form.customerName, phone: form.phone }"
+          :rules="rules"
+          @customer-change="onCustomerChange"
+          @calc-change="onCalcChange"
+        />
 
         <el-row :gutter="20">
           <el-col :span="24">
@@ -231,8 +115,8 @@
         </el-row>
       </el-form>
       <div slot="footer" class="dialog-footer">
-        <el-button type="text" @click="crud.cancelCU">取消</el-button>
-        <el-button :loading="crud.status.cu === 2" type="primary" @click="crud.submitCU">确认</el-button>
+        <el-button type="text" @click="cancelDialog">取消</el-button>
+        <el-button :loading="submitLoading" type="primary" @click="submitForm">确认</el-button>
       </div>
     </el-dialog>
   </div>
@@ -240,39 +124,17 @@
 
 <script>
 import * as orderApi from '@/api/customer/order'
-import * as profileApi from '@/api/customer/profile'
+import { createOrderDefaultForm } from '@/components/Order/OrderForm.vue'
 import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
+import OrderForm from '@/components/Order/OrderForm.vue'
 import { parseTime } from '@/utils/index'
-
-const defaultForm = {
-  id: null,
-  customerId: null,
-  orderCode: null,
-  depositAmount: 0,
-  totalAmount: null,
-  finalAmount: null,
-  breakfastCount: 0,
-  lunchDinnerCount: 0,
-  breakfastPrice: 0,
-  lunchDinnerPrice: 0,
-  verifiedCount: 0,
-  verifiedAmount: 0,
-  mealBalance: 0,
-  remainingCount: 0,
-  dealTime: null,
-  firstDeliveryTime: null,
-  startDate: null,
-  endDate: null,
-  status: 1,
-  remark: null
-}
 
 export default {
   name: 'CustomerOrder',
-  components: { crudOperation, rrOperation },
-  mixins: [presenter(), header(), form(defaultForm), crud()],
+  components: { crudOperation, rrOperation, OrderForm },
+  mixins: [presenter(), header(), form(createOrderDefaultForm()), crud()],
   cruds() {
     return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }})
   },
@@ -288,8 +150,7 @@ export default {
         customerName: '',
         status: null
       },
-      customers: [],
-      customerLoading: false,
+      submitLoading: false,
       rules: {
         customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
         totalAmount: [{ required: true, message: '请输入总金额', trigger: 'blur' }],
@@ -299,60 +160,76 @@ export default {
     }
   },
   computed: {
-    totalCount() {
-      const breakfast = this.form.breakfastCount || 0
-      const lunchDinner = this.form.lunchDinnerCount || 0
-      return breakfast + lunchDinner
+    dialogVisible: {
+      get() {
+        return this.crud.status.cu > 0
+      },
+      set(val) {
+        if (!val) {
+          this.crud.cancelCU()
+        }
+      }
+    },
+    dialogTitle() {
+      return this.crud.status.add === CRUD.STATUS.PREPARED ? '新增订单' : '编辑订单'
     }
   },
   methods: {
     [CRUD.HOOK.beforeToCU]() {
-      // 编辑时：把当前客户加入下拉列表，避免列表为空
-      if (this.form.customerId && this.form.customerName) {
-        const exists = this.customers.find(c => c.id === this.form.customerId)
-        if (!exists) {
-          this.customers = [{ id: this.form.customerId, customerName: this.form.customerName, phone: this.form.phone }]
-        }
-      }
+      return true
     },
     [CRUD.HOOK.beforeToAdd]() {
-      this.customers = []
+      // 重置表单
+      Object.assign(this.form, createOrderDefaultForm())
       return true
     },
     [CRUD.HOOK.beforeSubmit]() {
       // 计算余额和剩余餐数
-      this.calcBalance()
-      this.calcRemaining()
+      this.onCalcChange()
       return true
     },
-    calcBalance() {
+    handleDialogClose(done) {
+      this.cancelDialog()
+      done && done()
+    },
+    cancelDialog() {
+      this.crud.cancelCU()
+    },
+    async submitForm() {
+      const valid = await this.$refs.orderFormRef.validate().catch(() => false)
+      if (!valid) return
+      try {
+        this.submitLoading = true
+        if (this.form.id) {
+          await orderApi.edit({ ...this.form })
+          this.$message.success('编辑成功')
+        } else {
+          await orderApi.add({ ...this.form })
+          this.$message.success('新增成功')
+        }
+        this.crud.cancelCU()
+        this.crud.refresh()
+      } catch (e) {
+        console.error('submit error', e)
+        this.$message.error((e.message || '') || '操作失败')
+      } finally {
+        this.submitLoading = false
+      }
+    },
+    onCustomerChange(customerId, customer) {
+      // 客户变更事件处理（如有需要可扩展）
+    },
+    onCalcChange() {
+      // 余额计算
       const finalAmt = this.form.finalAmount || 0
       const verifiedAmt = this.form.verifiedAmount || 0
       this.form.mealBalance = Math.max(0, finalAmt - verifiedAmt)
-    },
-    calcRemaining() {
-      const total = this.totalCount
+      // 剩余餐数计算
+      const breakfast = this.form.breakfastCount || 0
+      const lunchDinner = this.form.lunchDinnerCount || 0
+      const total = breakfast + lunchDinner
       const verified = this.form.verifiedCount || 0
       this.form.remainingCount = Math.max(0, total - verified)
-    },
-    async searchCustomer(query) {
-      if (!query) return
-      this.customerLoading = true
-      try {
-        const res = await profileApi.getProfiles({ customerName: query, size: 20 })
-        this.customers = res.content || []
-      } catch (e) {
-        console.error('searchCustomer error', e)
-      } finally {
-        this.customerLoading = false
-      }
-    },
-    onCustomerChange(customerId) {
-      const customer = this.customers.find(c => c.id === customerId)
-      if (customer) {
-        this.form.customerName = customer.customerName
-        this.form.phone = customer.phone
-      }
     },
     statusText(status) {
       if (status === 1) return '进行中'
