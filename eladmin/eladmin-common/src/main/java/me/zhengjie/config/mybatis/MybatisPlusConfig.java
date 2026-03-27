@@ -16,6 +16,7 @@
 package me.zhengjie.config.mybatis;
 
 import com.baomidou.mybatisplus.annotation.DbType;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import org.springframework.context.annotation.Bean;
@@ -38,5 +39,13 @@ public class MybatisPlusConfig {
         //添加MySQL的分页拦截器
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
         return interceptor;
+    }
+
+    /**
+     * 注册 JSON 类型处理器（全局）
+     */
+    @Bean
+    public JacksonTypeHandler jacksonTypeHandler() {
+        return new JacksonTypeHandler();
     }
 }
