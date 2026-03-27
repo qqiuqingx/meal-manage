@@ -1,0 +1,160 @@
+package me.zhengjie.modules.customer.order.domain;
+
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.Data;
+
+import java.io.Serializable;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+/**
+ * 客户订单实体
+ */
+@Data
+@TableName("customer_order")
+public class CustomerOrder implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
+
+    /**
+     * 客户ID
+     */
+    private Long customerId;
+
+    /**
+     * 订单编号
+     */
+    private String orderCode;
+
+    /**
+     * 定金金额
+     */
+    private BigDecimal depositAmount;
+
+    /**
+     * 总金额
+     */
+    private BigDecimal totalAmount;
+
+    /**
+     * 成交金额
+     */
+    private BigDecimal finalAmount;
+
+    /**
+     * 早餐合计餐数
+     */
+    private Integer breakfastCount;
+
+    /**
+     * 午餐+晚餐合计餐数
+     */
+    private Integer lunchDinnerCount;
+
+    /**
+     * 早餐单价
+     */
+    private BigDecimal breakfastPrice;
+
+    /**
+     * 午餐晚餐单价
+     */
+    private BigDecimal lunchDinnerPrice;
+
+    /**
+     * 核销餐数(合计)
+     */
+    private Integer verifiedCount;
+
+    /**
+     * 核销金额
+     */
+    private BigDecimal verifiedAmount;
+
+    /**
+     * 餐费余额
+     */
+    private BigDecimal mealBalance;
+
+    /**
+     * 剩余餐数
+     */
+    private Integer remainingCount;
+
+    /**
+     * 成交时间
+     */
+    private LocalDateTime dealTime;
+
+    /**
+     * 第一次送餐时间
+     */
+    private LocalDateTime firstDeliveryTime;
+
+    /**
+     * 订单开始日期
+     */
+    private LocalDate startDate;
+
+    /**
+     * 订单结束日期
+     */
+    private LocalDate endDate;
+
+    /**
+     * 订单状态(0=已取消,1=进行中,2=已完成)
+     */
+    private Integer status;
+
+    /**
+     * 备注
+     */
+    private String remark;
+
+    /**
+     * 创建人
+     */
+    private String createBy;
+
+    /**
+     * 更新人
+     */
+    private String updateBy;
+
+    /**
+     * 创建时间
+     */
+    private LocalDateTime createTime;
+
+    /**
+     * 更新时间
+     */
+    private LocalDateTime updateTime;
+
+    // ========== 非数据库字段 ==========
+
+    /**
+     * 客户姓名(查询时填充)
+     */
+    @TableField(exist = false)
+    private String customerName;
+
+    /**
+     * 客户手机号(查询时填充)
+     */
+    @TableField(exist = false)
+    private String phone;
+
+    /**
+     * 合计餐数(查询时计算)
+     */
+    @TableField(exist = false)
+    private Integer totalCount;
+}

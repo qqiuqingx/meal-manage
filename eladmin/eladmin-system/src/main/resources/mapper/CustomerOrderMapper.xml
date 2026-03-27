@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper">
+
+    <resultMap id="BaseResultMap" type="me.zhengjie.modules.customer.order.domain.CustomerOrder">
+        <id column="id" property="id"/>
+        <result column="customer_id" property="customerId"/>
+        <result column="order_code" property="orderCode"/>
+        <result column="deposit_amount" property="depositAmount"/>
+        <result column="total_amount" property="totalAmount"/>
+        <result column="final_amount" property="finalAmount"/>
+        <result column="breakfast_count" property="breakfastCount"/>
+        <result column="lunch_dinner_count" property="lunchDinnerCount"/>
+        <result column="breakfast_price" property="breakfastPrice"/>
+        <result column="lunch_dinner_price" property="lunchDinnerPrice"/>
+        <result column="verified_count" property="verifiedCount"/>
+        <result column="verified_amount" property="verifiedAmount"/>
+        <result column="meal_balance" property="mealBalance"/>
+        <result column="remaining_count" property="remainingCount"/>
+        <result column="deal_time" property="dealTime"/>
+        <result column="first_delivery_time" property="firstDeliveryTime"/>
+        <result column="start_date" property="startDate"/>
+        <result column="end_date" property="endDate"/>
+        <result column="status" property="status"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <resultMap id="JoinResultMap" type="me.zhengjie.modules.customer.order.domain.CustomerOrder" extends="BaseResultMap">
+        <result column="customer_name" property="customerName"/>
+        <result column="phone" property="phone"/>
+    </resultMap>
+
+    <!-- 条件查询订单列表(关联客户姓名和手机号) -->
+    <select id="findAll" resultMap="JoinResultMap">
+        SELECT o.*, cp.customer_name, cp.phone
+        FROM customer_order o
+        LEFT JOIN customer_profile cp ON o.customer_id = cp.id
+        <where>
+            <if test="criteria.orderCode != null and criteria.orderCode != ''">
+                AND o.order_code LIKE CONCAT('%', #{criteria.orderCode}, '%')
+            </if>
+            <if test="criteria.customerId != null">
+                AND o.customer_id = #{criteria.customerId}
+            </if>
+            <if test="criteria.customerName != null and criteria.customerName != ''">
+                AND cp.customer_name LIKE CONCAT('%', #{criteria.customerName}, '%')
+            </if>
+            <if test="criteria.status != null">
+                AND o.status = #{criteria.status}
+            </if>
+            <if test="criteria.dealTime != null and criteria.dealTime.length == 2">
+                AND o.deal_time &gt;= #{criteria.dealTime[0]}
+                AND o.deal_time &lt;= #{criteria.dealTime[1]}
+            </if>
+            <if test="criteria.startDate != null and criteria.startDate.length == 2">
+                AND o.start_date &gt;= #{criteria.startDate[0]}
+                AND o.start_date &lt;= #{criteria.startDate[1]}
+            </if>
+            <if test="criteria.endDate != null and criteria.endDate.length == 2">
+                AND o.end_date &gt;= #{criteria.endDate[0]}
+                AND o.end_date &lt;= #{criteria.endDate[1]}
+            </if>
+        </where>
+        ORDER BY o.id DESC
+    </select>
+
+    <!-- 多条件统计总数 -->
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*)
+        FROM customer_order o
+        LEFT JOIN customer_profile cp ON o.customer_id = cp.id
+        <where>
+            <if test="criteria.orderCode != null and criteria.orderCode != ''">
+                AND o.order_code LIKE CONCAT('%', #{criteria.orderCode}, '%')
+            </if>
+            <if test="criteria.customerId != null">
+                AND o.customer_id = #{criteria.customerId}
+            </if>
+            <if test="criteria.customerName != null and criteria.customerName != ''">
+                AND cp.customer_name LIKE CONCAT('%', #{criteria.customerName}, '%')
+            </if>
+            <if test="criteria.status != null">
+                AND o.status = #{criteria.status}
+            </if>
+            <if test="criteria.dealTime != null and criteria.dealTime.length == 2">
+                AND o.deal_time &gt;= #{criteria.dealTime[0]}
+                AND o.deal_time &lt;= #{criteria.dealTime[1]}
+            </if>
+            <if test="criteria.startDate != null and criteria.startDate.length == 2">
+                AND o.start_date &gt;= #{criteria.startDate[0]}
+                AND o.start_date &lt;= #{criteria.startDate[1]}
+            </if>
+            <if test="criteria.endDate != null and criteria.endDate.length == 2">
+                AND o.end_date &gt;= #{criteria.endDate[0]}
+                AND o.end_date &lt;= #{criteria.endDate[1]}
+            </if>
+        </where>
+    </select>
+
+    <!-- 根据订单编号查询(排除指定ID) -->
+    <select id="countByCodeExcludeId" resultType="int">
+        SELECT COUNT(*) FROM customer_order
+        WHERE order_code = #{orderCode}
+        <if test="excludeId != null">
+            AND id != #{excludeId}
+        </if>
+    </select>
+
+    <!-- 查询今日最大订单编号 -->
+    <select id="findTodayMaxOrderCode" resultType="string">
+        SELECT order_code FROM customer_order
+        WHERE order_code LIKE CONCAT(#{datePrefix}, '%')
+        ORDER BY order_code DESC
+        LIMIT 1
+    </select>
+
+</mapper>
