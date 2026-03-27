@@ -145,7 +145,7 @@
             </el-col>
             <el-col :span="8">
               <el-form-item label="子套餐" prop="orderInfo.childPackageId">
-                <el-select v-model="form.orderInfo.childPackageId" placeholder="选择子套餐" style="width: 100%;">
+                <el-select v-model="form.orderInfo.childPackageId" placeholder="选择子套餐" style="width: 100%;" @change="calcTotalCount">
                   <el-option v-for="item in childPackages" :key="item.id" :label="item.categoryName" :value="item.id" />
                 </el-select>
               </el-form-item>
@@ -243,7 +243,6 @@ export default {
       url: '/api/customerProfile',
       idField: 'id',
       sort: 'id,desc',
-      optShow: { edit: false },
       crudMethod: { ...profileApi }
     })
   },
@@ -385,14 +384,14 @@ export default {
       this.$set(this.form, 'orderInfo', createDefaultOrderInfo())
     },
     [CRUD.HOOK.beforeToCU]() {
-      if (this.form && this.form.addresses && this.form.addresses.length > 0 && this.form.addresses[0].addressDetail) {
-        return
+      // 确保 addresses 数组有3个元素
+      if (!this.form || !this.form.addresses || this.form.addresses.length < 3) {
+        this.$set(this.form, 'addresses', [
+          { addressType: 'DEFAULT', addressDetail: '', contactName: '', contactPhone: '' },
+          { addressType: 'WORKDAY', addressDetail: '', contactName: '', contactPhone: '' },
+          { addressType: 'WEEKEND', addressDetail: '', contactName: '', contactPhone: '' }
+        ])
       }
-      this.$set(this.form, 'addresses', [
-        { addressType: 'DEFAULT', addressDetail: '', contactName: '', contactPhone: '' },
-        { addressType: 'WORKDAY', addressDetail: '', contactName: '', contactPhone: '' },
-        { addressType: 'WEEKEND', addressDetail: '', contactName: '', contactPhone: '' }
-      ])
       if (!this.form.orderInfo) {
         this.$set(this.form, 'orderInfo', createDefaultOrderInfo())
       }
@@ -435,6 +434,7 @@ export default {
     async parentPackageChange(parentId) {
       await this.loadChildPackages(parentId)
       this.form.orderInfo.childPackageId = null
+      this.calcTotalCount()
     },
     async loadChildPackages(parentId) {
       if (!parentId) {
