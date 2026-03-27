@@ -46,7 +46,7 @@ public class CustomerProfile implements Serializable {
     /**
      * 过敏食物标签(JSON数组)
      */
-    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    @TableField(value = "allergy_tags", typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
     private List<String> allergyTags;
 
     /**
