@@ -74,7 +74,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
     @Override
     public CustomerProfileDetailDto getDetail(Long id) {
-        CustomerProfile profile = profileMapper.selectById(id);
+        CustomerProfile profile = profileMapper.selectByIdWithJson(id);
         if (profile == null) {
             throw new BadRequestException("客户档案不存在");
         }

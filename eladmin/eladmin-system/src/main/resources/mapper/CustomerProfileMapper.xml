@@ -19,6 +19,11 @@
         <result column="update_time" property="updateTime"/>
     </resultMap>
 
+    <!-- 根据ID查询客户档案（带JSON字段反序列化） -->
+    <select id="selectByIdWithJson" resultMap="BaseResultMap">
+        SELECT * FROM customer_profile WHERE id = #{id}
+    </select>
+
     <!-- 条件查询客户档案列表 -->
     <select id="findAll" resultMap="BaseResultMap">
         SELECT * FROM customer_profile
