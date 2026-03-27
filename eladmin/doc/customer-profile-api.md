@@ -1,11 +1,21 @@
 # 客户档案管理 API 文档
 
-> 文档版本: 1.0
+> 文档版本: 2.0
 > 创建日期: 2026-03-25
+> 更新日期: 2026-03-27
+>
+> **变更说明 (v2.0)**：
+> - `packageInfo` → `orderInfo`：首单信息语义更清晰
+> - 创建时 `customerCode` 由后端根据首单父套餐自动生成，前端不再传入
+> - 编辑时只更新基本资料 + 地址，不再操作套餐/订单
+> - 状态切换只传 `{ status }`，不再传套餐信息
+> - 列表响应删除冗余套餐列（父套餐名/子套餐名/早餐数等）
+> - 详情响应不再返回 `packageInfo`
 
 ## 1. 概述
 
-客户档案管理模块提供客户基础档案、地址、两级套餐、餐数、过敏食物、医嘱要求、孕周等信息的管理能力。
+客户档案管理模块提供客户基础档案、地址、过敏食物、医嘱要求、孕周等信息的管理能力。
+首单（第一笔订单）随客户创建时自动生成。
 
 ### 1.1 模块结构
 
@@ -190,11 +200,11 @@ GET /api/customerProfile
 | customerCode | string | 客户编号 |
 | customerName | string | 客户姓名 |
 | phone | string | 手机号 |
-| parentPackageId | long | 父套餐ID |
-| childPackageId | long | 子套餐ID |
 | status | boolean | 状态 |
 | current | int | 当前页码(默认1) |
 | size | int | 每页条数(默认10) |
+
+> 注：`parentPackageId`/`childPackageId` 查询参数已废弃，列表不再返回套餐相关字段。
 
 **响应**
 
@@ -214,13 +224,6 @@ GET /api/customerProfile
         "medicalRequirements": "少盐少油",
         "status": true,
         "defaultAddress": "北京市朝阳区xxx",
-        "parentPackageName": "月子餐",
-        "childPackageName": "两荤一素",
-        "breakfastCount": 10,
-        "lunchDinnerCount": 20,
-        "totalCount": 30,
-        "startDate": "2026-03-25",
-        "endDate": "2026-04-25",
         "createTime": "2026-03-25 10:00:00"
       }
     ],
@@ -232,6 +235,8 @@ GET /api/customerProfile
 ```
 
 ### 3.2 获取客户详情
+
+> 编辑前必须先调用此接口获取完整详情，再进入编辑表单。
 
 **请求**
 
@@ -260,20 +265,8 @@ GET /api/customerProfile/{id}
       { "addressType": "WORKDAY", "addressDetail": "地址2" },
       { "addressType": "WEEKEND", "addressDetail": "地址3" }
     ],
-    "packageInfo": {
-      "parentPackageId": 1,
-      "parentPackageName": "月子餐",
-      "childPackageId": 3,
-      "childPackageName": "两荤一素",
-      "breakfastCount": 10,
-      "lunchDinnerCount": 20,
-      "totalCount": 30,
-      "startDate": "2026-03-25",
-      "endDate": "2026-04-25",
-      "activeFlag": true
-    },
-    "createTime": "2026-03-25 10:00:00",
-    "updateTime": "2026-03-25 10:00:00"
+    "createTime": "2026-03-25",
+    "updateTime": "2026-03-25"
   }
 }
 ```
@@ -287,19 +280,17 @@ POST /api/customerProfile
 Content-Type: application/json
 
 {
-  "customerCode": "A001",
   "customerName": "张三",
   "phone": "13800000000",
   "gestationalWeek": 32,
   "allergyTags": ["牛奶", "海鲜"],
   "medicalRequirements": "少盐少油",
-  "status": true,
   "addresses": [
-    { "addressType": "DEFAULT", "addressDetail": "地址1" },
+    { "addressType": "DEFAULT", "addressDetail": "地址1", "contactName": "张三", "contactPhone": "13800000000" },
     { "addressType": "WORKDAY", "addressDetail": "地址2" },
     { "addressType": "WEEKEND", "addressDetail": "地址3" }
   ],
-  "packageInfo": {
+  "orderInfo": {
     "parentPackageId": 1,
     "childPackageId": 3,
     "breakfastCount": 10,
@@ -314,34 +305,41 @@ Content-Type: application/json
 
 | 字段 | 类型 | 必填 | 说明 |
 |-----|------|------|------|
-| customerCode | string | 是 | 客户编号(格式: 父套餐前缀+3位数字,如A001) |
 | customerName | string | 是 | 客户姓名 |
 | phone | string | 是 | 手机号(中国大陆手机号格式) |
 | gestationalWeek | int | 否 | 孕周(正整数) |
 | allergyTags | array | 否 | 过敏食物标签(JSON数组) |
-| medicalRequirements | string | 否 | 医嘱要求(建议不超过500字符) |
-| status | boolean | 是 | 状态 |
+| medicalRequirements | string | 否 | 医嘱要求 |
 | addresses | array | 是 | 地址列表(至少一个地址非空) |
 | addresses[].addressType | string | 是 | 地址类型(DEFAULT/WORKDAY/WEEKEND) |
-| addresses[].addressDetail | string | 是 | 详细地址(建议不超过200字符) |
+| addresses[].addressDetail | string | 是 | 详细地址(至少一个非空) |
 | addresses[].contactName | string | 否 | 联系人姓名 |
 | addresses[].contactPhone | string | 否 | 联系人电话 |
-| packageInfo | object | 是 | 套餐信息 |
-| packageInfo.parentPackageId | long | 是 | 父套餐ID |
-| packageInfo.childPackageId | long | 是 | 子套餐ID |
-| packageInfo.breakfastCount | int | 否 | 早餐数(与午餐+晚餐数至少填一个) |
-| packageInfo.lunchDinnerCount | int | 否 | 午餐+晚餐数 |
-| packageInfo.startDate | string | 是 | 签约开始日期(YYYY-MM-DD) |
-| packageInfo.endDate | string | 是 | 签约结束日期(YYYY-MM-DD) |
+| orderInfo | object | 是 | 首单信息 |
+| orderInfo.parentPackageId | long | 是 | 父套餐ID |
+| orderInfo.childPackageId | long | 是 | 子套餐ID |
+| orderInfo.breakfastCount | int | 否 | 早餐数(与午餐+晚餐数至少填一个) |
+| orderInfo.lunchDinnerCount | int | 否 | 午餐+晚餐数 |
+| orderInfo.startDate | string | 是 | 签约开始日期(YYYY-MM-DD) |
+| orderInfo.endDate | string | 是 | 签约结束日期(YYYY-MM-DD) |
 
 **校验规则**
 
+- `customerCode` 由后端自动生成，前端无需传入
 - `DEFAULT`、`WORKDAY`、`WEEKEND` 三个地址槽位中至少有一个地址明细非空
 - 早餐数与午餐+晚餐数不能同时为空
-- `total_count` 由后端自动计算
-- `end_date >= start_date`
+- `totalCount` 由后端根据 `breakfastCount + lunchDinnerCount` 自动计算
+- `endDate >= startDate`
+- 首单份数总和必须 > 0
+
+**创建后行为**
+
+- 自动生成 `customerCode`（格式：`{父套餐codePrefix}{NNN}`，如 A001）
+- 自动在 `customer_order` 表创建首笔订单，状态为"进行中"
 
 ### 3.4 编辑客户档案
+
+> 编辑时只更新基本资料 + 地址，套餐/订单信息不受影响。
 
 **请求**
 
@@ -351,23 +349,26 @@ Content-Type: application/json
 
 {
   "id": 1,
-  "customerCode": "A001",
   "customerName": "张三",
   "phone": "13800000000",
   "gestationalWeek": 32,
   "allergyTags": ["牛奶", "海鲜"],
   "medicalRequirements": "少盐少油",
-  "status": true,
-  "addresses": [...],
-  "packageInfo": {...}
+  "remark": "备注",
+  "addresses": [
+    { "addressType": "DEFAULT", "addressDetail": "新地址1", "contactName": "张三", "contactPhone": "13800000000" },
+    { "addressType": "WORKDAY", "addressDetail": "新地址2" },
+    { "addressType": "WEEKEND", "addressDetail": "" }
+  ]
 }
 ```
 
 **说明**
 
-- 采用全量覆盖更新语义: 前端提交的 `addresses` 与 `packageInfo` 视为客户当前完整状态
-- 编辑时如果某个地址槽位未提交，则视为清空该槽位
-- `packageInfo` 每次整体覆盖当前签约记录，不支持局部 patch
+- 必须传入 `id`
+- 不传 `orderInfo`/`packageInfo`，后端不修改套餐/订单
+- 不传 `status`，后端不修改状态
+- `addresses` 整体覆盖：某槽位不传则清空
 
 ### 3.5 启用/停用客户档案
 
@@ -382,30 +383,11 @@ Content-Type: application/json
 }
 ```
 
-**停用时**
+**说明**
 
-- 当前生效签约同步失效 (`active_flag = 0`)
+- 仅更新客户档案状态，不操作套餐/订单
 
-**启用时**
-
-- 必须同时存在 1 条有效签约记录
-- 重新启用停用客户时，要求同时提交并更新一条有效签约记录
-
-```json
-{
-  "status": true,
-  "packageInfo": {
-    "parentPackageId": 1,
-    "childPackageId": 3,
-    "breakfastCount": 10,
-    "lunchDinnerCount": 20,
-    "startDate": "2026-03-25",
-    "endDate": "2026-04-25"
-  }
-}
-```
-
-### 3.6 生成客户编号
+### 3.6 生成客户编号（预览）
 
 **请求**
 
@@ -425,9 +407,10 @@ GET /api/customerProfile/generateCode?parentPackageId=1
 
 **说明**
 
-- 根据父套餐 `code_prefix` 生成建议编号
+- 根据父套餐 `code_prefix` 生成建议编号预览
 - 格式为"父套餐前缀 + 三位数字"
 - 若父套餐不存在、未启用或未配置 `code_prefix`，返回错误
+- 此接口仅用于编号预览，实际编号在创建时由后端自动分配
 
 ---
 
@@ -435,7 +418,7 @@ GET /api/customerProfile/generateCode?parentPackageId=1
 
 | 错误码 | 说明 |
 |-------|------|
-| 400 | 请求参数错误 |
+| 400 | 请求参数错误（后端会返回具体字段校验失败信息）|
 | 404 | 资源不存在 |
 | 500 | 服务器内部错误 |
 
@@ -456,3 +439,11 @@ GET /api/customerProfile/generateCode?parentPackageId=1
 套餐采用两级结构:
 - **父级**: 月子餐、营养餐等(配置编号前缀)
 - **子级**: 两荤一素、一荤一素、两荤两素等
+
+### 5.3 create/edit/status 三路径分离
+
+| 路径 | 传入 orderInfo | 传入 status | 修改客户基本资料 | 修改地址 |
+|------|---------------|-------------|---------------|---------|
+| POST（创建） | ✅ 必填 | ❌（自动=true）| ✅ | ✅ |
+| PUT（编辑） | ❌ | ❌ | ✅ | ✅ |
+| PUT /status | ❌ | ✅ 必填 | ❌ | ❌ |

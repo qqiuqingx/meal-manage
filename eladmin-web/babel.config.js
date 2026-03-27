@@ -7,5 +7,13 @@ module.exports = {
   plugins: plugins,
   presets: [
     '@vue/app'
+  ],
+  overrides: [
+    {
+      test: ['tests/**'],
+      presets: [
+        ['@babel/preset-env', { modules: 'auto' }]
+      ]
+    }
   ]
 }
