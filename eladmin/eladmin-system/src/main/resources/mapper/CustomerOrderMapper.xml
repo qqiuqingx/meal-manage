@@ -23,6 +23,7 @@
         <result column="end_date" property="endDate"/>
         <result column="status" property="status"/>
         <result column="remark" property="remark"/>
+        <result column="customer_source" property="customerSource"/>
         <result column="create_by" property="createBy"/>
         <result column="update_by" property="updateBy"/>
         <result column="create_time" property="createTime"/>
@@ -51,6 +52,9 @@
             </if>
             <if test="criteria.status != null">
                 AND o.status = #{criteria.status}
+            </if>
+            <if test="criteria.customerSource != null and criteria.customerSource != ''">
+                AND o.customer_source = #{criteria.customerSource}
             </if>
             <if test="criteria.dealTime != null and criteria.dealTime.length == 2">
                 AND o.deal_time &gt;= #{criteria.dealTime[0]}
@@ -85,6 +89,9 @@
             </if>
             <if test="criteria.status != null">
                 AND o.status = #{criteria.status}
+            </if>
+            <if test="criteria.customerSource != null and criteria.customerSource != ''">
+                AND o.customer_source = #{criteria.customerSource}
             </if>
             <if test="criteria.dealTime != null and criteria.dealTime.length == 2">
                 AND o.deal_time &gt;= #{criteria.dealTime[0]}

@@ -134,6 +134,11 @@ public class CustomerOrder implements Serializable {
     private String remark;
 
     /**
+     * 销售渠道
+     */
+    private String customerSource;
+
+    /**
      * 创建人
      */
     private String createBy;

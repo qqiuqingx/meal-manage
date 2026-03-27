@@ -10,6 +10,9 @@
           <el-option label="已完成" :value="2" />
           <el-option label="已取消" :value="0" />
         </el-select>
+        <el-select v-model="query.customerSource" clearable size="small" placeholder="销售渠道" class="filter-item" style="width: 120px" @change="crud.toQuery">
+          <el-option v-for="item in customerSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
         <rrOperation />
       </div>
       <crudOperation :permission="permission" />
@@ -56,6 +59,11 @@
           <el-tag :type="statusTagType(scope.row.status)">
             {{ statusText(scope.row.status) }}
           </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="销售渠道" width="100">
+        <template slot-scope="scope">
+          {{ getSourceLabel(scope.row.customerSource) }}
         </template>
       </el-table-column>
       <el-table-column label="订单期间" width="180">
@@ -124,6 +132,7 @@
 
 <script>
 import * as orderApi from '@/api/customer/order'
+import * as dictDetailApi from '@/api/system/dictDetail'
 import { createOrderDefaultForm } from '@/components/Order/OrderForm.vue'
 import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
@@ -148,9 +157,11 @@ export default {
       query: {
         orderCode: '',
         customerName: '',
-        status: null
+        status: null,
+        customerSource: null
       },
       submitLoading: false,
+      customerSourceOptions: [],
       rules: {
         customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
         totalAmount: [{ required: true, message: '请输入总金额', trigger: 'blur' }],
@@ -174,7 +185,23 @@ export default {
       return this.crud.status.add === CRUD.STATUS.PREPARED ? '新增订单' : '编辑订单'
     }
   },
+  created() {
+    this.loadCustomerSourceDict()
+  },
   methods: {
+    loadCustomerSourceDict() {
+      dictDetailApi.get('customer_source').then(res => {
+        this.customerSourceOptions = (res.content || res.data || res || []).map(item => ({
+          value: item.value,
+          label: item.label
+        }))
+      }).catch(() => {})
+    },
+    getSourceLabel(value) {
+      if (!value) return '-'
+      const item = this.customerSourceOptions.find(o => o.value === value)
+      return item ? item.label : value
+    },
     [CRUD.HOOK.beforeToCU]() {
       return true
     },
