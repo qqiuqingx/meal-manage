@@ -59,6 +59,11 @@ public class CustomerProfileSaveDto implements Serializable {
         private Integer breakfastCount;
         private Integer lunchDinnerCount;
         private Integer totalCount;
+        private java.math.BigDecimal breakfastPrice;
+        private java.math.BigDecimal lunchDinnerPrice;
+        private java.math.BigDecimal totalAmount;
+        private java.math.BigDecimal depositAmount;
+        private java.math.BigDecimal finalAmount;
         private String startDate;
         private String endDate;
     }
