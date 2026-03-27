@@ -312,7 +312,8 @@ export default {
           depositAmount: orderInfo.depositAmount || 0,
           finalAmount: orderInfo.finalAmount || 0,
           startDate: orderInfo.startDate,
-          endDate: orderInfo.endDate
+          endDate: orderInfo.endDate,
+          customerSource: orderInfo.customerSource || null
         }
       }
 

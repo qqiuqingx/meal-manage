@@ -126,4 +126,9 @@ public class CustomerOrderSaveDto implements Serializable {
      * 备注
      */
     private String remark;
+
+    /**
+     * 销售渠道
+     */
+    private String customerSource;
 }

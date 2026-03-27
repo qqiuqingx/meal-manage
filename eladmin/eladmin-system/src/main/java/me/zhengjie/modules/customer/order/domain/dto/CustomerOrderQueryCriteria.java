@@ -40,4 +40,9 @@ public class CustomerOrderQueryCriteria implements Serializable {
      * 订单结束日期范围
      */
     private LocalDate[] endDate;
+
+    /**
+     * 销售渠道
+     */
+    private String customerSource;
 }
