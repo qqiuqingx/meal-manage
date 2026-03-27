@@ -1,0 +1,129 @@
+package me.zhengjie.modules.customer.order.domain.dto;
+
+import lombok.Data;
+
+import javax.validation.constraints.DecimalMin;
+import javax.validation.constraints.Min;
+import javax.validation.constraints.NotNull;
+import java.io.Serializable;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+/**
+ * 客户订单保存 DTO
+ */
+@Data
+public class CustomerOrderSaveDto implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    private Long id;
+
+    /**
+     * 客户ID
+     */
+    @NotNull(message = "客户不能为空")
+    private Long customerId;
+
+    /**
+     * 订单编号
+     */
+    private String orderCode;
+
+    /**
+     * 定金金额
+     */
+    @DecimalMin(value = "0", message = "定金金额不能为负数")
+    private BigDecimal depositAmount;
+
+    /**
+     * 总金额
+     */
+    @NotNull(message = "总金额不能为空")
+    @DecimalMin(value = "0", message = "总金额不能为负数")
+    private BigDecimal totalAmount;
+
+    /**
+     * 成交金额
+     */
+    @NotNull(message = "成交金额不能为空")
+    @DecimalMin(value = "0", message = "成交金额不能为负数")
+    private BigDecimal finalAmount;
+
+    /**
+     * 早餐合计餐数
+     */
+    @Min(value = 0, message = "早餐餐数不能为负数")
+    private Integer breakfastCount;
+
+    /**
+     * 午餐+晚餐合计餐数
+     */
+    @Min(value = 0, message = "午餐+晚餐餐数不能为负数")
+    private Integer lunchDinnerCount;
+
+    /**
+     * 早餐单价
+     */
+    @DecimalMin(value = "0", message = "早餐单价不能为负数")
+    private BigDecimal breakfastPrice;
+
+    /**
+     * 午餐晚餐单价
+     */
+    @DecimalMin(value = "0", message = "午餐晚餐单价不能为负数")
+    private BigDecimal lunchDinnerPrice;
+
+    /**
+     * 核销餐数(合计)
+     */
+    @Min(value = 0, message = "核销餐数不能为负数")
+    private Integer verifiedCount;
+
+    /**
+     * 核销金额
+     */
+    @DecimalMin(value = "0", message = "核销金额不能为负数")
+    private BigDecimal verifiedAmount;
+
+    /**
+     * 餐费余额（后端计算）
+     */
+    private BigDecimal mealBalance;
+
+    /**
+     * 剩余餐数（后端计算）
+     */
+    private Integer remainingCount;
+
+    /**
+     * 成交时间
+     */
+    private LocalDateTime dealTime;
+
+    /**
+     * 第一次送餐时间
+     */
+    private LocalDateTime firstDeliveryTime;
+
+    /**
+     * 订单开始日期
+     */
+    private LocalDate startDate;
+
+    /**
+     * 订单结束日期
+     */
+    private LocalDate endDate;
+
+    /**
+     * 订单状态(0=已取消,1=进行中,2=已完成)
+     */
+    private Integer status;
+
+    /**
+     * 备注
+     */
+    private String remark;
+}
