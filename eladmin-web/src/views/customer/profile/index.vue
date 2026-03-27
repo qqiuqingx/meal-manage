@@ -63,7 +63,14 @@
     />
 
     <!--表单组件-->
-    <el-dialog append-to-body :close-on-click-modal="false" :before-close="crud.cancelCU" :visible.sync="crud.status.cu > 0" :title="crud.status.title" width="800px" top="5vh">
+    <el-dialog
+      append-to-body
+      :close-on-click-modal="false"
+      :visible.sync="dialogVisible"
+      :title="dialogTitle"
+      width="800px"
+      top="5vh"
+    >
       <el-form ref="form" :model="form" :rules="rules" size="small" label-width="100px">
         <!-- 客户基本信息 -->
         <el-row :gutter="20">
@@ -92,11 +99,16 @@
                 v-model="form.allergyTags"
                 multiple
                 filterable
+                remote
                 allow-create
                 default-first-option
-                placeholder="输入或选择过敏食物"
+                :remote-method="searchAllergy"
+                :loading="allergyLoading"
+                placeholder="输入配料名称搜索"
                 style="width: 100%;"
-              />
+              >
+                <el-option v-for="item in allergyOptions" :key="item.id" :label="item.name" :value="item.name" />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
@@ -132,83 +144,15 @@
           </el-col>
         </el-row>
 
-        <!-- 创建时显示首单信息 -->
+        <!-- 首单信息（仅新增时显示） -->
         <template v-if="isCreateMode()">
           <el-divider content-position="left">首单信息</el-divider>
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item label="父套餐" prop="orderInfo.parentPackageId">
-                <el-select v-model="form.orderInfo.parentPackageId" placeholder="选择父套餐" style="width: 100%;" @change="parentPackageChange">
-                  <el-option v-for="item in parentPackages" :key="item.id" :label="item.categoryName" :value="item.id" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="子套餐" prop="orderInfo.childPackageId">
-                <el-select v-model="form.orderInfo.childPackageId" placeholder="选择子套餐" style="width: 100%;" @change="calcTotalCount">
-                  <el-option v-for="item in childPackages" :key="item.id" :label="item.categoryName" :value="item.id" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item label="早餐数">
-                <el-input-number v-model="form.orderInfo.breakfastCount" :min="0" controls-position="right" style="width: 100%;" @change="calcTotalCount" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="午餐+晚餐数">
-                <el-input-number v-model="form.orderInfo.lunchDinnerCount" :min="0" controls-position="right" style="width: 100%;" @change="calcTotalCount" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="总份数">
-                <el-input-number v-model="form.orderInfo.totalCount" :min="0" disabled controls-position="right" style="width: 100%;" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item label="早餐单价">
-                <el-input-number v-model="form.orderInfo.breakfastPrice" :min="0" :precision="2" controls-position="right" style="width: 100%;" @change="calcTotalAmount" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="午晚单价">
-                <el-input-number v-model="form.orderInfo.lunchDinnerPrice" :min="0" :precision="2" controls-position="right" style="width: 100%;" @change="calcTotalAmount" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="总价">
-                <el-input-number v-model="form.orderInfo.totalAmount" :min="0" disabled :precision="2" controls-position="right" style="width: 100%;" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item label="定金">
-                <el-input-number v-model="form.orderInfo.depositAmount" :min="0" :precision="2" controls-position="right" style="width: 100%;" @change="calcTotalAmount" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="成交金额">
-                <el-input-number v-model="form.orderInfo.finalAmount" :min="0" :precision="2" controls-position="right" style="width: 100%;" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="开始日期" prop="orderInfo.startDate">
-                <el-date-picker v-model="form.orderInfo.startDate" type="date" placeholder="选择开始日期" style="width: 100%;" value-format="yyyy-MM-dd" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="结束日期" prop="orderInfo.endDate">
-                <el-date-picker v-model="form.orderInfo.endDate" type="date" placeholder="选择结束日期" style="width: 100%;" value-format="yyyy-MM-dd" />
-              </el-form-item>
-            </el-col>
-          </el-row>
+          <OrderForm
+            ref="orderFormRef"
+            v-model="form.orderInfo"
+            mode="firstOrder"
+            :readonly="false"
+          />
         </template>
 
         <el-row :gutter="20">
@@ -220,8 +164,8 @@
         </el-row>
       </el-form>
       <div slot="footer" class="dialog-footer">
-        <el-button type="text" @click="crud.cancelCU">取消</el-button>
-        <el-button :loading="crud.status.cu === 2" type="primary" @click="crud.submitCU">确认</el-button>
+        <el-button type="text" @click="cancelDialog">取消</el-button>
+        <el-button :loading="submitLoading" type="primary" @click="submitForm">确认</el-button>
       </div>
     </el-dialog>
   </div>
@@ -229,26 +173,18 @@
 
 <script>
 import * as profileApi from '@/api/customer/profile'
-import * as categoryApi from '@/api/customer/packageCategory'
+import { queryIngredients } from '@/api/dishIngredient'
 import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
+import OrderForm, { createFirstOrderDefaultForm } from '@/components/Order/OrderForm.vue'
 
-function createDefaultOrderInfo() {
-  return {
-    parentPackageId: null,
-    childPackageId: null,
-    breakfastCount: 0,
-    lunchDinnerCount: 0,
-    totalCount: 0,
-    breakfastPrice: 0,
-    lunchDinnerPrice: 0,
-    depositAmount: 0,
-    totalAmount: 0,
-    finalAmount: 0,
-    startDate: null,
-    endDate: null
-  }
+function createDefaultAddresses() {
+  return [
+    { addressType: 'DEFAULT', addressDetail: '', contactName: '', contactPhone: '' },
+    { addressType: 'WORKDAY', addressDetail: '', contactName: '', contactPhone: '' },
+    { addressType: 'WEEKEND', addressDetail: '', contactName: '', contactPhone: '' }
+  ]
 }
 
 const defaultForm = {
@@ -259,17 +195,13 @@ const defaultForm = {
   allergyTags: [],
   medicalRequirements: null,
   remark: null,
-  addresses: [
-    { addressType: 'DEFAULT', addressDetail: '', contactName: '', contactPhone: '' },
-    { addressType: 'WORKDAY', addressDetail: '', contactName: '', contactPhone: '' },
-    { addressType: 'WEEKEND', addressDetail: '', contactName: '', contactPhone: '' }
-  ],
-  orderInfo: createDefaultOrderInfo()
+  addresses: createDefaultAddresses(),
+  orderInfo: createFirstOrderDefaultForm()
 }
 
 export default {
   name: 'CustomerProfile',
-  components: { crudOperation, rrOperation },
+  components: { crudOperation, rrOperation, OrderForm },
   mixins: [presenter(), header(), form(defaultForm), crud()],
   cruds() {
     return CRUD({
@@ -293,8 +225,6 @@ export default {
         phone: '',
         status: null
       },
-      parentPackages: [],
-      childPackages: [],
       rules: {
         customerName: [{ required: true, message: '请输入客户姓名', trigger: 'blur' }],
         phone: [
@@ -306,22 +236,33 @@ export default {
         'orderInfo.startDate': [{ required: true, message: '请选择开始日期', trigger: 'change' }],
         'orderInfo.endDate': [{ required: true, message: '请选择结束日期', trigger: 'change' }]
       },
+      submitLoading: false,
+      allergyOptions: [],
+      allergyLoading: false,
       editRequestId: 0
     }
   },
-  created() {
-    this.loadParentPackages()
+  computed: {
+    dialogVisible: {
+      get() {
+        return this.crud.status.cu > 0
+      },
+      set(val) {
+        if (!val) {
+          this.crud.cancelCU()
+        }
+      }
+    },
+    dialogTitle() {
+      return this.isCreateMode() ? '新增客户' : '编辑客户'
+    }
   },
   methods: {
     isCreateMode() {
       return this.crud.status.add === CRUD.STATUS.PREPARED
     },
     createAddressesFromForm(formData = {}) {
-      const defaults = [
-        { addressType: 'DEFAULT', addressDetail: '', contactName: '', contactPhone: '' },
-        { addressType: 'WORKDAY', addressDetail: '', contactName: '', contactPhone: '' },
-        { addressType: 'WEEKEND', addressDetail: '', contactName: '', contactPhone: '' }
-      ]
+      const defaults = createDefaultAddresses()
       if (Array.isArray(formData.addresses)) {
         const addressMap = formData.addresses.reduce((result, address) => {
           if (address && address.addressType) {
@@ -339,7 +280,7 @@ export default {
       return defaults
     },
     buildSubmitPayload() {
-      const formData = JSON.parse(JSON.stringify(this.form))
+      const formData = this.form
       const payload = {
         customerName: formData.customerName,
         phone: formData.phone,
@@ -355,7 +296,7 @@ export default {
       }
 
       if (this.isCreateMode()) {
-        const orderInfo = formData.orderInfo || createDefaultOrderInfo()
+        const orderInfo = formData.orderInfo || createFirstOrderDefaultForm()
         const breakfastCount = orderInfo.breakfastCount || 0
         const lunchDinnerCount = orderInfo.lunchDinnerCount || 0
         payload.status = true
@@ -377,61 +318,54 @@ export default {
 
       return payload
     },
-    [CRUD.HOOK.beforeSubmit]() {
-      this.submitFormSnapshot = JSON.parse(JSON.stringify(this.form))
-      const payload = this.buildSubmitPayload()
-      Object.keys(this.crud.form).forEach(key => {
-        this.$delete(this.crud.form, key)
-      })
-      Object.keys(payload).forEach(key => {
-        this.$set(this.crud.form, key, payload[key])
-      })
-      return true
+    cancelDialog() {
+      this.crud.cancelCU()
     },
-    [CRUD.HOOK.afterSubmit]() {
-      this.submitFormSnapshot = null
-    },
-    restoreSubmitFormSnapshot() {
-      if (!this.submitFormSnapshot) {
-        return
+    async submitForm() {
+      // 基础字段校验
+      const basicValid = await new Promise(resolve => {
+        this.$refs.form.validate((valid) => resolve(valid))
+      })
+      if (!basicValid) return
+
+      // 首单信息校验（仅新增时）
+      if (this.isCreateMode() && this.$refs.orderFormRef) {
+        const orderValid = await this.$refs.orderFormRef.validate().catch(() => false)
+        if (!orderValid) return
       }
-      const snapshot = JSON.parse(JSON.stringify(this.submitFormSnapshot))
-      Object.keys(this.crud.form).forEach(key => {
-        this.$delete(this.crud.form, key)
-      })
-      Object.keys(snapshot).forEach(key => {
-        this.$set(this.crud.form, key, snapshot[key])
-      })
-      this.submitFormSnapshot = null
-    },
-    [CRUD.HOOK.afterAddError]() {
-      this.restoreSubmitFormSnapshot()
-    },
-    [CRUD.HOOK.afterEditError]() {
-      this.restoreSubmitFormSnapshot()
+
+      try {
+        this.submitLoading = true
+        const payload = this.buildSubmitPayload()
+        if (payload.id) {
+          await profileApi.edit(payload)
+          this.$message.success('编辑成功')
+        } else {
+          await profileApi.add(payload)
+          this.$message.success('新增成功')
+        }
+        this.crud.cancelCU()
+        this.crud.refresh()
+      } catch (e) {
+        console.error('submit error', e)
+        this.$message.error((e.message || '') || '操作失败')
+      } finally {
+        this.submitLoading = false
+      }
     },
     [CRUD.HOOK.beforeToAdd]() {
-      this.loadParentPackages()
+      Object.assign(this.form, JSON.parse(JSON.stringify(defaultForm)))
       return true
-    },
-    [CRUD.HOOK.afterToAdd]() {
-      this.$set(this.form, 'addresses', [
-        { addressType: 'DEFAULT', addressDetail: '', contactName: '', contactPhone: '' },
-        { addressType: 'WORKDAY', addressDetail: '', contactName: '', contactPhone: '' },
-        { addressType: 'WEEKEND', addressDetail: '', contactName: '', contactPhone: '' }
-      ])
-      this.$set(this.form, 'orderInfo', createDefaultOrderInfo())
     },
     [CRUD.HOOK.beforeToCU]() {
       // 确保过敏食物是数组
       if (!this.form.allergyTags || !Array.isArray(this.form.allergyTags)) {
         this.$set(this.form, 'allergyTags', [])
       }
-      // 如果 addresses 不完整，补充缺失的地址类型
+      // 确保地址完整
       const existingTypes = (this.form.addresses || []).map(a => a.addressType)
       const requiredTypes = ['DEFAULT', 'WORKDAY', 'WEEKEND']
       const missingTypes = requiredTypes.filter(t => !existingTypes.includes(t))
-
       if (missingTypes.length > 0 || !this.form.addresses || this.form.addresses.length === 0) {
         const addressMap = new Map()
         ;(this.form.addresses || []).forEach(a => {
@@ -442,9 +376,11 @@ export default {
         })
         this.$set(this.form, 'addresses', newAddresses)
       }
+      // 确保首单信息存在
       if (!this.form.orderInfo) {
-        this.$set(this.form, 'orderInfo', createDefaultOrderInfo())
+        this.$set(this.form, 'orderInfo', createFirstOrderDefaultForm())
       }
+      return true
     },
     async handleEdit(row) {
       const requestId = this.editRequestId + 1
@@ -463,61 +399,6 @@ export default {
         this.$message.error('获取客户详情失败: ' + (e.message || '未知错误'))
       }
     },
-    initForm() {
-      const savedAddresses = this.form && this.form.addresses
-      Object.assign(this.form, JSON.parse(JSON.stringify(defaultForm)))
-      if (savedAddresses) {
-        this.form.addresses = savedAddresses
-      }
-    },
-    async loadParentPackages() {
-      try {
-        const res = await categoryApi.getParents()
-        const data = res.data || res
-        this.$nextTick(() => {
-          this.parentPackages = data || []
-        })
-      } catch (e) {
-        console.error('loadParentPackages error', e)
-      }
-    },
-    async parentPackageChange(parentId) {
-      await this.loadChildPackages(parentId)
-      this.form.orderInfo.childPackageId = null
-      this.calcTotalCount()
-    },
-    async loadChildPackages(parentId) {
-      if (!parentId) {
-        this.childPackages = []
-        return
-      }
-      try {
-        const res = await categoryApi.getTree()
-        const tree = res.data || res || []
-        const parent = tree.find(p => p.id === parentId)
-        this.childPackages = parent ? (parent.children || []) : []
-      } catch (e) {
-        console.error('loadChildPackages error', e)
-      }
-    },
-    calcTotalCount() {
-      const breakfast = this.form.orderInfo.breakfastCount || 0
-      const lunchDinner = this.form.orderInfo.lunchDinnerCount || 0
-      this.form.orderInfo.totalCount = breakfast + lunchDinner
-      this.calcTotalAmount()
-    },
-    calcTotalAmount() {
-      const breakfastCount = this.form.orderInfo.breakfastCount || 0
-      const lunchDinnerCount = this.form.orderInfo.lunchDinnerCount || 0
-      const breakfastPrice = this.form.orderInfo.breakfastPrice || 0
-      const lunchDinnerPrice = this.form.orderInfo.lunchDinnerPrice || 0
-      const totalAmount = breakfastCount * breakfastPrice + lunchDinnerCount * lunchDinnerPrice
-      this.form.orderInfo.totalAmount = totalAmount
-      // 如果成交金额未填写，默认等于总价
-      if (!this.form.orderInfo.finalAmount) {
-        this.form.orderInfo.finalAmount = totalAmount
-      }
-    },
     async toggleStatus(row) {
       const newStatus = !row.status
       try {
@@ -528,8 +409,23 @@ export default {
         this.$message.error('状态更新失败: ' + (e.message || '未知错误'))
       }
     },
-    checkboxT(row) {
+    checkboxT() {
       return true
+    },
+    async searchAllergy(query) {
+      if (!query) {
+        this.allergyOptions = []
+        return
+      }
+      this.allergyLoading = true
+      try {
+        const res = await queryIngredients({ name: query, page: 0, size: 20 })
+        this.allergyOptions = res.content || []
+      } catch (e) {
+        console.error('searchAllergy error', e)
+      } finally {
+        this.allergyLoading = false
+      }
     }
   }
 }
