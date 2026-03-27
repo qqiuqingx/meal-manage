@@ -33,10 +33,28 @@
         </el-row>
 
         <el-divider content-position="left">金额信息</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="销售渠道">
+              <el-select v-model="form.customerSource" :disabled="readonly" clearable placeholder="选择销售渠道" style="width: 100%;">
+                <el-option v-for="item in customerSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
       </template>
 
       <!-- 客户首单模式：套餐选择 -->
       <template v-if="mode === 'firstOrder'">
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="销售渠道">
+              <el-select v-model="form.customerSource" :disabled="readonly" clearable placeholder="选择销售渠道" style="width: 100%;">
+                <el-option v-for="item in customerSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="父套餐" prop="parentPackageId">
@@ -345,6 +363,7 @@
 <script>
 import * as profileApi from '@/api/customer/profile'
 import * as categoryApi from '@/api/customer/packageCategory'
+import * as dictDetailApi from '@/api/system/dictDetail'
 
 // 订单模式默认数据
 export function createOrderDefaultForm() {
@@ -368,7 +387,8 @@ export function createOrderDefaultForm() {
     startDate: null,
     endDate: null,
     status: 1,
-    remark: null
+    remark: null,
+    customerSource: null
   }
 }
 
@@ -386,7 +406,8 @@ export function createFirstOrderDefaultForm() {
     totalAmount: 0,
     finalAmount: 0,
     startDate: null,
-    endDate: null
+    endDate: null,
+    customerSource: null
   }
 }
 
@@ -430,7 +451,8 @@ export default {
       customers: [],
       customerLoading: false,
       parentPackages: [],
-      childPackages: []
+      childPackages: [],
+      customerSourceOptions: []
     }
   },
   computed: {
@@ -461,6 +483,7 @@ export default {
     }
   },
   created() {
+    this.loadCustomerSourceDict()
     if (this.mode === 'firstOrder') {
       this.loadParentPackages()
     }
@@ -474,6 +497,18 @@ export default {
     }
   },
   methods: {
+    // 加载销售渠道字典
+    async loadCustomerSourceDict() {
+      try {
+        const res = await dictDetailApi.get('customer_source')
+        this.customerSourceOptions = (res.content || res.data || res || []).map(item => ({
+          value: item.value,
+          label: item.label
+        }))
+      } catch (e) {
+        console.error('loadCustomerSourceDict error', e)
+      }
+    },
     // 远程搜索客户
     async searchCustomer(query) {
       if (!query) return
@@ -588,7 +623,7 @@ export default {
       // 由父组件调用 this.$refs.orderForm.validate()
       return new Promise((resolve, reject) => {
         this.$refs.elForm && this.$refs.elForm.validate((valid) => {
-          if (valid) resolve()
+          if (valid) resolve(true)
           else reject(new Error('validation failed'))
         })
       })

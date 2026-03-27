@@ -63,6 +63,8 @@ public class CustomerOrderDetailDto implements Serializable {
 
     private String remark;
 
+    private String customerSource;
+
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;
