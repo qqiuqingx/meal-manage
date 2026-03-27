@@ -384,13 +384,20 @@ export default {
       this.$set(this.form, 'orderInfo', createDefaultOrderInfo())
     },
     [CRUD.HOOK.beforeToCU]() {
-      // 确保 addresses 数组有3个元素
-      if (!this.form || !this.form.addresses || this.form.addresses.length < 3) {
-        this.$set(this.form, 'addresses', [
-          { addressType: 'DEFAULT', addressDetail: '', contactName: '', contactPhone: '' },
-          { addressType: 'WORKDAY', addressDetail: '', contactName: '', contactPhone: '' },
-          { addressType: 'WEEKEND', addressDetail: '', contactName: '', contactPhone: '' }
-        ])
+      // 如果 addresses 不完整，补充缺失的地址类型
+      const existingTypes = (this.form.addresses || []).map(a => a.addressType)
+      const requiredTypes = ['DEFAULT', 'WORKDAY', 'WEEKEND']
+      const missingTypes = requiredTypes.filter(t => !existingTypes.includes(t))
+
+      if (missingTypes.length > 0 || !this.form.addresses || this.form.addresses.length === 0) {
+        const addressMap = new Map()
+        ;(this.form.addresses || []).forEach(a => {
+          addressMap.set(a.addressType, a)
+        })
+        const newAddresses = requiredTypes.map(type => {
+          return addressMap.get(type) || { addressType: type, addressDetail: '', contactName: '', contactPhone: '' }
+        })
+        this.$set(this.form, 'addresses', newAddresses)
       }
       if (!this.form.orderInfo) {
         this.$set(this.form, 'orderInfo', createDefaultOrderInfo())
