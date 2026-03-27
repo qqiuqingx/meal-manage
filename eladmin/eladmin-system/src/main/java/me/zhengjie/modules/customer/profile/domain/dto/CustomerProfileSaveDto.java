@@ -15,55 +15,28 @@ public class CustomerProfileSaveDto implements Serializable {
 
     private Long id;
 
-    /**
-     * 客户编号
-     */
     private String customerCode;
 
-    /**
-     * 客户姓名
-     */
     private String customerName;
 
-    /**
-     * 手机号
-     */
     private String phone;
 
-    /**
-     * 孕周
-     */
     private Integer gestationalWeek;
 
-    /**
-     * 过敏食物标签
-     */
     private List<String> allergyTags;
 
-    /**
-     * 医嘱要求
-     */
     private String medicalRequirements;
 
-    /**
-     * 状态
-     */
     private Boolean status;
 
-    /**
-     * 备注
-     */
     private String remark;
 
-    /**
-     * 地址列表
-     */
     private List<AddressDto> addresses;
 
     /**
-     * 套餐信息
+     * 首单信息（仅创建时使用）
      */
-    private PackageInfoDto packageInfo;
+    private OrderInfoDto orderInfo;
 
     /**
      * 地址 DTO
@@ -77,10 +50,10 @@ public class CustomerProfileSaveDto implements Serializable {
     }
 
     /**
-     * 套餐信息 DTO
+     * 首单信息 DTO
      */
     @Data
-    public static class PackageInfoDto implements Serializable {
+    public static class OrderInfoDto implements Serializable {
         private Long parentPackageId;
         private Long childPackageId;
         private Integer breakfastCount;
