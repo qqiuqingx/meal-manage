@@ -12,13 +12,5 @@ public class CustomerProfileStatusRequestDto implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    /**
-     * 目标状态
-     */
     private Boolean status;
-
-    /**
-     * 套餐信息(启用时必填)
-     */
-    private CustomerProfileSaveDto.PackageInfoDto packageInfo;
 }
