@@ -384,6 +384,10 @@ export default {
       this.$set(this.form, 'orderInfo', createDefaultOrderInfo())
     },
     [CRUD.HOOK.beforeToCU]() {
+      // 确保过敏食物是数组
+      if (!this.form.allergyTags || !Array.isArray(this.form.allergyTags)) {
+        this.$set(this.form, 'allergyTags', [])
+      }
       // 如果 addresses 不完整，补充缺失的地址类型
       const existingTypes = (this.form.addresses || []).map(a => a.addressType)
       const requiredTypes = ['DEFAULT', 'WORKDAY', 'WEEKEND']
