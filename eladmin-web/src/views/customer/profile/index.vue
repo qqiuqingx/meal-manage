@@ -169,6 +169,35 @@
             </el-col>
           </el-row>
           <el-row :gutter="20">
+            <el-col :span="8">
+              <el-form-item label="早餐单价">
+                <el-input-number v-model="form.orderInfo.breakfastPrice" :min="0" :precision="2" controls-position="right" style="width: 100%;" @change="calcTotalAmount" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="午晚单价">
+                <el-input-number v-model="form.orderInfo.lunchDinnerPrice" :min="0" :precision="2" controls-position="right" style="width: 100%;" @change="calcTotalAmount" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="总价">
+                <el-input-number v-model="form.orderInfo.totalAmount" :min="0" disabled :precision="2" controls-position="right" style="width: 100%;" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <el-form-item label="定金">
+                <el-input-number v-model="form.orderInfo.depositAmount" :min="0" :precision="2" controls-position="right" style="width: 100%;" @change="calcTotalAmount" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="成交金额">
+                <el-input-number v-model="form.orderInfo.finalAmount" :min="0" :precision="2" controls-position="right" style="width: 100%;" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="开始日期" prop="orderInfo.startDate">
                 <el-date-picker v-model="form.orderInfo.startDate" type="date" placeholder="选择开始日期" style="width: 100%;" value-format="yyyy-MM-dd" />
@@ -212,6 +241,11 @@ function createDefaultOrderInfo() {
     breakfastCount: 0,
     lunchDinnerCount: 0,
     totalCount: 0,
+    breakfastPrice: 0,
+    lunchDinnerPrice: 0,
+    depositAmount: 0,
+    totalAmount: 0,
+    finalAmount: 0,
     startDate: null,
     endDate: null
   }
@@ -331,6 +365,11 @@ export default {
           breakfastCount,
           lunchDinnerCount,
           totalCount: breakfastCount + lunchDinnerCount,
+          breakfastPrice: orderInfo.breakfastPrice || 0,
+          lunchDinnerPrice: orderInfo.lunchDinnerPrice || 0,
+          totalAmount: orderInfo.totalAmount || 0,
+          depositAmount: orderInfo.depositAmount || 0,
+          finalAmount: orderInfo.finalAmount || 0,
           startDate: orderInfo.startDate,
           endDate: orderInfo.endDate
         }
@@ -465,6 +504,19 @@ export default {
       const breakfast = this.form.orderInfo.breakfastCount || 0
       const lunchDinner = this.form.orderInfo.lunchDinnerCount || 0
       this.form.orderInfo.totalCount = breakfast + lunchDinner
+      this.calcTotalAmount()
+    },
+    calcTotalAmount() {
+      const breakfastCount = this.form.orderInfo.breakfastCount || 0
+      const lunchDinnerCount = this.form.orderInfo.lunchDinnerCount || 0
+      const breakfastPrice = this.form.orderInfo.breakfastPrice || 0
+      const lunchDinnerPrice = this.form.orderInfo.lunchDinnerPrice || 0
+      const totalAmount = breakfastCount * breakfastPrice + lunchDinnerCount * lunchDinnerPrice
+      this.form.orderInfo.totalAmount = totalAmount
+      // 如果成交金额未填写，默认等于总价
+      if (!this.form.orderInfo.finalAmount) {
+        this.form.orderInfo.finalAmount = totalAmount
+      }
     },
     async toggleStatus(row) {
       const newStatus = !row.status
