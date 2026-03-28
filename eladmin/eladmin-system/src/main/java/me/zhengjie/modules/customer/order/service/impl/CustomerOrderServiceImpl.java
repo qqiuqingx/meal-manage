@@ -223,7 +223,6 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         order.setStartDate(dto.getStartDate());
         order.setEndDate(dto.getEndDate());
         order.setStatus(dto.getStatus());
-        order.setDeliveryMode(dto.getDeliveryMode());
         order.setScheduleMode(dto.getScheduleMode());
         order.setRemark(dto.getRemark());
         order.setCustomerSource(dto.getCustomerSource());
@@ -259,7 +258,6 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setEndDate(order.getEndDate());
         dto.setStatus(order.getStatus());
         dto.setStatusDesc(getStatusDesc(order.getStatus()));
-        dto.setDeliveryMode(order.getDeliveryMode());
         dto.setScheduleMode(order.getScheduleMode());
         dto.setRemark(order.getRemark());
         dto.setCustomerSource(order.getCustomerSource());
