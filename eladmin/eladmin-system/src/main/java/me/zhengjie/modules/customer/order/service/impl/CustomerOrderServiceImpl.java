@@ -7,7 +7,9 @@ import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.order.service.CustomerOrderService;
+import me.zhengjie.modules.customer.profile.domain.CustomerPackageCategory;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.mapper.CustomerPackageCategoryMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.SecurityUtils;
@@ -36,6 +38,9 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
     @Autowired
     private CustomerProfileMapper profileMapper;
+
+    @Autowired
+    private CustomerPackageCategoryMapper packageCategoryMapper;
 
     private static final DateTimeFormatter ORDER_CODE_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
 
@@ -249,6 +254,21 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             dto.setCustomerName(profile.getCustomerName());
             dto.setPhone(profile.getPhone());
         }
+
+        // 填充套餐名称
+        if (order.getParentPackageId() != null) {
+            CustomerPackageCategory parentPackage = packageCategoryMapper.selectById(order.getParentPackageId());
+            if (parentPackage != null) {
+                dto.setParentPackageName(parentPackage.getCategoryName());
+            }
+        }
+        if (order.getChildPackageId() != null) {
+            CustomerPackageCategory childPackage = packageCategoryMapper.selectById(order.getChildPackageId());
+            if (childPackage != null) {
+                dto.setChildPackageName(childPackage.getCategoryName());
+            }
+        }
+
         dto.setOrderCode(order.getOrderCode());
         dto.setDepositAmount(order.getDepositAmount());
         dto.setTotalAmount(order.getTotalAmount());
