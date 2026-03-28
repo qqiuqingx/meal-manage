@@ -93,6 +93,9 @@ npm run lint
 - Active profile: `application.yml` sets `spring.profiles.active: dev`
 - Frontend config: Environment variables in `.env.*` files
 - Server: Port 8000, HTTP/2 enabled, GZIP compression enabled
+- Frontend: Port 8013 (see `eladmin-web/vue.config.js`)
+- Default login: admin / REDACTED_PASSWORD
+- Dev验证码: 输入 `REDACTED_CODE` 可跳过验证码校验 (see `AuthController.java`)
 
 ### Environment Variables
 

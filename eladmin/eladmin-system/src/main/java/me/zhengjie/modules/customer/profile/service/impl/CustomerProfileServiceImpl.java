@@ -67,6 +67,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         List<CustomerProfile> pageList = list.subList(fromIndex, toIndex);
         for (CustomerProfile profile : pageList) {
             fillDefaultAddress(profile);
+            fillLatestOrderInfo(profile);
         }
 
         return new PageResult<>(pageList, total);
@@ -409,6 +410,14 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 profile.setDefaultAddress(addr.getAddressDetail());
                 break;
             }
+        }
+    }
+
+    private void fillLatestOrderInfo(CustomerProfile profile) {
+        CustomerOrder latestOrder = customerOrderMapper.findLatestByCustomerId(profile.getId());
+        if (latestOrder != null) {
+            profile.setBreakfastCount(latestOrder.getBreakfastCount());
+            profile.setLunchDinnerCount(latestOrder.getLunchDinnerCount());
         }
     }
 
