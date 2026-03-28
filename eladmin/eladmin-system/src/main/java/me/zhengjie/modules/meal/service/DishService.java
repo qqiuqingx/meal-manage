@@ -90,7 +90,7 @@ public interface DishService extends IService<Dish> {
      * @param customerId 客户ID（可选，不传则为所有生效客户）
      * @return DishScheduleResult
      */
-    DishScheduleResult getScheduleAndSave(String date, String mealType, Integer customerId);
+    DishScheduleResult getScheduleAndSave(String date, String mealType, String scheduleMode, Integer customerId);
     DishScheduleResult getScheduleAndSaveNew(String date, String mealType, Integer customerId);
     /**
      * 获取首页排餐统计数据

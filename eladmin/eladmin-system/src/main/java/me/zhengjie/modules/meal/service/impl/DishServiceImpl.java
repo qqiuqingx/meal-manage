@@ -22,6 +22,7 @@ import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.modules.meal.mapper.DishScheduleRecordMapper;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.system.service.DictDetailService;
+import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.system.domain.DictDetail;
 import me.zhengjie.utils.FileUtil;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +64,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     private final CustomerMenuRecordService customerMenuRecordService;
     private final DishIngredientMapper dishIngredientMapper;
     private final DictDetailService dictDetailService;
+    private final CustomerOrderMapper customerOrderMapper;
 
     private static final String[] DISH_TYPES = {"MAIN", "SIDE", "SOUP", "VEGETABLE", "RICE"};
     private static final String[] MEAL_TYPES = {"LUNCH", "DINNER"};
@@ -387,7 +389,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     /**
      * 构建客户菜单列表
      */
-    private List<DishScheduleResult.CustomerMenu> buildCustomerMenus(String dateStr, int week, int day, String mealType, Integer customerId) {
+    private List<DishScheduleResult.CustomerMenu> buildCustomerMenus(String dateStr, int week, int day, String mealType, Integer customerId, String scheduleMode) {
         List<DishScheduleResult.CustomerMenu> customerMenus = new ArrayList<>();
 
         // 查找所有客户
@@ -406,7 +408,9 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         Map<String, List<Dish>> dishesByPackageAndMeal = new LinkedHashMap<>();
         Set<String> packageAndMealKeys = new HashSet<>();
         for (CustomerDietaryRestrictions customer : allCustomers) {
-            if (!isCustomerActive(customer, targetDate)) {
+            String customerScheduleMode = getCustomerScheduleMode(customer.getId());
+
+            if (!isCustomerActive(customer, targetDate, customerScheduleMode)) {
                 continue;
             }
             String pkg = customer.getMealPackage();
@@ -471,9 +475,41 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     }
 
     /**
+     * 获取客户的最新订单排餐模式
+     * @param customerId 客户ID
+     * @return 排餐模式（SCHEDULE=指定日期送,DAILY=每天送,WEEKEND=周末送,WEEKDAY=工作日送）
+     */
+    private String getCustomerScheduleMode(Long customerId) {
+        me.zhengjie.modules.customer.order.domain.CustomerOrder order = customerOrderMapper.findLatestByCustomerId(customerId);
+        return order != null ? order.getScheduleMode() : "SCHEDULE";
+    }
+
+    /**
+     * 根据订单排餐模式判断是否应该排餐
+     * @param scheduleMode 排餐模式
+     * @param targetDate 目标日期
+     * @return true表示应该排餐
+     */
+    private boolean shouldScheduleForDate(String scheduleMode, LocalDate targetDate) {
+        if ("SCHEDULE".equals(scheduleMode) || "DAILY".equals(scheduleMode)) {
+            // 指定日期送和每天送：正常排餐
+            return true;
+        } else if ("WEEKEND".equals(scheduleMode)) {
+            // 周末送：只排周末
+            int dayOfWeek = targetDate.getDayOfWeek().getValue();
+            return dayOfWeek == 6 || dayOfWeek == 7;
+        } else if ("WEEKDAY".equals(scheduleMode)) {
+            // 工作日送：只排工作日
+            int dayOfWeek = targetDate.getDayOfWeek().getValue();
+            return dayOfWeek >= 1 && dayOfWeek <= 5;
+        }
+        return false;
+    }
+
+    /**
      * 检查客户是否在生效期间且有剩余餐数
      */
-    private boolean isCustomerActive(CustomerDietaryRestrictions customer, LocalDate targetDate) {
+    private boolean isCustomerActive(CustomerDietaryRestrictions customer, LocalDate targetDate, String scheduleMode) {
         // 检查剩余餐数
         if (customer.getRemainingMeals() == null || customer.getRemainingMeals() <= 0) {
             return false;
@@ -770,7 +806,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public DishScheduleResult getScheduleAndSave(String date, String mealType, Integer customerId) {
+    public DishScheduleResult getScheduleAndSave(String date, String mealType, String scheduleMode, Integer customerId) {
         log.info("========== 开始生成排餐计划 ==========");
         log.info("请求参数: date={}, mealType={}, customerId={}", date, mealTypeCn(mealType), customerId);
 
@@ -1127,7 +1163,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     /**
      * 构建排餐结果
      */
-    private DishScheduleResult buildScheduleResult(String dateStr, String mealType, Integer customerId) {
+    private DishScheduleResult buildScheduleResult(String dateStr, String mealType, Integer customerId, String scheduleMode) {
         DishScheduleResult result = new DishScheduleResult();
         result.setDate(dateStr);
 

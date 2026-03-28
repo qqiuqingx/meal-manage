@@ -128,8 +128,9 @@ public class DishController {
     public ResponseEntity<DishScheduleResult> generateSchedule(
             @PathVariable String date,
             @RequestParam(required = false, defaultValue = "ALL") String mealType,
+            @RequestParam(required = false, defaultValue = "SCHEDULE") String scheduleMode,
             @RequestParam(required = false) Integer customerId){
-        return new ResponseEntity<>(dishService.getScheduleAndSave(date, mealType, customerId),HttpStatus.OK);
+        return new ResponseEntity<>(dishService.getScheduleAndSave(date, mealType, scheduleMode, customerId),HttpStatus.OK);
     }
 
     @GetMapping("/schedule/stats/{date}")
