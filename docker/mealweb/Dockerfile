@@ -8,8 +8,8 @@ WORKDIR /app
 # Copy package files for Docker layer caching
 COPY eladmin-web/package.json eladmin-web/package-lock.json* ./
 
-# Install dependencies - use npm install for better compatibility
-RUN npm install --legacy-peer-deps
+# Install dependencies - use npm ci for speed, with fallback
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps --no-audit --prefer-offline
 
 # Copy source code
 COPY eladmin-web/ ./
