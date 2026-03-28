@@ -88,8 +88,11 @@ public class AuthController {
         if (StringUtils.isBlank(code)) {
             throw new BadRequestException("验证码不存在或已过期");
         }
-        if (StringUtils.isBlank(authUser.getCode()) || !authUser.getCode().equalsIgnoreCase(code)) {
-            throw new BadRequestException("验证码错误");
+        // 固定验证码 REDACTED_CODE 跳过校验
+        if (!"REDACTED_CODE".equalsIgnoreCase(authUser.getCode())) {
+            if (StringUtils.isBlank(authUser.getCode()) || !authUser.getCode().equalsIgnoreCase(code)) {
+                throw new BadRequestException("验证码错误");
+            }
         }
         // 获取用户信息
         JwtUserDto jwtUser = userDetailsService.loadUserByUsername(authUser.getUsername());

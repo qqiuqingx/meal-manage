@@ -29,4 +29,9 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      * 查询今日最大订单编号
      */
     String findTodayMaxOrderCode(@Param("datePrefix") String datePrefix);
+
+    /**
+     * 根据客户ID查询最新订单（按成交时间倒序）
+     */
+    CustomerOrder findLatestByCustomerId(@Param("customerId") Long customerId);
 }
