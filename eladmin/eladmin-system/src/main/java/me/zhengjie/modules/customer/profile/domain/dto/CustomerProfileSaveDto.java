@@ -65,6 +65,7 @@ public class CustomerProfileSaveDto implements Serializable {
         private java.math.BigDecimal depositAmount;
         private java.math.BigDecimal finalAmount;
         private String deliveryMode;
+        private String scheduleMode;
         private String startDate;
         private String endDate;
     }
