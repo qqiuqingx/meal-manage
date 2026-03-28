@@ -9,7 +9,9 @@ WORKDIR /app
 COPY eladmin-web/package.json eladmin-web/package-lock.json* ./
 
 # Install dependencies - use npm ci for speed, with fallback
-RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps --no-audit --prefer-offline
+# Use Taobao mirror for faster installation in China
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm ci --legacy-peer-deps || npm install --legacy-peer-deps --no-audit --prefer-offline
 
 # Copy source code
 COPY eladmin-web/ ./
