@@ -115,6 +115,16 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         orderMapper.deleteBatchIds(ids);
     }
 
+    @Override
+    public PageResult<?> getOrdersByCustomerId(Long customerId, Integer current, Integer size) {
+        if (customerId == null) {
+            throw new BadRequestException("客户ID不能为空");
+        }
+        CustomerOrderQueryCriteria criteria = new CustomerOrderQueryCriteria();
+        criteria.setCustomerId(customerId);
+        return query(criteria, current, size);
+    }
+
     /**
      * 生成订单编号: ORD + yyyyMMdd + 3位序号
      */
