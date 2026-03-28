@@ -134,6 +134,16 @@ public class CustomerOrder implements Serializable {
     private String deliveryMode;
 
     /**
+     * 排餐模式(SCHEDULE=指定日期送,DAILY=每天送,WEEKEND=周末送,WEEKDAY=工作日送)
+     */
+    private String scheduleMode;
+
+    /**
+     * 送餐日期(JSON数组格式,如["2026-04-01","2026-04-03"])
+     */
+    private String deliveryDates;
+
+    /**
      * 备注
      */
     private String remark;

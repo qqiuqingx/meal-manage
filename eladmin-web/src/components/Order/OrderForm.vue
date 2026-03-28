@@ -41,6 +41,37 @@
               </el-select>
             </el-form-item>
           </el-col>
+          <el-col :span="12">
+            <el-form-item label="排餐模式">
+              <el-select v-model="form.scheduleMode" :disabled="readonly" placeholder="请选择排餐模式" style="width: 100%;">
+                <el-option label="指定日期送" value="SCHEDULE" />
+                <el-option label="每天送" value="DAILY" />
+                <el-option label="周末送" value="WEEKEND" />
+                <el-option label="工作日送" value="WEEKDAY" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row v-if="form.deliveryMode === 'SCHEDULE'" :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="送餐日期">
+              <el-select
+                v-model="form.deliveryDates"
+                multiple
+                filterable
+                allow-create
+                placeholder="选择或输入送餐日期（格式：yyyy-MM-dd）"
+                style="width: 100%;"
+              >
+                <el-option
+                  v-for="date in availableDates"
+                  :key="date"
+                  :label="date"
+                  :value="date"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
         </el-row>
 
         <el-divider content-position="left">金额信息</el-divider>
@@ -71,6 +102,16 @@
                 <el-option label="按计划送" value="SCHEDULE" />
                 <el-option label="每天送" value="DAILY" />
                 <el-option label="隔天送" value="INTERVAL" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="排餐模式">
+              <el-select v-model="form.scheduleMode" :disabled="readonly" placeholder="请选择排餐模式" style="width: 100%;">
+                <el-option label="指定日期送" value="SCHEDULE" />
+                <el-option label="每天送" value="DAILY" />
+                <el-option label="周末送" value="WEEKEND" />
+                <el-option label="工作日送" value="WEEKDAY" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -408,6 +449,8 @@ export function createOrderDefaultForm() {
     endDate: null,
     status: 1,
     deliveryMode: 'SCHEDULE',
+    scheduleMode: 'SCHEDULE',
+    deliveryDates: [],
     remark: null,
     customerSource: null
   }
@@ -427,6 +470,8 @@ export function createFirstOrderDefaultForm() {
     totalAmount: 0,
     finalAmount: 0,
     deliveryMode: 'SCHEDULE',
+    scheduleMode: 'SCHEDULE',
+    deliveryDates: [],
     startDate: null,
     endDate: null,
     customerSource: null
@@ -474,7 +519,8 @@ export default {
       customerLoading: false,
       parentPackages: [],
       childPackages: [],
-      customerSourceOptions: []
+      customerSourceOptions: [],
+      availableDates: []
     }
   },
   computed: {
@@ -506,6 +552,7 @@ export default {
   },
   created() {
     this.loadCustomerSourceDict()
+    this.initAvailableDates()
     if (this.mode === 'firstOrder') {
       this.loadParentPackages()
     }
@@ -530,6 +577,20 @@ export default {
       } catch (e) {
         console.error('loadCustomerSourceDict error', e)
       }
+    },
+    // 初始化可选日期（未来30天）
+    initAvailableDates() {
+      const dates = []
+      const today = new Date()
+      for (let i = 1; i <= 30; i++) {
+        const date = new Date(today)
+        date.setDate(today.getDate() + i)
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        dates.push(`${year}-${month}-${day}`)
+      }
+      this.availableDates = dates
     },
     // 远程搜索客户
     async searchCustomer(query) {
