@@ -38,3 +38,11 @@ export function del(ids) {
     data: ids
   })
 }
+
+export function getOrdersByCustomer(customerId, params) {
+  return axios({
+    url: `/api/customer/order/byCustomer/${customerId}`,
+    method: 'get',
+    params
+  })
+}

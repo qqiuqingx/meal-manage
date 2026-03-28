@@ -38,9 +38,17 @@
         </template>
       </el-table-column>
       <el-table-column label="创建时间" prop="createTime" width="150" />
-      <el-table-column v-if="checkPer(['admin','customerProfile:edit','customerProfile:status'])" label="操作" width="180px" align="center" fixed="right">
+      <el-table-column v-if="checkPer(['admin','customerProfile:edit','customerProfile:status'])" label="操作" width="240px" align="center" fixed="right">
         <template slot-scope="scope">
           <el-button size="mini" type="primary" icon="edit" @click="handleEdit(scope.row)">编辑</el-button>
+          <el-button
+            size="mini"
+            type="success"
+            icon="view"
+            @click="handleDetail(scope.row)"
+          >
+            详情
+          </el-button>
           <el-button
             size="mini"
             :type="scope.row.status ? 'warning' : 'success'"
@@ -170,6 +178,14 @@
         <el-button :loading="submitLoading" type="primary" @click="submitForm">确认</el-button>
       </div>
     </el-dialog>
+
+    <!-- 客户详情弹窗 -->
+    <CustomerDetailDialog
+      :visible.sync="detailDialogVisible"
+      :customer="currentCustomer"
+      @edit-customer="handleEdit"
+      @view-all-orders="handleViewAllOrders"
+    />
   </div>
 </template>
 
@@ -180,6 +196,7 @@ import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
 import OrderForm, { createFirstOrderDefaultForm } from '@/components/Order/OrderForm.vue'
+import CustomerDetailDialog from './CustomerDetailDialog.vue'
 
 function createDefaultAddresses() {
   return [
@@ -203,7 +220,7 @@ const defaultForm = {
 
 export default {
   name: 'CustomerProfile',
-  components: { crudOperation, rrOperation, OrderForm },
+  components: { crudOperation, rrOperation, OrderForm, CustomerDetailDialog },
   mixins: [presenter(), header(), form(defaultForm), crud()],
   cruds() {
     return CRUD({
@@ -241,7 +258,9 @@ export default {
       submitLoading: false,
       allergyOptions: [],
       allergyLoading: false,
-      editRequestId: 0
+      editRequestId: 0,
+      detailDialogVisible: false,
+      currentCustomer: null
     }
   },
   computed: {
@@ -415,6 +434,20 @@ export default {
     },
     checkboxT() {
       return true
+    },
+    handleDetail(row) {
+      this.currentCustomer = row
+      this.detailDialogVisible = true
+    },
+    handleViewAllOrders(customer) {
+      // 跳转到订单页面并筛选该客户的订单
+      this.$router.push({
+        path: '/customer/order',
+        query: {
+          customerId: customer.id,
+          customerName: customer.customerName
+        }
+      })
     },
     async searchAllergy(query) {
       if (!query) {

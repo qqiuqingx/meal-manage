@@ -37,6 +37,15 @@ public class CustomerOrderController {
         return ResponseEntity.ok(orderService.query(criteria, current, size));
     }
 
+    @ApiOperation("根据客户ID分页查询订单")
+    @GetMapping("/byCustomer/{customerId}")
+    @PreAuthorize("@el.check('customerOrder:list')")
+    public ResponseEntity<PageResult<?>> getOrdersByCustomer(@PathVariable Long customerId,
+            @RequestParam(name = "page", defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size) {
+        return ResponseEntity.ok(orderService.getOrdersByCustomerId(customerId, current, size));
+    }
+
     @ApiOperation("获取订单详情")
     @GetMapping("/{id}")
     @PreAuthorize("@el.check('customerOrder:list')")
