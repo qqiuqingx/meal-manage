@@ -61,6 +61,8 @@ public class CustomerOrderDetailDto implements Serializable {
 
     private String statusDesc;
 
+    private String deliveryMode;
+
     private String remark;
 
     private String customerSource;
