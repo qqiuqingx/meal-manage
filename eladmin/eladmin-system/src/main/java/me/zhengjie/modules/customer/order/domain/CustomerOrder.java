@@ -129,6 +129,11 @@ public class CustomerOrder implements Serializable {
     private Integer status;
 
     /**
+     * 送餐模式(SCHEDULE=按计划送,DAILY=每天送,INTERVAL=隔天送)
+     */
+    private String deliveryMode;
+
+    /**
      * 备注
      */
     private String remark;

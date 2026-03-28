@@ -41,7 +41,8 @@ CREATE TABLE customer_order (
     KEY idx_status (status),
     KEY idx_start_date (start_date),
     KEY idx_end_date (end_date),
-    KEY idx_deal_time (deal_time)
+    KEY idx_deal_time (deal_time),
+    delivery_mode VARCHAR(16) NOT NULL DEFAULT 'SCHEDULE' COMMENT '送餐模式(SCHEDULE=按计划送,DAILY=每天送,INTERVAL=隔天送)'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='客户订单表';
 
 -- ============================================
