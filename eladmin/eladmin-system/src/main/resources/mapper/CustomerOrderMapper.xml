@@ -22,6 +22,8 @@
         <result column="start_date" property="startDate"/>
         <result column="end_date" property="endDate"/>
         <result column="status" property="status"/>
+        <result column="schedule_mode" property="scheduleMode"/>
+        <result column="delivery_dates" property="deliveryDates"/>
         <result column="remark" property="remark"/>
         <result column="customer_source" property="customerSource"/>
         <result column="create_by" property="createBy"/>
