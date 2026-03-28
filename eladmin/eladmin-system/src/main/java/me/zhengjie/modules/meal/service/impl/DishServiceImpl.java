@@ -431,7 +431,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
         for (CustomerDietaryRestrictions customer : allCustomers) {
             // 检查客户是否生效
-            if (!isCustomerActive(customer, targetDate)) {
+            String custScheduleMode = getCustomerScheduleMode(customer.getId());
+            if (!isCustomerActive(customer, targetDate, custScheduleMode)) {
                 continue;
             }
 
@@ -479,8 +480,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
      * @param customerId 客户ID
      * @return 排餐模式（SCHEDULE=指定日期送,DAILY=每天送,WEEKEND=周末送,WEEKDAY=工作日送）
      */
-    private String getCustomerScheduleMode(Long customerId) {
-        me.zhengjie.modules.customer.order.domain.CustomerOrder order = customerOrderMapper.findLatestByCustomerId(customerId);
+    private String getCustomerScheduleMode(Integer customerId) {
+        me.zhengjie.modules.customer.order.domain.CustomerOrder order = customerOrderMapper.findLatestByCustomerId(customerId.longValue());
         return order != null ? order.getScheduleMode() : "SCHEDULE";
     }
 
@@ -808,11 +809,11 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     @Transactional(rollbackFor = Exception.class)
     public DishScheduleResult getScheduleAndSave(String date, String mealType, String scheduleMode, Integer customerId) {
         log.info("========== 开始生成排餐计划 ==========");
-        log.info("请求参数: date={}, mealType={}, customerId={}", date, mealTypeCn(mealType), customerId);
+        log.info("请求参数: date={}, mealType={}, scheduleMode={}, customerId={}", date, mealTypeCn(mealType), scheduleMode, customerId);
 
         // 步骤1: 构建排餐结果
 
-        DishScheduleResult result = buildScheduleResult(date, mealType, customerId);
+        DishScheduleResult result = buildScheduleResult(date, mealType, customerId, scheduleMode);
         log.info("[步骤1] 排餐结果构建完成，有效客户数: {}", result.getCustomers() != null ? result.getCustomers().size() : 0);
 
         // 检查是否有生效的客户
@@ -1175,7 +1176,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         result.setDay(day);
 
         // 2. 查找生效客户并生成客户菜单
-        List<DishScheduleResult.CustomerMenu> customerMenus = buildCustomerMenus(dateStr, week, day, mealType, customerId);
+        List<DishScheduleResult.CustomerMenu> customerMenus = buildCustomerMenus(dateStr, week, day, mealType, customerId, scheduleMode);
         result.setCustomers(customerMenus);
 
         return result;
