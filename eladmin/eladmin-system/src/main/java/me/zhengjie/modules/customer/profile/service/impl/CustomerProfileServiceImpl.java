@@ -378,6 +378,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         order.setFirstDeliveryTime(java.time.LocalDateTime.now());
         order.setDealTime(java.time.LocalDateTime.now());
         order.setStatus(1);
+        order.setDeliveryMode(orderInfo.getDeliveryMode() != null ? orderInfo.getDeliveryMode() : "SCHEDULE");
         order.setRemark(profile.getRemark());
         order.setCreateBy(getCurrentUsername());
         customerOrderMapper.insert(order);
