@@ -187,4 +187,16 @@ public class CustomerOrder implements Serializable {
      */
     @TableField(exist = false)
     private Integer totalCount;
+
+    /**
+     * 父套餐名称(查询时填充)
+     */
+    @TableField(exist = false)
+    private String parentPackageName;
+
+    /**
+     * 子套餐名称(查询时填充)
+     */
+    @TableField(exist = false)
+    private String childPackageName;
 }

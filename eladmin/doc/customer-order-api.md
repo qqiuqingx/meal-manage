@@ -61,9 +61,14 @@ GET /api/customer/order
     {
       "id": 1,
       "customerId": 1,
+      "customerCode": "C001",
+      "parentPackageId": 1,
+      "childPackageId": 2,
       "orderCode": "ORD20260326001",
       "customerName": "张三",
       "phone": "13800138000",
+      "parentPackageName": "月子餐",
+      "childPackageName": "7天月子餐",
       "depositAmount": 1000.00,
       "totalAmount": 5000.00,
       "finalAmount": 4800.00,
@@ -112,6 +117,8 @@ GET /api/customer/order/{id}
     "customerId": 1,
     "customerName": "张三",
     "phone": "13800138000",
+    "parentPackageName": "月子餐",
+    "childPackageName": "7天月子餐",
     "orderCode": "ORD20260326001",
     "depositAmount": 1000.00,
     "totalAmount": 5000.00,
@@ -154,6 +161,8 @@ Content-Type: application/json
 ```json
 {
   "customerId": 1,
+  "parentPackageId": 1,
+  "childPackageId": 2,
   "depositAmount": 1000.00,
   "totalAmount": 5000.00,
   "finalAmount": 4800.00,
@@ -177,6 +186,8 @@ Content-Type: application/json
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | customerId | Long | 是 | 客户ID |
+| parentPackageId | Long | 否 | 父套餐ID |
+| childPackageId | Long | 否 | 子套餐ID |
 | totalAmount | BigDecimal | 是 | 总金额 |
 | finalAmount | BigDecimal | 是 | 成交金额 |
 | depositAmount | BigDecimal | 否 | 定金金额，默认 0 |
@@ -255,6 +266,9 @@ Content-Type: application/json
 CREATE TABLE customer_order (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     customer_id BIGINT NOT NULL,
+    customer_code VARCHAR(32),
+    parent_package_id BIGINT,
+    child_package_id BIGINT,
     order_code VARCHAR(32) NOT NULL,
     deposit_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
@@ -272,6 +286,9 @@ CREATE TABLE customer_order (
     start_date DATE,
     end_date DATE,
     status TINYINT NOT NULL DEFAULT 1,
+    schedule_mode VARCHAR(32),
+    delivery_dates VARCHAR(500),
+    customer_source VARCHAR(64),
     remark VARCHAR(255),
     create_by VARCHAR(100),
     update_by VARCHAR(100),
@@ -287,3 +304,4 @@ CREATE TABLE customer_order (
 | 版本 | 日期 | 修改人 | 说明 |
 |------|------|--------|------|
 | 1.0 | 2026-03-26 | Claude | 初版实现 |
+| 1.1 | 2026-03-28 | Claude | 新增父套餐、子套餐字段及名称显示 |

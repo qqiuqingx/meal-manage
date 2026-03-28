@@ -23,6 +23,10 @@ public class CustomerOrderDetailDto implements Serializable {
 
     private String phone;
 
+    private String parentPackageName;
+
+    private String childPackageName;
+
     private String orderCode;
 
     private BigDecimal depositAmount;

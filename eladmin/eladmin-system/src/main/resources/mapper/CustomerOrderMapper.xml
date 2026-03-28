@@ -5,6 +5,9 @@
     <resultMap id="BaseResultMap" type="me.zhengjie.modules.customer.order.domain.CustomerOrder">
         <id column="id" property="id"/>
         <result column="customer_id" property="customerId"/>
+        <result column="customer_code" property="customerCode"/>
+        <result column="parent_package_id" property="parentPackageId"/>
+        <result column="child_package_id" property="childPackageId"/>
         <result column="order_code" property="orderCode"/>
         <result column="deposit_amount" property="depositAmount"/>
         <result column="total_amount" property="totalAmount"/>
@@ -35,13 +38,19 @@
     <resultMap id="JoinResultMap" type="me.zhengjie.modules.customer.order.domain.CustomerOrder" extends="BaseResultMap">
         <result column="customer_name" property="customerName"/>
         <result column="phone" property="phone"/>
+        <result column="parent_package_name" property="parentPackageName"/>
+        <result column="child_package_name" property="childPackageName"/>
     </resultMap>
 
-    <!-- 条件查询订单列表(关联客户姓名和手机号) -->
+    <!-- 条件查询订单列表(关联客户姓名、手机号和套餐名称) -->
     <select id="findAll" resultMap="JoinResultMap">
-        SELECT o.*, cp.customer_name, cp.phone
+        SELECT o.*, cp.customer_name, cp.phone,
+               ppc.category_name as parent_package_name,
+               cpc.category_name as child_package_name
         FROM customer_order o
         LEFT JOIN customer_profile cp ON o.customer_id = cp.id
+        LEFT JOIN customer_package_category ppc ON o.parent_package_id = ppc.id
+        LEFT JOIN customer_package_category cpc ON o.child_package_id = cpc.id
         <where>
             <if test="criteria.orderCode != null and criteria.orderCode != ''">
                 AND o.order_code LIKE CONCAT('%', #{criteria.orderCode}, '%')
@@ -79,6 +88,8 @@
         SELECT COUNT(*)
         FROM customer_order o
         LEFT JOIN customer_profile cp ON o.customer_id = cp.id
+        LEFT JOIN customer_package_category ppc ON o.parent_package_id = ppc.id
+        LEFT JOIN customer_package_category cpc ON o.child_package_id = cpc.id
         <where>
             <if test="criteria.orderCode != null and criteria.orderCode != ''">
                 AND o.order_code LIKE CONCAT('%', #{criteria.orderCode}, '%')
