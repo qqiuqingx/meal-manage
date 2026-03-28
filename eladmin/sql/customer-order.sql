@@ -42,7 +42,6 @@ CREATE TABLE customer_order (
     KEY idx_start_date (start_date),
     KEY idx_end_date (end_date),
     KEY idx_deal_time (deal_time),
-    delivery_mode VARCHAR(16) NOT NULL DEFAULT 'SCHEDULE' COMMENT '送餐模式(SCHEDULE=按计划送,DAILY=每天送,INTERVAL=隔天送)',
     schedule_mode VARCHAR(16) NOT NULL DEFAULT 'SCHEDULE' COMMENT '排餐模式(SCHEDULE=指定日期送,DAILY=每天送,WEEKEND=周末送,WEEKDAY=工作日送)',
     delivery_dates TEXT NULL COMMENT '送餐日期(JSON数组格式,如["2026-04-01","2026-04-03"])',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='客户订单表';

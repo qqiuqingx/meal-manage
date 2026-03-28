@@ -123,11 +123,6 @@ public class CustomerOrderSaveDto implements Serializable {
     private Integer status;
 
     /**
-     * 送餐模式(SCHEDULE=按计划送,DAILY=每天送,INTERVAL=隔天送)
-     */
-    private String deliveryMode;
-
-    /**
      * 排餐模式(SCHEDULE=指定日期送,DAILY=每天送,WEEKEND=周末送,WEEKDAY=工作日送)
      */
     private String scheduleMode;

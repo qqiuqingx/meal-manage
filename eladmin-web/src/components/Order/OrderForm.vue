@@ -33,15 +33,6 @@
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="送餐模式">
-              <el-select v-model="form.deliveryMode" :disabled="readonly" placeholder="请选择送餐模式" style="width: 100%;">
-                <el-option label="按计划送" value="SCHEDULE" />
-                <el-option label="每天送" value="DAILY" />
-                <el-option label="隔天送" value="INTERVAL" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
             <el-form-item label="排餐模式">
               <el-select v-model="form.scheduleMode" :disabled="readonly" placeholder="请选择排餐模式" style="width: 100%;">
                 <el-option label="指定日期送" value="SCHEDULE" />
@@ -52,7 +43,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row v-if="form.deliveryMode === 'SCHEDULE'" :gutter="20">
+        <el-row v-if="form.scheduleMode === 'SCHEDULE'" :gutter="20">
           <el-col :span="24">
             <el-form-item label="送餐日期">
               <el-select
@@ -93,15 +84,6 @@
             <el-form-item label="销售渠道">
               <el-select v-model="form.customerSource" :disabled="readonly" clearable placeholder="选择销售渠道" style="width: 100%;">
                 <el-option v-for="item in customerSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="送餐模式">
-              <el-select v-model="form.deliveryMode" :disabled="readonly" placeholder="请选择送餐模式" style="width: 100%;">
-                <el-option label="按计划送" value="SCHEDULE" />
-                <el-option label="每天送" value="DAILY" />
-                <el-option label="隔天送" value="INTERVAL" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -448,7 +430,6 @@ export function createOrderDefaultForm() {
     startDate: null,
     endDate: null,
     status: 1,
-    deliveryMode: 'SCHEDULE',
     scheduleMode: 'SCHEDULE',
     deliveryDates: [],
     remark: null,
@@ -469,7 +450,6 @@ export function createFirstOrderDefaultForm() {
     depositAmount: 0,
     totalAmount: 0,
     finalAmount: 0,
-    deliveryMode: 'SCHEDULE',
     scheduleMode: 'SCHEDULE',
     deliveryDates: [],
     startDate: null,

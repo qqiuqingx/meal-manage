@@ -313,7 +313,6 @@ export default {
           totalAmount: orderInfo.totalAmount || 0,
           depositAmount: orderInfo.depositAmount || 0,
           finalAmount: orderInfo.finalAmount || 0,
-          deliveryMode: orderInfo.deliveryMode || 'SCHEDULE',
           scheduleMode: orderInfo.scheduleMode || 'SCHEDULE',
           startDate: orderInfo.startDate,
           endDate: orderInfo.endDate,
