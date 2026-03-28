@@ -36,4 +36,9 @@ public interface CustomerOrderService {
      * 删除订单
      */
     void delete(Set<Long> ids);
+
+    /**
+     * 根据客户ID分页查询订单
+     */
+    PageResult<?> getOrdersByCustomerId(Long customerId, Integer current, Integer size);
 }
