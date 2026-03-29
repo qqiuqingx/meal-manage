@@ -93,26 +93,36 @@ INSERT INTO `parent_package_sub` (`parent_package_id`, `sub_package_id`, `status
 -- 5. sys_menu 路由配置
 -- --------------------------------------------------------
 
--- 5.1 父菜单: 套餐管理
-INSERT INTO `sys_menu` (`id`, `pid`, `sub_count`, `type`, `title`, `path`, `component`, `sort`, `icon`, `is_inner`, `is_cache`, `is_show`, `permission`, `create_by`, `update_by`, `create_time`, `update_time`) VALUES
-(123, 122, 0, 1, '套餐管理', 'customer/package/index', 'customer/package/index', 5, 'bug', 0, 0, 1, '', 'admin', '', NOW(), NOW());
+-- 5.1 父菜单: 套餐管理（menu_id=138，pid=122 客户管理目录）
+INSERT INTO `sys_menu` (`menu_id`, `pid`, `sub_count`, `type`, `title`, `name`, `component`, `menu_sort`, `icon`, `path`, `i_frame`, `cache`, `hidden`, `permission`, `create_by`, `update_by`, `create_time`, `update_time`) VALUES
+(138, 122, 0, 1, '套餐管理', 'customer/package/index', 'customer/package/index', 5, 'bug', '', 0, 0, 0, '', 'admin', '', NOW(), NOW());
 
--- 5.2 子菜单: 查看
-INSERT INTO `sys_menu` (`id`, `pid`, `sub_count`, `type`, `title`, `path`, `component`, `sort`, `icon`, `is_inner`, `is_cache`, `is_show`, `permission`, `create_by`, `update_by`, `create_time`, `update_time`) VALUES
-(124, 123, 0, 2, '套餐管理查看', 'customer/package/index', NULL, 0, '', 0, 0, 1, 'customerPackage:list', 'admin', '', NOW(), NOW());
+-- 5.2 按钮: 查看
+INSERT INTO `sys_menu` (`menu_id`, `pid`, `sub_count`, `type`, `title`, `name`, `component`, `menu_sort`, `icon`, `path`, `i_frame`, `cache`, `hidden`, `permission`, `create_by`, `update_by`, `create_time`, `update_time`) VALUES
+(139, 138, 0, 2, '套餐管理查看', NULL, NULL, 0, '', '', 0, 0, 0, 'package:list', 'admin', '', NOW(), NOW());
 
--- 5.3 子菜单: 新增
-INSERT INTO `sys_menu` (`id`, `pid`, `sub_count`, `type`, `title`, `path`, `component`, `sort`, `icon`, `is_inner`, `is_cache`, `is_show`, `permission`, `create_by`, `update_by`, `create_time`, `update_time`) VALUES
-(125, 123, 0, 2, '套餐管理新增', 'customer/package/add', NULL, 0, '', 0, 0, 1, 'customerPackage:add', 'admin', '', NOW(), NOW());
+-- 5.3 按钮: 新增
+INSERT INTO `sys_menu` (`menu_id`, `pid`, `sub_count`, `type`, `title`, `name`, `component`, `menu_sort`, `icon`, `path`, `i_frame`, `cache`, `hidden`, `permission`, `create_by`, `update_by`, `create_time`, `update_time`) VALUES
+(140, 138, 0, 2, '套餐管理新增', NULL, NULL, 0, '', '', 0, 0, 0, 'package:add', 'admin', '', NOW(), NOW());
 
--- 5.4 子菜单: 编辑
-INSERT INTO `sys_menu` (`id`, `pid`, `sub_count`, `type`, `title`, `path`, `component`, `sort`, `icon`, `is_inner`, `is_cache`, `is_show`, `permission`, `create_by`, `update_by`, `create_time`, `update_time`) VALUES
-(126, 123, 0, 2, '套餐管理编辑', 'customer/package/edit', NULL, 0, '', 0, 0, 1, 'customerPackage:edit', 'admin', '', NOW(), NOW());
+-- 5.4 按钮: 编辑
+INSERT INTO `sys_menu` (`menu_id`, `pid`, `sub_count`, `type`, `title`, `name`, `component`, `menu_sort`, `icon`, `path`, `i_frame`, `cache`, `hidden`, `permission`, `create_by`, `update_by`, `create_time`, `update_time`) VALUES
+(141, 138, 0, 2, '套餐管理编辑', NULL, NULL, 0, '', '', 0, 0, 0, 'package:edit', 'admin', '', NOW(), NOW());
 
--- 5.5 子菜单: 删除
-INSERT INTO `sys_menu` (`id`, `pid`, `sub_count`, `type`, `title`, `path`, `component`, `sort`, `icon`, `is_inner`, `is_cache`, `is_show`, `permission`, `create_by`, `update_by`, `create_time`, `update_time`) VALUES
-(127, 123, 0, 2, '套餐管理删除', 'customer/package/del', NULL, 0, '', 0, 0, 1, 'customerPackage:del', 'admin', '', NOW(), NOW());
+-- 5.5 按钮: 删除
+INSERT INTO `sys_menu` (`menu_id`, `pid`, `sub_count`, `type`, `title`, `name`, `component`, `menu_sort`, `icon`, `path`, `i_frame`, `cache`, `hidden`, `permission`, `create_by`, `update_by`, `create_time`, `update_time`) VALUES
+(142, 138, 0, 2, '套餐管理删除', NULL, NULL, 0, '', '', 0, 0, 0, 'package:del', 'admin', '', NOW(), NOW());
 
--- 5.6 子菜单: 修改状态
-INSERT INTO `sys_menu` (`id`, `pid`, `sub_count`, `type`, `title`, `path`, `component`, `sort`, `icon`, `is_inner`, `is_cache`, `is_show`, `permission`, `create_by`, `update_by`, `create_time`, `update_time`) VALUES
-(128, 123, 0, 2, '套餐管理修改状态', 'customer/package/status', NULL, 0, '', 0, 0, 1, 'customerPackage:status', 'admin', '', NOW(), NOW());
+-- 5.6 按钮: 修改状态
+INSERT INTO `sys_menu` (`menu_id`, `pid`, `sub_count`, `type`, `title`, `name`, `component`, `menu_sort`, `icon`, `path`, `i_frame`, `cache`, `hidden`, `permission`, `create_by`, `update_by`, `create_time`, `update_time`) VALUES
+(143, 138, 0, 2, '套餐管理修改状态', NULL, NULL, 0, '', '', 0, 0, 0, 'package:status', 'admin', '', NOW(), NOW());
+
+-- --------------------------------------------------------
+-- 6. 删除旧套餐分类管理菜单（menu_id=124 及其按钮 129-131）
+-- --------------------------------------------------------
+DELETE FROM `sys_menu` WHERE `menu_id` IN (129, 130, 131, 124);
+
+-- --------------------------------------------------------
+-- 7. 删除旧表（确认新模块正常后可执行）
+-- --------------------------------------------------------
+-- DROP TABLE IF EXISTS `customer_package_category`;
