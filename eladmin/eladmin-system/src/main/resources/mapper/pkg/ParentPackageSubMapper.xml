@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="me.zhengjie.modules.customer.pkg.mapper.ParentPackageSubMapper">
+
+    <select id="findByParentPackageId" resultType="me.zhengjie.modules.customer.pkg.domain.ParentPackageSub">
+        SELECT * FROM parent_package_sub WHERE parent_package_id = #{parentPackageId}
+    </select>
+
+    <delete id="deleteByParentPackageId">
+        DELETE FROM parent_package_sub WHERE parent_package_id = #{parentPackageId}
+    </delete>
+
+    <delete id="deleteBySubPackageId">
+        DELETE FROM parent_package_sub WHERE sub_package_id = #{subPackageId}
+    </delete>
+
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO parent_package_sub (parent_package_id, sub_package_id, status, created_at)
+        VALUES
+        <foreach collection="records" item="item" separator=",">
+            (#{item.parentPackageId}, #{item.subPackageId}, #{item.status}, NOW())
+        </foreach>
+    </insert>
+</mapper>
