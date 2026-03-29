@@ -67,5 +67,8 @@ public class CustomerProfileSaveDto implements Serializable {
         private String scheduleMode;
         private String startDate;
         private String endDate;
+        private String mealType;
+        private String customerSource;
+        private String deliveryDates;
     }
 }

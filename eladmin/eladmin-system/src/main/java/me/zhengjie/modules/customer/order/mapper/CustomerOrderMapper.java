@@ -34,4 +34,29 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      * 根据客户ID查询最新订单（按成交时间倒序）
      */
     CustomerOrder findLatestByCustomerId(@Param("customerId") Long customerId);
+
+    /**
+     * 统计同一客户在同一时间段内的订单数量
+     */
+    int countOverlappingOrders(@Param("customerId") Long customerId,
+                              @Param("startDate") java.time.LocalDate startDate,
+                              @Param("endDate") java.time.LocalDate endDate,
+                              @Param("excludeId") Long excludeId);
+
+    /**
+     * 统计同一客户在同一时间段内的全餐次订单数量
+     */
+    int countAllMealTypeOrders(@Param("customerId") Long customerId,
+                               @Param("startDate") java.time.LocalDate startDate,
+                               @Param("endDate") java.time.LocalDate endDate,
+                               @Param("excludeId") Long excludeId);
+
+    /**
+     * 统计同一客户在同一时间段内的指定餐次订单数量
+     */
+    int countMealTypeOrders(@Param("customerId") Long customerId,
+                           @Param("startDate") java.time.LocalDate startDate,
+                           @Param("endDate") java.time.LocalDate endDate,
+                           @Param("mealType") String mealType,
+                           @Param("excludeId") Long excludeId);
 }

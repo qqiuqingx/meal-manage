@@ -46,3 +46,13 @@ export function getOrdersByCustomer(customerId, params) {
     params
   })
 }
+
+export function validateOrder(data) {
+  return axios({
+    url: '/api/customer/order/validate',
+    method: 'post',
+    data
+  })
+}
+
+export default { getOrders, getOrder, add, edit, del, getOrdersByCustomer, validateOrder }
