@@ -10,6 +10,10 @@
         DELETE FROM parent_package_sub WHERE parent_package_id = #{parentPackageId}
     </delete>
 
+    <delete id="deleteBySubPackageId">
+        DELETE FROM parent_package_sub WHERE sub_package_id = #{subPackageId}
+    </delete>
+
     <insert id="batchInsert" parameterType="java.util.List">
         INSERT INTO parent_package_sub (parent_package_id, sub_package_id, status, created_at)
         VALUES
