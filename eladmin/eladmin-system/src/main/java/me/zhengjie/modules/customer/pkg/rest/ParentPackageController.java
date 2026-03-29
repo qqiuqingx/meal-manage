@@ -30,6 +30,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -67,11 +69,18 @@ public class ParentPackageController {
     @Log("新增套餐")
     @PreAuthorize("@el.check('package:add')")
     public ResponseEntity<Void> create(@RequestBody ParentPackageDto dto) {
-        List<Long> subPackageIds = dto.getChildren() == null ? List.of() :
+        List<Long> subPackageIds = dto.getChildren() == null ? Collections.<Long>emptyList() :
                 dto.getChildren().stream()
                         .map(SubPackageDto::getId)
                         .collect(Collectors.toList());
-        parentPackageService.create(dto, subPackageIds);
+        ParentPackage entity = new ParentPackage();
+        entity.setId(dto.getId());
+        entity.setPackageCode(dto.getPackageCode());
+        entity.setPrefix(dto.getPrefix());
+        entity.setPackageName(dto.getPackageName());
+        entity.setStatus(dto.getStatus() != null && dto.getStatus() == 1);
+        entity.setRemark(dto.getRemark());
+        parentPackageService.create(entity, subPackageIds);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
@@ -79,11 +88,18 @@ public class ParentPackageController {
     @Log("编辑套餐")
     @PreAuthorize("@el.check('package:edit')")
     public ResponseEntity<Void> update(@RequestBody ParentPackageDto dto) {
-        List<Long> subPackageIds = dto.getChildren() == null ? List.of() :
+        List<Long> subPackageIds = dto.getChildren() == null ? Collections.<Long>emptyList() :
                 dto.getChildren().stream()
                         .map(SubPackageDto::getId)
                         .collect(Collectors.toList());
-        parentPackageService.update(dto, subPackageIds);
+        ParentPackage entity = new ParentPackage();
+        entity.setId(dto.getId());
+        entity.setPackageCode(dto.getPackageCode());
+        entity.setPrefix(dto.getPrefix());
+        entity.setPackageName(dto.getPackageName());
+        entity.setStatus(dto.getStatus() != null && dto.getStatus() == 1);
+        entity.setRemark(dto.getRemark());
+        parentPackageService.update(entity, subPackageIds);
         return ResponseEntity.ok().build();
     }
 
