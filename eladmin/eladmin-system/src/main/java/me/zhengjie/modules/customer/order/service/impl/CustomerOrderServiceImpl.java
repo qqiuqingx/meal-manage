@@ -74,6 +74,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void create(CustomerOrderSaveDto dto) {
+        // 先校验订单冲突
+        validateOrderConflict(dto, null);
         validateAndNormalize(dto, null);
 
         for (int attempt = 0; attempt < 3; attempt++) {
@@ -103,6 +105,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             throw new BadRequestException("订单不存在");
         }
 
+        // 先校验订单冲突
+        validateOrderConflict(dto, dto.getId());
         validateAndNormalize(dto, dto.getId());
 
         buildOrderEntity(order, dto);
@@ -215,6 +219,11 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         if (dto.getStatus() == null) {
             dto.setStatus(1);
         }
+
+        // 餐次类型默认值（兼容老数据）
+        if (dto.getMealType() == null) {
+            dto.setMealType("ALL");
+        }
     }
 
     /**
@@ -238,6 +247,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         order.setStartDate(dto.getStartDate());
         order.setEndDate(dto.getEndDate());
         order.setStatus(dto.getStatus());
+        order.setMealType(dto.getMealType());
         order.setScheduleMode(dto.getScheduleMode());
         order.setRemark(dto.getRemark());
         order.setCustomerSource(dto.getCustomerSource());
@@ -288,6 +298,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setEndDate(order.getEndDate());
         dto.setStatus(order.getStatus());
         dto.setStatusDesc(getStatusDesc(order.getStatus()));
+        dto.setMealType(order.getMealType());
+        dto.setMealTypeDesc(getMealTypeDesc(order.getMealType()));
         dto.setScheduleMode(order.getScheduleMode());
         dto.setRemark(order.getRemark());
         dto.setCustomerSource(order.getCustomerSource());
@@ -313,6 +325,64 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             case 1: return "进行中";
             case 2: return "已完成";
             default: return "未知";
+        }
+    }
+
+    private String getMealTypeDesc(String mealType) {
+        if (mealType == null) return "全餐次";
+        switch (mealType) {
+            case "LUNCH": return "午餐";
+            case "DINNER": return "晚餐";
+            case "ALL": return "全餐次";
+            default: return "未知";
+        }
+    }
+
+    @Override
+    public void validateOrderConflict(CustomerOrderSaveDto dto, Long excludeId) {
+        // 如果没有日期范围，不进行校验
+        if (dto.getStartDate() == null || dto.getEndDate() == null) {
+            return;
+        }
+
+        LocalDate startDate = dto.getStartDate();
+        LocalDate endDate = dto.getEndDate();
+
+        // 校验规则：
+        // 1. 如果是全餐次订单，同一时间段只能有1个订单
+        if ("ALL".equals(dto.getMealType())) {
+            int count = orderMapper.countAllMealTypeOrders(dto.getCustomerId(), startDate, endDate, excludeId);
+            if (count > 0) {
+                throw new BadRequestException("同一时间段已存在全餐次订单，不能重复创建");
+            }
+            return;
+        }
+
+        // 2. 如果是午餐或晚餐订单，同一时间段最多2个不同餐次的订单
+        if ("LUNCH".equals(dto.getMealType()) || "DINNER".equals(dto.getMealType())) {
+            // 先检查同一时间段的总订单数
+            int totalCount = orderMapper.countOverlappingOrders(dto.getCustomerId(), startDate, endDate, excludeId);
+            if (totalCount >= 2) {
+                throw new BadRequestException("同一时间段最多只能有两个不同餐次的订单");
+            }
+
+            // 检查是否已存在相同餐次的订单
+            int sameTypeCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, endDate, dto.getMealType(), excludeId);
+            if (sameTypeCount > 0) {
+                throw new BadRequestException("同一时间段已存在相同餐次的订单");
+            }
+        }
+
+        // 3. 检查剩余餐数（仅编辑时）
+        if (excludeId != null) {
+            CustomerOrder existingOrder = orderMapper.selectById(excludeId);
+            if (existingOrder != null && existingOrder.getVerifiedCount() != null) {
+                int newTotalCount = getTotalCount(dto);
+                int existingVerified = existingOrder.getVerifiedCount();
+                if (newTotalCount < existingVerified) {
+                    throw new BadRequestException("订单餐数不能小于已核销餐数（当前已核销：" + existingVerified + "）");
+                }
+            }
         }
     }
 

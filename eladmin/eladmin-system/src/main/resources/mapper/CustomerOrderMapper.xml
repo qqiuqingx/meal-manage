@@ -146,4 +146,54 @@
         LIMIT 1
     </select>
 
+    <!-- 统计同一客户在同一时间段内的订单数量 -->
+    <select id="countOverlappingOrders" resultType="int">
+        SELECT COUNT(*)
+        FROM customer_order
+        WHERE customer_id = #{customerId}
+          AND status != 0
+          AND (
+            (start_date &lt;= #{endDate} AND end_date &gt;= #{startDate})
+            OR (start_date BETWEEN #{startDate} AND #{endDate})
+            OR (end_date BETWEEN #{startDate} AND #{endDate})
+          )
+        <if test="excludeId != null">
+            AND id != #{excludeId}
+        </if>
+    </select>
+
+    <!-- 统计同一客户在同一时间段内的全餐次订单数量 -->
+    <select id="countAllMealTypeOrders" resultType="int">
+        SELECT COUNT(*)
+        FROM customer_order
+        WHERE customer_id = #{customerId}
+          AND meal_type = 'ALL'
+          AND status != 0
+          AND (
+            (start_date &lt;= #{endDate} AND end_date &gt;= #{startDate})
+            OR (start_date BETWEEN #{startDate} AND #{endDate})
+            OR (end_date BETWEEN #{startDate} AND #{endDate})
+          )
+        <if test="excludeId != null">
+            AND id != #{excludeId}
+        </if>
+    </select>
+
+    <!-- 统计同一客户在同一时间段内的指定餐次订单数量 -->
+    <select id="countMealTypeOrders" resultType="int">
+        SELECT COUNT(*)
+        FROM customer_order
+        WHERE customer_id = #{customerId}
+          AND meal_type = #{mealType}
+          AND status != 0
+          AND (
+            (start_date &lt;= #{endDate} AND end_date &gt;= #{startDate})
+            OR (start_date BETWEEN #{startDate} AND #{endDate})
+            OR (end_date BETWEEN #{startDate} AND #{endDate})
+          )
+        <if test="excludeId != null">
+            AND id != #{excludeId}
+        </if>
+    </select>
+
 </mapper>

@@ -41,4 +41,12 @@ public interface CustomerOrderService {
      * 根据客户ID分页查询订单
      */
     PageResult<?> getOrdersByCustomerId(Long customerId, Integer current, Integer size);
+
+    /**
+     * 校验订单是否与现有订单冲突
+     * @param dto 订单数据
+     * @param excludeId 编辑时排除的订单ID
+     * @throws BadRequestException 校验失败时抛出异常
+     */
+    void validateOrderConflict(CustomerOrderSaveDto dto, Long excludeId);
 }

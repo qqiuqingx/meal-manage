@@ -129,6 +129,11 @@ public class CustomerOrder implements Serializable {
     private Integer status;
 
     /**
+     * 餐次类型(LUNCH=午餐订单,DINNER=晚餐订单,ALL=全餐次订单)
+     */
+    private String mealType;
+
+    /**
      * 排餐模式(SCHEDULE=指定日期送,DAILY=每天送,WEEKEND=周末送,WEEKDAY=工作日送)
      */
     private String scheduleMode;

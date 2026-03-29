@@ -81,6 +81,11 @@
               </el-tag>
             </template>
           </el-table-column>
+          <el-table-column label="餐次" width="70" align="center">
+            <template slot-scope="scope">
+              {{ orderMealTypeText(scope.row.mealType) }}
+            </template>
+          </el-table-column>
           <el-table-column label="订单期间" width="180" show-overflow-tooltip>
             <template slot-scope="scope">
               {{ scope.row.startDate }} ~ {{ scope.row.endDate }}
@@ -216,6 +221,10 @@ export default {
         case 2: return '已完成'
         default: return '未知'
       }
+    },
+    orderMealTypeText(mealType) {
+      if (!mealType || mealType === 'ALL') return '-'
+      return mealType === 'LUNCH' ? '午餐' : '晚餐'
     },
     handleClose() {
       this.dialogVisible = false
