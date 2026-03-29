@@ -27,8 +27,7 @@ public class CustomerProfileSaveDto implements Serializable {
 
     private String medicalRequirements;
 
-    private Boolean status;
-
+    // 备注
     private String remark;
 
     private List<AddressDto> addresses;

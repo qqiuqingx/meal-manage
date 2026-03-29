@@ -39,10 +39,3 @@ export function edit(data) {
   })
 }
 
-export function updateStatus(id, payload) {
-  return axios({
-    url: `/api/customerProfile/${id}/status`,
-    method: 'put',
-    data: payload
-  })
-}

@@ -13,5 +13,4 @@ public class CustomerProfileQueryCriteria {
     private String phone;
     private Long parentPackageId;
     private Long childPackageId;
-    private Boolean status;
 }

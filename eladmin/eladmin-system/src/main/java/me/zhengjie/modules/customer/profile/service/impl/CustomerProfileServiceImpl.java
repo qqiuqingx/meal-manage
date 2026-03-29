@@ -10,7 +10,6 @@ import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
-import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileStatusRequestDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerPackageCategoryMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
@@ -92,8 +91,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         detail.setGestationalWeek(profile.getGestationalWeek());
         detail.setAllergyTags(profile.getAllergyTags());
         detail.setMedicalRequirements(profile.getMedicalRequirements());
-        detail.setStatus(profile.getStatus());
-        detail.setRemark(profile.getRemark());
+        //
         detail.setCreateTime(profile.getCreateTime() != null ? profile.getCreateTime().toLocalDate() : null);
         detail.setUpdateTime(profile.getUpdateTime() != null ? profile.getUpdateTime().toLocalDate() : null);
 
@@ -125,8 +123,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profile.setGestationalWeek(dto.getGestationalWeek());
         profile.setAllergyTags(dto.getAllergyTags());
         profile.setMedicalRequirements(dto.getMedicalRequirements());
-        profile.setStatus(dto.getStatus() != null ? dto.getStatus() : true);
-        profile.setRemark(dto.getRemark());
+        //
         profile.setCreateBy(getCurrentUsername());
         profileMapper.insert(profile);
 
@@ -160,22 +157,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         updateAddresses(profile.getId(), dto.getAddresses());
     }
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void updateStatus(Long id, CustomerProfileStatusRequestDto dto) {
-        if (dto.getStatus() == null) {
-            throw new BadRequestException("客户状态不能为空");
-        }
-
-        CustomerProfile profile = profileMapper.selectById(id);
-        if (profile == null) {
-            throw new BadRequestException("客户档案不存在");
-        }
-
-        profile.setStatus(dto.getStatus());
-        profile.setUpdateBy(getCurrentUsername());
-        profileMapper.updateById(profile);
-    }
+    //
 
     @Override
     public String generateCode(Long parentPackageId) {
