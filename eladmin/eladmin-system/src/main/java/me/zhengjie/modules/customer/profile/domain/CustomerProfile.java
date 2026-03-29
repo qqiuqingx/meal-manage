@@ -54,14 +54,7 @@ public class CustomerProfile implements Serializable {
      */
     private String medicalRequirements;
 
-    /**
-     * 状态(0=停用,1=启用)
-     */
-    private Boolean status;
-
-    /**
-     * 备注
-     */
+    //
     private String remark;
 
     /**

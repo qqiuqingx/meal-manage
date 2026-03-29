@@ -21,7 +21,7 @@ public class CustomerProfileDetailDto implements Serializable {
     private Integer gestationalWeek;
     private List<String> allergyTags;
     private String medicalRequirements;
-    private Boolean status;
+    //
     private String remark;
     private LocalDate createTime;
     private LocalDate updateTime;

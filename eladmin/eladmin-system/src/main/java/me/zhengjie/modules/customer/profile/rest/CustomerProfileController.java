@@ -5,7 +5,6 @@ import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
-import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileStatusRequestDto;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.utils.PageResult;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,19 +64,6 @@ public class CustomerProfileController {
     @PreAuthorize("@el.check('customerProfile:edit')")
     public ResponseEntity<Void> update(@Validated @RequestBody CustomerProfileSaveDto dto) {
         profileService.update(dto);
-        return ResponseEntity.ok().build();
-    }
-
-    /**
-     * 更新客户状态
-     */
-    @PutMapping("/{id}/status")
-    @Log("更新客户档案状态")
-    @PreAuthorize("@el.check('customerProfile:status')")
-    public ResponseEntity<Void> updateStatus(
-            @PathVariable Long id,
-            @Validated @RequestBody CustomerProfileStatusRequestDto dto) {
-        profileService.updateStatus(id, dto);
         return ResponseEntity.ok().build();
     }
 
