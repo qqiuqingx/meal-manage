@@ -136,6 +136,7 @@ eladmin-system/src/main/java/me/zhengjie/modules/meal/
 - MyBatis-Plus is used for database operations
 - XML mappers go in `eladmin-system/src/main/resources/mapper/`
 - Use `QueryCriteria` classes for dynamic query building
+- **禁止使用 Docker 查询数据库**，直接用 Python pymysql 或其他本地工具
 
 ## Business Modules
 
