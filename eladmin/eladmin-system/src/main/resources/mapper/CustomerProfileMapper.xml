@@ -11,7 +11,6 @@
         <result column="allergy_tags" property="allergyTags"
                 typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
         <result column="medical_requirements" property="medicalRequirements"/>
-        <result column="status" property="status"/>
         <result column="remark" property="remark"/>
         <result column="create_by" property="createBy"/>
         <result column="update_by" property="updateBy"/>
@@ -36,9 +35,6 @@
             </if>
             <if test="criteria.phone != null and criteria.phone != ''">
                 AND phone LIKE CONCAT('%', #{criteria.phone}, '%')
-            </if>
-            <if test="criteria.status != null">
-                AND status = #{criteria.status}
             </if>
         </where>
         ORDER BY id DESC

@@ -29,7 +29,6 @@
 | `customerProfile:list` | 客户档案列表查询 |
 | `customerProfile:add` | 新增客户档案 |
 | `customerProfile:edit` | 编辑客户档案 |
-| `customerProfile:status` | 启用/停用客户档案 |
 | `customerProfile:del` | 删除客户档案(仅内部管理工具) |
 | `customerPackageCategory:list` | 套餐分类列表 |
 | `customerPackageCategory:add` | 新增套餐分类 |
@@ -200,7 +199,6 @@ GET /api/customerProfile
 | customerCode | string | 客户编号 |
 | customerName | string | 客户姓名 |
 | phone | string | 手机号 |
-| status | boolean | 状态 |
 | current | int | 当前页码(默认1) |
 | size | int | 每页条数(默认10) |
 
@@ -222,7 +220,6 @@ GET /api/customerProfile
         "gestationalWeek": 32,
         "allergyTags": ["牛奶", "海鲜"],
         "medicalRequirements": "少盐少油",
-        "status": true,
         "defaultAddress": "北京市朝阳区xxx",
         "createTime": "2026-03-25 10:00:00"
       }
@@ -258,7 +255,6 @@ GET /api/customerProfile/{id}
     "gestationalWeek": 32,
     "allergyTags": ["牛奶", "海鲜"],
     "medicalRequirements": "少盐少油",
-    "status": true,
     "remark": "备注信息",
     "addresses": [
       { "addressType": "DEFAULT", "addressDetail": "地址1", "contactName": "张三", "contactPhone": "13800000000" },
@@ -370,24 +366,7 @@ Content-Type: application/json
 - 不传 `status`，后端不修改状态
 - `addresses` 整体覆盖：某槽位不传则清空
 
-### 3.5 启用/停用客户档案
-
-**请求**
-
-```
-PUT /api/customerProfile/{id}/status
-Content-Type: application/json
-
-{
-  "status": false
-}
-```
-
-**说明**
-
-- 仅更新客户档案状态，不操作套餐/订单
-
-### 3.6 生成客户编号（预览）
+### 3.5 生成客户编号（预览）
 
 **请求**
 
@@ -440,10 +419,9 @@ GET /api/customerProfile/generateCode?parentPackageId=1
 - **父级**: 月子餐、营养餐等(配置编号前缀)
 - **子级**: 两荤一素、一荤一素、两荤两素等
 
-### 5.3 create/edit/status 三路径分离
+### 5.3 create/edit 两路径分离
 
-| 路径 | 传入 orderInfo | 传入 status | 修改客户基本资料 | 修改地址 |
-|------|---------------|-------------|---------------|---------|
-| POST（创建） | ✅ 必填 | ❌（自动=true）| ✅ | ✅ |
-| PUT（编辑） | ❌ | ❌ | ✅ | ✅ |
-| PUT /status | ❌ | ✅ 必填 | ❌ | ❌ |
+| 路径 | 传入 orderInfo | 修改客户基本资料 | 修改地址 |
+|------|---------------|---------------|---------|
+| POST（创建） | ✅ 必填 | ✅ | ✅ |
+| PUT（编辑） | ❌ | ✅ | ✅ |

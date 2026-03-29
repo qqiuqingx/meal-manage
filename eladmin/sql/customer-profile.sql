@@ -38,7 +38,7 @@ CREATE TABLE customer_profile (
     gestational_week INT NULL COMMENT '孕周(正整数)',
     allergy_tags JSON NULL COMMENT '过敏食物标签(JSON数组)',
     medical_requirements VARCHAR(500) NULL COMMENT '医嘱要求',
-    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态(0=停用,1=启用)',
+    --
     remark VARCHAR(255) NULL COMMENT '备注',
     create_by VARCHAR(100) NULL COMMENT '创建人',
     update_by VARCHAR(100) NULL COMMENT '更新人',
@@ -46,7 +46,7 @@ CREATE TABLE customer_profile (
     update_time DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_customer_code (customer_code),
     KEY idx_phone (phone),
-    KEY idx_status (status)
+    --
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='客户档案表';
 
 -- ============================================
@@ -131,7 +131,7 @@ INSERT INTO customer_package_category (category_name, category_code, parent_id, 
 --     ├── 客户档案管理 (menu, id=123)
 --     │   ├── 客户档案新增 (button)
 --     │   ├── 客户档案编辑 (button)
---     │   ├── 客户档案状态 (button)
+--     │   ├── 客户档案状态 (button) -- 已移除
 --     │   └── 客户档案删除 (button)
 --     └── 套餐分类管理 (menu, id=124)
 --         ├── 套餐分类新增 (button)
@@ -154,7 +154,7 @@ VALUES (124, 122, 4, 1, '套餐分类管理', 'CustomerPackageCategory', 'custom
 -- 客户档案按钮权限 (pid = 123)
 INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (125, 123, 0, 2, '客户档案新增', NULL, '', 1, '', '', b'0', b'0', b'0', 'customerProfile:add', NULL, NULL, NOW(), NULL);
 INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (126, 123, 0, 2, '客户档案编辑', NULL, '', 2, '', '', b'0', b'0', b'0', 'customerProfile:edit', NULL, NULL, NOW(), NULL);
-INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (127, 123, 0, 2, '客户档案状态', NULL, '', 3, '', '', b'0', b'0', b'0', 'customerProfile:status', NULL, NULL, NOW(), NULL);
+-- INSERT INTO sys_menu ... (127, 客户档案状态) -- 已移除
 INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (128, 123, 0, 2, '客户档案删除', NULL, '', 4, '', '', b'0', b'0', b'0', 'customerProfile:del', NULL, NULL, NOW(), NULL);
 
 -- 套餐分类按钮权限 (pid = 124)

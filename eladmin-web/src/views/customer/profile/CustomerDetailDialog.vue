@@ -18,11 +18,6 @@
           <el-descriptions-item label="客户姓名">{{ customer.customerName || '-' }}</el-descriptions-item>
           <el-descriptions-item label="手机号">{{ customer.phone || '-' }}</el-descriptions-item>
           <el-descriptions-item label="孕周">{{ customer.gestationalWeek ? customer.gestationalWeek + '周' : '-' }}</el-descriptions-item>
-          <el-descriptions-item label="状态">
-            <el-tag :type="customer.status ? 'success' : 'danger'" size="small">
-              {{ customer.status ? '启用' : '停用' }}
-            </el-tag>
-          </el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ customer.createTime || '-' }}</el-descriptions-item>
           <el-descriptions-item label="过敏食物" :span="3">
             <el-tag

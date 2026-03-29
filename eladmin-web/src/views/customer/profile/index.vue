@@ -6,10 +6,6 @@
         <el-input v-model="query.customerCode" clearable size="small" placeholder="客户编号" style="width: 120px;" class="filter-item" @keyup.enter.native="crud.toQuery" />
         <el-input v-model="query.customerName" clearable size="small" placeholder="客户姓名" style="width: 120px;" class="filter-item" @keyup.enter.native="crud.toQuery" />
         <el-input v-model="query.phone" clearable size="small" placeholder="手机号" style="width: 120px;" class="filter-item" @keyup.enter.native="crud.toQuery" />
-        <el-select v-model="query.status" clearable size="small" placeholder="状态" class="filter-item" style="width: 90px" @change="crud.toQuery">
-          <el-option label="启用" :value="true" />
-          <el-option label="停用" :value="false" />
-        </el-select>
         <rrOperation />
       </div>
       <crudOperation :permission="permission" />
@@ -30,15 +26,8 @@
       <el-table-column label="孕周" prop="gestationalWeek" width="60" align="center" />
       <el-table-column label="早餐数" prop="breakfastCount" width="80" align="center" />
       <el-table-column label="午晚数" prop="lunchDinnerCount" width="80" align="center" />
-      <el-table-column label="状态" width="70" align="center">
-        <template slot-scope="scope">
-          <el-tag :type="scope.row.status ? 'success' : 'danger'">
-            {{ scope.row.status ? '启用' : '停用' }}
-          </el-tag>
-        </template>
-      </el-table-column>
       <el-table-column label="创建时间" prop="createTime" width="150" />
-      <el-table-column v-if="checkPer(['admin','customerProfile:edit','customerProfile:status'])" label="操作" width="240px" align="center" fixed="right">
+      <el-table-column v-if="checkPer(['admin','customerProfile:edit'])" label="操作" width="180px" align="center" fixed="right">
         <template slot-scope="scope">
           <el-button size="mini" type="primary" icon="edit" @click="handleEdit(scope.row)">编辑</el-button>
           <el-button
@@ -48,14 +37,6 @@
             @click="handleDetail(scope.row)"
           >
             详情
-          </el-button>
-          <el-button
-            size="mini"
-            :type="scope.row.status ? 'warning' : 'success'"
-            :icon="scope.row.status ? 'close' : 'check'"
-            @click="toggleStatus(scope.row)"
-          >
-            {{ scope.row.status ? '停用' : '启用' }}
           </el-button>
         </template>
       </el-table-column>
@@ -241,8 +222,7 @@ export default {
       query: {
         customerCode: '',
         customerName: '',
-        phone: '',
-        status: null
+        phone: ''
       },
       rules: {
         customerName: [{ required: true, message: '请输入客户姓名', trigger: 'blur' }],
@@ -320,7 +300,6 @@ export default {
         const orderInfo = formData.orderInfo || createFirstOrderDefaultForm()
         const breakfastCount = orderInfo.breakfastCount || 0
         const lunchDinnerCount = orderInfo.lunchDinnerCount || 0
-        payload.status = true
         payload.orderInfo = {
           parentPackageId: orderInfo.parentPackageId,
           childPackageId: orderInfo.childPackageId,
@@ -422,16 +401,6 @@ export default {
           return
         }
         this.$message.error('获取客户详情失败: ' + (e.message || '未知错误'))
-      }
-    },
-    async toggleStatus(row) {
-      const newStatus = !row.status
-      try {
-        await profileApi.updateStatus(row.id, { status: newStatus })
-        this.$message.success('状态更新成功')
-        this.crud.refresh()
-      } catch (e) {
-        this.$message.error('状态更新失败: ' + (e.message || '未知错误'))
       }
     },
     checkboxT() {
