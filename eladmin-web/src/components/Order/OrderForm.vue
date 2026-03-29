@@ -94,7 +94,7 @@
               style="width: 100%;"
               @change="onParentPackageChange"
             >
-              <el-option v-for="item in parentPackages" :key="item.id" :label="item.categoryName" :value="item.id" />
+              <el-option v-for="item in parentPackages" :key="item.id" :label="item.packageName" :value="item.id" />
             </el-select>
           </el-form-item>
         </el-col>
@@ -108,7 +108,7 @@
               style="width: 100%;"
               @change="onChildPackageChange"
             >
-              <el-option v-for="item in childPackages" :key="item.id" :label="item.categoryName" :value="item.id" />
+              <el-option v-for="item in childPackages" :key="item.id" :label="item.subPackageName" :value="item.id" />
             </el-select>
           </el-form-item>
         </el-col>
@@ -368,7 +368,7 @@
 
 <script>
 import * as profileApi from '@/api/customer/profile'
-import * as categoryApi from '@/api/customer/packageCategory'
+import * as packageApi from '@/api/customer/package'
 import * as dictDetailApi from '@/api/system/dictDetail'
 
 // 订单模式默认数据
@@ -610,8 +610,9 @@ export default {
     // 加载父套餐列表
     async loadParentPackages() {
       try {
-        const res = await categoryApi.getParents()
-        this.parentPackages = (res.data || res) || []
+        const res = await packageApi.getParents()
+        const list = res.content || res.data || res || []
+        this.parentPackages = Array.isArray(list) ? list : []
       } catch (e) {
         console.error('loadParentPackages error', e)
       }
@@ -623,7 +624,7 @@ export default {
         return
       }
       try {
-        const res = await categoryApi.getTree()
+        const res = await packageApi.getTree()
         const tree = res.data || res || []
         const parent = tree.find(p => p.id === parentId)
         this.childPackages = parent ? (parent.children || []) : []

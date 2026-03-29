@@ -57,8 +57,16 @@
           size="small"
         >
           <el-table-column label="订单编号" prop="orderCode" width="140" show-overflow-tooltip />
-          <el-table-column label="父套餐" prop="parentPackageName" width="120" show-overflow-tooltip />
-          <el-table-column label="子套餐" prop="childPackageName" width="120" show-overflow-tooltip />
+          <el-table-column label="父套餐" width="120" show-overflow-tooltip>
+            <template slot-scope="scope">
+              {{ parentPackageMap[scope.row.parentPackageId] || scope.row.parentPackageName || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="子套餐" width="120" show-overflow-tooltip>
+            <template slot-scope="scope">
+              {{ subPackageMap[scope.row.childPackageId] || scope.row.childPackageName || '-' }}
+            </template>
+          </el-table-column>
           <el-table-column label="总金额" prop="totalAmount" width="90" align="right" :formatter="amountFormatter" />
           <el-table-column label="成交金额" prop="finalAmount" width="100" align="right" :formatter="amountFormatter" />
           <el-table-column label="早餐" prop="breakfastCount" width="60" align="center" />
@@ -119,6 +127,7 @@
 
 <script>
 import { getOrdersByCustomer } from '@/api/customer/order'
+import * as packageApi from '@/api/customer/package'
 
 export default {
   name: 'CustomerDetailDialog',
@@ -137,6 +146,7 @@ export default {
       loading: false,
       orderLoading: false,
       orderList: [],
+      packageTree: [],
       orderPage: 1,
       orderSize: 10,
       orderTotal: 0
@@ -155,6 +165,24 @@ export default {
       return this.customer && this.customer.customerName
         ? `客户详情 - ${this.customer.customerName}`
         : '客户详情'
+    },
+    parentPackageMap() {
+      const map = {}
+      for (const parent of this.packageTree) {
+        map[parent.id] = parent.packageName
+      }
+      return map
+    },
+    subPackageMap() {
+      const map = {}
+      for (const parent of this.packageTree) {
+        if (parent.children) {
+          for (const sub of parent.children) {
+            map[sub.id] = sub.subPackageName
+          }
+        }
+      }
+      return map
     }
   },
   watch: {
@@ -164,7 +192,18 @@ export default {
       }
     }
   },
+  created() {
+    this.loadPackageTree()
+  },
   methods: {
+    async loadPackageTree() {
+      try {
+        const res = await packageApi.getTree()
+        this.packageTree = res.data || res || []
+      } catch (e) {
+        console.error('loadPackageTree error', e)
+      }
+    },
     async loadOrderList() {
       if (!this.customer || !this.customer.id) {
         return

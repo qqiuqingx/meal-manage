@@ -4,13 +4,15 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
-import me.zhengjie.modules.customer.profile.domain.CustomerPackageCategory;
+import me.zhengjie.modules.customer.package.domain.ParentPackage;
+import me.zhengjie.modules.customer.package.domain.SubPackage;
+import me.zhengjie.modules.customer.package.mapper.ParentPackageMapper;
+import me.zhengjie.modules.customer.package.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
-import me.zhengjie.modules.customer.profile.mapper.CustomerPackageCategoryMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
@@ -43,7 +45,10 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private CustomerProfileAddressMapper addressMapper;
 
     @Autowired
-    private CustomerPackageCategoryMapper categoryMapper;
+    private ParentPackageMapper parentPackageMapper;
+
+    @Autowired
+    private SubPackageMapper subPackageMapper;
 
     @Autowired
     private CustomerOrderMapper customerOrderMapper;
@@ -165,19 +170,19 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             throw new BadRequestException("父套餐ID不能为空");
         }
 
-        CustomerPackageCategory parent = categoryMapper.selectById(parentPackageId);
+        ParentPackage parent = parentPackageMapper.selectById(parentPackageId);
         if (parent == null) {
             throw new BadRequestException("父套餐不存在");
         }
-        if (!Boolean.TRUE.equals(parent.getEnabled())) {
+        if (!Boolean.TRUE.equals(parent.getStatus())) {
             throw new BadRequestException("父套餐已禁用");
         }
-        if (StringUtils.isBlank(parent.getCodePrefix())) {
+        if (StringUtils.isBlank(parent.getPrefix())) {
             throw new BadRequestException("父套餐未配置编号前缀");
         }
 
         QueryWrapper<CustomerProfile> wrapper = new QueryWrapper<>();
-        wrapper.likeRight("customer_code", parent.getCodePrefix())
+        wrapper.likeRight("customer_code", parent.getPrefix())
             .orderByDesc("customer_code")
             .last("LIMIT 1");
 
@@ -185,7 +190,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         int nextNum = 1;
         if (lastProfile != null) {
             String code = lastProfile.getCustomerCode();
-            String numPart = code.substring(parent.getCodePrefix().length());
+            String numPart = code.substring(parent.getPrefix().length());
             try {
                 nextNum = Integer.parseInt(numPart) + 1;
             } catch (NumberFormatException e) {
@@ -193,7 +198,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             }
         }
 
-        return parent.getCodePrefix() + String.format("%03d", nextNum);
+        return parent.getPrefix() + String.format("%03d", nextNum);
     }
 
     private CustomerProfileSaveDto.OrderInfoDto normalizeAndValidate(CustomerProfileSaveDto dto, boolean createMode) {
@@ -264,26 +269,23 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             throw new BadRequestException("首单父套餐不能为空");
         }
 
-        CustomerPackageCategory parent = categoryMapper.selectById(orderInfo.getParentPackageId());
+        ParentPackage parent = parentPackageMapper.selectById(orderInfo.getParentPackageId());
         if (parent == null) {
             throw new BadRequestException("父套餐不存在");
         }
-        if (!Boolean.TRUE.equals(parent.getEnabled())) {
+        if (!Boolean.TRUE.equals(parent.getStatus())) {
             throw new BadRequestException("父套餐已禁用");
         }
-        if (StringUtils.isBlank(parent.getCodePrefix())) {
+        if (StringUtils.isBlank(parent.getPrefix())) {
             throw new BadRequestException("父套餐未配置编号前缀");
         }
 
         if (orderInfo.getChildPackageId() == null) {
             throw new BadRequestException("首单子套餐不能为空");
         }
-        CustomerPackageCategory child = categoryMapper.selectById(orderInfo.getChildPackageId());
+        SubPackage child = subPackageMapper.selectById(orderInfo.getChildPackageId());
         if (child == null) {
             throw new BadRequestException("子套餐不存在");
-        }
-        if (!orderInfo.getParentPackageId().equals(child.getParentId())) {
-            throw new BadRequestException("子套餐必须属于所选父套餐");
         }
 
         if (orderInfo.getBreakfastCount() == null && orderInfo.getLunchDinnerCount() == null) {
