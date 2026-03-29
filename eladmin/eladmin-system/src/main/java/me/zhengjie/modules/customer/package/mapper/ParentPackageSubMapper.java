@@ -28,5 +28,7 @@ public interface ParentPackageSubMapper extends BaseMapper<ParentPackageSub> {
 
     void deleteByParentPackageId(@Param("parentPackageId") Long parentPackageId);
 
+    void deleteBySubPackageId(@Param("subPackageId") Long subPackageId);
+
     void batchInsert(@Param("records") List<ParentPackageSub> records);
 }
