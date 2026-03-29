@@ -30,6 +30,7 @@ CREATE TABLE customer_order (
     start_date DATE NULL COMMENT '订单开始日期',
     end_date DATE NULL COMMENT '订单结束日期',
     status TINYINT NOT NULL DEFAULT 1 COMMENT '订单状态(0=已取消,1=进行中,2=已完成)',
+    meal_type VARCHAR(20) NULL COMMENT '餐次类型: LUNCH=午餐订单, DINNER=晚餐订单, ALL=全餐次订单',
     remark VARCHAR(255) NULL COMMENT '备注',
     create_by VARCHAR(100) NULL COMMENT '创建人',
     update_by VARCHAR(100) NULL COMMENT '更新人',
@@ -39,12 +40,28 @@ CREATE TABLE customer_order (
     KEY idx_customer_id (customer_id),
     KEY idx_customer_code (customer_code),
     KEY idx_status (status),
+    KEY idx_meal_type (meal_type),
     KEY idx_start_date (start_date),
     KEY idx_end_date (end_date),
     KEY idx_deal_time (deal_time),
     schedule_mode VARCHAR(16) NOT NULL DEFAULT 'SCHEDULE' COMMENT '排餐模式(SCHEDULE=指定日期送,DAILY=每天送,WEEKEND=周末送,WEEKDAY=工作日送)',
     delivery_dates TEXT NULL COMMENT '送餐日期(JSON数组格式,如["2026-04-01","2026-04-03"])',
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='客户订单表';
+
+-- ============================================
+-- Migration: Add meal_type field (for existing databases)
+-- ============================================
+ALTER TABLE customer_order
+ADD COLUMN meal_type VARCHAR(20) NULL COMMENT '餐次类型: LUNCH=午餐订单, DINNER=晚餐订单, ALL=全餐次订单'
+AFTER status;
+CREATE INDEX idx_meal_type ON customer_order(meal_type);
+
+-- ============================================
+-- Migration: Add delivery_dates field (for existing databases)
+-- ============================================
+ALTER TABLE customer_order
+ADD COLUMN delivery_dates TEXT NULL COMMENT '送餐日期(JSON数组格式)'
+AFTER schedule_mode;
 
 -- ============================================
 -- Sys Menu (for permission management)

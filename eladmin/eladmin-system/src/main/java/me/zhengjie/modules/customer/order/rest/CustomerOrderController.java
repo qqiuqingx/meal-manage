@@ -62,6 +62,14 @@ public class CustomerOrderController {
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
+    @ApiOperation("校验订单冲突")
+    @PostMapping("/validate")
+    @PreAuthorize("@el.check('customerOrder:add')")
+    public ResponseEntity<Void> validateOrder(@Validated @RequestBody CustomerOrderSaveDto dto) {
+        orderService.validateOrderConflict(dto, null);
+        return ResponseEntity.ok().build();
+    }
+
     @ApiOperation("编辑订单")
     @PutMapping
     @Log("编辑订单")

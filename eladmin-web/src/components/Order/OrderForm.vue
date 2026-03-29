@@ -1,7 +1,8 @@
 <template>
   <div class="order-form">
     <el-form ref="elForm" :model="form" :rules="rules" size="small" label-width="110px">
-      <!-- 订单管理模式：客户选择 + 订单状态 -->
+
+      <!-- ===== 订单管理模式专属：客户 + 订单状态 ===== -->
       <template v-if="mode === 'order'">
         <el-row :gutter="20">
           <el-col :span="12">
@@ -31,94 +32,90 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="排餐模式">
-              <el-select v-model="form.scheduleMode" :disabled="readonly" placeholder="请选择排餐模式" style="width: 100%;">
-                <el-option label="指定日期送" value="SCHEDULE" />
-                <el-option label="每天送" value="DAILY" />
-                <el-option label="周末送" value="WEEKEND" />
-                <el-option label="工作日送" value="WEEKDAY" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row v-if="form.scheduleMode === 'SCHEDULE'" :gutter="20">
-          <el-col :span="24">
-            <el-form-item label="送餐日期">
-              <el-select
-                v-model="form.deliveryDates"
-                multiple
-                filterable
-                allow-create
-                placeholder="选择或输入送餐日期（格式：yyyy-MM-dd）"
-                style="width: 100%;"
-              >
-                <el-option
-                  v-for="date in availableDates"
-                  :key="date"
-                  :label="date"
-                  :value="date"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-divider content-position="left">金额信息</el-divider>
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <el-form-item label="销售渠道">
-              <el-select v-model="form.customerSource" :disabled="readonly" clearable placeholder="选择销售渠道" style="width: 100%;">
-                <el-option v-for="item in customerSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
       </template>
 
-      <!-- 客户首单模式：套餐选择 -->
-      <template v-if="mode === 'firstOrder'">
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <el-form-item label="销售渠道">
-              <el-select v-model="form.customerSource" :disabled="readonly" clearable placeholder="选择销售渠道" style="width: 100%;">
-                <el-option v-for="item in customerSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="排餐模式">
-              <el-select v-model="form.scheduleMode" :disabled="readonly" placeholder="请选择排餐模式" style="width: 100%;">
-                <el-option label="指定日期送" value="SCHEDULE" />
-                <el-option label="每天送" value="DAILY" />
-                <el-option label="周末送" value="WEEKEND" />
-                <el-option label="工作日送" value="WEEKDAY" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <el-form-item label="父套餐" prop="parentPackageId">
-              <el-select v-model="form.parentPackageId" :disabled="readonly" placeholder="选择父套餐" style="width: 100%;" @change="onParentPackageChange">
-                <el-option v-for="item in parentPackages" :key="item.id" :label="item.categoryName" :value="item.id" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="子套餐" prop="childPackageId">
-              <el-select v-model="form.childPackageId" :disabled="readonly" placeholder="选择子套餐" style="width: 100%;" @change="onChildPackageChange">
-                <el-option v-for="item in childPackages" :key="item.id" :label="item.categoryName" :value="item.id" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
+      <!-- ===== 公共字段：销售渠道 + 排餐模式（两种模式均显示） ===== -->
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="销售渠道">
+            <el-select v-model="form.customerSource" :disabled="readonly" clearable placeholder="选择销售渠道" style="width: 100%;">
+              <el-option v-for="item in customerSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="排餐模式">
+            <el-select v-model="form.scheduleMode" :disabled="readonly" placeholder="请选择排餐模式" style="width: 100%;">
+              <el-option label="指定日期送" value="SCHEDULE" />
+              <el-option label="每天送" value="DAILY" />
+              <el-option label="周末送" value="WEEKEND" />
+              <el-option label="工作日送" value="WEEKDAY" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="餐次类型">
+            <el-select v-model="form.mealType" :disabled="readonly" placeholder="请选择餐次类型" style="width: 100%;">
+              <el-option label="全餐次（默认）" value="ALL" />
+              <el-option label="午餐订单" value="LUNCH" />
+              <el-option label="晚餐订单" value="DINNER" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
 
-        <el-divider content-position="left">餐数信息</el-divider>
-      </template>
+      <!-- 指定日期送时显示送餐日期选择 -->
+      <el-row v-if="form.scheduleMode === 'SCHEDULE'" :gutter="20">
+        <el-col :span="24">
+          <el-form-item label="送餐日期">
+            <el-select
+              v-model="form.deliveryDates"
+              multiple
+              filterable
+              allow-create
+              placeholder="选择或输入送餐日期（格式：yyyy-MM-dd）"
+              style="width: 100%;"
+            >
+              <el-option v-for="date in availableDates" :key="date" :label="date" :value="date" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
 
-      <!-- 金额信息（订单模式 + 首单模式） -->
+      <!-- ===== 公共字段：父/子套餐选择（两种模式均显示） ===== -->
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="父套餐" :prop="mode === 'firstOrder' ? 'parentPackageId' : ''">
+            <el-select
+              v-model="form.parentPackageId"
+              :disabled="readonly"
+              clearable
+              placeholder="选择父套餐"
+              style="width: 100%;"
+              @change="onParentPackageChange"
+            >
+              <el-option v-for="item in parentPackages" :key="item.id" :label="item.categoryName" :value="item.id" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="子套餐" :prop="mode === 'firstOrder' ? 'childPackageId' : ''">
+            <el-select
+              v-model="form.childPackageId"
+              :disabled="readonly || !form.parentPackageId"
+              clearable
+              placeholder="选择子套餐"
+              style="width: 100%;"
+              @change="onChildPackageChange"
+            >
+              <el-option v-for="item in childPackages" :key="item.id" :label="item.categoryName" :value="item.id" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <!-- ===== 金额信息 ===== -->
+      <el-divider content-position="left">金额信息</el-divider>
       <el-row :gutter="20">
         <el-col :span="8">
           <el-form-item label="总金额(元)" prop="totalAmount">
@@ -126,7 +123,7 @@
               v-model="form.totalAmount"
               :min="0"
               :precision="2"
-              :disabled="readonly"
+              :disabled="readonly || mode === 'firstOrder'"
               controls-position="right"
               style="width: 100%;"
               @change="calcBalance"
@@ -146,19 +143,8 @@
             />
           </el-form-item>
         </el-col>
-        <el-col v-if="mode === 'order'" :span="8">
-          <el-form-item label="定金(元)">
-            <el-input-number
-              v-model="form.depositAmount"
-              :min="0"
-              :precision="2"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-            />
-          </el-form-item>
-        </el-col>
-        <el-col v-if="mode === 'firstOrder'" :span="8">
+        <!-- 定金：两种模式均显示，去除重复 -->
+        <el-col :span="8">
           <el-form-item label="定金(元)">
             <el-input-number
               v-model="form.depositAmount"
@@ -172,7 +158,8 @@
         </el-col>
       </el-row>
 
-      <!-- 餐数信息 -->
+      <!-- ===== 餐数信息 ===== -->
+      <el-divider content-position="left">餐数信息</el-divider>
       <el-row :gutter="20">
         <el-col :span="8">
           <el-form-item label="早餐合计(份)">
@@ -238,10 +225,11 @@
             />
           </el-form-item>
         </el-col>
+        <!-- 首单模式：自动计算总价展示 -->
         <el-col v-if="mode === 'firstOrder'" :span="8">
-          <el-form-item label="总价">
+          <el-form-item label="总价(自动)">
             <el-input-number
-              v-model="form.totalAmount"
+              :value="form.totalAmount"
               :min="0"
               disabled
               :precision="2"
@@ -252,10 +240,9 @@
         </el-col>
       </el-row>
 
-      <!-- 核销信息（仅订单模式） -->
+      <!-- ===== 核销信息（仅订单模式） ===== -->
       <template v-if="mode === 'order'">
         <el-divider content-position="left">核销信息</el-divider>
-
         <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="核销餐数(合计)">
@@ -294,7 +281,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="餐费余额">
@@ -311,10 +297,9 @@
         </el-row>
       </template>
 
-      <!-- 日期信息（订单模式） -->
+      <!-- ===== 日期信息（公共，但订单模式多成交时间 + 第一次送餐时间） ===== -->
+      <el-divider content-position="left">日期信息</el-divider>
       <template v-if="mode === 'order'">
-        <el-divider content-position="left">日期信息</el-divider>
-
         <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="成交时间">
@@ -341,64 +326,42 @@
             </el-form-item>
           </el-col>
         </el-row>
-
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="订单开始日期">
-              <el-date-picker
-                v-model="form.startDate"
-                :disabled="readonly"
-                type="date"
-                placeholder="选择开始日期"
-                style="width: 100%;"
-                value-format="yyyy-MM-dd"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="订单结束日期">
-              <el-date-picker
-                v-model="form.endDate"
-                :disabled="readonly"
-                type="date"
-                placeholder="选择结束日期"
-                style="width: 100%;"
-                value-format="yyyy-MM-dd"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
       </template>
 
-      <!-- 首单模式的日期选择（客户新增） -->
-      <template v-if="mode === 'firstOrder'">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="开始日期" prop="startDate">
-              <el-date-picker
-                v-model="form.startDate"
-                :disabled="readonly"
-                type="date"
-                placeholder="选择开始日期"
-                style="width: 100%;"
-                value-format="yyyy-MM-dd"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="结束日期" prop="endDate">
-              <el-date-picker
-                v-model="form.endDate"
-                :disabled="readonly"
-                type="date"
-                placeholder="选择结束日期"
-                style="width: 100%;"
-                value-format="yyyy-MM-dd"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </template>
+      <!-- 开始/结束日期：两种模式均显示，prop 按 mode 区分 -->
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item
+            :label="mode === 'order' ? '订单开始日期' : '开始日期'"
+            :prop="mode === 'firstOrder' ? 'startDate' : ''"
+          >
+            <el-date-picker
+              v-model="form.startDate"
+              :disabled="readonly"
+              type="date"
+              placeholder="选择开始日期"
+              style="width: 100%;"
+              value-format="yyyy-MM-dd"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item
+            :label="mode === 'order' ? '订单结束日期' : '结束日期'"
+            :prop="mode === 'firstOrder' ? 'endDate' : ''"
+          >
+            <el-date-picker
+              v-model="form.endDate"
+              :disabled="readonly"
+              type="date"
+              placeholder="选择结束日期"
+              style="width: 100%;"
+              value-format="yyyy-MM-dd"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
     </el-form>
   </div>
 </template>
@@ -414,6 +377,8 @@ export function createOrderDefaultForm() {
     id: null,
     customerId: null,
     orderCode: null,
+    parentPackageId: null,
+    childPackageId: null,
     depositAmount: 0,
     totalAmount: null,
     finalAmount: null,
@@ -430,6 +395,7 @@ export function createOrderDefaultForm() {
     startDate: null,
     endDate: null,
     status: 1,
+    mealType: 'ALL',
     scheduleMode: 'SCHEDULE',
     deliveryDates: [],
     remark: null,
@@ -454,6 +420,7 @@ export function createFirstOrderDefaultForm() {
     deliveryDates: [],
     startDate: null,
     endDate: null,
+    mealType: 'ALL',
     customerSource: null
   }
 }
@@ -521,9 +488,8 @@ export default {
   watch: {
     value: {
       handler(val) {
-        // 当外部 value 变化时（如编辑时加载数据），同步内部数据
-        // 套餐模式下，如果 parentPackageId 变化且有子套餐数据，需要同步 childPackages
-        if (this.mode === 'firstOrder' && val.parentPackageId) {
+        // 当外部 value 变化时（如编辑时加载数据），同步子套餐列表
+        if (val.parentPackageId) {
           this.loadChildPackages(val.parentPackageId)
         }
       },
@@ -533,9 +499,8 @@ export default {
   created() {
     this.loadCustomerSourceDict()
     this.initAvailableDates()
-    if (this.mode === 'firstOrder') {
-      this.loadParentPackages()
-    }
+    // 两种模式均需加载父套餐
+    this.loadParentPackages()
     // 编辑时：如果传入了当前客户数据，填充下拉列表
     if (this.mode === 'order' && this.currentCustomer && this.currentCustomer.id) {
       this.customers = [{
@@ -617,7 +582,7 @@ export default {
       this.form.remainingCount = Math.max(0, total - verified)
       this.$emit('calc-change')
     },
-    // 计算首单总价
+    // 计算首单总价（仅首单模式触发自动计算，订单模式手动填写）
     calcTotalAmount() {
       if (this.mode !== 'firstOrder') return
       const breakfastCount = this.form.breakfastCount || 0
@@ -634,8 +599,9 @@ export default {
     },
     // 父套餐变更
     async onParentPackageChange(parentId) {
-      await this.loadChildPackages(parentId)
       this.form.childPackageId = null
+      await this.loadChildPackages(parentId)
+      this.$emit('package-change', parentId, null)
     },
     // 子套餐变更
     onChildPackageChange(childPackageId) {
@@ -680,10 +646,10 @@ export default {
       Object.keys(defaultData).forEach(key => {
         this.$set(this.form, key, defaultData[key])
       })
+      this.childPackages = []
     },
-    // 获取表单校验引用
+    // 表单校验
     validate() {
-      // 由父组件调用 this.$refs.orderForm.validate()
       return new Promise((resolve, reject) => {
         this.$refs.elForm && this.$refs.elForm.validate((valid) => {
           if (valid) resolve(true)

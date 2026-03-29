@@ -335,7 +335,9 @@ export default {
           scheduleMode: orderInfo.scheduleMode || 'SCHEDULE',
           startDate: orderInfo.startDate,
           endDate: orderInfo.endDate,
-          customerSource: orderInfo.customerSource || null
+          mealType: orderInfo.mealType || 'ALL',
+          customerSource: orderInfo.customerSource || null,
+          deliveryDates: orderInfo.deliveryDates || null
         }
       }
 

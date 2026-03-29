@@ -61,6 +61,11 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="餐次" width="70" align="center">
+        <template slot-scope="scope">
+          {{ mealTypeText(scope.row.mealType) }}
+        </template>
+      </el-table-column>
       <el-table-column label="销售渠道" width="100">
         <template slot-scope="scope">
           {{ getSourceLabel(scope.row.customerSource) }}
@@ -225,6 +230,15 @@ export default {
     async submitForm() {
       const valid = await this.$refs.orderFormRef.validate().catch(() => false)
       if (!valid) return
+
+      // 先校验订单冲突（提交前校验）
+      try {
+        await orderApi.validateOrder({ ...this.form })
+      } catch (e) {
+        this.$message.warning(e.message || '订单校验失败')
+        return // 校验失败则阻止提交
+      }
+
       try {
         this.submitLoading = true
         if (this.form.id) {
@@ -269,6 +283,10 @@ export default {
       if (status === 2) return 'info'
       if (status === 0) return 'danger'
       return 'info'
+    },
+    mealTypeText(mealType) {
+      if (!mealType || mealType === 'ALL') return '-'
+      return mealType === 'LUNCH' ? '午餐' : '晚餐'
     },
     checkboxT() {
       return true
