@@ -137,6 +137,7 @@ public class ParentPackageController {
         subPackage.setVegCount(dto.getVegCount());
         subPackage.setIncludeSoup(dto.getIncludeSoup() != null && dto.getIncludeSoup() == 1);
         subPackage.setIncludeRice(dto.getIncludeRice() != null && dto.getIncludeRice() == 1);
+        subPackage.setStatus(Boolean.TRUE);
         subPackage.setRemark(dto.getRemark());
         subPackageService.create(subPackage, dto.getParentPackageId());
         return ResponseEntity.status(HttpStatus.CREATED).build();
@@ -145,7 +146,19 @@ public class ParentPackageController {
     @PutMapping("/sub")
     @Log("编辑子套餐")
     @PreAuthorize("@el.check('package:edit')")
-    public ResponseEntity<Void> updateSub(@RequestBody SubPackage resources) {
+    public ResponseEntity<Void> updateSub(@RequestBody SubPackageDto dto) {
+        SubPackage resources = new SubPackage();
+        resources.setId(dto.getId());
+        resources.setSubPackageCode(dto.getSubPackageCode());
+        resources.setSubPackageName(dto.getSubPackageName());
+        resources.setMeatCount(dto.getMeatCount());
+        resources.setVegCount(dto.getVegCount());
+        resources.setIncludeSoup(dto.getIncludeSoup() != null && dto.getIncludeSoup() == 1);
+        resources.setIncludeRice(dto.getIncludeRice() != null && dto.getIncludeRice() == 1);
+        if (dto.getStatus() != null) {
+            resources.setStatus(dto.getStatus() == 1);
+        }
+        resources.setRemark(dto.getRemark());
         subPackageService.update(resources);
         return ResponseEntity.ok().build();
     }

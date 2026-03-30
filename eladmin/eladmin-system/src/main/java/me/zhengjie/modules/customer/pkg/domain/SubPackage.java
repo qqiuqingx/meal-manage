@@ -1,6 +1,7 @@
 package me.zhengjie.modules.customer.pkg.domain;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -63,10 +64,12 @@ public class SubPackage implements Serializable {
     /**
      * 创建时间
      */
+    @TableField("created_at")
     private LocalDateTime createTime;
 
     /**
      * 更新时间
      */
+    @TableField("updated_at")
     private LocalDateTime updateTime;
 }
