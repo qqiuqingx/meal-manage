@@ -32,13 +32,19 @@
         </el-checkbox-group>
       </el-form-item>
       <el-form-item label="套餐" prop="mealPackages">
-        <el-checkbox-group v-model="form.mealPackages">
-          <el-checkbox label="yuezi">月子餐</el-checkbox>
-          <el-checkbox label="yunqi">孕期餐</el-checkbox>
-          <el-checkbox label="xiaoyuezi">小月子</el-checkbox>
-          <el-checkbox label="yingyang">营养餐</el-checkbox>
-          <el-checkbox label="fenmian">分娩餐</el-checkbox>
-        </el-checkbox-group>
+        <el-select
+          v-model="form.mealPackages"
+          multiple
+          placeholder="请选择套餐"
+          style="width: 100%;"
+        >
+          <el-option
+            v-for="pkg in packageOptions"
+            :key="pkg.id"
+            :label="pkg.packageName"
+            :value="pkg.id"
+          />
+        </el-select>
       </el-form-item>
       <el-form-item label="排期" prop="schedule">
         <div class="schedule-container">
@@ -146,7 +152,7 @@
 </template>
 
 <script>
-import { addDish, editDish } from '@/api/dish'
+import { addDish, editDish, queryPackages } from '@/api/dish'
 import { queryIngredients } from '@/api/dishIngredient'
 
 export default {
@@ -155,6 +161,7 @@ export default {
     return {
       dialogVisible: false,
       title: '',
+      packageOptions: [],
       form: {
         id: null,
         name: '',
@@ -192,9 +199,15 @@ export default {
     }
   },
   methods: {
+    loadPackages() {
+      queryPackages().then(response => {
+        this.packageOptions = response || []
+      })
+    },
     handleAdd() {
       this.title = '新增菜品'
       this.resetForm()
+      this.loadPackages()
       this.dialogVisible = true
     },
     handleUpdate(row) {
@@ -205,6 +218,7 @@ export default {
         this.form.ingredientList = []
       }
       this.parseSchedule()
+      this.loadPackages()
       this.dialogVisible = true
     },
     submitForm() {
