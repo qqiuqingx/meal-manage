@@ -1,15 +1,17 @@
 <template>
   <div class="app-container">
-    <!-- 工具栏 -->
     <div class="head-container">
-      <el-row :gutter="10">
-        <el-col :span="24">
+      <el-row type="flex" justify="space-between" align="middle" :gutter="12">
+        <el-col :span="16">
+          <div class="page-title">套餐管理</div>
+          <div class="page-desc">按父套餐分组维护子套餐及配餐规则，展开行后可直接新增、编辑子套餐。</div>
+        </el-col>
+        <el-col :span="8" style="text-align: right;">
           <el-button class="filter-item" type="primary" icon="el-icon-plus" @click="handleAddParent">新增套餐</el-button>
         </el-col>
       </el-row>
     </div>
 
-    <!-- 父套餐列表 -->
     <el-table
       v-loading="loading"
       :data="treeData"
@@ -19,44 +21,48 @@
     >
       <el-table-column type="expand">
         <template #default="{ row }">
-          <div style="padding: 0 0 10px 50px;">
-            <el-table :data="row.children" border size="small">
+          <div class="sub-table-wrap">
+            <div class="sub-table-header">
+              <span class="sub-table-title">子套餐列表</span>
+              <el-button type="primary" size="mini" icon="el-icon-plus" plain @click="handleAddSub(row)">新增子套餐</el-button>
+            </div>
+            <el-table :data="row.subPackages || []" border size="small" empty-text="暂无子套餐">
+              <el-table-column prop="subPackageCode" label="子套餐编码" width="150" />
               <el-table-column prop="subPackageName" label="子套餐名称" min-width="150" />
               <el-table-column prop="meatCount" label="荤菜数" width="90" align="center" />
               <el-table-column prop="vegCount" label="素菜数" width="90" align="center" />
-              <el-table-column prop="includeSoup" label="含汤" width="80" align="center">
-                <template #default="{ scope }">
-                  <el-tag :type="scope.row.includeSoup === 1 ? 'success' : 'info'" size="small">
-                    {{ scope.row.includeSoup === 1 ? '是' : '否' }}
+              <el-table-column prop="includeSoup" label="含汤" width="90" align="center">
+                <template #default="{ row: subRow }">
+                  <el-tag :type="subRow.includeSoup === 1 ? 'success' : 'info'" size="small">
+                    {{ subRow.includeSoup === 1 ? '是' : '否' }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="includeRice" label="含米饭" width="80" align="center">
-                <template #default="{ scope }">
-                  <el-tag :type="scope.row.includeRice === 1 ? 'success' : 'info'" size="small">
-                    {{ scope.row.includeRice === 1 ? '是' : '否' }}
+              <el-table-column prop="includeRice" label="含米饭" width="90" align="center">
+                <template #default="{ row: subRow }">
+                  <el-tag :type="subRow.includeRice === 1 ? 'success' : 'info'" size="small">
+                    {{ subRow.includeRice === 1 ? '是' : '否' }}
                   </el-tag>
                 </template>
               </el-table-column>
               <el-table-column prop="status" label="状态" width="90" align="center">
-                <template #default="{ scope }">
-                  <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'" size="small">
-                    {{ scope.row.status === 1 ? '启用' : '停用' }}
+                <template #default="{ row: subRow }">
+                  <el-tag :type="subRow.status === 1 ? 'success' : 'danger'" size="small">
+                    {{ subRow.status === 1 ? '启用' : '停用' }}
                   </el-tag>
                 </template>
               </el-table-column>
               <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
               <el-table-column label="操作" width="200" align="center">
-                <template #default="{ scope }">
-                  <el-button type="text" size="small" @click="handleEditSub(row, scope.row)">编辑</el-button>
-                  <el-button type="text" size="small" @click="handleDeleteSub(row, scope.row)">删除</el-button>
-                  <el-button type="text" size="small" @click="handleSubStatusChange(row, scope.row)">
-                    {{ scope.row.status === 1 ? '停用' : '启用' }}
+                <template #default="{ row: subRow }">
+                  <el-button type="text" size="small" @click="handleEditSub(row, subRow)">编辑</el-button>
+                  <el-button type="text" size="small" @click="handleDeleteSub(row, subRow)">删除</el-button>
+                  <el-button type="text" size="small" @click="handleSubStatusChange(row, subRow)">
+                    {{ subRow.status === 1 ? '停用' : '启用' }}
                   </el-button>
                 </template>
               </el-table-column>
             </el-table>
-            <el-button type="text" size="small" icon="el-icon-plus" style="margin-top: 8px;" @click="handleAddSub(row)">新增子套餐</el-button>
           </div>
         </template>
       </el-table-column>
@@ -107,6 +113,9 @@
     <!-- 新增/编辑子套餐弹窗 -->
     <el-dialog :title="subDialogTitle" :visible.sync="subDialogVisible" width="620px" append-to-body :close-on-click-modal="false" @closed="resetSubForm">
       <el-form ref="subFormRef" :model="subForm" :rules="subRules" label-width="100px">
+        <el-form-item label="所属套餐">
+          <el-input :value="subForm.parentPackageName || '-'" disabled />
+        </el-form-item>
         <el-form-item label="子套餐编码" prop="subPackageCode">
           <el-input v-model="subForm.subPackageCode" placeholder="请输入子套餐编码" />
         </el-form-item>
@@ -159,7 +168,8 @@ const defaultSubForm = {
   includeSoup: 0,
   includeRice: 0,
   remark: '',
-  parentPackageId: null
+  parentPackageId: null,
+  parentPackageName: ''
 }
 
 export default {
@@ -210,7 +220,14 @@ export default {
     getTree() {
       this.loading = true
       api.getTree().then(res => {
-        this.treeData = Array.isArray(res) ? res : []
+        const rows = Array.isArray(res) ? res : []
+        this.treeData = rows.map(item => {
+          const { children, ...parentRow } = item
+          return {
+            ...parentRow,
+            subPackages: Array.isArray(children) ? children : []
+          }
+        })
         this.loading = false
       }).catch(() => {
         this.loading = false
@@ -232,7 +249,7 @@ export default {
         packageName: row.packageName,
         remark: row.remark || '',
         status: row.status,
-        children: (row.children || []).map(child => ({ id: child.id }))
+        children: (row.subPackages || []).map(child => ({ id: child.id }))
       }
       this.dialogTitle = '编辑套餐'
       this.dialogVisible = true
@@ -300,7 +317,8 @@ export default {
         includeSoup: 0,
         includeRice: 0,
         remark: '',
-        parentPackageId: parentRow.id
+        parentPackageId: parentRow.id,
+        parentPackageName: parentRow.packageName
       }
       this.subDialogTitle = '新增子套餐'
       this.subDialogVisible = true
@@ -318,7 +336,8 @@ export default {
           includeSoup: dto.includeSoup,
           includeRice: dto.includeRice,
           remark: dto.remark || '',
-          parentPackageId: parentRow.id
+          parentPackageId: parentRow.id,
+          parentPackageName: parentRow.packageName
         }
         this.subDialogTitle = '编辑子套餐'
         this.subDialogVisible = true
@@ -397,5 +416,36 @@ export default {
 .head-container {
   padding: 10px;
   margin-bottom: 10px;
+  background: #fff;
+  border-radius: 4px;
+}
+
+.page-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.page-desc {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #909399;
+}
+
+.sub-table-wrap {
+  padding: 0 0 10px 50px;
+}
+
+.sub-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.sub-table-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #606266;
 }
 </style>
