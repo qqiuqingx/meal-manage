@@ -60,9 +60,9 @@ public class Dish implements Serializable {
     @TableField(value = "meal_types", typeHandler = JacksonTypeHandler.class)
     private List<String> mealTypes;
 
-    @ApiModelProperty(value = "所属套餐")
+    @ApiModelProperty(value = "所属套餐（父套餐ID列表）")
     @TableField(value = "meal_packages", typeHandler = JacksonTypeHandler.class)
-    private List<String> mealPackages;
+    private List<Long> mealPackages;
 
     @ApiModelProperty(value = "排期：格式如1-1表示第1周周一")
     @TableField(value = "schedule", typeHandler = JacksonTypeHandler.class)
