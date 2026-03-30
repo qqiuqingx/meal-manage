@@ -45,12 +45,12 @@
     <!-- 条件查询订单列表(关联客户姓名、手机号和套餐名称) -->
     <select id="findAll" resultMap="JoinResultMap">
         SELECT o.*, cp.customer_name, cp.phone,
-               ppc.category_name as parent_package_name,
-               cpc.category_name as child_package_name
+               pp.package_name as parent_package_name,
+               sp.sub_package_name as child_package_name
         FROM customer_order o
         LEFT JOIN customer_profile cp ON o.customer_id = cp.id
-        LEFT JOIN customer_package_category ppc ON o.parent_package_id = ppc.id
-        LEFT JOIN customer_package_category cpc ON o.child_package_id = cpc.id
+        LEFT JOIN parent_package pp ON o.parent_package_id = pp.id
+        LEFT JOIN sub_package sp ON o.child_package_id = sp.id
         <where>
             <if test="criteria.orderCode != null and criteria.orderCode != ''">
                 AND o.order_code LIKE CONCAT('%', #{criteria.orderCode}, '%')
@@ -88,8 +88,8 @@
         SELECT COUNT(*)
         FROM customer_order o
         LEFT JOIN customer_profile cp ON o.customer_id = cp.id
-        LEFT JOIN customer_package_category ppc ON o.parent_package_id = ppc.id
-        LEFT JOIN customer_package_category cpc ON o.child_package_id = cpc.id
+        LEFT JOIN parent_package pp ON o.parent_package_id = pp.id
+        LEFT JOIN sub_package sp ON o.child_package_id = sp.id
         <where>
             <if test="criteria.orderCode != null and criteria.orderCode != ''">
                 AND o.order_code LIKE CONCAT('%', #{criteria.orderCode}, '%')
