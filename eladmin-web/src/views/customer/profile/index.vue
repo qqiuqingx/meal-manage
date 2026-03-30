@@ -259,6 +259,17 @@ export default {
     }
   },
   methods: {
+    serializeDeliveryDates(value) {
+      if (Array.isArray(value)) {
+        const dates = value.map(item => String(item || '').trim()).filter(Boolean)
+        return dates.length ? JSON.stringify(dates) : null
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        return trimmed || null
+      }
+      return null
+    },
     isCreateMode() {
       return this.crud.status.add === CRUD.STATUS.PREPARED
     },
@@ -316,7 +327,7 @@ export default {
           endDate: orderInfo.endDate,
           mealType: orderInfo.mealType || 'ALL',
           customerSource: orderInfo.customerSource || null,
-          deliveryDates: orderInfo.deliveryDates || null
+          deliveryDates: this.serializeDeliveryDates(orderInfo.deliveryDates)
         }
       }
 

@@ -194,6 +194,17 @@ export default {
     this.loadCustomerSourceDict()
   },
   methods: {
+    serializeDeliveryDates(value) {
+      if (Array.isArray(value)) {
+        const dates = value.map(item => String(item || '').trim()).filter(Boolean)
+        return dates.length ? JSON.stringify(dates) : null
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        return trimmed || null
+      }
+      return null
+    },
     loadCustomerSourceDict() {
       dictDetailApi.get('customer_source').then(res => {
         this.customerSourceOptions = (res.content || res.data || res || []).map(item => ({
@@ -230,10 +241,14 @@ export default {
     async submitForm() {
       const valid = await this.$refs.orderFormRef.validate().catch(() => false)
       if (!valid) return
+      const payload = {
+        ...this.form,
+        deliveryDates: this.serializeDeliveryDates(this.form.deliveryDates)
+      }
 
       // 先校验订单冲突（提交前校验）
       try {
-        await orderApi.validateOrder({ ...this.form })
+        await orderApi.validateOrder(payload)
       } catch (e) {
         this.$message.warning(e.message || '订单校验失败')
         return // 校验失败则阻止提交
@@ -242,10 +257,10 @@ export default {
       try {
         this.submitLoading = true
         if (this.form.id) {
-          await orderApi.edit({ ...this.form })
+          await orderApi.edit(payload)
           this.$message.success('编辑成功')
         } else {
-          await orderApi.add({ ...this.form })
+          await orderApi.add(payload)
           this.$message.success('新增成功')
         }
         this.crud.cancelCU()

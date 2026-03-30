@@ -254,6 +254,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         order.setStatus(dto.getStatus());
         order.setMealType(dto.getMealType());
         order.setScheduleMode(dto.getScheduleMode());
+        order.setDeliveryDates(dto.getDeliveryDates());
         order.setRemark(dto.getRemark());
         order.setCustomerSource(dto.getCustomerSource());
     }
@@ -306,6 +307,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setMealType(order.getMealType());
         dto.setMealTypeDesc(getMealTypeDesc(order.getMealType()));
         dto.setScheduleMode(order.getScheduleMode());
+        dto.setDeliveryDates(order.getDeliveryDates());
         dto.setRemark(order.getRemark());
         dto.setCustomerSource(order.getCustomerSource());
         dto.setCreateTime(order.getCreateTime());
