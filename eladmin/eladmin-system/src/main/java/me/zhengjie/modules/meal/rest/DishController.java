@@ -24,6 +24,8 @@ import me.zhengjie.modules.meal.domain.dto.DishScheduleStats;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleRecordQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleRecordVO;
 import me.zhengjie.modules.meal.domain.dto.DailyCustomerStats;
+import me.zhengjie.modules.customer.pkg.domain.dto.ParentPackageDto;
+import me.zhengjie.modules.customer.pkg.service.ParentPackageService;
 import lombok.RequiredArgsConstructor;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +52,14 @@ import me.zhengjie.utils.PageResult;
 public class DishController {
 
     private final DishService dishService;
+    private final ParentPackageService parentPackageService;
+
+    @GetMapping("/packages")
+    @ApiOperation("获取套餐选项列表（用于菜品关联）")
+    @PreAuthorize("@el.check('dish:list')")
+    public ResponseEntity<List<ParentPackageDto>> queryPackages(){
+        return new ResponseEntity<>(parentPackageService.getTree(), HttpStatus.OK);
+    }
 
     @ApiOperation("导出菜品数据")
     @GetMapping(value = "/download")
