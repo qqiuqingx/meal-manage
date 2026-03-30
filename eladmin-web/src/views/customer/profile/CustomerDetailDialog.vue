@@ -94,6 +94,11 @@
               {{ scope.row.startDate }} ~ {{ scope.row.endDate }}
             </template>
           </el-table-column>
+          <el-table-column label="送餐日期" width="180" show-overflow-tooltip>
+            <template slot-scope="scope">
+              {{ formatDeliveryDates(scope.row.deliveryDates) }}
+            </template>
+          </el-table-column>
           <el-table-column label="成交时间" prop="dealTime" width="150" show-overflow-tooltip />
         </el-table>
 
@@ -255,6 +260,21 @@ export default {
         case 2: return '已完成'
         default: return '未知'
       }
+    },
+    formatDeliveryDates(value) {
+      if (!value) return '-'
+      if (Array.isArray(value)) {
+        return value.length ? value.join(', ') : '-'
+      }
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value)
+          return Array.isArray(parsed) && parsed.length ? parsed.join(', ') : '-'
+        } catch (e) {
+          return value
+        }
+      }
+      return '-'
     },
     orderMealTypeText(mealType) {
       if (!mealType || mealType === 'ALL') return '-'

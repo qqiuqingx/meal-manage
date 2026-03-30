@@ -359,7 +359,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         order.setRemainingCount(orderInfo.getTotalCount());
         order.setStartDate(LocalDate.parse(orderInfo.getStartDate(), DATE_FORMATTER));
         order.setEndDate(LocalDate.parse(orderInfo.getEndDate(), DATE_FORMATTER));
-        order.setFirstDeliveryTime(java.time.LocalDateTime.now());
+        order.setFirstDeliveryTime(null);
         order.setDealTime(java.time.LocalDateTime.now());
         order.setStatus(1);
         order.setScheduleMode(orderInfo.getScheduleMode() != null ? orderInfo.getScheduleMode() : "SCHEDULE");

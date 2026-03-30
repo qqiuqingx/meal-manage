@@ -492,6 +492,7 @@ export default {
         if (val.parentPackageId) {
           this.loadChildPackages(val.parentPackageId)
         }
+        this.normalizeDeliveryDates(val)
       },
       immediate: true
     }
@@ -536,6 +537,33 @@ export default {
         dates.push(`${year}-${month}-${day}`)
       }
       this.availableDates = dates
+    },
+    normalizeDeliveryDates(form) {
+      if (!form) return
+      const normalized = this.parseDeliveryDates(form.deliveryDates)
+      const same = Array.isArray(form.deliveryDates) &&
+        normalized.length === form.deliveryDates.length &&
+        normalized.every((item, index) => item === form.deliveryDates[index])
+      if (!same) {
+        this.$set(form, 'deliveryDates', normalized)
+      }
+    },
+    parseDeliveryDates(value) {
+      if (Array.isArray(value)) {
+        return value.filter(Boolean)
+      }
+      if (!value) {
+        return []
+      }
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value)
+          return Array.isArray(parsed) ? parsed.filter(Boolean) : []
+        } catch (e) {
+          return value.split(',').map(item => item.trim()).filter(Boolean)
+        }
+      }
+      return []
     },
     // 远程搜索客户
     async searchCustomer(query) {
