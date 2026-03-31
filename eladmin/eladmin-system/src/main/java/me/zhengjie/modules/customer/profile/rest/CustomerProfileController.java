@@ -14,6 +14,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Set;
+
 /**
  * 客户档案管理 REST 控制器
  */
@@ -68,6 +70,17 @@ public class CustomerProfileController {
     }
 
     /**
+     * 批量删除客户档案
+     */
+    @DeleteMapping
+    @Log("删除客户档案")
+    @PreAuthorize("@el.check('customerProfile:del')")
+    public ResponseEntity<Void> delete(@RequestBody Set<Long> ids) {
+        profileService.delete(ids);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
      * 生成客户编号
      */
     @GetMapping("/generateCode")
@@ -75,6 +88,4 @@ public class CustomerProfileController {
     public ResponseEntity<String> generateCode(@RequestParam Long parentPackageId) {
         return ResponseEntity.ok(profileService.generateCode(parentPackageId));
     }
-
-    // 注意: 本期不开放普通业务 DELETE 接口
 }

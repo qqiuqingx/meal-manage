@@ -1,8 +1,13 @@
 # 客户档案管理 API 文档
 
-> 文档版本: 2.0
+> 文档版本: 2.1
 > 创建日期: 2026-03-25
-> 更新日期: 2026-03-27
+> 更新日期: 2026-03-31
+>
+> **变更说明 (v2.1)**：
+> - 新增批量删除接口 `DELETE /api/customerProfile`，支持传入多个客户ID一次性删除
+> - 删除前校验：若任一客户存在进行中订单（`status=1`），拒绝整个批量删除请求
+> - 删除时级联删除地址记录和签约记录，不删除订单记录
 >
 > **变更说明 (v2.0)**：
 > - `packageInfo` → `orderInfo`：首单信息语义更清晰
@@ -390,6 +395,57 @@ GET /api/customerProfile/generateCode?parentPackageId=1
 - 格式为"父套餐前缀 + 三位数字"
 - 若父套餐不存在、未启用或未配置 `code_prefix`，返回错误
 - 此接口仅用于编号预览，实际编号在创建时由后端自动分配
+
+### 3.6 批量删除客户档案
+
+**请求**
+
+```
+DELETE /api/customerProfile
+Content-Type: application/json
+```
+
+**请求体**
+
+```json
+[1, 2, 3]
+```
+
+> `Set<Long>` 客户ID集合，支持单个或批量。
+
+**响应（成功）**
+
+```
+HTTP 200 OK
+```
+
+**响应（失败 - 存在有效订单）**
+
+```
+HTTP 400 Bad Request
+
+{
+  "code": 400,
+  "message": "以下客户存在进行中的订单，无法删除：张三、李四",
+  "data": null
+}
+```
+
+**校验规则**
+
+- 删除前检查 `customer_order` 表中是否存在 `status=1`（进行中）的订单
+- 若任一客户存在进行中订单，拒绝整个批量删除请求，并返回被拦截的客户姓名列表
+- `status=0`（已取消）和 `status=2`（已完成）的订单不影响删除
+
+**级联删除说明**
+
+- 同步删除：`customer_profile_address`（地址记录）
+- 同步删除：`customer_profile_package`（签约记录）
+- **不删除**：`customer_order`（订单记录独立管理）
+
+**权限**
+
+- `customerProfile:del`
 
 ---
 
