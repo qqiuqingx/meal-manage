@@ -7,6 +7,7 @@ import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -59,4 +60,18 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
                            @Param("endDate") java.time.LocalDate endDate,
                            @Param("mealType") String mealType,
                            @Param("excludeId") Long excludeId);
+
+    /**
+     * 批量统计每个客户的进行中订单数量（status=1）
+     * @param customerIds 客户ID集合
+     * @return Map: key=customerId, value=有效订单数
+     */
+    List<java.util.Map<String, Object>> countActiveOrdersByCustomerIds(@Param("customerIds") java.util.Set<Long> customerIds);
+
+    /**
+     * 查询指定日期和餐次的有效订单候选
+     */
+    List<CustomerOrder> findMealPlanOrders(@Param("targetDate") LocalDate targetDate,
+                                           @Param("mealType") String mealType);
+
 }

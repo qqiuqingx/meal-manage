@@ -1,0 +1,60 @@
+create table meal_plan (
+    id bigint auto_increment primary key,
+    record_date date not null,
+    meal_type varchar(20) not null,
+    total_count int not null default 0,
+    success_count int not null default 0,
+    fail_count int not null default 0,
+    status varchar(20) not null default 'GENERATING',
+    generate_time datetime not null,
+    create_by varchar(64) default '',
+    update_by varchar(64) default '',
+    deleted bit(1) not null default b'0',
+    create_time datetime default current_timestamp,
+    update_time datetime default current_timestamp on update current_timestamp,
+    index idx_record_date_meal_deleted (record_date, meal_type, deleted),
+    index idx_generate_time (generate_time)
+) engine=innodb default charset=utf8mb4;
+
+create table meal_plan_customer (
+    id bigint auto_increment primary key,
+    meal_plan_id bigint not null,
+    customer_id bigint not null,
+    customer_name varchar(64) not null default '',
+    phone varchar(20) not null default '',
+    order_id bigint not null,
+    parent_package_id bigint not null default 0,
+    child_package_id bigint not null default 0,
+    status tinyint not null default 0 comment '0=失败,1=成功',
+    fail_reason varchar(255) default '',
+    meat_required_count int not null default 0,
+    veg_required_count int not null default 0,
+    include_soup tinyint not null default 0,
+    include_rice tinyint not null default 0,
+    create_by varchar(64) default '',
+    update_by varchar(64) default '',
+    deleted bit(1) not null default b'0',
+    create_time datetime default current_timestamp,
+    update_time datetime default current_timestamp on update current_timestamp,
+    index idx_meal_plan_id (meal_plan_id),
+    index idx_customer_id (customer_id),
+    index idx_order_id (order_id),
+    index idx_meal_plan_order (meal_plan_id, order_id),
+    index idx_meal_plan_status (meal_plan_id, status)
+) engine=innodb default charset=utf8mb4;
+
+create table meal_plan_customer_item (
+    id bigint auto_increment primary key,
+    customer_plan_id bigint not null,
+    dish_type varchar(20) not null,
+    dish_id int not null,
+    dish_name varchar(64) not null default '',
+    seq int not null default 1,
+    create_by varchar(64) default '',
+    update_by varchar(64) default '',
+    deleted bit(1) not null default b'0',
+    create_time datetime default current_timestamp,
+    update_time datetime default current_timestamp on update current_timestamp,
+    index idx_customer_plan_id (customer_plan_id),
+    index idx_dish_id (dish_id)
+) engine=innodb default charset=utf8mb4;

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="me.zhengjie.modules.meal.mapper.MealPlanMapper">
+
+    <resultMap id="BaseResultMap" type="me.zhengjie.modules.meal.domain.MealPlan">
+        <id column="id" property="id"/>
+        <result column="record_date" property="recordDate"/>
+        <result column="meal_type" property="mealType"/>
+        <result column="total_count" property="totalCount"/>
+        <result column="success_count" property="successCount"/>
+        <result column="fail_count" property="failCount"/>
+        <result column="status" property="status"/>
+        <result column="generate_time" property="generateTime"/>
+        <result column="create_by" property="createBy"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="deleted" property="deleted"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="findActiveByDateAndMealType" resultMap="BaseResultMap">
+        select id, record_date, meal_type, total_count, success_count, fail_count, status, generate_time,
+               create_by, update_by, deleted, create_time, update_time
+        from meal_plan
+        where record_date = #{recordDate}
+          and meal_type = #{mealType}
+          and deleted = 0
+        order by id desc
+        limit 1
+    </select>
+
+    <select id="findActiveByDateAndMealTypeForUpdate" resultMap="BaseResultMap">
+        select id, record_date, meal_type, total_count, success_count, fail_count, status, generate_time,
+               create_by, update_by, deleted, create_time, update_time
+        from meal_plan
+        where record_date = #{recordDate}
+          and meal_type = #{mealType}
+          and deleted = 0
+        order by id desc
+        limit 1
+        for update
+    </select>
+
+    <update id="softDeleteItemsByMealPlanId">
+        update meal_plan_customer_item
+        set deleted = 1
+        where deleted = 0
+          and customer_plan_id in (
+            select id from meal_plan_customer where meal_plan_id = #{mealPlanId} and deleted = 0
+          )
+    </update>
+
+    <update id="softDeleteCustomersByMealPlanId">
+        update meal_plan_customer
+        set deleted = 1
+        where meal_plan_id = #{mealPlanId}
+          and deleted = 0
+    </update>
+
+    <update id="softDeletePlanById">
+        update meal_plan
+        set deleted = 1
+        where id = #{id}
+          and deleted = 0
+    </update>
+</mapper>
