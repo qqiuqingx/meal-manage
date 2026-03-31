@@ -22,6 +22,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * 客户档案 Mapper 接口
@@ -38,6 +39,11 @@ public interface CustomerProfileMapper extends BaseMapper<CustomerProfile> {
      * 根据客户编号查询(排除指定ID)
      */
     int countByCodeExcludeId(@Param("customerCode") String customerCode, @Param("excludeId") Long excludeId);
+
+    /**
+     * 批量查询客户档案
+     */
+    List<CustomerProfile> findByIds(@Param("ids") Set<Long> ids);
 
     /**
      * 根据ID查询（带JSON字段）
