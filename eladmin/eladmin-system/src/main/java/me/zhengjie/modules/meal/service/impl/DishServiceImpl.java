@@ -23,6 +23,8 @@ import me.zhengjie.modules.meal.mapper.DishScheduleRecordMapper;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.system.service.DictDetailService;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
+import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.system.domain.DictDetail;
 import me.zhengjie.utils.FileUtil;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +67,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     private final DishIngredientMapper dishIngredientMapper;
     private final DictDetailService dictDetailService;
     private final CustomerOrderMapper customerOrderMapper;
+    private final ParentPackageMapper parentPackageMapper;
 
     private static final String[] DISH_TYPES = {"MAIN", "SIDE", "SOUP", "VEGETABLE", "RICE"};
     private static final String[] MEAL_TYPES = {"LUNCH", "DINNER"};
@@ -161,10 +164,86 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         }
     }
 
+    /**
+     * 批量填充菜品套餐详情（一次性 IN 查询，消除 N+1）
+     */
+    private void fillMealPackageDetailsBatch(List<Dish> dishes) {
+        if (dishes == null || dishes.isEmpty()) return;
+        // 收集所有套餐ID（兼容字符串和数字类型）
+        Set<Object> packageIds = new HashSet<>();
+        for (Dish dish : dishes) {
+            if (dish.getMealPackages() != null) {
+                packageIds.addAll(dish.getMealPackages());
+            }
+        }
+        if (packageIds.isEmpty()) return;
+
+        // 转换为 Set<Long> 用于数据库查询
+        Set<Long> numericIds = new HashSet<>();
+        Set<String> stringIds = new HashSet<>();
+        for (Object id : packageIds) {
+            if (id instanceof Number) {
+                numericIds.add(((Number) id).longValue());
+            } else if (id instanceof String) {
+                try {
+                    numericIds.add(Long.parseLong((String) id));
+                } catch (NumberFormatException e) {
+                    // 不是数字的字符串（如 "yuezi"），记录下来
+                    stringIds.add((String) id);
+                }
+            }
+        }
+
+        // 查询数字ID对应的套餐（包含 id, packageCode, packageName）
+        Map<Long, ParentPackage> packageMap = new HashMap<>();
+        if (!numericIds.isEmpty()) {
+            List<ParentPackage> packages = parentPackageMapper.selectBatchIds(numericIds);
+            for (ParentPackage pkg : packages) {
+                packageMap.put(pkg.getId(), pkg);
+            }
+        }
+
+        // 回填套餐详情
+        for (Dish dish : dishes) {
+            if (dish.getMealPackages() != null) {
+                List<Dish.PackageInfo> details = new ArrayList<>();
+                for (Object id : dish.getMealPackages()) {
+                    if (id instanceof Number) {
+                        Long numericId = ((Number) id).longValue();
+                        ParentPackage pkg = packageMap.get(numericId);
+                        if (pkg != null) {
+                            details.add(new Dish.PackageInfo(pkg.getId(), pkg.getPackageCode(), pkg.getPackageName()));
+                        } else {
+                            details.add(new Dish.PackageInfo(numericId, null, String.valueOf(id)));
+                        }
+                    } else if (id instanceof String) {
+                        String strId = (String) id;
+                        try {
+                            Long numericId = Long.parseLong(strId);
+                            ParentPackage pkg = packageMap.get(numericId);
+                            if (pkg != null) {
+                                details.add(new Dish.PackageInfo(pkg.getId(), pkg.getPackageCode(), pkg.getPackageName()));
+                            } else {
+                                details.add(new Dish.PackageInfo(numericId, null, strId));
+                            }
+                        } catch (NumberFormatException e) {
+                            // 无法解析的字符串（如 "yuezi"），packageCode 和 packageName 都用字符串本身
+                            details.add(new Dish.PackageInfo(null, strId, strId));
+                        }
+                    } else {
+                        details.add(new Dish.PackageInfo(null, null, String.valueOf(id)));
+                    }
+                }
+                dish.setMealPackageDetails(details);
+            }
+        }
+    }
+
     @Override
     public PageResult<Dish> queryAll(DishQueryCriteria criteria, Page<Object> page){
         PageResult<Dish> result = PageUtil.toPage(dishMapper.findAll(criteria, page));
         fillIngredientsBatch(result.getContent());
+        fillMealPackageDetailsBatch(result.getContent());
         return result;
     }
 
@@ -172,6 +251,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     public List<Dish> queryAll(DishQueryCriteria criteria){
         List<Dish> list = dishMapper.findAll(criteria);
         fillIngredientsBatch(list);
+        fillMealPackageDetailsBatch(list);
         return list;
     }
 
@@ -257,7 +337,11 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             map.put("图片路径", dish.getImageUrl());
             map.put("菜品类型", dish.getDishType());
             map.put("餐次", dish.getMealTypes());
-            map.put("所属套餐", dish.getMealPackages());
+            map.put("所属套餐", dish.getMealPackageDetails() != null
+                ? dish.getMealPackageDetails().stream()
+                    .map(Dish.PackageInfo::getPackageName)
+                    .collect(Collectors.joining(", "))
+                : "");
             map.put("排期", dish.getSchedule());
             map.put("排序", dish.getSort());
             map.put("是否启用", dish.getEnabled());
