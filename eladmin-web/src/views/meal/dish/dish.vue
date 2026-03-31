@@ -212,10 +212,16 @@ export default {
     },
     handleUpdate(row) {
       this.title = '编辑菜品'
-      // 列表接口已返回完整 ingredientList，直接使用
+      // 列表接口已返回完整 ingredientList 和 mealPackageDetails，直接使用
       this.form = JSON.parse(JSON.stringify(row))
       if (!this.form.ingredientList) {
         this.form.ingredientList = []
+      }
+      // 将 mealPackageDetails 中的 id 反填到 mealPackages（DB 存的是 ID）
+      if (this.form.mealPackageDetails && this.form.mealPackageDetails.length > 0) {
+        this.form.mealPackages = this.form.mealPackageDetails.map(pkg => pkg.id)
+      } else {
+        this.form.mealPackages = []
       }
       this.parseSchedule()
       this.loadPackages()
