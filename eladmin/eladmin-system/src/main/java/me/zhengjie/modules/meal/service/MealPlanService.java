@@ -24,5 +24,12 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
  **/
 public interface MealPlanService {
 
+    /**
+     * 根据排餐日期和餐次生成排餐计划。
+     *
+     * @param recordDate 排餐日期，格式 yyyy-MM-dd
+     * @param mealType 餐次，支持 LUNCH / DINNER
+     * @return 生成结果汇总
+     */
     MealPlanGenerateResult generateMealPlan(String recordDate, String mealType);
 }

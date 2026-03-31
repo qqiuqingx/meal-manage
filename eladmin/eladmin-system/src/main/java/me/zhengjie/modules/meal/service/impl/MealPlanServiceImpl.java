@@ -109,6 +109,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return doGenerateMealPlan(targetDate, normalizedMealType);
     }
 
+    /**
+     * 执行排餐生成主流程：清理旧计划、加载候选数据、逐个订单生成并汇总结果。
+     */
     private MealPlanGenerateResult doGenerateMealPlan(LocalDate targetDate, String mealType) {
         softDeleteExistingPlan(targetDate, mealType);
         List<CustomerOrder> orders = loadValidOrders(targetDate, mealType);
@@ -153,6 +156,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return buildResult(mealPlan, failDetails);
     }
 
+    /**
+     * 校验餐次参数，只允许午餐和晚餐。
+     */
     private String validateParams(String mealType) {
         if (!MEAL_TYPE_LUNCH.equals(mealType) && !MEAL_TYPE_DINNER.equals(mealType)) {
             throw new BadRequestException("餐次仅支持LUNCH或DINNER");
@@ -160,6 +166,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return mealType;
     }
 
+    /**
+     * 对同日期同餐次的历史有效排餐做软删除，保证重新生成时只保留最新计划。
+     */
     private void softDeleteExistingPlan(LocalDate recordDate, String mealType) {
         MealPlan existingPlan = mealPlanMapper.findActiveByDateAndMealTypeForUpdate(recordDate, mealType);
         if (existingPlan == null) {
@@ -170,6 +179,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         mealPlanMapper.softDeletePlanById(existingPlan.getId());
     }
 
+    /**
+     * 查询满足日期、餐次和配送规则的订单候选。
+     */
     private List<CustomerOrder> loadValidOrders(LocalDate targetDate, String mealType) {
         List<CustomerOrder> candidateOrders = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
         List<CustomerOrder> validOrders = new ArrayList<>();
@@ -182,6 +194,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return validOrders;
     }
 
+    /**
+     * 判断订单配送模式是否命中目标日期。
+     */
     private boolean scheduleModeMatches(CustomerOrder order, LocalDate targetDate) {
         String scheduleMode = order.getScheduleMode();
         if (scheduleMode == null || SCHEDULE_MODE_DAILY.equals(scheduleMode)) {
@@ -200,6 +215,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return false;
     }
 
+    /**
+     * 批量加载订单关联的客户档案，避免逐条查询。
+     */
     private Map<Long, CustomerProfile> loadCustomers(List<CustomerOrder> orders) {
         if (orders.isEmpty()) {
             return Collections.emptyMap();
@@ -215,6 +233,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return customerMap;
     }
 
+    /**
+     * 按订单子套餐ID批量加载套餐数据。
+     */
     private Map<Long, SubPackage> loadSubPackages(List<CustomerOrder> orders) {
         Set<Long> ids = orders.stream().map(CustomerOrder::getChildPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
         if (ids.isEmpty()) {
@@ -227,6 +248,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return packageMap;
     }
 
+    /**
+     * 按订单父套餐ID批量加载套餐数据。
+     */
     private Map<Long, ParentPackage> loadParentPackages(List<CustomerOrder> orders) {
         Set<Long> ids = orders.stream().map(CustomerOrder::getParentPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
         if (ids.isEmpty()) {
@@ -239,6 +263,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return packageMap;
     }
 
+    /**
+     * 按父套餐归类候选菜池，供后续客户排餐复用。
+     */
     private Map<Long, Map<String, List<Dish>>> buildCandidateDishPool(List<Dish> scheduledDishes, List<CustomerOrder> orders,
                                                                        Map<Long, ParentPackage> parentPackageMap) {
         Set<Long> parentPackageIds = orders.stream().map(CustomerOrder::getParentPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
@@ -262,10 +289,16 @@ public class MealPlanServiceImpl implements MealPlanService {
         return candidateDishMap;
     }
 
+    /**
+     * 按排期和餐次查询当日候选菜品。
+     */
     private List<Dish> loadScheduledDishes(LocalDate targetDate, String mealType) {
         return dishMapper.findBySchedule(ScheduleKeyUtil.calcWeek(targetDate), ScheduleKeyUtil.calcDay(targetDate), mealType);
     }
 
+    /**
+     * 对候选菜池按排序号和ID稳定排序，保证选菜结果可预期。
+     */
     private void sortDishTypeMap(Map<String, List<Dish>> dishTypeMap) {
         for (List<Dish> dishList : dishTypeMap.values()) {
             dishList.sort((a, b) -> {
@@ -278,6 +311,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
     }
 
+    /**
+     * 加载候选菜品的食材清单，用于过敏过滤。
+     */
     private Map<Integer, Set<String>> loadDishIngredients(List<Dish> dishes) {
         List<Integer> dishIds = dishes.stream().map(Dish::getId).filter(Objects::nonNull).collect(Collectors.toList());
         if (dishIds.isEmpty()) {
@@ -291,6 +327,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return dishIngredients;
     }
 
+    /**
+     * 为单个订单生成具体菜品组合。
+     */
     private CustomerMealPlan buildCustomerPlan(CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
                                                Map<Long, Map<String, List<Dish>>> candidateDishMap,
                                                Map<Integer, Set<String>> dishIngredientMap) {
@@ -310,6 +349,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return customerMealPlan;
     }
 
+    /**
+     * 选择荤菜，支持单荤和主副菜组合两种配置。
+     */
     private void pickRequiredDishes(Integer meatCount, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                     Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap) {
         int requiredCount = meatCount == null ? 0 : meatCount;
@@ -342,6 +384,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         selectedDishIds.add(sideDish.getId());
     }
 
+    /**
+     * 按套餐要求补齐素菜数量。
+     */
     private void pickVegetables(Integer vegCount, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                 Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap) {
         int requiredCount = vegCount == null ? 0 : vegCount;
@@ -355,6 +400,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
     }
 
+    /**
+     * 在套餐配置要求时补选汤或米饭等可选菜品。
+     */
     private void pickOptionalDish(boolean required, String dishType, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                   Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap) {
         if (!required) {
@@ -368,6 +416,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         selectedDishIds.add(dish.getId());
     }
 
+    /**
+     * 从候选列表中挑选首个未重复且不过敏的菜品。
+     */
     private Dish selectDish(List<Dish> dishes, Set<Integer> selectedDishIds, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap) {
         if (dishes == null || dishes.isEmpty()) {
             return null;
@@ -384,6 +435,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return null;
     }
 
+    /**
+     * 判断菜品食材是否与客户过敏标签精确命中。
+     */
     private boolean containsAllergy(List<String> allergyTags, Set<String> ingredientNames) {
         if (allergyTags == null || allergyTags.isEmpty() || ingredientNames == null || ingredientNames.isEmpty()) {
             return false;
@@ -401,6 +455,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return false;
     }
 
+    /**
+     * 将成功生成的客户排餐结果落库到主表和明细表。
+     */
     private void saveSuccessPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
                                  CustomerMealPlan customerPlan) {
         MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, subPackage, 1, "");
@@ -418,6 +475,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
     }
 
+    /**
+     * 记录单个订单的失败结果，并追加失败原因到返回结果。
+     */
     private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
                              String failReason, List<MealPlanGenerateResult.FailDetail> failDetails) {
         MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, subPackage, 0, failReason);
@@ -428,6 +488,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return 1;
     }
 
+    /**
+     * 组装客户排餐记录实体，统一填充订单、客户和套餐快照字段。
+     */
     private MealPlanCustomer buildCustomerEntity(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
                                                  SubPackage subPackage, int status, String failReason) {
         MealPlanCustomer entity = new MealPlanCustomer();
@@ -448,6 +511,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return entity;
     }
 
+    /**
+     * 创建单次排餐主记录，初始状态为生成中。
+     */
     private MealPlan createMealPlan(LocalDate recordDate, String mealType, int totalCount) {
         MealPlan mealPlan = new MealPlan();
         mealPlan.setRecordDate(recordDate);
@@ -462,6 +528,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return mealPlan;
     }
 
+    /**
+     * 回填排餐统计信息并更新最终状态。
+     */
     private void updateMealPlanSummary(MealPlan mealPlan, int successCount, int failCount) {
         mealPlan.setSuccessCount(successCount);
         mealPlan.setFailCount(failCount);
@@ -469,6 +538,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         mealPlanMapper.updateById(mealPlan);
     }
 
+    /**
+     * 将内部排餐结果转换为接口返回对象。
+     */
     private MealPlanGenerateResult buildResult(MealPlan mealPlan, List<MealPlanGenerateResult.FailDetail> failDetails) {
         MealPlanGenerateResult result = new MealPlanGenerateResult();
         result.setMealPlanId(mealPlan.getId());
@@ -481,6 +553,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return result;
     }
 
+    /**
+     * 注册事务完成后的锁释放逻辑，避免在事务提交前释放同 key 生成锁。
+     */
     private void registerLockCleanup(String lockKey, Lock lock) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             lock.unlock();
@@ -498,10 +573,16 @@ public class MealPlanServiceImpl implements MealPlanService {
         });
     }
 
+    /**
+     * 构造同日期同餐次的本地锁 key。
+     */
     private String buildGenerateLockKey(LocalDate recordDate, String mealType) {
         return recordDate + "#" + mealType;
     }
 
+    /**
+     * 判断菜品配置的套餐标识是否匹配当前父套餐ID或套餐编码。
+     */
     private boolean matchesParentPackage(List<String> mealPackages, Long parentPackageId, String packageCode) {
         if (mealPackages == null || mealPackages.isEmpty()) {
             return false;
@@ -518,6 +599,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         return false;
     }
 
+    /**
+     * 解析订单中的配送日期JSON数组，异常时降级为空列表。
+     */
     private List<String> parseJsonArray(String json) {
         if (json == null || json.trim().isEmpty()) {
             return Collections.emptyList();
