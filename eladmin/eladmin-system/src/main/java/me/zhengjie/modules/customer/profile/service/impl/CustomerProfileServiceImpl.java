@@ -15,6 +15,7 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCrite
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.SecurityUtils;
@@ -27,8 +28,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -52,6 +55,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
     @Autowired
     private CustomerOrderMapper customerOrderMapper;
+
+    @Autowired
+    private CustomerProfilePackageMapper profilePackageMapper;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -160,6 +166,48 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profileMapper.updateById(profile);
 
         updateAddresses(profile.getId(), dto.getAddresses());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void delete(Set<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new BadRequestException("请选择要删除的客户");
+        }
+
+        // Step 1: 校验有效订单
+        List<Map<String, Object>> activeOrderCounts = customerOrderMapper.countActiveOrdersByCustomerIds(ids);
+        Map<Long, Integer> activeOrderMap = new HashMap<>();
+        for (Map<String, Object> row : activeOrderCounts) {
+            Object customerIdObj = row.get("customerId");
+            Object countObj = row.get("orderCount");
+            if (customerIdObj != null && countObj != null) {
+                activeOrderMap.put(((Number) customerIdObj).longValue(), ((Number) countObj).intValue());
+            }
+        }
+
+        List<String> blockedCustomers = new ArrayList<>();
+        for (Long customerId : ids) {
+            Integer count = activeOrderMap.getOrDefault(customerId, 0);
+            if (count > 0) {
+                CustomerProfile profile = profileMapper.selectById(customerId);
+                if (profile != null) {
+                    blockedCustomers.add(profile.getCustomerName());
+                }
+            }
+        }
+
+        if (!blockedCustomers.isEmpty()) {
+            throw new BadRequestException("以下客户存在进行中的订单，无法删除：" + String.join("、", blockedCustomers));
+        }
+
+        // Step 2: 级联删除
+        // 2a: 删除地址
+        addressMapper.delete(new QueryWrapper<me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress>().in("customer_id", ids));
+        // 2b: 删除签约记录
+        profilePackageMapper.delete(new QueryWrapper<me.zhengjie.modules.customer.profile.domain.CustomerProfilePackage>().in("customer_id", ids));
+        // 2c: 删除客户档案
+        profileMapper.deleteBatchIds(ids);
     }
 
     //
