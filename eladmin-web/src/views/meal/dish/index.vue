@@ -77,8 +77,8 @@
         </el-table-column>
         <el-table-column label="套餐" prop="mealPackages" align="center">
           <template slot-scope="scope">
-            <el-tag v-for="item in scope.row.mealPackages" :key="item" style="margin-right: 5px;">
-              {{ getMealPackageName(item) }}
+            <el-tag v-for="pkg in scope.row.mealPackageDetails" :key="pkg.packageCode" style="margin-right: 5px;">
+              {{ pkg.packageName }}
             </el-tag>
           </template>
         </el-table-column>
@@ -147,13 +147,6 @@ export default {
         mealType: null,
         mealPackage: null,
         enabled: null
-      },
-      mealPackageMap: {
-        yuezi: '月子餐',
-        yunqi: '孕期餐',
-        xiaoyuezi: '小月子',
-        yingyang: '营养餐',
-        fenmian: '分娩餐'
       }
     }
   },
@@ -215,9 +208,6 @@ export default {
         this.getList()
         this.$message.success('删除成功')
       }).catch(() => {})
-    },
-    getMealPackageName(code) {
-      return this.mealPackageMap[code] || code
     },
     formatSchedule(schedule) {
       if (!schedule || !schedule.length) return '-'
