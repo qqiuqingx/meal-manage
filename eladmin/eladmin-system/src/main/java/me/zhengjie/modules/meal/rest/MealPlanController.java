@@ -46,6 +46,12 @@ public class MealPlanController {
 
     private final MealPlanService mealPlanService;
 
+    /**
+     * 生成指定日期、指定餐次的排餐计划。
+     *
+     * @param request 排餐生成请求
+     * @return 排餐生成结果
+     */
     @Log("生成排餐计划")
     @ApiOperation("生成排餐计划")
     @PostMapping("/generate")
