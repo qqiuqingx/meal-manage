@@ -39,3 +39,13 @@ export function edit(data) {
   })
 }
 
+export function del(ids) {
+  return axios({
+    url: '/api/customerProfile',
+    method: 'delete',
+    data: ids
+  })
+}
+
+export default { getProfiles, getProfile, generateCode, add, edit, del }
+

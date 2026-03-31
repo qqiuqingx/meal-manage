@@ -6,6 +6,8 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCrite
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
 import me.zhengjie.utils.PageResult;
 
+import java.util.Set;
+
 /**
  * 客户档案服务接口
  */
@@ -30,6 +32,12 @@ public interface CustomerProfileService {
      * 更新客户档案
      */
     void update(CustomerProfileSaveDto dto);
+
+    /**
+     * 批量删除客户档案
+     * @param ids 客户ID集合
+     */
+    void delete(Set<Long> ids);
 
     /**
      * 生成客户编号
