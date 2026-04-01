@@ -1,0 +1,78 @@
+flowchart TD
+
+    A[开始\n输入 adate + mealType] --> B[参数校验\n校验日期和餐次]
+    B --> C[计算 scheduleKey\n例如 1-1 / 2-3 / 4-7]
+
+    C --> D[查询 dish 候选菜池\n条件: enabled=1]
+    D --> E[按 meal_types 过滤\n包含当前 mealType]
+    E --> F[按 schedule 过滤\n包含当前 scheduleKey]
+    F --> F1[按 meal_packages 过滤\n包含当前订单 parentPackageId]
+    F1 --> G[按 parentPackageId + dish_type 分组缓存\nMAIN / SIDE / VEGETABLE / SOUP / RICE]
+
+    G --> H[查询 customer_order 订单]
+    H --> I[筛选有效订单\nstatus=1\nremaining_count>0\nstart_date<=adate<=end_date]
+    I --> J[按 meal_type 过滤\nLUNCH / DINNER / ALL]
+
+    J --> K{schedule_mode 是什么?}
+
+    K -->|DAILY| L[通过]
+    K -->|WEEKDAY| M{adate 是否工作日?}
+    K -->|WEEKEND| N{adate 是否周末?}
+    K -->|SCHEDULE| O{adate 是否在 delivery_dates 中?}
+
+    M -->|是| L
+    M -->|否| P[跳过订单]
+
+    N -->|是| L
+    N -->|否| P
+
+    O -->|是| L
+    O -->|否| P
+
+    L --> Q[读取订单客户信息\ncustomer_id]
+    Q --> R[查询 customer_profile]
+    R --> S[读取 allergy_tags]
+
+    S --> T[查询 sub_package\n读取 meat_count / veg_count /\ninclude_soup / include_rice]
+
+    T --> U[初始化当前客户排餐上下文]
+    U --> V[从缓存菜池构造候选集合]
+
+    V --> W{meatCount 是多少?}
+    W -->|1| W1[筛选荤菜候选\nMAIN优先 SIDE兜底]
+    W -->|2| W2[筛选荤菜候选\n固定选择 MAIN + SIDE]
+    W -->|其他| W3[非法套餐配置]
+    W1 --> X[筛选素菜候选\nVEGETABLE]
+    W2 --> X
+    W3 --> AI
+    X --> Y[如需汤则筛选 SOUP]
+    Y --> Z[如需米饭则筛选 RICE]
+
+    Z --> AA[对每个候选菜查询配料\n来自 dish_ingredient_relation]
+    AA --> AB{是否命中过敏食材?}
+
+    AB -->|是| AC[移除当前菜品\n尝试下一个候选]
+    AB -->|否| AD[保留该菜品]
+
+    AC --> AE{当前类别是否还有候选?}
+    AE -->|有| AA
+    AE -->|无| AF[该类别菜品不足]
+
+    AD --> AG{是否满足子套餐要求?}
+    AF --> AG
+
+    AG -->|满足| AH[组装客户排餐结果]
+    AG -->|不满足| AI[记录失败原因\n如 MAIN+SIDE不足/素菜不足/过敏冲突]
+
+    AH --> AJ[写 meal_plan_customer 客户结果]
+    AJ --> AK[写 meal_plan_customer_item 菜品明细]
+    AK --> AL[处理下一个客户]
+
+    AI --> AM[写 meal_plan_customer 失败记录]
+    AM --> AL
+
+    AL --> AN{是否还有下一个订单/客户?}
+    AN -->|有| Q
+    AN -->|无| AO[更新 meal_plan 汇总\n总订单数/成功数/失败数]
+
+    AO --> AP[结束]

@@ -1,5 +1,6 @@
 package me.zhengjie.modules.customer.profile.domain.dto;
 
+import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
 
 /**
@@ -13,4 +14,10 @@ public class CustomerProfileQueryCriteria {
     private String phone;
     private Long parentPackageId;
     private Long childPackageId;
+
+    @ApiModelProperty(value = "页码（0基）")
+    private Integer page = 0;
+
+    @ApiModelProperty(value = "每页数量")
+    private Integer size = 10;
 }

@@ -5,6 +5,7 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
 import me.zhengjie.utils.PageResult;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import java.util.Set;
 
@@ -16,7 +17,7 @@ public interface CustomerProfileService {
     /**
      * 分页查询客户档案
      */
-    PageResult<CustomerProfile> query(CustomerProfileQueryCriteria criteria, Integer current, Integer size);
+    PageResult<CustomerProfile> queryAll(CustomerProfileQueryCriteria criteria, Page<Object> page);
 
     /**
      * 获取客户详情
