@@ -42,7 +42,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Create file storage directories and set ownership to ubuntu user
-RUN mkdir -p /home/eladmin/file /home/eladmin/avatar && \
+RUN mkdir -p /home/eladmin/file /home/eladmin/avatar /app/logs && \
     chown -R ubuntu:ubuntu /home/eladmin
 
 # Copy built JAR from the builder stage
