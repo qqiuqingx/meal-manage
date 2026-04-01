@@ -41,9 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Create file storage directories and set ownership to ubuntu user
+# Create runtime directories and grant the non-root user write access
 RUN mkdir -p /home/eladmin/file /home/eladmin/avatar /app/logs && \
-    chown -R ubuntu:ubuntu /home/eladmin
+    chown -R ubuntu:ubuntu /home/eladmin /app
 
 # Copy built JAR from the builder stage
 COPY --from=builder --chown=ubuntu:ubuntu /build/eladmin/eladmin-system/target/eladmin-system-1.1.jar /app/app.jar
