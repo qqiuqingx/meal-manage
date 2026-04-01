@@ -100,45 +100,108 @@ public class MealPlanServiceImpl implements MealPlanService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MealPlanGenerateResult generateMealPlan(String recordDate, String mealType) {
+        long startTime = System.currentTimeMillis();
+        log.info("开始生成排餐计划 - 日期: {}, 餐次: {}", recordDate, mealType);
+
         LocalDate targetDate = ScheduleKeyUtil.parseDate(recordDate);
         String normalizedMealType = validateParams(mealType);
         String lockKey = buildGenerateLockKey(targetDate, normalizedMealType);
+        log.debug("开始获取锁 - lockKey: {}", lockKey);
+
         Lock lock = GENERATE_LOCKS.computeIfAbsent(lockKey, key -> new ReentrantLock());
         lock.lock();
+        log.debug("成功获取锁 - lockKey: {}", lockKey);
         registerLockCleanup(lockKey, lock);
-        return doGenerateMealPlan(targetDate, normalizedMealType);
+
+        MealPlanGenerateResult result = doGenerateMealPlan(targetDate, normalizedMealType);
+
+        log.info("排餐计划生成完成 - 耗时: {}ms, 计划ID: {}, 成功数: {}, 失败数: {}",
+                System.currentTimeMillis() - startTime,
+                result.getMealPlanId(),
+                result.getSuccessCount(),
+                result.getFailCount());
+
+        return result;
     }
 
     /**
      * 执行排餐生成主流程：清理旧计划、加载候选数据、逐个订单生成并汇总结果。
      */
     private MealPlanGenerateResult doGenerateMealPlan(LocalDate targetDate, String mealType) {
-        softDeleteExistingPlan(targetDate, mealType);
-        List<CustomerOrder> orders = loadValidOrders(targetDate, mealType);
-        Map<Long, CustomerProfile> customerMap = loadCustomers(orders);
-        Map<Long, SubPackage> subPackageMap = loadSubPackages(orders);
-        Map<Long, ParentPackage> parentPackageMap = loadParentPackages(orders);
-        List<Dish> scheduledDishes = loadScheduledDishes(targetDate, mealType);
-        Map<Integer, Set<String>> dishIngredientMap = loadDishIngredients(scheduledDishes);
-        Map<Long, Map<String, List<Dish>>> candidateDishMap = buildCandidateDishPool(scheduledDishes, orders, parentPackageMap);
+        log.debug("开始执行排餐生成主流程 - 日期: {}, 餐次: {}", targetDate, mealType);
 
+        long startTime = System.currentTimeMillis();
+
+        // 步骤1: 清理旧计划
+        log.debug("开始清理旧排餐计划");
+        softDeleteExistingPlan(targetDate, mealType);
+        log.debug("旧排餐计划清理完成");
+
+        // 步骤2: 加载各种数据
+        log.debug("开始加载数据");
+        long dataLoadStart = System.currentTimeMillis();
+
+        List<CustomerOrder> orders = loadValidOrders(targetDate, mealType);
+        log.debug("加载有效订单完成 - 订单数量: {}", orders.size());
+
+        Map<Long, CustomerProfile> customerMap = loadCustomers(orders);
+        log.debug("加载客户档案完成 - 客户数量: {}", customerMap.size());
+
+        Map<Long, SubPackage> subPackageMap = loadSubPackages(orders);
+        log.debug("加载子套餐完成 - 套餐数量: {}", subPackageMap.size());
+
+        Map<Long, ParentPackage> parentPackageMap = loadParentPackages(orders);
+        log.debug("加载父套餐完成 - 套餐数量: {}", parentPackageMap.size());
+
+        List<Dish> scheduledDishes = loadScheduledDishes(targetDate, mealType);
+        log.debug("加载排期菜品完成 - 菜品数量: {}", scheduledDishes.size());
+
+        Map<Integer, Set<String>> dishIngredientMap = loadDishIngredients(scheduledDishes);
+        log.debug("加载菜品食材完成 - 菜品-食材关联数量: {}", dishIngredientMap.size());
+
+        Map<Long, Map<String, List<Dish>>> candidateDishMap = buildCandidateDishPool(scheduledDishes, orders, parentPackageMap);
+        log.debug("构建候选菜池完成 - 父套餐数量: {}", candidateDishMap.size());
+
+        log.debug("数据加载总耗时: {}ms", System.currentTimeMillis() - dataLoadStart);
+
+        // 步骤3: 创建排餐计划主记录
+        log.debug("创建排餐计划主记录");
         MealPlan mealPlan = createMealPlan(targetDate, mealType, orders.size());
+        log.info("创建排餐计划主记录成功 - ID: {}, 总订单数: {}", mealPlan.getId(), orders.size());
+
+        // 步骤4: 逐个处理订单
         List<MealPlanGenerateResult.FailDetail> failDetails = new ArrayList<>();
         int successCount = 0;
         int failCount = 0;
 
-        for (CustomerOrder order : orders) {
+        log.debug("开始处理订单，共{}个订单", orders.size());
+
+        for (int i = 0; i < orders.size(); i++) {
+            CustomerOrder order = orders.get(i);
+            log.debug("处理订单 {}/{} - 订单ID: {}, 客户ID: {}, 父套餐ID: {}, 子套餐ID: {}",
+                    i + 1, orders.size(),
+                    order.getId(),
+                    order.getCustomerId(),
+                    order.getParentPackageId(),
+                    order.getChildPackageId());
+
             CustomerProfile customer = customerMap.get(order.getCustomerId());
             SubPackage subPackage = subPackageMap.get(order.getChildPackageId());
             if (customer == null) {
+                log.warn("订单处理失败：客户档案不存在 - 订单ID: {}, 客户ID: {}",
+                        order.getId(), order.getCustomerId());
                 failCount += saveFailPlan(mealPlan.getId(), order, null, null, "客户档案不存在", failDetails);
                 continue;
             }
             if (subPackage == null) {
+                log.warn("订单处理失败：子套餐不存在 - 订单ID: {}, 子套餐ID: {}",
+                        order.getId(), order.getChildPackageId());
                 failCount += saveFailPlan(mealPlan.getId(), order, customer, null, "子套餐不存在", failDetails);
                 continue;
             }
             if (!parentPackageMap.containsKey(order.getParentPackageId())) {
+                log.warn("订单处理失败：父套餐不存在 - 订单ID: {}, 父套餐ID: {}",
+                        order.getId(), order.getParentPackageId());
                 failCount += saveFailPlan(mealPlan.getId(), order, customer, subPackage, "父套餐不存在", failDetails);
                 continue;
             }
@@ -147,12 +210,22 @@ public class MealPlanServiceImpl implements MealPlanService {
                 CustomerMealPlan customerPlan = buildCustomerPlan(order, customer, subPackage, candidateDishMap, dishIngredientMap);
                 saveSuccessPlan(mealPlan.getId(), order, customer, subPackage, customerPlan);
                 successCount++;
+                log.debug("订单处理成功 - 订单ID: {}", order.getId());
             } catch (BadRequestException e) {
+                log.warn("订单处理失败 - 订单ID: {}, 客户ID: {}, 失败原因: {}",
+                        order.getId(), order.getCustomerId(), e.getMessage());
                 failCount += saveFailPlan(mealPlan.getId(), order, customer, subPackage, e.getMessage(), failDetails);
             }
         }
 
+        log.debug("订单处理完成 - 成功: {}, 失败: {}", successCount, failCount);
+
+        // 步骤5: 更新汇总信息
+        log.debug("更新排餐计划汇总信息");
         updateMealPlanSummary(mealPlan, successCount, failCount);
+
+        log.debug("排餐生成主流程完成 - 总耗时: {}ms", System.currentTimeMillis() - startTime);
+
         return buildResult(mealPlan, failDetails);
     }
 
@@ -170,27 +243,52 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 对同日期同餐次的历史有效排餐做软删除，保证重新生成时只保留最新计划。
      */
     private void softDeleteExistingPlan(LocalDate recordDate, String mealType) {
+        log.debug("查询现有排餐计划 - 日期: {}, 餐次: {}", recordDate, mealType);
         MealPlan existingPlan = mealPlanMapper.findActiveByDateAndMealTypeForUpdate(recordDate, mealType);
         if (existingPlan == null) {
+            log.info("未找到现有排餐计划，跳过清理 - 日期: {}, 餐次: {}", recordDate, mealType);
             return;
         }
+
+        log.info("找到现有排餐计划，开始软删除 - 计划ID: {}, 日期: {}, 餐次: {}",
+                existingPlan.getId(), recordDate, mealType);
+
+        log.debug("软删除排餐计划明细表 - 计划ID: {}", existingPlan.getId());
         mealPlanMapper.softDeleteItemsByMealPlanId(existingPlan.getId());
+
+        log.debug("软删除排餐计划客户表 - 计划ID: {}", existingPlan.getId());
         mealPlanMapper.softDeleteCustomersByMealPlanId(existingPlan.getId());
+
+        log.debug("软删除排餐计划主表 - 计划ID: {}", existingPlan.getId());
         mealPlanMapper.softDeletePlanById(existingPlan.getId());
+
+        log.info("现有排餐计划软删除完成 - 计划ID: {}", existingPlan.getId());
     }
 
     /**
      * 查询满足日期、餐次和配送规则的订单候选。
      */
     private List<CustomerOrder> loadValidOrders(LocalDate targetDate, String mealType) {
+        long startTime = System.currentTimeMillis();
+        log.debug("查询候选订单 - 日期: {}, 餐次: {}", targetDate, mealType);
+
         List<CustomerOrder> candidateOrders = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
+        log.debug("查询到候选订单 - 数量: {}", candidateOrders.size());
+
         List<CustomerOrder> validOrders = new ArrayList<>();
         for (CustomerOrder order : candidateOrders) {
             if (!scheduleModeMatches(order, targetDate)) {
+                log.debug("订单不匹配配送模式 - 订单ID: {}, 配送模式: {}",
+                        order.getId(), order.getScheduleMode());
                 continue;
             }
             validOrders.add(order);
         }
+
+        log.debug("有效订单过滤完成 - 候选数: {}, 有效数: {}, 耗时: {}ms",
+                candidateOrders.size(), validOrders.size(),
+                System.currentTimeMillis() - startTime);
+
         return validOrders;
     }
 
@@ -220,16 +318,26 @@ public class MealPlanServiceImpl implements MealPlanService {
      */
     private Map<Long, CustomerProfile> loadCustomers(List<CustomerOrder> orders) {
         if (orders.isEmpty()) {
+            log.debug("订单列表为空，无需加载客户档案");
             return Collections.emptyMap();
         }
+
+        long startTime = System.currentTimeMillis();
         Set<Long> customerIds = orders.stream().map(CustomerOrder::getCustomerId).filter(Objects::nonNull).collect(Collectors.toSet());
+
         if (customerIds.isEmpty()) {
+            log.debug("订单中没有有效的客户ID，无需加载客户档案");
             return Collections.emptyMap();
         }
+
+        log.debug("批量查询客户档案 - 客户ID数量: {}", customerIds.size());
         Map<Long, CustomerProfile> customerMap = new HashMap<>();
         for (CustomerProfile customer : customerProfileMapper.findByIds(customerIds)) {
             customerMap.put(customer.getId(), customer);
         }
+
+        log.debug("客户档案加载完成 - 加载数: {}, 耗时: {}ms",
+                customerMap.size(), System.currentTimeMillis() - startTime);
         return customerMap;
     }
 
@@ -239,12 +347,18 @@ public class MealPlanServiceImpl implements MealPlanService {
     private Map<Long, SubPackage> loadSubPackages(List<CustomerOrder> orders) {
         Set<Long> ids = orders.stream().map(CustomerOrder::getChildPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
         if (ids.isEmpty()) {
+            log.debug("订单中没有有效的子套餐ID，无需加载子套餐数据");
             return Collections.emptyMap();
         }
+
+        long startTime = System.currentTimeMillis();
         Map<Long, SubPackage> packageMap = new HashMap<>();
         for (SubPackage subPackage : subPackageMapper.selectBatchIds(ids)) {
             packageMap.put(subPackage.getId(), subPackage);
         }
+
+        log.debug("子套餐加载完成 - 套餐ID数量: {}, 加载数: {}, 耗时: {}ms",
+                ids.size(), packageMap.size(), System.currentTimeMillis() - startTime);
         return packageMap;
     }
 
@@ -254,12 +368,18 @@ public class MealPlanServiceImpl implements MealPlanService {
     private Map<Long, ParentPackage> loadParentPackages(List<CustomerOrder> orders) {
         Set<Long> ids = orders.stream().map(CustomerOrder::getParentPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
         if (ids.isEmpty()) {
+            log.debug("订单中没有有效的父套餐ID，无需加载父套餐数据");
             return Collections.emptyMap();
         }
+
+        long startTime = System.currentTimeMillis();
         Map<Long, ParentPackage> packageMap = new HashMap<>();
         for (ParentPackage parentPackage : parentPackageMapper.selectBatchIds(ids)) {
             packageMap.put(parentPackage.getId(), parentPackage);
         }
+
+        log.debug("父套餐加载完成 - 套餐ID数量: {}, 加载数: {}, 耗时: {}ms",
+                ids.size(), packageMap.size(), System.currentTimeMillis() - startTime);
         return packageMap;
     }
 
@@ -267,25 +387,42 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 按父套餐归类候选菜池，供后续客户排餐复用。
      */
     private Map<Long, Map<String, List<Dish>>> buildCandidateDishPool(List<Dish> scheduledDishes, List<CustomerOrder> orders,
-                                                                       Map<Long, ParentPackage> parentPackageMap) {
+                                                                     Map<Long, ParentPackage> parentPackageMap) {
         Set<Long> parentPackageIds = orders.stream().map(CustomerOrder::getParentPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
         if (parentPackageIds.isEmpty() || scheduledDishes.isEmpty()) {
+            log.debug("父套餐ID为空或排期菜品为空，跳过构建候选菜池");
             return Collections.emptyMap();
         }
+
+        long startTime = System.currentTimeMillis();
         Map<Long, Map<String, List<Dish>>> candidateDishMap = new HashMap<>();
+
+        log.debug("开始构建候选菜池 - 父套餐ID数量: {}, 排期菜品数量: {}",
+                parentPackageIds.size(), scheduledDishes.size());
+
         for (Long parentPackageId : parentPackageIds) {
             ParentPackage parentPackage = parentPackageMap.get(parentPackageId);
             String packageCode = parentPackage != null ? parentPackage.getPackageCode() : null;
             Map<String, List<Dish>> dishTypeMap = new HashMap<>();
+
+            int matchedDishes = 0;
             for (Dish dish : scheduledDishes) {
                 if (!matchesParentPackage(dish.getMealPackages(), parentPackageId, packageCode)) {
                     continue;
                 }
                 dishTypeMap.computeIfAbsent(dish.getDishType(), key -> new ArrayList<>()).add(dish);
+                matchedDishes++;
             }
+
             sortDishTypeMap(dishTypeMap);
             candidateDishMap.put(parentPackageId, dishTypeMap);
+
+            log.debug("父套餐 {} 的候选菜池构建完成 - 匹配菜品数: {}, 菜品类型数: {}",
+                    parentPackageId, matchedDishes, dishTypeMap.size());
         }
+
+        log.debug("候选菜池构建完成 - 父套餐数: {}, 总耗时: {}ms",
+                candidateDishMap.size(), System.currentTimeMillis() - startTime);
         return candidateDishMap;
     }
 
@@ -293,7 +430,20 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 按排期和餐次查询当日候选菜品。
      */
     private List<Dish> loadScheduledDishes(LocalDate targetDate, String mealType) {
-        return dishMapper.findBySchedule(ScheduleKeyUtil.calcWeek(targetDate), ScheduleKeyUtil.calcDay(targetDate), mealType);
+        long startTime = System.currentTimeMillis();
+        log.debug("查询排期菜品 - 周序号: {}, 星期: {}, 餐次: {}",
+                ScheduleKeyUtil.calcWeek(targetDate),
+                ScheduleKeyUtil.calcDay(targetDate),
+                mealType);
+
+        List<Dish> scheduledDishes = dishMapper.findBySchedule(
+                ScheduleKeyUtil.calcWeek(targetDate),
+                ScheduleKeyUtil.calcDay(targetDate),
+                mealType);
+
+        log.debug("排期菜品查询完成 - 数量: {}, 耗时: {}ms",
+                scheduledDishes.size(), System.currentTimeMillis() - startTime);
+        return scheduledDishes;
     }
 
     /**
@@ -317,13 +467,21 @@ public class MealPlanServiceImpl implements MealPlanService {
     private Map<Integer, Set<String>> loadDishIngredients(List<Dish> dishes) {
         List<Integer> dishIds = dishes.stream().map(Dish::getId).filter(Objects::nonNull).collect(Collectors.toList());
         if (dishIds.isEmpty()) {
+            log.debug("菜品列表为空，无需加载食材信息");
             return Collections.emptyMap();
         }
+
+        long startTime = System.currentTimeMillis();
         List<DishIngredientRelation> relations = dishIngredientMapper.findRelationsByDishIds(dishIds);
+        log.debug("查询到食材关联关系 - 数量: {}", relations.size());
+
         Map<Integer, Set<String>> dishIngredients = new HashMap<>();
         for (DishIngredientRelation relation : relations) {
             dishIngredients.computeIfAbsent(relation.getDishId(), key -> new LinkedHashSet<>()).add(relation.getIngredientName());
         }
+
+        log.debug("菜品食材加载完成 - 菜品数: {}, 食材关联数: {}, 耗时: {}ms",
+                dishIds.size(), dishIngredients.size(), System.currentTimeMillis() - startTime);
         return dishIngredients;
     }
 
@@ -460,8 +618,12 @@ public class MealPlanServiceImpl implements MealPlanService {
      */
     private void saveSuccessPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
                                  CustomerMealPlan customerPlan) {
+        log.debug("保存成功排餐计划 - 计划ID: {}, 订单ID: {}, 客户ID: {}",
+                mealPlanId, order.getId(), order.getCustomerId());
+
         MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, subPackage, 1, "");
         mealPlanCustomerMapper.insert(entity);
+
         int seq = 1;
         for (SelectedDish selectedDish : customerPlan.getSelectedDishes()) {
             MealPlanCustomerItem item = new MealPlanCustomerItem();
@@ -472,7 +634,14 @@ public class MealPlanServiceImpl implements MealPlanService {
             item.setSeq(seq++);
             item.setDeleted(false);
             mealPlanCustomerItemMapper.insert(item);
+
+            log.debug("保存客户菜品明细 - 客户计划ID: {}, 菜品ID: {}, 菜品类型: {}, 菜品名称: {}",
+                    entity.getId(), selectedDish.getDish().getId(),
+                    selectedDish.getDishType(), selectedDish.getDish().getName());
         }
+
+        log.debug("成功排餐计划保存完成 - 客户计划ID: {}, 选菜数量: {}",
+                entity.getId(), customerPlan.getSelectedDishes().size());
     }
 
     /**
@@ -480,11 +649,19 @@ public class MealPlanServiceImpl implements MealPlanService {
      */
     private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
                              String failReason, List<MealPlanGenerateResult.FailDetail> failDetails) {
+        log.debug("保存失败排餐计划 - 计划ID: {}, 订单ID: {}, 客户ID: {}, 失败原因: {}",
+                mealPlanId, order.getId(),
+                customer != null ? customer.getId() : order.getCustomerId(),
+                failReason);
+
         MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, subPackage, 0, failReason);
         mealPlanCustomerMapper.insert(entity);
+
         MealPlanGenerateResult.FailDetail failDetail = new MealPlanGenerateResult.FailDetail();
         failDetail.setFailReason(failReason);
         failDetails.add(failDetail);
+
+        log.warn("排餐计划保存失败 - 客户计划ID: {}, 失败原因: {}", entity.getId(), failReason);
         return 1;
     }
 
@@ -515,6 +692,8 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 创建单次排餐主记录，初始状态为生成中。
      */
     private MealPlan createMealPlan(LocalDate recordDate, String mealType, int totalCount) {
+        log.info("创建排餐计划主记录 - 日期: {}, 餐次: {}, 订单总数: {}", recordDate, mealType, totalCount);
+
         MealPlan mealPlan = new MealPlan();
         mealPlan.setRecordDate(recordDate);
         mealPlan.setMealType(mealType);
@@ -525,6 +704,8 @@ public class MealPlanServiceImpl implements MealPlanService {
         mealPlan.setGenerateTime(new Timestamp(System.currentTimeMillis()));
         mealPlan.setDeleted(false);
         mealPlanMapper.insert(mealPlan);
+
+        log.info("排餐计划主记录创建成功 - 计划ID: {}", mealPlan.getId());
         return mealPlan;
     }
 
@@ -532,10 +713,17 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 回填排餐统计信息并更新最终状态。
      */
     private void updateMealPlanSummary(MealPlan mealPlan, int successCount, int failCount) {
+        log.debug("更新排餐计划汇总信息 - 计划ID: {}, 成功数: {}, 失败数: {}",
+                mealPlan.getId(), successCount, failCount);
+
         mealPlan.setSuccessCount(successCount);
         mealPlan.setFailCount(failCount);
         mealPlan.setStatus(failCount > 0 ? PLAN_STATUS_FAILED : PLAN_STATUS_SUCCESS);
         mealPlanMapper.updateById(mealPlan);
+
+        String statusText = failCount > 0 ? "部分成功" : "全部成功";
+        log.info("排餐计划汇总信息更新完成 - 计划ID: {}, 最终状态: {}, 成功: {}, 失败: {}",
+                mealPlan.getId(), statusText, successCount, failCount);
     }
 
     /**
