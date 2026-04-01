@@ -56,7 +56,11 @@ deploy_compose() {
   require_file "$compose_file"
   require_file "$ENV_FILE"
 
-  log "rebuilding and starting containers"
+  # 生成镜像 tag，精确到分钟
+  export IMAGE_TAG
+  IMAGE_TAG=$(date '+%Y%m%d%H%M')
+
+  log "rebuilding and starting containers, image tag: $IMAGE_TAG"
   (
     cd "$DEPLOY_BASE_DIR"
     DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --build
