@@ -7,6 +7,7 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCrite
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.utils.PageResult;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -31,11 +32,11 @@ public class CustomerProfileController {
      */
     @GetMapping
     @PreAuthorize("@el.check('customerProfile:list')")
-    public ResponseEntity<PageResult<CustomerProfile>> query(
-            CustomerProfileQueryCriteria criteria,
-            @RequestParam(defaultValue = "1") Integer current,
-            @RequestParam(defaultValue = "10") Integer size) {
-        return ResponseEntity.ok(profileService.query(criteria, current, size));
+    public ResponseEntity<PageResult<CustomerProfile>> queryAll( CustomerProfileQueryCriteria criteria,
+                                                                 @RequestParam(defaultValue = "1") Integer page,
+                                                                 @RequestParam(defaultValue = "10") Integer size) {
+        Page<Object> page1 = new Page<>(page, size);
+        return ResponseEntity.ok(profileService.queryAll(criteria, page1));
     }
 
     /**

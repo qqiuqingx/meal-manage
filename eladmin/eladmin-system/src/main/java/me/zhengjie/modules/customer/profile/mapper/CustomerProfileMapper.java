@@ -16,6 +16,8 @@
 package me.zhengjie.modules.customer.profile.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
 import org.apache.ibatis.annotations.Mapper;
@@ -34,6 +36,11 @@ public interface CustomerProfileMapper extends BaseMapper<CustomerProfile> {
      * 条件查询客户档案列表
      */
     List<CustomerProfile> findAll(@Param("criteria") CustomerProfileQueryCriteria criteria);
+
+    /**
+     * 条件查询客户档案列表（分页）
+     */
+    IPage<CustomerProfile> findAll(@Param("criteria") CustomerProfileQueryCriteria criteria, Page<Object> page);
 
     /**
      * 根据客户编号查询(排除指定ID)

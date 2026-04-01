@@ -6,3 +6,6 @@ docker/volumes/
 .idea/*
 .DS_Store
 application.pid
+
+### Worktrees ###
+.worktrees/

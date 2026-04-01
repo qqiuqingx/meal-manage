@@ -1,0 +1,51 @@
+flowchart LR
+
+    subgraph API层
+        A1[接收 adate + mealType]
+        A2[参数校验]
+        A3[返回结果]
+    end
+
+    subgraph 菜池生成
+        B1[计算 scheduleKey]
+        B2[查询 dish]
+        B3[按 meal_types 过滤]
+        B4[按 schedule 过滤]
+        B5[按 meal_packages 过滤]
+        B6[按 parentPackageId + dish_type 分组缓存]
+    end
+
+    subgraph 订单筛选
+        C1[查询 customer_order]
+        C2[过滤 status / remaining_count]
+        C3[过滤 start_date / end_date]
+        C4[按 meal_type 过滤]
+        C5[按 schedule_mode 判断]
+    end
+
+    subgraph 客户规则
+        D1[查询 customer_profile]
+        D2[读取 allergy_tags]
+        D3[查询 sub_package]
+        D4[获取 meat_count / veg_count / 汤 / 米饭规则]
+    end
+
+    subgraph 排餐执行
+        E1[构造候选菜]
+        E2[查询 dish_ingredient_relation]
+        E3[过敏过滤]
+        E4[按套餐规则选菜\nmeatCount=1: MAIN优先SIDE兜底\nmeatCount=2: MAIN+SIDE]
+        E5[校验是否满足套餐]
+    end
+
+    subgraph 结果落库
+        F1[写 meal_plan_customer]
+        F2[写 meal_plan_customer_item]
+        F3[统计成功失败]
+    end
+
+    A1 --> A2 --> B1 --> B2 --> B3 --> B4 --> B5 --> B6
+    B6 --> C1 --> C2 --> C3 --> C4 --> C5
+    C5 --> D1 --> D2 --> D3 --> D4
+    D4 --> E1 --> E2 --> E3 --> E4 --> E5
+    E5 --> F1 --> F2 --> F3 --> A3
