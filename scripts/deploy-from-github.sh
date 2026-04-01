@@ -93,13 +93,14 @@ deploy_compose() {
       docker pull nginx:1.25-alpine || true
 
     # 串行构建 + 启动，避免并发内存不足
+    # 注意：up 必须显式指定服务，避免 backend 构建完成后 frontend 镜像尚未生成就被提前拉起
     log "building backend..."
     DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build backend
-    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --no-build
+    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --no-build backend
 
     log "building frontend..."
     DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build frontend
-    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --no-build
+    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --no-build frontend
   )
 }
 
