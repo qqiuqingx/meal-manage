@@ -25,7 +25,8 @@ ENV VUE_APP_BASE_API=${VUE_APP_BASE_API}
 RUN sed -i 's/NODE_OPTIONS=--openssl-legacy-provider //g' package.json
 
 # Build for production
-RUN npm run build:prod
+# 4GB server: limit Node.js heap to 2GB to avoid OOM in Docker container
+RUN node_modules/.bin/vue-cli-service build --max-old-space-size=2048
 
 # =============================================================================
 # Stage 2: Serve with Nginx
