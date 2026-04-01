@@ -35,7 +35,7 @@
       <el-table-column label="客户编号" prop="customerCode" width="100" />
       <el-table-column label="姓名" prop="customerName" width="100" />
       <el-table-column label="手机号" prop="phone" width="120" />
-      <el-table-column label="默认地址" prop="defaultAddress" min-width="150" />
+      <el-table-column label="地址" prop="defaultAddress" min-width="150" />
       <el-table-column label="孕周" prop="gestationalWeek" width="60" align="center" />
       <el-table-column label="早餐数" prop="breakfastCount" width="80" align="center" />
       <el-table-column label="午晚数" prop="lunchDinnerCount" width="80" align="center" />
