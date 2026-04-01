@@ -63,7 +63,15 @@ deploy_compose() {
   log "rebuilding and starting containers, image tag: $IMAGE_TAG"
   (
     cd "$DEPLOY_BASE_DIR"
-    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --build
+    # 停止所有容器，释放内存（4GB 服务器构建时不能有其他容器跑着）
+    docker compose -f "$compose_file" --env-file "$ENV_FILE" down || true
+
+    # 串行构建 + 启动，避免并发内存不足
+    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build backend
+    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --no-build
+
+    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build frontend
+    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --no-build
   )
 }
 
