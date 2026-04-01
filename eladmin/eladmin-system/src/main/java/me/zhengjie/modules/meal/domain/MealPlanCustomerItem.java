@@ -54,4 +54,16 @@ public class MealPlanCustomerItem extends BaseEntity {
 
     @ApiModelProperty(value = "是否删除")
     private Boolean deleted;
+
+    @ApiModelProperty(value = "是否发生了替换")
+    private Boolean isReplaced;
+
+    @ApiModelProperty(value = "原本想选的菜品ID")
+    private Integer originalDishId;
+
+    @ApiModelProperty(value = "原本想选的菜品名称")
+    private String originalDishName;
+
+    @ApiModelProperty(value = "替换原因：ALLERGY-过敏，NOT_FOUND-当日不足，NEXT_DAY-次日回退")
+    private String replaceReason;
 }
