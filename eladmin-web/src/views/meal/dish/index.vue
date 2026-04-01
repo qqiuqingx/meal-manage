@@ -28,11 +28,12 @@
         </el-form-item>
         <el-form-item label="套餐" prop="mealPackage">
           <el-select v-model="queryParams.mealPackage" placeholder="请选择套餐" clearable>
-            <el-option label="月子餐" value="yuezi" />
-            <el-option label="孕期餐" value="yunqi" />
-            <el-option label="小月子" value="xiaoyuezi" />
-            <el-option label="营养餐" value="yingyang" />
-            <el-option label="分娩餐" value="fenmian" />
+            <el-option
+              v-for="pkg in packageOptions"
+              :key="pkg.id"
+              :label="pkg.packageName"
+              :value="pkg.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="状态" prop="enabled">
@@ -121,7 +122,7 @@
 </template>
 
 <script>
-import { queryDishes, editDish, delDish } from '@/api/dish'
+import { queryDishes, editDish, delDish, queryPackages } from '@/api/dish'
 import DishForm from './dish'
 import Pagination from '@/components/Pagination'
 
@@ -133,6 +134,7 @@ export default {
   },
   data() {
     return {
+      packageOptions: [],
       loading: true,
       ids: [],
       single: true,
@@ -151,12 +153,27 @@ export default {
     }
   },
   created() {
+    this.loadPackages()
     this.getList()
   },
   methods: {
+    loadPackages() {
+      queryPackages().then(response => {
+        this.packageOptions = response || []
+      })
+    },
     getList() {
       this.loading = true
-      queryDishes(this.queryParams).then(response => {
+
+      // 过滤掉空字符串、null、undefined的参数
+      const params = {}
+      for (const key in this.queryParams) {
+        if (this.queryParams[key] !== '' && this.queryParams[key] !== null && this.queryParams[key] !== undefined) {
+          params[key] = this.queryParams[key]
+        }
+      }
+
+      queryDishes(params).then(response => {
         this.dishList = response.content || []
         this.total = response.totalElements || response.total || 0
         this.loading = false

@@ -436,12 +436,28 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 .orderByAsc("address_type")
         );
 
+        StringBuilder allAddresses = new StringBuilder();
         for (CustomerProfileAddress addr : addresses) {
-            if ("DEFAULT".equals(addr.getAddressType())) {
-                profile.setDefaultAddress(addr.getAddressDetail());
-                break;
+            if (StringUtils.isNotBlank(addr.getAddressDetail())) {
+                if (allAddresses.length() > 0) {
+                    allAddresses.append(", ");
+                }
+                allAddresses.append("[").append(getAddressTypeName(addr.getAddressType())).append("] ")
+                          .append(addr.getAddressDetail());
             }
         }
+        profile.setDefaultAddress(allAddresses.toString());
+    }
+
+    private String getAddressTypeName(String addressType) {
+        if ("DEFAULT".equals(addressType)) {
+            return "默认";
+        } else if ("WORKDAY".equals(addressType)) {
+            return "工作日";
+        } else if ("WEEKEND".equals(addressType)) {
+            return "周末";
+        }
+        return addressType;
     }
 
     private void fillLatestOrderInfo(CustomerProfile profile) {
