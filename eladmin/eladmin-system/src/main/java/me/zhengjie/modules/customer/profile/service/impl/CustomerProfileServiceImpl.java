@@ -1,6 +1,8 @@
 package me.zhengjie.modules.customer.profile.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
@@ -18,6 +20,7 @@ import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.utils.PageResult;
+import me.zhengjie.utils.PageUtil;
 import me.zhengjie.utils.SecurityUtils;
 import me.zhengjie.utils.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,24 +66,16 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     @Override
-    public PageResult<CustomerProfile> query(CustomerProfileQueryCriteria criteria, Integer current, Integer size) {
-        List<CustomerProfile> list = profileMapper.findAll(criteria);
+    public PageResult<CustomerProfile> queryAll(CustomerProfileQueryCriteria criteria, Page<Object> page) {
+        IPage<CustomerProfile> pageResult = profileMapper.findAll(criteria, page);
 
-        int total = list.size();
-        int fromIndex = (current - 1) * size;
-        int toIndex = Math.min(fromIndex + size, total);
 
-        if (fromIndex >= total) {
-            return new PageResult<>(new ArrayList<>(), total);
-        }
-
-        List<CustomerProfile> pageList = list.subList(fromIndex, toIndex);
-        for (CustomerProfile profile : pageList) {
+        for (CustomerProfile profile : pageResult.getRecords()) {
             fillDefaultAddress(profile);
             fillLatestOrderInfo(profile);
         }
-
-        return new PageResult<>(pageList, total);
+        PageResult<CustomerProfile> result = PageUtil.toPage(pageResult);
+        return result;
     }
 
     @Override
