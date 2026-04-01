@@ -50,6 +50,25 @@ prepare_repo() {
   fi
 }
 
+# 重试直到成功的辅助函数（用于拉取镜像，网络不稳定时用）
+retry_until_success() {
+  local max_attempts="${1:-3}"
+  local description="$2"
+  shift 2
+  local attempt=1
+  while (( attempt <= max_attempts )); do
+    log "[$attempt/$max_attempts] $description"
+    if "$@"; then
+      return 0
+    fi
+    log "failed, retrying in 30s..."
+    sleep 30
+    ((attempt++))
+  done
+  log "failed after $max_attempts attempts: $description"
+  return 1
+}
+
 deploy_compose() {
   local compose_file="$DEPLOY_BASE_DIR/$COMPOSE_FILE_REL"
 
@@ -66,10 +85,19 @@ deploy_compose() {
     # 停止所有容器，释放内存（4GB 服务器构建时不能有其他容器跑着）
     docker compose -f "$compose_file" --env-file "$ENV_FILE" down || true
 
+    # 先预拉取所有基础镜像（国内访问 Docker Hub 不稳定，提前拉取减少构建失败）
+    log "pre-pulling base images..."
+    retry_until_success 3 "pulling node:16" \
+      docker pull node:16 || true
+    retry_until_success 3 "pulling nginx:1.25-alpine" \
+      docker pull nginx:1.25-alpine || true
+
     # 串行构建 + 启动，避免并发内存不足
+    log "building backend..."
     DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build backend
     DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --no-build
 
+    log "building frontend..."
     DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build frontend
     DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --no-build
   )
