@@ -4,7 +4,7 @@ services:
   # Backend (Spring Boot JAR)
   # ------------------------------
   backend:
-    image: mealserver
+    image: mealserver:${IMAGE_TAG:-latest}
     build:
       context: ../
       dockerfile: docker/mealserver/Dockerfile
@@ -50,7 +50,7 @@ services:
   # Frontend (Nginx serving Vue SPA)
   # ------------------------------
   frontend:
-    image: mealweb
+    image: mealweb:${IMAGE_TAG:-latest}
     build:
       context: ../
       dockerfile: docker/mealweb/Dockerfile
