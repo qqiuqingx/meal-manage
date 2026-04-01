@@ -529,13 +529,14 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
         if (requiredCount == 1) {
             // 一荤: MAIN -> SIDE -> 次日MAIN -> 次日SIDE
-            Dish dish = selectDishWithFallback(DISH_TYPE_MAIN, DISH_TYPE_SIDE, selectedDishIds, allergyTags,
+            DishSelectResult result = selectDishWithFallback(DISH_TYPE_MAIN, DISH_TYPE_SIDE, selectedDishIds, allergyTags,
                     dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
-            if (dish == null) {
+            if (result == null || result.getDish() == null) {
                 throw new BadRequestException("荤菜不足");
             }
-            selectedDishes.add(new SelectedDish(dish.getDishType(), dish));
-            selectedDishIds.add(dish.getId());
+            selectedDishes.add(new SelectedDish(result.getDish().getDishType(), result.getDish(),
+                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason()));
+            selectedDishIds.add(result.getDish().getId());
             return;
         }
         if (requiredCount != 2) {
@@ -546,9 +547,17 @@ public class MealPlanServiceImpl implements MealPlanService {
         Dish mainDish = selectDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, allergyTags, dishIngredientMap);
         Dish sideDish = selectDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, dishIngredientMap);
 
+        // 记录原本想选的菜品
+        Dish originalMainDish = mainDish;
+        Dish originalSideDish = sideDish;
+        String mainReplaceReason = null;
+        String sideReplaceReason = null;
+
         // 回退1: MAIN过敏，用SIDE作为MAIN
         if (mainDish == null && sideDish != null) {
             log.info("主菜全部过敏，改用副菜作为主菜");
+            originalMainDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
+            mainReplaceReason = "ALLERGY";
             mainDish = sideDish;
             sideDish = null; // 重新选择SIDE
         }
@@ -566,15 +575,23 @@ public class MealPlanServiceImpl implements MealPlanService {
                     nextDayDishTypeMap.values().stream().flatMap(List::stream).collect(Collectors.toList()));
 
             if (mainDish == null) {
+                if (originalMainDish == null) {
+                    originalMainDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
+                }
                 mainDish = selectDish(nextDayDishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, allergyTags, nextDayIngredients);
                 if (mainDish != null) {
                     log.info("次日主菜选择成功 - 菜品: {}", mainDish.getName());
+                    mainReplaceReason = mainReplaceReason == null ? "NEXT_DAY" : mainReplaceReason;
                 }
             }
             if (sideDish == null) {
+                if (originalSideDish == null) {
+                    originalSideDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, dishIngredientMap);
+                }
                 sideDish = selectDish(nextDayDishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, nextDayIngredients);
                 if (sideDish != null) {
                     log.info("次日副菜选择成功 - 菜品: {}", sideDish.getName());
+                    sideReplaceReason = sideReplaceReason == null ? "NEXT_DAY" : sideReplaceReason;
                 }
             }
         }
@@ -582,8 +599,10 @@ public class MealPlanServiceImpl implements MealPlanService {
         if (mainDish == null || sideDish == null) {
             throw new BadRequestException("荤菜不足，必须同时选出主菜和副菜");
         }
-        selectedDishes.add(new SelectedDish(DISH_TYPE_MAIN, mainDish));
-        selectedDishes.add(new SelectedDish(DISH_TYPE_SIDE, sideDish));
+        selectedDishes.add(new SelectedDish(DISH_TYPE_MAIN, mainDish,
+                mainReplaceReason != null, originalMainDish, mainReplaceReason));
+        selectedDishes.add(new SelectedDish(DISH_TYPE_SIDE, sideDish,
+                sideReplaceReason != null, originalSideDish, sideReplaceReason));
         selectedDishIds.add(mainDish.getId());
         selectedDishIds.add(sideDish.getId());
     }
@@ -596,13 +615,14 @@ public class MealPlanServiceImpl implements MealPlanService {
                                 LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap) {
         int requiredCount = vegCount == null ? 0 : vegCount;
         for (int i = 0; i < requiredCount; i++) {
-            Dish dish = selectDishWithFallback(DISH_TYPE_VEGETABLE, null, selectedDishIds, allergyTags,
+            DishSelectResult result = selectDishWithFallback(DISH_TYPE_VEGETABLE, null, selectedDishIds, allergyTags,
                     dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
-            if (dish == null) {
+            if (result == null || result.getDish() == null) {
                 throw new BadRequestException("素菜不足");
             }
-            selectedDishes.add(new SelectedDish(DISH_TYPE_VEGETABLE, dish));
-            selectedDishIds.add(dish.getId());
+            selectedDishes.add(new SelectedDish(DISH_TYPE_VEGETABLE, result.getDish(),
+                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason()));
+            selectedDishIds.add(result.getDish().getId());
         }
     }
 
@@ -616,13 +636,14 @@ public class MealPlanServiceImpl implements MealPlanService {
             return;
         }
         // log.info("pickOptionalDish_dishTypeMap:"+JSONUtil.toJsonStr(dishTypeMap));
-        Dish dish = selectDishWithFallback(dishType, null, selectedDishIds, allergyTags,
+        DishSelectResult result = selectDishWithFallback(dishType, null, selectedDishIds, allergyTags,
                 dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
-        if (dish == null) {
+        if (result == null || result.getDish() == null) {
             throw new BadRequestException(dishType + "类型菜品不足");
         }
-        selectedDishes.add(new SelectedDish(dishType, dish));
-        selectedDishIds.add(dish.getId());
+        selectedDishes.add(new SelectedDish(dishType, result.getDish(),
+                result.isReplaced(), result.getOriginalDish(), result.getReplaceReason()));
+        selectedDishIds.add(result.getDish().getId());
     }
 
     /**
@@ -637,9 +658,9 @@ public class MealPlanServiceImpl implements MealPlanService {
      * @param mealType 餐次
      * @param parentPackageId 父套餐ID
      * @param parentPackageMap 父套餐映射
-     * @return 选中的菜品，如果都无法选择则返回 null
+     * @return 菜品选择结果，包含选中的菜品和替换信息
      */
-    private Dish selectDishWithFallback(String primaryType, String fallbackType, Set<Integer> selectedDishIds,
+    private DishSelectResult selectDishWithFallback(String primaryType, String fallbackType, Set<Integer> selectedDishIds,
                                        List<String> allergyTags, Map<String, List<Dish>> dishTypeMap,
                                        Map<Integer, Set<String>> dishIngredientMap,
                                        LocalDate targetDate, String mealType, Long parentPackageId,
@@ -647,15 +668,17 @@ public class MealPlanServiceImpl implements MealPlanService {
         // 尝试首选类型
         Dish dish = selectDish(dishTypeMap.get(primaryType), selectedDishIds, allergyTags, dishIngredientMap);
         if (dish != null) {
-            return dish;
+            return DishSelectResult.noReplace(dish);
         }
 
         // 尝试次选类型
         if (fallbackType != null) {
+            // 记录原本想选的菜品（首选类型的第一个候选）
+            Dish originalDish = getFirstAvailableDish(dishTypeMap.get(primaryType), selectedDishIds, dishIngredientMap);
             log.info("{}类型菜品全部过敏，改用{}类型", primaryType, fallbackType);
             dish = selectDish(dishTypeMap.get(fallbackType), selectedDishIds, allergyTags, dishIngredientMap);
             if (dish != null) {
-                return dish;
+                return DishSelectResult.withReplace(dish, originalDish, "ALLERGY");
             }
         }
 
@@ -669,11 +692,17 @@ public class MealPlanServiceImpl implements MealPlanService {
         Map<Integer, Set<String>> nextDayIngredients = loadDishIngredients(
                 nextDayDishTypeMap.values().stream().flatMap(List::stream).collect(Collectors.toList()));
 
+        // 记录原本想选的菜品
+        Dish originalDish = getFirstAvailableDish(dishTypeMap.get(primaryType), selectedDishIds, dishIngredientMap);
+        if (originalDish == null && fallbackType != null) {
+            originalDish = getFirstAvailableDish(dishTypeMap.get(fallbackType), selectedDishIds, dishIngredientMap);
+        }
+
         // 优先尝试次日首选类型
         dish = selectDish(nextDayDishTypeMap.get(primaryType), selectedDishIds, allergyTags, nextDayIngredients);
         if (dish != null) {
             log.info("次日{}类型选择成功 - 菜品: {}", primaryType, dish.getName());
-            return dish;
+            return DishSelectResult.withReplace(dish, originalDish, "NEXT_DAY");
         }
 
         // 如果次选类型存在，尝试次日次选类型
@@ -681,10 +710,25 @@ public class MealPlanServiceImpl implements MealPlanService {
             dish = selectDish(nextDayDishTypeMap.get(fallbackType), selectedDishIds, allergyTags, nextDayIngredients);
             if (dish != null) {
                 log.info("次日{}类型选择成功 - 菜品: {}", fallbackType, dish.getName());
-                return dish;
+                return DishSelectResult.withReplace(dish, originalDish, "NEXT_DAY");
             }
         }
 
+        return null;
+    }
+
+    /**
+     * 获取候选列表中第一个可用的菜品（未选中且不过敏）
+     */
+    private Dish getFirstAvailableDish(List<Dish> dishes, Set<Integer> selectedDishIds, Map<Integer, Set<String>> dishIngredientMap) {
+        if (dishes == null || dishes.isEmpty()) {
+            return null;
+        }
+        for (Dish dish : dishes) {
+            if (!selectedDishIds.contains(dish.getId())) {
+                return dish;
+            }
+        }
         return null;
     }
 
@@ -778,11 +822,21 @@ public class MealPlanServiceImpl implements MealPlanService {
             item.setDishName(selectedDish.getDish().getName());
             item.setSeq(seq++);
             item.setDeleted(false);
+            // 记录替换信息
+            if (selectedDish.isReplaced()) {
+                item.setIsReplaced(true);
+                if (selectedDish.getOriginalDish() != null) {
+                    item.setOriginalDishId(selectedDish.getOriginalDish().getId());
+                    item.setOriginalDishName(selectedDish.getOriginalDish().getName());
+                }
+                item.setReplaceReason(selectedDish.getReplaceReason());
+            }
             mealPlanCustomerItemMapper.insert(item);
 
-            log.debug("保存客户菜品明细 - 客户计划ID: {}, 菜品ID: {}, 菜品类型: {}, 菜品名称: {}",
+            log.debug("保存客户菜品明细 - 客户计划ID: {}, 菜品ID: {}, 菜品类型: {}, 菜品名称: {}, 是否替换: {}, 替换原因: {}",
                     entity.getCustomerName(), selectedDish.getDish().getId(),
-                    selectedDish.getDishType(), selectedDish.getDish().getName());
+                    selectedDish.getDishType(), selectedDish.getDish().getName(),
+                    selectedDish.isReplaced(), selectedDish.getReplaceReason());
         }
 
         log.debug("成功排餐计划保存完成 - 客户计划ID: {}, 选菜数量: {}",
@@ -959,13 +1013,68 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
     }
 
+    /**
+     * 菜品选择结果，包含选中的菜品和替换信息
+     */
+    private static class DishSelectResult {
+        private final Dish dish;
+        private final boolean isReplaced;
+        private final Dish originalDish;
+        private final String replaceReason;
+
+        private DishSelectResult(Dish dish, boolean isReplaced, Dish originalDish, String replaceReason) {
+            this.dish = dish;
+            this.isReplaced = isReplaced;
+            this.originalDish = originalDish;
+            this.replaceReason = replaceReason;
+        }
+
+        public static DishSelectResult noReplace(Dish dish) {
+            return new DishSelectResult(dish, false, null, null);
+        }
+
+        public static DishSelectResult withReplace(Dish dish, Dish originalDish, String reason) {
+            return new DishSelectResult(dish, true, originalDish, reason);
+        }
+
+        public Dish getDish() {
+            return dish;
+        }
+
+        public boolean isReplaced() {
+            return isReplaced;
+        }
+
+        public Dish getOriginalDish() {
+            return originalDish;
+        }
+
+        public String getReplaceReason() {
+            return replaceReason;
+        }
+    }
+
     private static class SelectedDish {
         private final String dishType;
         private final Dish dish;
+        private final boolean isReplaced;
+        private final Dish originalDish;
+        private final String replaceReason;
 
         private SelectedDish(String dishType, Dish dish) {
             this.dishType = dishType;
             this.dish = dish;
+            this.isReplaced = false;
+            this.originalDish = null;
+            this.replaceReason = null;
+        }
+
+        private SelectedDish(String dishType, Dish dish, boolean isReplaced, Dish originalDish, String replaceReason) {
+            this.dishType = dishType;
+            this.dish = dish;
+            this.isReplaced = isReplaced;
+            this.originalDish = originalDish;
+            this.replaceReason = replaceReason;
         }
 
         public String getDishType() {
@@ -974,6 +1083,18 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         public Dish getDish() {
             return dish;
+        }
+
+        public boolean isReplaced() {
+            return isReplaced;
+        }
+
+        public Dish getOriginalDish() {
+            return originalDish;
+        }
+
+        public String getReplaceReason() {
+            return replaceReason;
         }
     }
 }
