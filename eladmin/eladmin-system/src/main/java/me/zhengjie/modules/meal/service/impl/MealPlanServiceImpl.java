@@ -186,12 +186,13 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         for (int i = 0; i < orders.size(); i++) {
             CustomerOrder order = orders.get(i);
-            log.debug("处理订单 {}/{} - 订单ID: {}, 客户ID: {}, 父套餐ID: {}, 子套餐ID: {}",
+            log.info("处理订单 {}/{} - 订单ID: {}, 客户ID: {},客户code{}, 父套餐ID: {}, 子套餐ID: {}",
                     i + 1, orders.size(),
                     order.getId(),
-                    order.getCustomerName(),
+                    customerMap.get(order.getCustomerId()).getCustomerCode(),
+                    customerMap.get(order.getCustomerId()).getCustomerName(),
                     order.getParentPackageName(),
-                    order.getChildPackageName());
+                    subPackageMap.get(order.getChildPackageId()).getSubPackageName());
 
             CustomerProfile customer = customerMap.get(order.getCustomerId());
             SubPackage subPackage = subPackageMap.get(order.getChildPackageId());
@@ -1133,7 +1134,44 @@ public class MealPlanServiceImpl implements MealPlanService {
     @Override
     public List<MealPlanCustomerItemVO> queryCustomerItems(Long customerPlanId) {
         List<MealPlanCustomerItem> items = mealPlanCustomerItemMapper.selectByCustomerPlanId(customerPlanId);
-        return items.stream().map(this::convertToVO).collect(Collectors.toList());
+        if (items.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 收集所有 dishId，批量查询配料
+        List<Integer> dishIds = items.stream()
+                .map(MealPlanCustomerItem::getDishId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> finalIngredientsMap =
+                buildDishIngredientsMap(dishIds);
+
+        return items.stream()
+                .map(item -> convertToVO(item, finalIngredientsMap))
+                .collect(Collectors.toList());
+    }
+
+    private Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> buildDishIngredientsMap(List<Integer> dishIds) {
+        if (dishIds == null || dishIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<me.zhengjie.modules.meal.domain.DishIngredientRelation> relations =
+                dishIngredientMapper.findRelationsByDishIds(dishIds);
+
+        Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> result = new HashMap<>();
+        for (me.zhengjie.modules.meal.domain.DishIngredientRelation relation : relations) {
+            me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO vo =
+                    new me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO();
+            vo.setIngredientId(relation.getIngredientId());
+            vo.setIngredientName(relation.getIngredientName());
+            vo.setUnit(relation.getUnit());
+            vo.setQuantity(relation.getQuantity());
+            vo.setRemark(relation.getRemark());
+            result.computeIfAbsent(relation.getDishId(), k -> new ArrayList<>()).add(vo);
+        }
+        return result;
     }
 
     private MealPlanCustomerItemVO convertToVO(MealPlanCustomerItem item) {
@@ -1147,6 +1185,14 @@ public class MealPlanServiceImpl implements MealPlanService {
         vo.setOriginalDishId(item.getOriginalDishId());
         vo.setOriginalDishName(item.getOriginalDishName());
         vo.setReplaceReason(item.getReplaceReason());
+        return vo;
+    }
+
+    private MealPlanCustomerItemVO convertToVO(
+            MealPlanCustomerItem item,
+            Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> ingredientsMap) {
+        MealPlanCustomerItemVO vo = convertToVO(item);
+        vo.setIngredients(ingredientsMap.getOrDefault(item.getDishId(), Collections.emptyList()));
         return vo;
     }
 
@@ -1242,6 +1288,21 @@ public class MealPlanServiceImpl implements MealPlanService {
             itemsMap = Collections.emptyMap();
         }
 
+        // 批量查询所有菜品的配料
+        List<Integer> allDishIds = Collections.emptyList();
+        if (!itemsMap.isEmpty()) {
+            Set<Integer> dishIds = itemsMap.values().stream()
+                    .flatMap(List::stream)
+                    .map(MealPlanCustomerItem::getDishId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            if (!dishIds.isEmpty()) {
+                allDishIds = new ArrayList<>(dishIds);
+            }
+        }
+        Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> finalIngredientsMap =
+                buildDishIngredientsMap(allDishIds);
+
         // 组装返回结果
         MealPlanDetailVO result = new MealPlanDetailVO();
 
@@ -1277,7 +1338,7 @@ public class MealPlanServiceImpl implements MealPlanService {
                     // 设置菜品明细
                     List<MealPlanCustomerItem> items = itemsMap.getOrDefault(customerId, Collections.emptyList());
                     List<MealPlanCustomerItemVO> itemVOs = items.stream()
-                            .map(this::convertToVO)
+                            .map(item -> convertToVO(item, finalIngredientsMap))
                             .collect(Collectors.toList());
                     detail.setItems(itemVOs);
 
