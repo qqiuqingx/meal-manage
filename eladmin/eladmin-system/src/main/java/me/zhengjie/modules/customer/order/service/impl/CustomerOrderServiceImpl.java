@@ -236,6 +236,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
      */
     private void buildOrderEntity(CustomerOrder order, CustomerOrderSaveDto dto) {
         order.setCustomerId(dto.getCustomerId());
+        order.setParentPackageId(dto.getParentPackageId());
+        order.setChildPackageId(dto.getChildPackageId());
         order.setDepositAmount(dto.getDepositAmount());
         order.setTotalAmount(dto.getTotalAmount());
         order.setFinalAmount(dto.getFinalAmount());

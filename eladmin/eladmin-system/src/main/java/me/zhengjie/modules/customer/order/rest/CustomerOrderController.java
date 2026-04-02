@@ -66,7 +66,7 @@ public class CustomerOrderController {
     @PostMapping("/validate")
     @PreAuthorize("@el.check('customerOrder:add')")
     public ResponseEntity<Void> validateOrder(@Validated @RequestBody CustomerOrderSaveDto dto) {
-        orderService.validateOrderConflict(dto, null);
+        orderService.validateOrderConflict(dto, dto.getId());
         return ResponseEntity.ok().build();
     }
 
