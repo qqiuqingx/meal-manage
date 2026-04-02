@@ -7,3 +7,26 @@ export function generateMealPlan(data) {
     data
   })
 }
+
+export function getMealPlanList(params) {
+  return request({
+    url: '/api/meal-plan',
+    method: 'get',
+    params
+  })
+}
+
+export function getMealPlanFullDetail(id) {
+  return request({
+    url: `/api/meal-plan/${id}/detail`,
+    method: 'get'
+  })
+}
+
+export function delMealPlan(params) {
+  return request({
+    url: '/api/meal-plan',
+    method: 'delete',
+    params
+  })
+}
