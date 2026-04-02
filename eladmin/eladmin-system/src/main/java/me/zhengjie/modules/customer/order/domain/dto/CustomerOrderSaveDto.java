@@ -27,6 +27,16 @@ public class CustomerOrderSaveDto implements Serializable {
     private Long customerId;
 
     /**
+     * 父套餐ID
+     */
+    private Long parentPackageId;
+
+    /**
+     * 子套餐ID
+     */
+    private Long childPackageId;
+
+    /**
      * 订单编号
      */
     private String orderCode;
