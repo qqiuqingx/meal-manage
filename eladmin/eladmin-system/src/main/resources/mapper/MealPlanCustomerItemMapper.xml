@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="me.zhengjie.modules.meal.mapper.MealPlanCustomerItemMapper">
+
+    <resultMap id="BaseResultMap" type="me.zhengjie.modules.meal.domain.MealPlanCustomerItem">
+        <id column="id" property="id"/>
+        <result column="customer_plan_id" property="customerPlanId"/>
+        <result column="dish_type" property="dishType"/>
+        <result column="dish_id" property="dishId"/>
+        <result column="dish_name" property="dishName"/>
+        <result column="seq" property="seq"/>
+        <result column="deleted" property="deleted"/>
+        <result column="is_replaced" property="isReplaced"/>
+        <result column="original_dish_id" property="originalDishId"/>
+        <result column="original_dish_name" property="originalDishName"/>
+        <result column="replace_reason" property="replaceReason"/>
+        <result column="create_by" property="createBy"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectByCustomerPlanId" resultMap="BaseResultMap">
+        select id, customer_plan_id, dish_type, dish_id, dish_name, seq, deleted,
+               is_replaced, original_dish_id, original_dish_name, replace_reason,
+               create_by, update_by, create_time, update_time
+        from meal_plan_customer_item
+        where customer_plan_id = #{customerPlanId}
+          and deleted = 0
+        order by seq asc
+    </select>
+
+    <select id="selectByCustomerPlanIds" resultMap="BaseResultMap">
+        select id, customer_plan_id, dish_type, dish_id, dish_name, seq, deleted,
+               is_replaced, original_dish_id, original_dish_name, replace_reason,
+               create_by, update_by, create_time, update_time
+        from meal_plan_customer_item
+        where customer_plan_id in
+        <foreach collection="customerPlanIds" item="customerPlanId" open="(" separator="," close=")">
+            #{customerPlanId}
+        </foreach>
+          and deleted = 0
+    </select>
+
+    <update id="softDeleteByCustomerPlanIds">
+        update meal_plan_customer_item
+        set deleted = 1
+        where customer_plan_id in
+        <foreach collection="customerPlanIds" item="customerPlanId" open="(" separator="," close=")">
+            #{customerPlanId}
+        </foreach>
+          and deleted = 0
+    </update>
+
+</mapper>

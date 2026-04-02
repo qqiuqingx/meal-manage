@@ -15,7 +15,16 @@
  */
 package me.zhengjie.modules.meal.service;
 
+import me.zhengjie.modules.meal.domain.MealPlan;
+import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
+import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
+import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
+import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
+import me.zhengjie.utils.PageResult;
+
+import java.util.List;
 
 /**
  * 排餐计划服务
@@ -32,4 +41,74 @@ public interface MealPlanService {
      * @return 生成结果汇总
      */
     MealPlanGenerateResult generateMealPlan(String recordDate, String mealType);
+
+    /**
+     * 分页查询排餐计划列表
+     *
+     * @param criteria 查询条件
+     * @return 分页结果
+     */
+    PageResult<MealPlan> queryAll(MealPlanQueryCriteria criteria);
+
+    /**
+     * 根据ID查询排餐计划
+     *
+     * @param id 排餐计划ID
+     * @return 排餐计划
+     */
+    MealPlan queryById(Long id);
+
+    /**
+     * 分页查询排餐计划客户列表
+     *
+     * @param criteria 查询条件
+     * @return 分页结果
+     */
+    PageResult<MealPlanCustomer> queryCustomers(MealPlanCustomerQueryCriteria criteria);
+
+    /**
+     * 根据ID查询排餐计划客户
+     *
+     * @param id 客户计划ID
+     * @return 排餐计划客户
+     */
+    MealPlanCustomer queryCustomerById(Long id);
+
+    /**
+     * 查询客户排餐菜品明细
+     *
+     * @param customerPlanId 客户计划ID
+     * @return 菜品明细列表
+     */
+    List<MealPlanCustomerItemVO> queryCustomerItems(Long customerPlanId);
+
+    /**
+     * 根据日期和餐次删除排餐计划（级联删除客户和明细）
+     *
+     * @param recordDate 排餐日期
+     * @param mealType 餐次
+     */
+    void deleteMealPlan(String recordDate, String mealType);
+
+    /**
+     * 根据ID列表批量删除排餐计划（级联删除客户和明细）
+     *
+     * @param ids 排餐计划ID列表
+     */
+    void deleteMealPlans(List<Long> ids);
+
+    /**
+     * 根据客户计划ID列表批量删除客户排餐计划（级联删除明细）
+     *
+     * @param customerPlanIds 客户计划ID列表
+     */
+    void deleteMealPlanCustomers(List<Long> customerPlanIds);
+
+    /**
+     * 根据排餐计划ID查询完整详情（含客户列表和菜品明细）
+     *
+     * @param mealPlanId 排餐计划ID
+     * @return 完整详情
+     */
+    MealPlanDetailVO queryMealPlanDetail(Long mealPlanId);
 }

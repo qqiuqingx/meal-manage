@@ -16,8 +16,13 @@
 package me.zhengjie.modules.meal.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 /**
  * 排餐计划客户结果 Mapper
@@ -26,4 +31,29 @@ import org.apache.ibatis.annotations.Mapper;
  **/
 @Mapper
 public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
+
+    /**
+     * 分页查询排餐计划客户列表
+     */
+    Page<MealPlanCustomer> selectPageByCriteria(@Param("criteria") MealPlanCustomerQueryCriteria criteria, Page<MealPlanCustomer> page);
+
+    /**
+     * 根据ID查询客户计划
+     */
+    MealPlanCustomer selectById(@Param("id") Long id);
+
+    /**
+     * 根据ID列表批量查询客户计划
+     */
+    List<MealPlanCustomer> selectByIds(@Param("ids") List<Long> ids);
+
+    /**
+     * 根据客户计划ID列表批量软删除客户计划
+     */
+    int softDeleteByIds(@Param("ids") List<Long> ids);
+
+    /**
+     * 根据排餐计划ID查询所有客户
+     */
+    List<MealPlanCustomer> selectByMealPlanId(@Param("mealPlanId") Long mealPlanId);
 }
