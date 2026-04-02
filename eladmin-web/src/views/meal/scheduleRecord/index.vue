@@ -132,12 +132,20 @@
             {{ formatTime(scope.row.createTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" align="center" width="90">
+        <el-table-column label="操作" align="center" width="150">
           <template slot-scope="scope">
+            <el-button
+              type="primary"
+              icon="el-icon-user"
+              size="mini"
+              title="管理客户排餐"
+              @click="openCustomerDialog(scope.row)"
+            />
             <el-button
               type="danger"
               icon="el-icon-delete"
               size="mini"
+              title="删除此排餐"
               @click="handleDelete(scope.row)"
             />
           </template>
@@ -178,11 +186,39 @@
         <el-button type="primary" :loading="generateDialog.loading" @click="handleGenerate">确认生成</el-button>
       </div>
     </el-dialog>
+
+    <!-- 客户排餐管理对话框 -->
+    <el-dialog title="客户排餐管理" :visible.sync="customerDialog.visible" width="600px" @close="resetCustomerDialog">
+      <div style="margin-bottom: 10px;">
+        <el-button
+          type="danger"
+          icon="el-icon-delete"
+          size="small"
+          :disabled="customerDialog.selections.length === 0"
+          @click="handleBatchDeleteCustomers"
+        >批量删除</el-button>
+      </div>
+      <el-table
+        v-loading="customerDialog.loading"
+        :data="customerDialog.list"
+        border
+        size="small"
+        @selection-change="handleCustomerSelectionChange"
+      >
+        <el-table-column type="selection" width="55" align="center" />
+        <el-table-column label="客户" prop="customerName" align="center" />
+        <el-table-column label="操作" align="center" width="100">
+          <template slot-scope="scope">
+            <el-button type="text" style="color: #F56C6C;" @click="handleDeleteSingleCustomer(scope.row)">删除排餐</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { getMealPlanList, getMealPlanFullDetail, generateMealPlan, delMealPlan } from '@/api/mealPlan'
+import { getMealPlanList, getMealPlanFullDetail, generateMealPlan, delMealPlan, delMealPlanCustomers } from '@/api/mealPlan'
 
 export default {
   name: 'ScheduleRecord',
@@ -218,6 +254,14 @@ export default {
       generateRules: {
         date: [{ required: true, message: '请选择排餐日期', trigger: 'change' }],
         mealType: [{ required: true, message: '请选择餐次', trigger: 'change' }]
+      },
+      // 客户排餐管理
+      customerDialog: {
+        visible: false,
+        loading: false,
+        list: [],
+        selections: [],
+        currentRecord: null
       }
     }
   },
@@ -421,6 +465,61 @@ export default {
           this.getList()
         })
       }).catch(() => {})
+    },
+    openCustomerDialog(row) {
+      this.customerDialog.currentRecord = row
+      this.customerDialog.visible = true
+      this.fetchCustomerList()
+    },
+    fetchCustomerList() {
+      this.customerDialog.loading = true
+      getMealPlanFullDetail(this.customerDialog.currentRecord.id).then(res => {
+        this.customerDialog.list = res.customers || []
+        this.customerDialog.loading = false
+      }).catch(() => {
+        this.customerDialog.loading = false
+      })
+    },
+    handleCustomerSelectionChange(val) {
+      this.customerDialog.selections = val
+    },
+    handleBatchDeleteCustomers() {
+      if (this.customerDialog.selections.length === 0) return
+      const ids = this.customerDialog.selections.map(item => item.id)
+      this.$confirm(`确认删除选定的 ${ids.length} 个客户的排餐计划吗？将同时删除相关的明细数据！`, '危险操作', {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'error'
+      }).then(() => {
+        this.doDeleteCustomers(ids)
+      }).catch(() => {})
+    },
+    handleDeleteSingleCustomer(row) {
+      this.$confirm(`确认删除客户 "${row.customerName}" 的排餐计划吗？将同时删除相关的明细数据！`, '危险操作', {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'error'
+      }).then(() => {
+        this.doDeleteCustomers([row.id])
+      }).catch(() => {})
+    },
+    doDeleteCustomers(ids) {
+      delMealPlanCustomers(ids).then(() => {
+        this.$message.success('删除成功')
+        this.getList()
+        this.fetchCustomerList()
+        // 触发外层详情刷新
+        if (this.customerDialog.currentRecord) {
+          const record = this.customerDialog.currentRecord
+          this.$set(record, 'customerMenus', null)
+          this.handleExpandChange(record, [record])
+        }
+      })
+    },
+    resetCustomerDialog() {
+      this.customerDialog.list = []
+      this.customerDialog.selections = []
+      this.customerDialog.currentRecord = null
     },
     dishTypeTag(type) {
       const map = {
