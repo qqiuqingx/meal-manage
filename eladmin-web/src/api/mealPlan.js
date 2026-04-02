@@ -30,3 +30,11 @@ export function delMealPlan(params) {
     params
   })
 }
+
+export function delMealPlanCustomers(data) {
+  return request({
+    url: '/api/meal-plan/customers',
+    method: 'delete',
+    data
+  })
+}
