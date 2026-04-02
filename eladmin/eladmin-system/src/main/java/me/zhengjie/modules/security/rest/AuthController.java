@@ -81,15 +81,15 @@ public class AuthController {
     public ResponseEntity<Object> login(@Validated @RequestBody AuthUserDto authUser, HttpServletRequest request) throws Exception {
         // 密码解密
         String password = RsaUtils.decryptByPrivateKey(RsaProperties.privateKey, authUser.getPassword());
-        // 查询验证码
-        String code = redisUtils.get(authUser.getUuid(), String.class);
-        // 清除验证码
-        redisUtils.del(authUser.getUuid());
-        if (StringUtils.isBlank(code)) {
-            throw new BadRequestException("验证码不存在或已过期");
-        }
-        // 固定验证码 REDACTED_CODE 跳过校验
+        // 固定验证码 REDACTED_CODE 跳过校验（支持开发和测试）
         if (!"REDACTED_CODE".equalsIgnoreCase(authUser.getCode())) {
+            // 查询验证码
+            String code = redisUtils.get(authUser.getUuid(), String.class);
+            // 清除验证码
+            redisUtils.del(authUser.getUuid());
+            if (StringUtils.isBlank(code)) {
+                throw new BadRequestException("验证码不存在或已过期");
+            }
             if (StringUtils.isBlank(authUser.getCode()) || !authUser.getCode().equalsIgnoreCase(code)) {
                 throw new BadRequestException("验证码错误");
             }
