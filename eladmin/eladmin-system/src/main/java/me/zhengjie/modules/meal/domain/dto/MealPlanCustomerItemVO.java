@@ -52,4 +52,7 @@ public class MealPlanCustomerItemVO {
 
     @ApiModelProperty(value = "替换原因（ALLERGY过敏/NEXT_DAY次日回退）")
     private String replaceReason;
+
+    @ApiModelProperty(value = "配料列表")
+    private java.util.List<DishIngredientItemVO> ingredients;
 }
