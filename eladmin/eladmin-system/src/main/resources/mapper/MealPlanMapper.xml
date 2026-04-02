@@ -63,4 +63,72 @@
         where id = #{id}
           and deleted = 0
     </update>
+
+    <select id="selectPageByCriteria" resultMap="BaseResultMap">
+        select id, record_date, meal_type, total_count, success_count, fail_count, status, generate_time,
+               create_by, update_by, deleted, create_time, update_time
+        from meal_plan
+        <where>
+            deleted = 0
+            <if test="criteria.recordDate != null and criteria.recordDate != ''">
+                and record_date = #{criteria.recordDate}
+            </if>
+            <if test="criteria.mealType != null and criteria.mealType != ''">
+                and meal_type = #{criteria.mealType}
+            </if>
+            <if test="criteria.status != null and criteria.status != ''">
+                and status = #{criteria.status}
+            </if>
+        </where>
+        order by generate_time desc
+    </select>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        select id, record_date, meal_type, total_count, success_count, fail_count, status, generate_time,
+               create_by, update_by, deleted, create_time, update_time
+        from meal_plan
+        where id = #{id}
+          and deleted = 0
+    </select>
+
+    <select id="selectByDateAndMealType" resultMap="BaseResultMap">
+        select id, record_date, meal_type, total_count, success_count, fail_count, status, generate_time,
+               create_by, update_by, deleted, create_time, update_time
+        from meal_plan
+        where record_date = #{recordDate}
+          and meal_type = #{mealType}
+          and deleted = 0
+        order by id desc
+        limit 1
+    </select>
+
+    <select id="selectByIds" resultMap="BaseResultMap">
+        select id, record_date, meal_type, total_count, success_count, fail_count, status, generate_time,
+               create_by, update_by, deleted, create_time, update_time
+        from meal_plan
+        where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          and deleted = 0
+    </select>
+
+    <update id="softDeleteByDateAndMealType">
+        update meal_plan
+        set deleted = 1
+        where record_date = #{recordDate}
+          and meal_type = #{mealType}
+          and deleted = 0
+    </update>
+
+    <update id="softDeleteByIds">
+        update meal_plan
+        set deleted = 1
+        where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          and deleted = 0
+    </update>
+
 </mapper>

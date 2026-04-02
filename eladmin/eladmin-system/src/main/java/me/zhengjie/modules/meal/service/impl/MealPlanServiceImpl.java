@@ -16,6 +16,7 @@
 package me.zhengjie.modules.meal.service.impl;
 
 import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import cn.hutool.json.JSONUtil;
 import me.zhengjie.exception.BadRequestException;
@@ -32,7 +33,11 @@ import me.zhengjie.modules.meal.domain.DishIngredientRelation;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.MealPlanCustomerItem;
+import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
+import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
+import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
+import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerItemMapper;
@@ -40,6 +45,7 @@ import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
 import me.zhengjie.modules.meal.service.MealPlanService;
 import me.zhengjie.modules.meal.util.ScheduleKeyUtil;
+import me.zhengjie.utils.PageResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -1096,5 +1102,195 @@ public class MealPlanServiceImpl implements MealPlanService {
         public String getReplaceReason() {
             return replaceReason;
         }
+    }
+
+    // ========== 查询接口实现 ==========
+
+    @Override
+    public PageResult<MealPlan> queryAll(MealPlanQueryCriteria criteria) {
+        Page<MealPlan> page = new Page<>(criteria.getPage() , criteria.getSize());
+        Page<MealPlan> result = mealPlanMapper.selectPageByCriteria(criteria, page);
+        return new PageResult<>(result.getRecords(), result.getTotal());
+    }
+
+    @Override
+    public MealPlan queryById(Long id) {
+        return mealPlanMapper.selectById(id);
+    }
+
+    @Override
+    public PageResult<MealPlanCustomer> queryCustomers(MealPlanCustomerQueryCriteria criteria) {
+        Page<MealPlanCustomer> page = new Page<>(criteria.getPage() , criteria.getSize());
+        Page<MealPlanCustomer> result = mealPlanCustomerMapper.selectPageByCriteria(criteria, page);
+        return new PageResult<>(result.getRecords(), result.getTotal());
+    }
+
+    @Override
+    public MealPlanCustomer queryCustomerById(Long id) {
+        return mealPlanCustomerMapper.selectById(id);
+    }
+
+    @Override
+    public List<MealPlanCustomerItemVO> queryCustomerItems(Long customerPlanId) {
+        List<MealPlanCustomerItem> items = mealPlanCustomerItemMapper.selectByCustomerPlanId(customerPlanId);
+        return items.stream().map(this::convertToVO).collect(Collectors.toList());
+    }
+
+    private MealPlanCustomerItemVO convertToVO(MealPlanCustomerItem item) {
+        MealPlanCustomerItemVO vo = new MealPlanCustomerItemVO();
+        vo.setId(item.getId());
+        vo.setDishType(item.getDishType());
+        vo.setDishId(item.getDishId());
+        vo.setDishName(item.getDishName());
+        vo.setSeq(item.getSeq());
+        vo.setIsReplaced(item.getIsReplaced());
+        vo.setOriginalDishId(item.getOriginalDishId());
+        vo.setOriginalDishName(item.getOriginalDishName());
+        vo.setReplaceReason(item.getReplaceReason());
+        return vo;
+    }
+
+    // ========== 删除接口实现 ==========
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteMealPlan(String recordDate, String mealType) {
+        log.info("删除排餐计划 - 日期: {}, 餐次: {}", recordDate, mealType);
+        LocalDate targetDate = ScheduleKeyUtil.parseDate(recordDate);
+
+        // 查询要删除的计划
+        MealPlan mealPlan = mealPlanMapper.selectByDateAndMealType(targetDate, mealType);
+        if (mealPlan == null) {
+            log.warn("未找到要删除的排餐计划 - 日期: {}, 餐次: {}", recordDate, mealType);
+            return;
+        }
+
+        // 级联删除明细
+        mealPlanMapper.softDeleteItemsByMealPlanId(mealPlan.getId());
+        // 级联删除客户
+        mealPlanMapper.softDeleteCustomersByMealPlanId(mealPlan.getId());
+        // 删除主表
+        mealPlanMapper.softDeletePlanById(mealPlan.getId());
+
+        log.info("删除排餐计划完成 - 计划ID: {}", mealPlan.getId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteMealPlans(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            log.warn("排餐计划ID列表为空，跳过删除");
+            return;
+        }
+        log.info("批量删除排餐计划 - 数量: {}", ids.size());
+
+        for (Long id : ids) {
+            // 级联删除明细
+            mealPlanMapper.softDeleteItemsByMealPlanId(id);
+            // 级联删除客户
+            mealPlanMapper.softDeleteCustomersByMealPlanId(id);
+            // 删除主表
+            mealPlanMapper.softDeletePlanById(id);
+        }
+
+        log.info("批量删除排餐计划完成 - 数量: {}", ids.size());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteMealPlanCustomers(List<Long> customerPlanIds) {
+        if (customerPlanIds == null || customerPlanIds.isEmpty()) {
+            log.warn("客户计划ID列表为空，跳过删除");
+            return;
+        }
+        log.info("批量删除客户排餐计划 - 数量: {}", customerPlanIds.size());
+
+        // 级联删除明细
+        mealPlanCustomerItemMapper.softDeleteByCustomerPlanIds(customerPlanIds);
+        // 软删除客户计划
+        mealPlanCustomerMapper.softDeleteByIds(customerPlanIds);
+
+        log.info("批量删除客户排餐计划完成 - 数量: {}", customerPlanIds.size());
+    }
+
+    // ========== 聚合查询接口实现 ==========
+
+    @Override
+    public MealPlanDetailVO queryMealPlanDetail(Long mealPlanId) {
+        log.info("查询排餐计划完整详情 - 计划ID: {}", mealPlanId);
+
+        // 查询排餐计划主表
+        MealPlan mealPlan = mealPlanMapper.selectById(mealPlanId);
+        if (mealPlan == null) {
+            log.warn("未找到排餐计划 - ID: {}", mealPlanId);
+            return null;
+        }
+
+        // 查询所有客户列表
+        List<MealPlanCustomer> customers = mealPlanCustomerMapper.selectByMealPlanId(mealPlanId);
+        List<Long> customerPlanIds = customers.stream()
+                .map(MealPlanCustomer::getId)
+                .collect(Collectors.toList());
+
+        // 批量查询所有客户的菜品明细
+        Map<Long, List<MealPlanCustomerItem>> itemsMap;
+        if (!customerPlanIds.isEmpty()) {
+            List<MealPlanCustomerItem> allItems = mealPlanCustomerItemMapper.selectByCustomerPlanIds(customerPlanIds);
+            itemsMap = allItems.stream()
+                    .collect(Collectors.groupingBy(MealPlanCustomerItem::getCustomerPlanId));
+        } else {
+            itemsMap = Collections.emptyMap();
+        }
+
+        // 组装返回结果
+        MealPlanDetailVO result = new MealPlanDetailVO();
+
+        // 设置主表信息
+        MealPlanDetailVO.MealPlanVO planVO = new MealPlanDetailVO.MealPlanVO();
+        planVO.setId(mealPlan.getId());
+        planVO.setRecordDate(mealPlan.getRecordDate() != null ? mealPlan.getRecordDate().toString() : null);
+        planVO.setMealType(mealPlan.getMealType());
+        planVO.setTotalCount(mealPlan.getTotalCount());
+        planVO.setStatus(mealPlan.getStatus());
+        planVO.setGenerateTime(mealPlan.getGenerateTime() != null ? mealPlan.getGenerateTime().toString() : null);
+        result.setMealPlan(planVO);
+
+        // 设置客户列表
+        List<MealPlanDetailVO.CustomerPlanDetail> customerDetails = customers.stream()
+                .map(customer -> {
+                    Long customerId = customer.getId();
+                    MealPlanDetailVO.CustomerPlanDetail detail = new MealPlanDetailVO.CustomerPlanDetail();
+                    detail.setId(customerId);
+                    detail.setCustomerId(customer.getCustomerId());
+                    detail.setCustomerName(customer.getCustomerName());
+                    detail.setPhone(customer.getPhone());
+                    detail.setOrderId(customer.getOrderId());
+                    detail.setParentPackageId(customer.getParentPackageId());
+                    detail.setChildPackageId(customer.getChildPackageId());
+                    detail.setStatus(customer.getStatus());
+                    detail.setFailReason(customer.getFailReason());
+                    detail.setMeatRequiredCount(customer.getMeatRequiredCount());
+                    detail.setVegRequiredCount(customer.getVegRequiredCount());
+                    detail.setIncludeSoup(customer.getIncludeSoup());
+                    detail.setIncludeRice(customer.getIncludeRice());
+
+                    // 设置菜品明细
+                    List<MealPlanCustomerItem> items = itemsMap.getOrDefault(customerId, Collections.emptyList());
+                    List<MealPlanCustomerItemVO> itemVOs = items.stream()
+                            .map(this::convertToVO)
+                            .collect(Collectors.toList());
+                    detail.setItems(itemVOs);
+
+                    return detail;
+                })
+                .collect(Collectors.toList());
+
+        result.setCustomers(customerDetails);
+        result.setTotalCustomers(customerDetails.size());
+        result.setSuccessCount((int) customerDetails.stream().filter(c -> c.getStatus() != null && c.getStatus() == 1).count());
+        result.setFailCount((int) customerDetails.stream().filter(c -> c.getStatus() != null && c.getStatus() == 0).count());
+
+        log.info("查询排餐计划完整详情完成 - 计划ID: {}, 客户数: {}", mealPlanId, customerDetails.size());
+        return result;
     }
 }

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper">
+
+    <resultMap id="BaseResultMap" type="me.zhengjie.modules.meal.domain.MealPlanCustomer">
+        <id column="id" property="id"/>
+        <result column="meal_plan_id" property="mealPlanId"/>
+        <result column="customer_id" property="customerId"/>
+        <result column="customer_name" property="customerName"/>
+        <result column="phone" property="phone"/>
+        <result column="order_id" property="orderId"/>
+        <result column="parent_package_id" property="parentPackageId"/>
+        <result column="child_package_id" property="childPackageId"/>
+        <result column="status" property="status"/>
+        <result column="fail_reason" property="failReason"/>
+        <result column="meat_required_count" property="meatRequiredCount"/>
+        <result column="veg_required_count" property="vegRequiredCount"/>
+        <result column="include_soup" property="includeSoup"/>
+        <result column="include_rice" property="includeRice"/>
+        <result column="create_by" property="createBy"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="deleted" property="deleted"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectPageByCriteria" resultMap="BaseResultMap">
+        select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
+               status, fail_reason, meat_required_count, veg_required_count, include_soup, include_rice,
+               create_by, update_by, deleted, create_time, update_time
+        from meal_plan_customer
+        <where>
+            deleted = 0
+            <if test="criteria.mealPlanId != null">
+                and meal_plan_id = #{criteria.mealPlanId}
+            </if>
+            <if test="criteria.customerName != null and criteria.customerName != ''">
+                and customer_name like concat('%', #{criteria.customerName}, '%')
+            </if>
+            <if test="criteria.phone != null and criteria.phone != ''">
+                and phone like concat('%', #{criteria.phone}, '%')
+            </if>
+            <if test="criteria.status != null">
+                and status = #{criteria.status}
+            </if>
+        </where>
+        order by id asc
+    </select>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
+               status, fail_reason, meat_required_count, veg_required_count, include_soup, include_rice,
+               create_by, update_by, deleted, create_time, update_time
+        from meal_plan_customer
+        where id = #{id}
+          and deleted = 0
+    </select>
+
+    <select id="selectByIds" resultMap="BaseResultMap">
+        select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
+               status, fail_reason, meat_required_count, veg_required_count, include_soup, include_rice,
+               create_by, update_by, deleted, create_time, update_time
+        from meal_plan_customer
+        where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          and deleted = 0
+    </select>
+
+    <update id="softDeleteByIds">
+        update meal_plan_customer
+        set deleted = 1
+        where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          and deleted = 0
+    </update>
+
+    <select id="selectByMealPlanId" resultMap="BaseResultMap">
+        select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
+               status, fail_reason, meat_required_count, veg_required_count, include_soup, include_rice,
+               create_by, update_by, deleted, create_time, update_time
+        from meal_plan_customer
+        where meal_plan_id = #{mealPlanId}
+          and deleted = 0
+        order by id asc
+    </select>
+
+</mapper>

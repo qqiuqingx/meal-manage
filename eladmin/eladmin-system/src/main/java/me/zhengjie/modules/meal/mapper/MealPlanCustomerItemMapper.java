@@ -18,6 +18,9 @@ package me.zhengjie.modules.meal.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import me.zhengjie.modules.meal.domain.MealPlanCustomerItem;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 /**
  * 排餐计划菜品明细 Mapper
@@ -26,4 +29,19 @@ import org.apache.ibatis.annotations.Mapper;
  **/
 @Mapper
 public interface MealPlanCustomerItemMapper extends BaseMapper<MealPlanCustomerItem> {
+
+    /**
+     * 根据客户计划ID查询菜品明细列表
+     */
+    List<MealPlanCustomerItem> selectByCustomerPlanId(@Param("customerPlanId") Long customerPlanId);
+
+    /**
+     * 根据客户计划ID列表批量查询菜品明细
+     */
+    List<MealPlanCustomerItem> selectByCustomerPlanIds(@Param("customerPlanIds") List<Long> customerPlanIds);
+
+    /**
+     * 根据客户计划ID列表批量软删除菜品明细
+     */
+    int softDeleteByCustomerPlanIds(@Param("customerPlanIds") List<Long> customerPlanIds);
 }
