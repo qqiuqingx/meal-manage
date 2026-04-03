@@ -67,7 +67,7 @@ class MealPlanServiceImplTest {
 
     @Test
     void shouldRejectInvalidMealType() {
-        assertThrows(BadRequestException.class, () -> mealPlanService.generateMealPlan("2026-04-01", "BREAKFAST"));
+        assertThrows(BadRequestException.class, () -> mealPlanService.generateMealPlan("2026-04-01", "BREAKFAST", null));
         verify(mealPlanMapper, never()).insert(any(MealPlan.class));
     }
 
@@ -92,7 +92,7 @@ class MealPlanServiceImplTest {
         when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, vegDish, soupDish));
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(mainIngredient, vegIngredient, soupIngredient));
 
-        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH");
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
 
         assertEquals(1, result.getTotalCount());
         assertEquals(1, result.getSuccessCount());
@@ -123,7 +123,7 @@ class MealPlanServiceImplTest {
         when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.singletonList(mainIngredient));
 
-        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH");
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
 
         assertEquals(1, result.getTotalCount());
         assertEquals(0, result.getSuccessCount());
@@ -143,7 +143,7 @@ class MealPlanServiceImplTest {
         when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.emptyList());
 
-        mealPlanService.generateMealPlan("2026-04-01", "LUNCH");
+        mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
 
         verify(mealPlanMapper).softDeleteItemsByMealPlanId(99L);
         verify(mealPlanMapper).softDeleteCustomersByMealPlanId(99L);
@@ -170,7 +170,7 @@ class MealPlanServiceImplTest {
         when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, sideDish));
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(mainIngredient, sideIngredient));
 
-        mealPlanService.generateMealPlan("2026-04-01", "LUNCH");
+        mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
 
         ArgumentCaptor<List> dishIdsCaptor = ArgumentCaptor.forClass(List.class);
         verify(dishIngredientMapper).findRelationsByDishIds(dishIdsCaptor.capture());
@@ -196,7 +196,7 @@ class MealPlanServiceImplTest {
         when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(blockedDish, allowedDish));
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(blockedIngredient, allowedIngredient));
 
-        mealPlanService.generateMealPlan("2026-04-01", "LUNCH");
+        mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
 
         ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomerItem> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomerItem.class);
         verify(mealPlanCustomerItemMapper).insert(captor.capture());

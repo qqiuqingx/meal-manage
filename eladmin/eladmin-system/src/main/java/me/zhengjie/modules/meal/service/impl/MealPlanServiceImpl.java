@@ -107,9 +107,9 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public MealPlanGenerateResult generateMealPlan(String recordDate, String mealType) {
+    public MealPlanGenerateResult generateMealPlan(String recordDate, String mealType, Long customerId) {
         long startTime = System.currentTimeMillis();
-        log.info("开始生成排餐计划 - 日期: {}, 餐次: {}", recordDate, mealType);
+        log.info("开始生成排餐计划 - 日期: {}, 餐次: {}, 客户ID: {}", recordDate, mealType, customerId);
 
         LocalDate targetDate = ScheduleKeyUtil.parseDate(recordDate);
         String normalizedMealType = validateParams(mealType);
@@ -121,7 +121,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         log.debug("成功获取锁 - lockKey: {}", lockKey);
         registerLockCleanup(lockKey, lock);
 
-        MealPlanGenerateResult result = doGenerateMealPlan(targetDate, normalizedMealType);
+        MealPlanGenerateResult result = doGenerateMealPlan(targetDate, normalizedMealType, customerId);
 
         log.info("排餐计划生成完成 - 耗时: {}ms, 计划ID: {}, 成功数: {}, 失败数: {}",
                 System.currentTimeMillis() - startTime,
@@ -135,21 +135,21 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 执行排餐生成主流程：清理旧计划、加载候选数据、逐个订单生成并汇总结果。
      */
-    private MealPlanGenerateResult doGenerateMealPlan(LocalDate targetDate, String mealType) {
+    private MealPlanGenerateResult doGenerateMealPlan(LocalDate targetDate, String mealType, Long customerId) {
         log.debug("开始执行排餐生成主流程 - 日期: {}, 餐次: {}", targetDate, mealType);
 
         long startTime = System.currentTimeMillis();
 
         // 步骤1: 清理旧计划
         log.debug("开始清理旧排餐计划");
-        softDeleteExistingPlan(targetDate, mealType);
+        MealPlan existingPlan = softDeleteExistingPlan(targetDate, mealType, customerId);
         log.debug("旧排餐计划清理完成");
 
         // 步骤2: 加载各种数据
         log.debug("开始加载数据");
         long dataLoadStart = System.currentTimeMillis();
 
-        List<CustomerOrder> orders = loadValidOrders(targetDate, mealType);
+        List<CustomerOrder> orders = loadValidOrders(targetDate, mealType, customerId);
         log.debug("加载有效订单完成 - 订单数量: {}", orders.size());
 
         Map<Long, CustomerProfile> customerMap = loadCustomers(orders);
@@ -172,10 +172,10 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         log.debug("数据加载总耗时: {}ms", System.currentTimeMillis() - dataLoadStart);
 
-        // 步骤3: 创建排餐计划主记录
-        log.debug("创建排餐计划主记录");
-        MealPlan mealPlan = createMealPlan(targetDate, mealType, orders.size());
-        log.info("创建排餐计划主记录成功 - ID: {}, 总订单数: {}", mealPlan.getId(), orders.size());
+        // 步骤3: 获取或创建排餐计划主记录（复用模式）
+        log.debug("获取或创建排餐计划主记录");
+        MealPlan mealPlan = getOrCreateMealPlan(targetDate, mealType, orders.size(), existingPlan);
+        log.info("排餐计划主记录获取成功 - ID: {}, 总订单数: {}", mealPlan.getId(), orders.size());
 
         // 步骤4: 逐个处理订单
         List<MealPlanGenerateResult.FailDetail> failDetails = new ArrayList<>();
@@ -232,7 +232,7 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         // 步骤5: 更新汇总信息
         log.debug("更新排餐计划汇总信息");
-        updateMealPlanSummary(mealPlan, successCount, failCount);
+        updateMealPlanSummary(mealPlan, successCount, failCount, customerId);
 
         log.debug("排餐生成主流程完成 - 总耗时: {}ms", System.currentTimeMillis() - startTime);
 
@@ -251,39 +251,90 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     /**
      * 对同日期同餐次的历史有效排餐做软删除，保证重新生成时只保留最新计划。
+     * 如果指定了customerId，则只删除该客户的排餐计划详情。
+     * 返回已存在的排餐计划（如果删除全部则返回null，否则返回被清理但保留的plan）
      */
-    private void softDeleteExistingPlan(LocalDate recordDate, String mealType) {
-        log.debug("查询现有排餐计划 - 日期: {}, 餐次: {}", recordDate, mealType);
+    private MealPlan softDeleteExistingPlan(LocalDate recordDate, String mealType, Long customerId) {
+        log.debug("查询现有排餐计划 - 日期: {}, 餐次: {}, 客户ID: {}", recordDate, mealType, customerId);
         MealPlan existingPlan = mealPlanMapper.findActiveByDateAndMealTypeForUpdate(recordDate, mealType);
         if (existingPlan == null) {
             log.info("未找到现有排餐计划，跳过清理 - 日期: {}, 餐次: {}", recordDate, mealType);
-            return;
+            return null;
         }
 
         log.info("找到现有排餐计划，开始软删除 - 计划ID: {}, 日期: {}, 餐次: {}",
                 existingPlan.getId(), recordDate, mealType);
 
-        log.debug("软删除排餐计划明细表 - 计划ID: {}", existingPlan.getId());
-        mealPlanMapper.softDeleteItemsByMealPlanId(existingPlan.getId());
+        // 如果指定了客户ID，只删除该客户的排餐计划详情，保留主记录
+        if (customerId != null) {
+            List<Long> customerPlanIds = mealPlanMapper.findCustomerPlanIdsByMealPlanIdAndCustomerId(existingPlan.getId(), customerId);
+            if (!customerPlanIds.isEmpty()) {
+                log.debug("软删除指定客户的排餐计划明细 - 客户计划ID数量: {}", customerPlanIds.size());
+                mealPlanCustomerItemMapper.softDeleteByCustomerPlanIds(customerPlanIds);
+                log.debug("软删除指定客户的排餐计划 - 客户计划ID数量: {}", customerPlanIds.size());
+                mealPlanCustomerMapper.softDeleteByIds(customerPlanIds);
+                log.info("指定客户排餐计划软删除完成 - 客户计划ID数量: {}", customerPlanIds.size());
+            } else {
+                log.info("未找到指定客户的排餐计划，跳过清理 - 客户ID: {}", customerId);
+            }
+            // 保留主记录，返回给后续复用
+            return existingPlan;
+        } else {
+            // 未指定客户ID，删除全部
+            log.debug("软删除排餐计划明细表 - 计划ID: {}", existingPlan.getId());
+            mealPlanMapper.softDeleteItemsByMealPlanId(existingPlan.getId());
 
-        log.debug("软删除排餐计划客户表 - 计划ID: {}", existingPlan.getId());
-        mealPlanMapper.softDeleteCustomersByMealPlanId(existingPlan.getId());
+            log.debug("软删除排餐计划客户表 - 计划ID: {}", existingPlan.getId());
+            mealPlanMapper.softDeleteCustomersByMealPlanId(existingPlan.getId());
 
-        log.debug("软删除排餐计划主表 - 计划ID: {}", existingPlan.getId());
-        mealPlanMapper.softDeletePlanById(existingPlan.getId());
+            log.debug("软删除排餐计划主表 - 计划ID: {}", existingPlan.getId());
+            mealPlanMapper.softDeletePlanById(existingPlan.getId());
 
-        log.info("现有排餐计划软删除完成 - 计划ID: {}", existingPlan.getId());
+            log.info("现有排餐计划软删除完成 - 计划ID: {}", existingPlan.getId());
+            // 主记录被删除，返回null
+            return null;
+        }
+    }
+
+    /**
+     * 获取或创建排餐计划主记录。
+     * 如果已有排餐计划则复用，否则创建新的。
+     */
+    private MealPlan getOrCreateMealPlan(LocalDate recordDate, String mealType, int totalCount, MealPlan existingPlan) {
+        if (existingPlan != null) {
+            // 复用已有排餐计划，重置统计信息
+            log.info("复用已有排餐计划 - ID: {}", existingPlan.getId());
+            existingPlan.setTotalCount(totalCount);
+            existingPlan.setSuccessCount(0);
+            existingPlan.setFailCount(0);
+            existingPlan.setStatus(PLAN_STATUS_GENERATING);
+            existingPlan.setGenerateTime(new Timestamp(System.currentTimeMillis()));
+            mealPlanMapper.updateById(existingPlan);
+            return existingPlan;
+        } else {
+            // 创建新的排餐计划
+            return createMealPlan(recordDate, mealType, totalCount);
+        }
     }
 
     /**
      * 查询满足日期、餐次和配送规则的订单候选。
      */
-    private List<CustomerOrder> loadValidOrders(LocalDate targetDate, String mealType) {
+    private List<CustomerOrder> loadValidOrders(LocalDate targetDate, String mealType, Long customerId) {
         long startTime = System.currentTimeMillis();
-        log.debug("查询候选订单 - 日期: {}, 餐次: {}", targetDate, mealType);
+        log.debug("查询候选订单 - 日期: {}, 餐次: {}, 客户ID: {}", targetDate, mealType, customerId);
 
         List<CustomerOrder> candidateOrders = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
         log.debug("查询到候选订单 - 数量: {}", candidateOrders.size());
+
+        // 如果指定了客户ID，则只返回该客户的订单
+        if (customerId != null) {
+            List<CustomerOrder> filtered = candidateOrders.stream()
+                    .filter(order -> order.getCustomerId().equals(customerId))
+                    .collect(java.util.stream.Collectors.toList());
+            log.debug("按客户ID过滤完成 - 候选数: {}, 过滤后: {}", candidateOrders.size(), filtered.size());
+            return filtered;
+        }
 
         List<CustomerOrder> validOrders = new ArrayList<>();
         for (CustomerOrder order : candidateOrders) {
@@ -918,18 +969,27 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 回填排餐统计信息并更新最终状态。
      */
-    private void updateMealPlanSummary(MealPlan mealPlan, int successCount, int failCount) {
-        log.debug("更新排餐计划汇总信息 - 计划ID: {}, 成功数: {}, 失败数: {}",
-                mealPlan.getId(), successCount, failCount);
+    private void updateMealPlanSummary(MealPlan mealPlan, int successCount, int failCount, Long customerId) {
+        log.debug("更新排餐计划汇总信息 - 计划ID: {}, 成功数: {}, 失败数: {}", mealPlan.getId(), successCount, failCount);
 
-        mealPlan.setSuccessCount(successCount);
-        mealPlan.setFailCount(failCount);
-        mealPlan.setStatus(failCount > 0 ? PLAN_STATUS_FAILED : PLAN_STATUS_SUCCESS);
-        mealPlanMapper.updateById(mealPlan);
+        // 重新查询最新的排餐计划，获取现有统计（因为可能是复用模式）
+        MealPlan latestPlan = mealPlanMapper.selectById(mealPlan.getId());
+        if (latestPlan == null) {
+            log.error("排餐计划不存在 - ID: {}", mealPlan.getId());
+            return;
+        }
 
-        String statusText = failCount > 0 ? "部分成功" : "全部成功";
+        int totalSuccess = latestPlan.getSuccessCount() + successCount;
+        int totalFail = latestPlan.getFailCount() + failCount;
+
+        latestPlan.setSuccessCount(totalSuccess);
+        latestPlan.setFailCount(totalFail);
+        latestPlan.setStatus(totalFail > 0 ? PLAN_STATUS_FAILED : PLAN_STATUS_SUCCESS);
+        mealPlanMapper.updateById(latestPlan);
+
+        String statusText = totalFail > 0 ? "部分成功" : "全部成功";
         log.info("排餐计划汇总信息更新完成 - 计划ID: {}, 最终状态: {}, 成功: {}, 失败: {}",
-                mealPlan.getId(), statusText, successCount, failCount);
+                latestPlan.getId(), statusText, totalSuccess, totalFail);
     }
 
     /**
@@ -1200,8 +1260,8 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void deleteMealPlan(String recordDate, String mealType) {
-        log.info("删除排餐计划 - 日期: {}, 餐次: {}", recordDate, mealType);
+    public void deleteMealPlan(String recordDate, String mealType, Long customerId) {
+        log.info("删除排餐计划 - 日期: {}, 餐次: {}, 客户ID: {}", recordDate, mealType, customerId);
         LocalDate targetDate = ScheduleKeyUtil.parseDate(recordDate);
 
         // 查询要删除的计划
@@ -1211,14 +1271,29 @@ public class MealPlanServiceImpl implements MealPlanService {
             return;
         }
 
-        // 级联删除明细
-        mealPlanMapper.softDeleteItemsByMealPlanId(mealPlan.getId());
-        // 级联删除客户
-        mealPlanMapper.softDeleteCustomersByMealPlanId(mealPlan.getId());
-        // 删除主表
-        mealPlanMapper.softDeletePlanById(mealPlan.getId());
-
-        log.info("删除排餐计划完成 - 计划ID: {}", mealPlan.getId());
+        // 如果指定了客户ID，只删除该客户的排餐计划详情
+        if (customerId != null) {
+            // 查询该客户在当前计划下的客户计划ID
+            List<Long> customerPlanIds = mealPlanMapper.findCustomerPlanIdsByMealPlanIdAndCustomerId(mealPlan.getId(), customerId);
+            if (!customerPlanIds.isEmpty()) {
+                // 级联删除该客户的明细
+                mealPlanCustomerItemMapper.softDeleteByCustomerPlanIds(customerPlanIds);
+                // 软删除该客户的计划
+                mealPlanCustomerMapper.softDeleteByIds(customerPlanIds);
+                log.info("删除指定客户排餐计划完成 - 客户计划ID数量: {}", customerPlanIds.size());
+            } else {
+                log.warn("未找到指定客户的排餐计划 - 客户ID: {}", customerId);
+            }
+        } else {
+            // 未指定客户ID，删除全部
+            // 级联删除明细
+            mealPlanMapper.softDeleteItemsByMealPlanId(mealPlan.getId());
+            // 级联删除客户
+            mealPlanMapper.softDeleteCustomersByMealPlanId(mealPlan.getId());
+            // 删除主表
+            mealPlanMapper.softDeletePlanById(mealPlan.getId());
+            log.info("删除排餐计划完成 - 计划ID: {}", mealPlan.getId());
+        }
     }
 
     @Override
