@@ -232,11 +232,11 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         // 步骤5: 更新汇总信息
         log.debug("更新排餐计划汇总信息");
-        updateMealPlanSummary(mealPlan, successCount, failCount, customerId);
+        MealPlan latestPlan = updateMealPlanSummary(mealPlan, successCount, failCount);
 
         log.debug("排餐生成主流程完成 - 总耗时: {}ms", System.currentTimeMillis() - startTime);
 
-        return buildResult(mealPlan, failDetails);
+        return buildResult(latestPlan, failDetails);
     }
 
     /**
@@ -277,6 +277,7 @@ public class MealPlanServiceImpl implements MealPlanService {
             } else {
                 log.info("未找到指定客户的排餐计划，跳过清理 - 客户ID: {}", customerId);
             }
+            refreshMealPlanSummary(existingPlan, false);
             // 保留主记录，返回给后续复用
             return existingPlan;
         } else {
@@ -302,11 +303,8 @@ public class MealPlanServiceImpl implements MealPlanService {
      */
     private MealPlan getOrCreateMealPlan(LocalDate recordDate, String mealType, int totalCount, MealPlan existingPlan) {
         if (existingPlan != null) {
-            // 复用已有排餐计划，重置统计信息
+            // 复用已有排餐计划，保留剩余客户的统计信息
             log.info("复用已有排餐计划 - ID: {}", existingPlan.getId());
-            existingPlan.setTotalCount(totalCount);
-            existingPlan.setSuccessCount(0);
-            existingPlan.setFailCount(0);
             existingPlan.setStatus(PLAN_STATUS_GENERATING);
             existingPlan.setGenerateTime(new Timestamp(System.currentTimeMillis()));
             mealPlanMapper.updateById(existingPlan);
@@ -327,17 +325,11 @@ public class MealPlanServiceImpl implements MealPlanService {
         List<CustomerOrder> candidateOrders = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
         log.debug("查询到候选订单 - 数量: {}", candidateOrders.size());
 
-        // 如果指定了客户ID，则只返回该客户的订单
-        if (customerId != null) {
-            List<CustomerOrder> filtered = candidateOrders.stream()
-                    .filter(order -> order.getCustomerId().equals(customerId))
-                    .collect(java.util.stream.Collectors.toList());
-            log.debug("按客户ID过滤完成 - 候选数: {}, 过滤后: {}", candidateOrders.size(), filtered.size());
-            return filtered;
-        }
-
         List<CustomerOrder> validOrders = new ArrayList<>();
         for (CustomerOrder order : candidateOrders) {
+            if (customerId != null && !Objects.equals(order.getCustomerId(), customerId)) {
+                continue;
+            }
             if (!scheduleModeMatches(order, targetDate)) {
                 log.debug("订单不匹配配送模式 - 订单ID: {}, 配送模式: {}",
                         order.getId(), order.getScheduleMode());
@@ -969,19 +961,22 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 回填排餐统计信息并更新最终状态。
      */
-    private void updateMealPlanSummary(MealPlan mealPlan, int successCount, int failCount, Long customerId) {
+    private MealPlan updateMealPlanSummary(MealPlan mealPlan, int successCount, int failCount) {
         log.debug("更新排餐计划汇总信息 - 计划ID: {}, 成功数: {}, 失败数: {}", mealPlan.getId(), successCount, failCount);
 
         // 重新查询最新的排餐计划，获取现有统计（因为可能是复用模式）
         MealPlan latestPlan = mealPlanMapper.selectById(mealPlan.getId());
         if (latestPlan == null) {
             log.error("排餐计划不存在 - ID: {}", mealPlan.getId());
-            return;
+            return mealPlan;
         }
 
-        int totalSuccess = latestPlan.getSuccessCount() + successCount;
-        int totalFail = latestPlan.getFailCount() + failCount;
+        int baseSuccess = latestPlan.getSuccessCount() == null ? 0 : latestPlan.getSuccessCount();
+        int baseFail = latestPlan.getFailCount() == null ? 0 : latestPlan.getFailCount();
+        int totalSuccess = baseSuccess + successCount;
+        int totalFail = baseFail + failCount;
 
+        latestPlan.setTotalCount(totalSuccess + totalFail);
         latestPlan.setSuccessCount(totalSuccess);
         latestPlan.setFailCount(totalFail);
         latestPlan.setStatus(totalFail > 0 ? PLAN_STATUS_FAILED : PLAN_STATUS_SUCCESS);
@@ -990,6 +985,48 @@ public class MealPlanServiceImpl implements MealPlanService {
         String statusText = totalFail > 0 ? "部分成功" : "全部成功";
         log.info("排餐计划汇总信息更新完成 - 计划ID: {}, 最终状态: {}, 成功: {}, 失败: {}",
                 latestPlan.getId(), statusText, totalSuccess, totalFail);
+        return latestPlan;
+    }
+
+    /**
+     * 基于当前有效客户计划重算父计划统计信息。
+     */
+    private MealPlan refreshMealPlanSummary(MealPlan mealPlan, boolean deletePlanWhenEmpty) {
+        MealPlan latestPlan = mealPlanMapper.selectById(mealPlan.getId());
+        if (latestPlan == null) {
+            log.warn("排餐计划不存在，跳过汇总重算 - 计划ID: {}", mealPlan.getId());
+            return null;
+        }
+
+        List<MealPlanCustomer> customerPlans = mealPlanCustomerMapper.selectByMealPlanId(latestPlan.getId());
+        if (customerPlans.isEmpty()) {
+            if (deletePlanWhenEmpty) {
+                mealPlanMapper.softDeletePlanById(latestPlan.getId());
+                log.info("排餐计划下已无客户记录，软删除主计划 - 计划ID: {}", latestPlan.getId());
+                return null;
+            }
+            latestPlan.setTotalCount(0);
+            latestPlan.setSuccessCount(0);
+            latestPlan.setFailCount(0);
+            latestPlan.setStatus(PLAN_STATUS_GENERATING);
+            mealPlanMapper.updateById(latestPlan);
+            return latestPlan;
+        }
+
+        int totalCount = customerPlans.size();
+        int successCount = (int) customerPlans.stream()
+                .filter(plan -> Integer.valueOf(1).equals(plan.getStatus()))
+                .count();
+        int failCount = totalCount - successCount;
+
+        latestPlan.setTotalCount(totalCount);
+        latestPlan.setSuccessCount(successCount);
+        latestPlan.setFailCount(failCount);
+        latestPlan.setStatus(failCount > 0 ? PLAN_STATUS_FAILED : PLAN_STATUS_SUCCESS);
+        mealPlanMapper.updateById(latestPlan);
+        log.info("排餐计划汇总重算完成 - 计划ID: {}, 总数: {}, 成功: {}, 失败: {}",
+                latestPlan.getId(), totalCount, successCount, failCount);
+        return latestPlan;
     }
 
     /**
@@ -1280,6 +1317,7 @@ public class MealPlanServiceImpl implements MealPlanService {
                 mealPlanCustomerItemMapper.softDeleteByCustomerPlanIds(customerPlanIds);
                 // 软删除该客户的计划
                 mealPlanCustomerMapper.softDeleteByIds(customerPlanIds);
+                refreshMealPlanSummary(mealPlan, true);
                 log.info("删除指定客户排餐计划完成 - 客户计划ID数量: {}", customerPlanIds.size());
             } else {
                 log.warn("未找到指定客户的排餐计划 - 客户ID: {}", customerId);

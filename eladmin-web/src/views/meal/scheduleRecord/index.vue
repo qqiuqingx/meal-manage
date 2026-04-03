@@ -191,9 +191,14 @@
             <el-option
               v-for="customer in customerOptions"
               :key="customer.id"
-              :label="customer.customerName"
+              :label="`${customer.customerName} - ${customer.customerCode || '无编码'} - ${customer.phone || '无手机号'}`"
               :value="customer.id"
-            />
+            >
+              <span style="float: left">{{ customer.customerName }}</span>
+              <span style="float: right; color: #8492a6; font-size: 13px">
+                {{ customer.customerCode || '无编码' }} | {{ customer.phone || '无手机号' }}
+              </span>
+            </el-option>
           </el-select>
         </el-form-item>
       </el-form>
