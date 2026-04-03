@@ -38,9 +38,10 @@ public interface MealPlanService {
      *
      * @param recordDate 排餐日期，格式 yyyy-MM-dd
      * @param mealType 餐次，支持 LUNCH / DINNER
+     * @param customerId 指定客户ID，不传则生成全部客户的排餐计划
      * @return 生成结果汇总
      */
-    MealPlanGenerateResult generateMealPlan(String recordDate, String mealType);
+    MealPlanGenerateResult generateMealPlan(String recordDate, String mealType, Long customerId);
 
     /**
      * 分页查询排餐计划列表
@@ -87,8 +88,9 @@ public interface MealPlanService {
      *
      * @param recordDate 排餐日期
      * @param mealType 餐次
+     * @param customerId 指定客户ID，不传则删除全部
      */
-    void deleteMealPlan(String recordDate, String mealType);
+    void deleteMealPlan(String recordDate, String mealType, Long customerId);
 
     /**
      * 根据ID列表批量删除排餐计划（级联删除客户和明细）

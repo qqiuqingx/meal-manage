@@ -72,4 +72,9 @@ public interface MealPlanMapper extends BaseMapper<MealPlan> {
      * 根据ID列表批量软删除排餐计划
      */
     int softDeleteByIds(@Param("ids") List<Long> ids);
+
+    /**
+     * 根据排餐计划ID和客户ID查询客户计划ID列表
+     */
+    List<Long> findCustomerPlanIdsByMealPlanIdAndCustomerId(@Param("mealPlanId") Long mealPlanId, @Param("customerId") Long customerId);
 }

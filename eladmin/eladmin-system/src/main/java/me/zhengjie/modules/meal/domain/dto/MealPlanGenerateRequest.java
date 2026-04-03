@@ -37,4 +37,7 @@ public class MealPlanGenerateRequest {
     @NotBlank(message = "餐次不能为空")
     @ApiModelProperty(value = "餐次，仅支持LUNCH/DINNER")
     private String mealType;
+
+    @ApiModelProperty(value = "指定客户ID，不传则生成全部客户的排餐计划")
+    private Long customerId;
 }
