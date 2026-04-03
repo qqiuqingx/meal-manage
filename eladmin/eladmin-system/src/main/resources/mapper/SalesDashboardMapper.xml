@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="me.zhengjie.modules.sales.mapper.SalesDashboardMapper">
+
+    <!-- 5.1 销售金额四卡片 -->
+    <select id="getOverview" resultType="me.zhengjie.modules.sales.domain.dto.SalesOverviewVO">
+        SELECT
+          COALESCE(SUM(CASE WHEN DATE(deal_time) = CURDATE() THEN final_amount ELSE 0 END), 0) AS todayAmount,
+          COALESCE(SUM(CASE WHEN YEARWEEK(deal_time, 1) = YEARWEEK(CURDATE(), 1) THEN final_amount ELSE 0 END), 0) AS weekAmount,
+          COALESCE(SUM(CASE WHEN DATE_FORMAT(deal_time, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m') THEN final_amount ELSE 0 END), 0) AS monthAmount,
+          COALESCE(SUM(final_amount), 0) AS totalAmount
+        FROM customer_order
+        WHERE status != 0
+          AND deal_time IS NOT NULL
+          <if test="startDate != null and endDate != null">
+            AND DATE(deal_time) &gt;= #{startDate}
+            AND DATE(deal_time) &lt;= #{endDate}
+          </if>
+          <if test="startDate != null and endDate == null">
+            AND DATE(deal_time) &gt;= #{startDate}
+          </if>
+          <if test="startDate == null and endDate != null">
+            AND DATE(deal_time) &lt;= #{endDate}
+          </if>
+    </select>
+
+    <!-- 5.2 月度销售金额趋势 -->
+    <select id="getMonthlyTrend" resultType="me.zhengjie.modules.sales.domain.dto.SalesMonthlyItemVO">
+        SELECT
+          MONTH(deal_time) AS month,
+          COALESCE(SUM(final_amount), 0) AS amount
+        FROM customer_order
+        WHERE status != 0
+          AND deal_time IS NOT NULL
+          AND YEAR(deal_time) = #{year}
+        GROUP BY MONTH(deal_time)
+        ORDER BY month
+    </select>
+
+    <!-- 5.3 产品销售数量 TOP3 -->
+    <select id="getProductQuantityTop3" resultType="me.zhengjie.modules.sales.domain.dto.SalesTopItemVO">
+        SELECT
+          COALESCE(pp.package_name, '') AS name,
+          COALESCE(SUM(COALESCE(o.breakfast_count, 0) + COALESCE(o.lunch_dinner_count, 0)), 0) AS value
+        FROM customer_order o
+        LEFT JOIN parent_package pp ON o.parent_package_id = pp.id
+        WHERE o.status != 0
+          AND o.deal_time IS NOT NULL
+          <if test="startDate != null">
+            AND DATE(o.deal_time) &gt;= #{startDate}
+          </if>
+          <if test="endDate != null">
+            AND DATE(o.deal_time) &lt;= #{endDate}
+          </if>
+        GROUP BY o.parent_package_id, pp.package_name
+        ORDER BY value DESC
+        LIMIT 3
+    </select>
+
+    <!-- 5.4 产品销售金额 TOP3 -->
+    <select id="getProductAmountTop3" resultType="me.zhengjie.modules.sales.domain.dto.SalesTopItemVO">
+        SELECT
+          COALESCE(pp.package_name, '') AS name,
+          COALESCE(SUM(o.final_amount), 0) AS value
+        FROM customer_order o
+        LEFT JOIN parent_package pp ON o.parent_package_id = pp.id
+        WHERE o.status != 0
+          AND o.deal_time IS NOT NULL
+          <if test="startDate != null">
+            AND DATE(o.deal_time) &gt;= #{startDate}
+          </if>
+          <if test="endDate != null">
+            AND DATE(o.deal_time) &lt;= #{endDate}
+          </if>
+        GROUP BY o.parent_package_id, pp.package_name
+        ORDER BY value DESC
+        LIMIT 3
+    </select>
+
+    <!-- 5.5 销售员业绩 TOP3 -->
+    <select id="getSalespersonTop3" resultType="me.zhengjie.modules.sales.domain.dto.SalesTopItemVO">
+        SELECT
+          COALESCE(pp.package_name, '') AS name,
+          COALESCE(SUM(o.final_amount), 0) AS value
+        FROM customer_order o
+        LEFT JOIN parent_package pp ON o.parent_package_id = pp.id
+        WHERE o.status != 0
+          AND o.deal_time IS NOT NULL
+          <if test="startDate != null">
+            AND DATE(o.deal_time) &gt;= #{startDate}
+          </if>
+          <if test="endDate != null">
+            AND DATE(o.deal_time) &lt;= #{endDate}
+          </if>
+        GROUP BY o.parent_package_id, pp.package_name
+        ORDER BY value DESC
+        LIMIT 3
+    </select>
+
+    <!-- 5.6 销售渠道 TOP3 -->
+    <select id="getChannelTop3" resultType="me.zhengjie.modules.sales.domain.dto.SalesTopItemVO">
+        SELECT
+          COALESCE(dd.label, o.customer_source) AS name,
+          COALESCE(SUM(o.final_amount), 0) AS value
+        FROM customer_order o
+        LEFT JOIN sys_dict d ON d.name = 'customer_source'
+        LEFT JOIN sys_dict_detail dd ON dd.dict_id = d.dict_id AND dd.value = o.customer_source
+        WHERE o.status != 0
+          AND o.deal_time IS NOT NULL
+          AND o.customer_source IS NOT NULL
+          AND o.customer_source != ''
+          <if test="startDate != null">
+            AND DATE(o.deal_time) &gt;= #{startDate}
+          </if>
+          <if test="endDate != null">
+            AND DATE(o.deal_time) &lt;= #{endDate}
+          </if>
+        GROUP BY o.customer_source, dd.label
+        ORDER BY value DESC
+        LIMIT 3
+    </select>
+
+    <!-- 5.7 销售明细表查询 -->
+    <select id="getDetailList" resultType="me.zhengjie.modules.sales.domain.dto.SalesDetailVO">
+        SELECT
+          o.id,
+          DATE_FORMAT(o.deal_time, '%Y-%m-%d %H:%i:%s') AS saleDate,
+          COALESCE(sp.sub_package_name, '') AS productName,
+          (COALESCE(o.breakfast_count, 0) + COALESCE(o.lunch_dinner_count, 0)) AS mealCount,
+          o.customer_code AS customerRemark,
+          o.final_amount AS saleAmount,
+          COALESCE(dd.label, o.customer_source) AS channelName,
+          COALESCE(pp.package_name, '') AS salespersonName
+        FROM customer_order o
+        LEFT JOIN parent_package pp ON o.parent_package_id = pp.id
+        LEFT JOIN sub_package sp ON o.child_package_id = sp.id
+        LEFT JOIN sys_dict d ON d.name = 'customer_source'
+        LEFT JOIN sys_dict_detail dd ON dd.dict_id = d.dict_id AND dd.value = o.customer_source
+        <where>
+            o.status != 0
+            AND o.deal_time IS NOT NULL
+            <if test="criteria.startDate != null">
+                AND DATE(o.deal_time) &gt;= #{criteria.startDate}
+            </if>
+            <if test="criteria.endDate != null">
+                AND DATE(o.deal_time) &lt;= #{criteria.endDate}
+            </if>
+            <if test="criteria.customerSource != null and criteria.customerSource != ''">
+                AND o.customer_source = #{criteria.customerSource}
+            </if>
+            <if test="criteria.parentPackageId != null">
+                AND o.parent_package_id = #{criteria.parentPackageId}
+            </if>
+            <if test="criteria.childPackageId != null">
+                AND o.child_package_id = #{criteria.childPackageId}
+            </if>
+        </where>
+        ORDER BY o.deal_time DESC, o.id DESC
+        <if test="criteria.offset != null and criteria.size != null">
+            LIMIT #{criteria.offset}, #{criteria.size}
+        </if>
+    </select>
+
+    <!-- 5.8 销售明细总数 -->
+    <select id="countDetailList" resultType="long">
+        SELECT COUNT(1)
+        FROM customer_order o
+        <where>
+            o.status != 0
+            AND o.deal_time IS NOT NULL
+            <if test="criteria.startDate != null">
+                AND DATE(o.deal_time) &gt;= #{criteria.startDate}
+            </if>
+            <if test="criteria.endDate != null">
+                AND DATE(o.deal_time) &lt;= #{criteria.endDate}
+            </if>
+            <if test="criteria.customerSource != null and criteria.customerSource != ''">
+                AND o.customer_source = #{criteria.customerSource}
+            </if>
+            <if test="criteria.parentPackageId != null">
+                AND o.parent_package_id = #{criteria.parentPackageId}
+            </if>
+            <if test="criteria.childPackageId != null">
+                AND o.child_package_id = #{criteria.childPackageId}
+            </if>
+        </where>
+    </select>
+
+    <!-- 5.9 销售渠道汇总卡片 -->
+    <select id="getChannelSummary" resultType="me.zhengjie.modules.sales.domain.dto.SalesChannelSummaryVO">
+        SELECT
+          COALESCE(dd.label, o.customer_source) AS channelName,
+          COUNT(1) AS orderCount,
+          COALESCE(SUM(o.final_amount), 0) AS saleAmount
+        FROM customer_order o
+        LEFT JOIN sys_dict d ON d.name = 'customer_source'
+        LEFT JOIN sys_dict_detail dd ON dd.dict_id = d.dict_id AND dd.value = o.customer_source
+        <where>
+            o.status != 0
+            AND o.customer_source = #{customerSource}
+            AND o.deal_time IS NOT NULL
+            <if test="startDate != null">
+                AND DATE(o.deal_time) &gt;= #{startDate}
+            </if>
+            <if test="endDate != null">
+                AND DATE(o.deal_time) &lt;= #{endDate}
+            </if>
+        </where>
+        GROUP BY o.customer_source, dd.label
+    </select>
+
+    <!-- 5.10 销售员汇总卡片 -->
+    <select id="getSalespersonSummary" resultType="me.zhengjie.modules.sales.domain.dto.SalesSalespersonSummaryVO">
+        SELECT
+          COALESCE(pp.package_name, '') AS salespersonName,
+          COUNT(1) AS orderCount,
+          COALESCE(SUM(o.final_amount), 0) AS saleAmount
+        FROM customer_order o
+        LEFT JOIN parent_package pp ON o.parent_package_id = pp.id
+        <where>
+            o.status != 0
+            AND o.parent_package_id = #{parentPackageId}
+            AND o.deal_time IS NOT NULL
+            <if test="startDate != null">
+                AND DATE(o.deal_time) &gt;= #{startDate}
+            </if>
+            <if test="endDate != null">
+                AND DATE(o.deal_time) &lt;= #{endDate}
+            </if>
+        </where>
+    </select>
+
+</mapper>

@@ -83,9 +83,16 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         validateOrderConflict(dto, null);
         validateAndNormalize(dto, null);
 
+        // 获取客户信息，用于设置客户编号
+        CustomerProfile profile = profileMapper.selectById(dto.getCustomerId());
+        if (profile == null) {
+            throw new BadRequestException("客户不存在");
+        }
+
         for (int attempt = 0; attempt < 3; attempt++) {
             CustomerOrder order = new CustomerOrder();
             buildOrderEntity(order, dto);
+            order.setCustomerCode(profile.getCustomerCode());
             order.setOrderCode(generateOrderCode());
             order.setCreateBy(getCurrentUsername());
             try {
