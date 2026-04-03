@@ -180,6 +180,22 @@
             <el-option label="晚餐" value="DINNER" />
           </el-select>
         </el-form-item>
+        <el-form-item label="指定客户">
+          <el-select
+            v-model="generateForm.customerId"
+            placeholder="不选则为全部客户"
+            clearable
+            filterable
+            style="width: 100%;"
+          >
+            <el-option
+              v-for="customer in customerOptions"
+              :key="customer.id"
+              :label="customer.customerName"
+              :value="customer.id"
+            />
+          </el-select>
+        </el-form-item>
       </el-form>
       <div slot="footer">
         <el-button @click="generateDialog.visible = false">取 消</el-button>
@@ -219,6 +235,7 @@
 
 <script>
 import { getMealPlanList, getMealPlanFullDetail, generateMealPlan, delMealPlan, delMealPlanCustomers } from '@/api/mealPlan'
+import { getProfiles } from '@/api/customer/profile'
 
 export default {
   name: 'ScheduleRecord',
@@ -249,8 +266,10 @@ export default {
       },
       generateForm: {
         date: null,
-        mealType: 'LUNCH'
+        mealType: 'LUNCH',
+        customerId: null
       },
+      customerOptions: [],
       generateRules: {
         date: [{ required: true, message: '请选择排餐日期', trigger: 'change' }],
         mealType: [{ required: true, message: '请选择餐次', trigger: 'change' }]
@@ -387,11 +406,15 @@ export default {
       }
     },
     openGenerateDialog() {
+      // 加载客户列表供选择
+      getProfiles({ page: 0, size: 9999 }).then(res => {
+        this.customerOptions = res.content || []
+      })
       this.generateDialog.visible = true
     },
     resetGenerateForm() {
       this.$refs.generateForm && this.$refs.generateForm.resetFields()
-      this.generateForm = { date: null, mealType: 'LUNCH' }
+      this.generateForm = { date: null, mealType: 'LUNCH', customerId: null }
     },
     handleGenerate() {
       this.$refs.generateForm.validate(valid => {
@@ -401,6 +424,10 @@ export default {
         const data = {
           recordDate: this.generateForm.date,
           mealType: this.generateForm.mealType
+        }
+        // 如果选择了客户，则添加 customerId
+        if (this.generateForm.customerId) {
+          data.customerId = this.generateForm.customerId
         }
 
         generateMealPlan(data)

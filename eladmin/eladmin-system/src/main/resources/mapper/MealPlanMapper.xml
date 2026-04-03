@@ -131,4 +131,12 @@
           and deleted = 0
     </update>
 
+    <select id="findCustomerPlanIdsByMealPlanIdAndCustomerId" resultType="long">
+        select id
+        from meal_plan_customer
+        where meal_plan_id = #{mealPlanId}
+          and customer_id = #{customerId}
+          and deleted = 0
+    </select>
+
 </mapper>

@@ -37,13 +37,13 @@ class MealPlanControllerTest {
 
         MealPlanGenerateResult result = new MealPlanGenerateResult();
         result.setMealPlanId(100L);
-        when(mealPlanService.generateMealPlan("2026-04-01", "LUNCH")).thenReturn(result);
+        when(mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null)).thenReturn(result);
 
         ResponseEntity<MealPlanGenerateResult> response = mealPlanController.generateMealPlan(request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(100L, response.getBody().getMealPlanId());
-        verify(mealPlanService).generateMealPlan("2026-04-01", "LUNCH");
+        verify(mealPlanService).generateMealPlan("2026-04-01", "LUNCH", null);
     }
 
     @Test
