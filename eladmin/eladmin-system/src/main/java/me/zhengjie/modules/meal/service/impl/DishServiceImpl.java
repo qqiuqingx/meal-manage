@@ -1392,6 +1392,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
             me.zhengjie.modules.customer.pkg.domain.ParentPackage pkg = packageMap.get(order.getParentPackageId());
             String mealPackage = (pkg != null) ? pkg.getPackageCode() : null;
+            String mealPackageDesc = (pkg != null) ? pkg.getPackageName() : null;
             if (mealPackage == null) continue;
 
             String key = mealType + "|" + mealPackage;
@@ -1424,8 +1425,13 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             DailyCustomerStats.MealPackageGroup group = new DailyCustomerStats.MealPackageGroup();
             group.setMealType(mealType);
             group.setMealPackage(mealPackage);
-            MealPackageEnum pkgEnum = MealPackageEnum.fromCode(mealPackage);
-            group.setMealPackageDesc(pkgEnum != null ? pkgEnum.getDesc() : mealPackage);
+            // 从 packageMap 获取套餐名称
+            String pkgDesc = packageMap.values().stream()
+                    .filter(p -> p.getPackageCode().equals(mealPackage))
+                    .findFirst()
+                    .map(me.zhengjie.modules.customer.pkg.domain.ParentPackage::getPackageName)
+                    .orElse(mealPackage);
+            group.setMealPackageDesc(pkgDesc);
             group.setCustomerCount(count);
             groups.add(group);
         }
