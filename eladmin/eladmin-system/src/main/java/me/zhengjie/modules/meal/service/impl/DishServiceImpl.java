@@ -1485,9 +1485,13 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             return Collections.emptyList();
         }
 
-        // 3. 收集客户ID，查询客户档案
+        // 3. 收集客户ID和订单ID，查询客户档案和订单
         Set<Long> customerIds = planCustomers.stream()
                 .map(MealPlanCustomer::getCustomerId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<Long> orderIds = planCustomers.stream()
+                .map(MealPlanCustomer::getOrderId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
@@ -1498,6 +1502,16 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             List<me.zhengjie.modules.customer.profile.domain.CustomerProfile> profiles = customerProfileMapper.selectList(profileWrapper);
             for (me.zhengjie.modules.customer.profile.domain.CustomerProfile p : profiles) {
                 customerProfileMap.put(p.getId(), p);
+            }
+        }
+
+        Map<Long, me.zhengjie.modules.customer.order.domain.CustomerOrder> orderMap = new HashMap<>();
+        if (!orderIds.isEmpty()) {
+            QueryWrapper<me.zhengjie.modules.customer.order.domain.CustomerOrder> orderWrapper = new QueryWrapper<>();
+            orderWrapper.in("id", orderIds);
+            List<me.zhengjie.modules.customer.order.domain.CustomerOrder> orders = customerOrderMapper.selectList(orderWrapper);
+            for (me.zhengjie.modules.customer.order.domain.CustomerOrder o : orders) {
+                orderMap.put(o.getId(), o);
             }
         }
 
