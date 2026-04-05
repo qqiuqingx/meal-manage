@@ -176,7 +176,7 @@ public class DishController {
     }
 
     @GetMapping("/schedule/customer-source-stats")
-    @ApiOperation("获取当天有效客户按来源分组统计")
+    @ApiOperation("获取客户按来源分组统计（支持传入具体日期或月份）")
     @PreAuthorize("@el.check('dish:list')")
     public ResponseEntity<List<Map<String, Object>>> getCustomerSourceStats(
             @RequestParam(required = false) String date) {

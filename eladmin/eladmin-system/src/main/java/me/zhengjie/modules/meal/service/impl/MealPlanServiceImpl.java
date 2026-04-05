@@ -33,6 +33,7 @@ import me.zhengjie.modules.meal.domain.DishIngredientRelation;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.MealPlanCustomerItem;
+import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
@@ -1466,6 +1467,14 @@ public class MealPlanServiceImpl implements MealPlanService {
         result.setFailCount((int) customerDetails.stream().filter(c -> c.getStatus() != null && c.getStatus() == 0).count());
 
         log.info("查询排餐计划完整详情完成 - 计划ID: {}, 客户数: {}", mealPlanId, customerDetails.size());
+        return result;
+    }
+
+    @Override
+    public List<MealPackageStatDto> statByDate(String date) {
+        log.info("按日期统计各父套餐餐数 - 日期: {}", date);
+        List<MealPackageStatDto> result = mealPlanCustomerMapper.statByDate(date);
+        log.info("按日期统计各父套餐餐数完成 - 日期: {}, 结果数量: {}", date, result.size());
         return result;
     }
 }

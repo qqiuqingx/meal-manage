@@ -17,6 +17,7 @@ package me.zhengjie.modules.meal.service;
 
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
@@ -113,4 +114,12 @@ public interface MealPlanService {
      * @return 完整详情
      */
     MealPlanDetailVO queryMealPlanDetail(Long mealPlanId);
+
+    /**
+     * 按日期统计各父套餐餐数
+     *
+     * @param date 排餐日期，格式 yyyy-MM-dd
+     * @return 套餐统计列表
+     */
+    List<MealPackageStatDto> statByDate(String date);
 }

@@ -1471,10 +1471,17 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     }
 
     @Override
-    public List<Map<String, Object>> getCustomerSourceStats(String date) {
-        // 1. 查询指定日期的排餐计划 (新表 meal_plan)
+    public List<Map<String, Object>> getCustomerSourceStats(String dateOrMonth) {
+        // 兼容日期格式和月份格式：yyyy-MM-dd 或 yyyy-MM
+        String month = dateOrMonth;
+        if (dateOrMonth != null && dateOrMonth.length() == 10) {
+            // 日期格式，提取月份部分
+            month = dateOrMonth.substring(0, 7);
+        }
+
+        // 1. 查询指定月份的排餐计划 (新表 meal_plan)
         QueryWrapper<MealPlan> planWrapper = new QueryWrapper<>();
-        planWrapper.eq("record_date", date).eq("deleted", false);
+        planWrapper.likeRight("record_date", month).eq("deleted", false);
         List<MealPlan> mealPlans = mealPlanMapper.selectList(planWrapper);
 
         if (mealPlans.isEmpty()) {
