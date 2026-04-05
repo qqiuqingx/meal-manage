@@ -18,6 +18,7 @@ package me.zhengjie.modules.meal.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -56,4 +57,9 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
      * 根据排餐计划ID查询所有客户
      */
     List<MealPlanCustomer> selectByMealPlanId(@Param("mealPlanId") Long mealPlanId);
+
+    /**
+     * 按日期统计各父套餐餐数
+     */
+    List<MealPackageStatDto> statByDate(@Param("date") String date);
 }

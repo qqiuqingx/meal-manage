@@ -24,6 +24,7 @@ import me.zhengjie.annotation.Log;
 import me.zhengjie.aspect.LimitType;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
@@ -81,6 +82,18 @@ public class MealPlanController {
     @PreAuthorize("@el.check('mealPlan:list')")
     public ResponseEntity<PageResult<MealPlan>> queryMealPlan(MealPlanQueryCriteria criteria) {
         return new ResponseEntity<>(mealPlanService.queryAll(criteria), HttpStatus.OK);
+    }
+
+    /**
+     * 按日期统计各父套餐餐数
+     */
+    @Log("查询父套餐餐数统计")
+    @ApiOperation("按日期统计各父套餐餐数")
+    @GetMapping("/statistics-by-date")
+    @PreAuthorize("@el.check('mealPlan:list')")
+    public ResponseEntity<List<MealPackageStatDto>> statByDate(
+            @ApiParam(value = "排餐日期，格式 yyyy-MM-dd", required = true) @RequestParam String date) {
+        return new ResponseEntity<>(mealPlanService.statByDate(date), HttpStatus.OK);
     }
 
     /**

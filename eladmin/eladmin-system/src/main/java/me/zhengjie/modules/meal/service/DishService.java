@@ -121,8 +121,8 @@ public interface DishService extends IService<Dish> {
     DailyCustomerStats getDailyCustomerStats(String date);
 
     /**
-     * 获取当天有效客户按来源分组统计
-     * @param date 日期（yyyy-MM-dd）
+     * 按来源分组统计客户数量（按月份，兼容传入具体日期）
+     * @param date 日期（yyyy-MM-dd）或月份（yyyy-MM）
      * @return 来源分组列表
      */
     List<Map<String, Object>> getCustomerSourceStats(String date);
