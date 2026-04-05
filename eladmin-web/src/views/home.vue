@@ -3,22 +3,27 @@
     <div class="dashboard-editor-container">
       <github-corner class="github-corner" />
 
+      <!-- 日期选择器独立一行 -->
+      <el-row :gutter="32" style="margin-bottom: 18px; display: flex; align-items: center;">
+        <span style="font-size: 16px; font-weight: 600; color: #303133; margin-left: 16px;">统计日期</span>
+        <el-date-picker
+          v-model="statsDate"
+          type="date"
+          placeholder="选择日期"
+          value-format="yyyy-MM-dd"
+          size="small"
+          style="margin-left: 16px;"
+          @change="handleDateChange"
+        />
+      </el-row>
+
       <!-- 当日客户统计 + 客户来源统计 并行 -->
-      <el-row :gutter="32" style="margin-top: 18px;">
+      <el-row :gutter="32">
         <!-- 左侧：当日客户统计 -->
         <el-col :xs="24" :sm="24" :lg="12">
           <div class="stats-card">
             <div class="stats-card-header">
               <span class="stats-title">当日客户统计</span>
-              <el-date-picker
-                v-model="statsDate"
-                type="date"
-                placeholder="选择日期"
-                value-format="yyyy-MM-dd"
-                size="small"
-                style="margin-left: 16px;"
-                @change="fetchCustomerStats"
-              />
             </div>
             <el-tabs v-model="activeMealType" style="margin-top: 12px;" @tab-click="handleTabChange">
               <el-tab-pane label="午餐" name="LUNCH" />
@@ -53,6 +58,26 @@
           </div>
         </el-col>
       </el-row>
+
+      <!-- 父套餐餐数统计 -->
+      <el-row :gutter="32" style="margin-top: 18px;">
+        <el-col :xs="24" :sm="24" :lg="24">
+          <div class="stats-card">
+            <div class="stats-card-header">
+              <span class="stats-title">父套餐餐数统计</span>
+            </div>
+            <div v-if="!mealPackageLoading && mealPackageGroups.length === 0" style="text-align: center; color: #909399; padding: 20px 0;">
+              暂无数据
+            </div>
+            <meal-package-stats-chart
+              v-if="!mealPackageLoading && mealPackageGroups.length > 0"
+              :chart-data="mealPackageGroups"
+              :height="'280px'"
+            />
+          </div>
+        </el-col>
+      </el-row>
+
     </div>
   </div>
 </template>
@@ -61,7 +86,9 @@
 import GithubCorner from '@/components/GithubCorner'
 import CustomerStatsChart from './dashboard/CustomerStatsChart'
 import SourceStatsChart from './dashboard/SourceStatsChart'
+import MealPackageStatsChart from './dashboard/MealPackageStatsChart'
 import { queryDailyCustomerStats, queryCustomerSourceStats } from '@/api/dish'
+import { getMealPackageStatistics } from '@/api/mealPlan'
 
 function formatDate(date) {
   const d = date || new Date()
@@ -76,7 +103,8 @@ export default {
   components: {
     GithubCorner,
     CustomerStatsChart,
-    SourceStatsChart
+    SourceStatsChart,
+    MealPackageStatsChart
   },
   data() {
     return {
@@ -84,8 +112,10 @@ export default {
       activeMealType: 'LUNCH',
       statsLoading: false,
       sourceLoading: false,
+      mealPackageLoading: false,
       customerStats: null,
-      sourceGroups: []
+      sourceGroups: [],
+      mealPackageGroups: []
     }
   },
   computed: {
@@ -99,12 +129,16 @@ export default {
     }
   },
   mounted() {
-    this.fetchCustomerStats()
-    this.fetchSourceStats()
+    this.handleDateChange()
   },
   methods: {
     handleTabChange() {
       // 数据通过 computed 自动过滤，图表 watch chartData 自动更新
+    },
+    handleDateChange() {
+      this.fetchCustomerStats()
+      this.fetchSourceStats()
+      this.fetchMealPackageStats()
     },
     fetchCustomerStats() {
       this.statsLoading = true
@@ -130,6 +164,19 @@ export default {
         })
         .finally(() => {
           this.sourceLoading = false
+        })
+    },
+    fetchMealPackageStats() {
+      this.mealPackageLoading = true
+      getMealPackageStatistics({ date: this.statsDate })
+        .then(data => {
+          this.mealPackageGroups = data || []
+        })
+        .catch(() => {
+          this.mealPackageGroups = []
+        })
+        .finally(() => {
+          this.mealPackageLoading = false
         })
     }
   }
