@@ -1439,10 +1439,10 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         // 7. 按来源分组，统计 distinct customerId
         Map<String, Set<Long>> sourceCustomerIds = new LinkedHashMap<>();
         for (MealPlanCustomer pc : planCustomers) {
-            me.zhengjie.modules.customer.profile.domain.CustomerProfile profile = customerProfileMap.get(pc.getCustomerId());
-            if (profile == null) continue;
-            String source = (profile.getPhone() != null && !profile.getPhone().isEmpty())
-                    ? profile.getPhone().substring(0, 7) : "未知来源";  // 用手机号前7位作为来源标识
+            me.zhengjie.modules.customer.order.domain.CustomerOrder order = orderMap.get(pc.getOrderId());
+            if (order == null) continue;
+            String source = (order.getCustomerSource() != null && !order.getCustomerSource().isEmpty())
+                    ? order.getCustomerSource() : "未知来源";
             sourceCustomerIds.computeIfAbsent(source, k -> new HashSet<>()).add(pc.getCustomerId());
         }
 
@@ -1501,13 +1501,13 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             }
         }
 
-        // 4. 按来源分组计数（用手机号前7位作为来源标识）
+        // 4. 按来源分组计数（从订单获取客户来源）
         Map<String, Integer> sourceCountMap = new LinkedHashMap<>();
         for (MealPlanCustomer pc : planCustomers) {
-            me.zhengjie.modules.customer.profile.domain.CustomerProfile profile = customerProfileMap.get(pc.getCustomerId());
-            if (profile == null) continue;
-            String source = (profile.getPhone() != null && !profile.getPhone().isEmpty())
-                    ? profile.getPhone().substring(0, 7) : "other";
+            me.zhengjie.modules.customer.order.domain.CustomerOrder order = orderMap.get(pc.getOrderId());
+            if (order == null) continue;
+            String source = (order.getCustomerSource() != null && !order.getCustomerSource().isEmpty())
+                    ? order.getCustomerSource() : "other";
             sourceCountMap.merge(source, 1, Integer::sum);
         }
 
