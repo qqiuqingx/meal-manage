@@ -25,6 +25,11 @@ import me.zhengjie.modules.system.service.DictDetailService;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
+import me.zhengjie.modules.meal.domain.MealPlan;
+import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.meal.mapper.MealPlanMapper;
+import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.system.domain.DictDetail;
 import me.zhengjie.utils.FileUtil;
 import lombok.RequiredArgsConstructor;
@@ -68,6 +73,9 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     private final DictDetailService dictDetailService;
     private final CustomerOrderMapper customerOrderMapper;
     private final ParentPackageMapper parentPackageMapper;
+    private final CustomerProfileMapper customerProfileMapper;
+    private final MealPlanMapper mealPlanMapper;
+    private final MealPlanCustomerMapper mealPlanCustomerMapper;
 
     private static final String[] DISH_TYPES = {"MAIN", "SIDE", "SOUP", "VEGETABLE", "RICE"};
     private static final String[] MEAL_TYPES = {"LUNCH", "DINNER"};
@@ -1292,75 +1300,108 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         DailyCustomerStats stats = new DailyCustomerStats();
         stats.setDate(date);
 
-        // 1. 查询指定日期的排餐记录
-        QueryWrapper<DishScheduleRecord> recordWrapper = new QueryWrapper<>();
-        recordWrapper.eq("record_date", date).eq("deleted", false);
-        List<DishScheduleRecord> records = dishScheduleRecordMapper.selectList(recordWrapper);
+        // 1. 查询指定日期的排餐计划 (新表 meal_plan)
+        QueryWrapper<MealPlan> planWrapper = new QueryWrapper<>();
+        planWrapper.eq("record_date", date).eq("deleted", false);
+        List<MealPlan> mealPlans = mealPlanMapper.selectList(planWrapper);
 
-        if (records.isEmpty()) {
+        if (mealPlans.isEmpty()) {
             stats.setTotalCustomerCount(0);
             stats.setGroups(Collections.emptyList());
             stats.setSourceGroups(Collections.emptyList());
             return stats;
         }
 
-        // 2. 收集所有 recordId，一次性查询所有客户菜单记录
-        List<Integer> recordIds = records.stream()
-                .map(DishScheduleRecord::getId)
+        // 2. 收集所有 mealPlanId，一次性查询所有客户排餐计划 (新表 meal_plan_customer)
+        List<Long> mealPlanIds = mealPlans.stream()
+                .map(MealPlan::getId)
                 .collect(Collectors.toList());
 
-        QueryWrapper<CustomerMenuRecord> menuWrapper = new QueryWrapper<>();
-        menuWrapper.in("record_id", recordIds).eq("deleted", false);
-        List<CustomerMenuRecord> menuRecords = customerMenuRecordMapper.selectList(menuWrapper);
+        QueryWrapper<MealPlanCustomer> customerWrapper = new QueryWrapper<>();
+        customerWrapper.in("meal_plan_id", mealPlanIds).eq("deleted", false);
+        List<MealPlanCustomer> planCustomers = mealPlanCustomerMapper.selectList(customerWrapper);
 
-        if (menuRecords.isEmpty()) {
+        if (planCustomers.isEmpty()) {
             stats.setTotalCustomerCount(0);
             stats.setGroups(Collections.emptyList());
             stats.setSourceGroups(Collections.emptyList());
             return stats;
         }
 
-        // 3. 收集所有客户ID，一次性查询客户信息获取套餐
-        Set<Integer> customerIds = menuRecords.stream()
-                .map(CustomerMenuRecord::getCustomerId)
+        // 3. 收集所有客户ID和订单ID，获取套餐信息
+        Set<Long> customerIds = planCustomers.stream()
+                .map(MealPlanCustomer::getCustomerId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<Long> orderIds = planCustomers.stream()
+                .map(MealPlanCustomer::getOrderId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        Map<Integer, CustomerDietaryRestrictions> customerMap = new HashMap<>();
+        // 3.1 查询客户档案获取来源
+        Map<Long, me.zhengjie.modules.customer.profile.domain.CustomerProfile> customerProfileMap = new HashMap<>();
         if (!customerIds.isEmpty()) {
-            QueryWrapper<CustomerDietaryRestrictions> customerWrapper = new QueryWrapper<>();
-            customerWrapper.in("id", customerIds);
-            List<CustomerDietaryRestrictions> customers = customerDietaryRestrictionsMapper.selectList(customerWrapper);
-            for (CustomerDietaryRestrictions c : customers) {
-                customerMap.put(c.getId(), c);
+            QueryWrapper<me.zhengjie.modules.customer.profile.domain.CustomerProfile> profileWrapper = new QueryWrapper<>();
+            profileWrapper.in("id", customerIds);
+            List<me.zhengjie.modules.customer.profile.domain.CustomerProfile> profiles = customerProfileMapper.selectList(profileWrapper);
+            for (me.zhengjie.modules.customer.profile.domain.CustomerProfile p : profiles) {
+                customerProfileMap.put(p.getId(), p);
             }
         }
 
-        // 4. 按 (mealType, mealPackage) 分组，统计 distinct customerId
-        // 先把 recordId -> mealType 映射
-        Map<Integer, String> recordMealTypeMap = records.stream()
-                .collect(Collectors.toMap(DishScheduleRecord::getId, DishScheduleRecord::getMealType));
+        // 3.2 查询订单获取套餐ID
+        Map<Long, me.zhengjie.modules.customer.order.domain.CustomerOrder> orderMap = new HashMap<>();
+        if (!orderIds.isEmpty()) {
+            QueryWrapper<me.zhengjie.modules.customer.order.domain.CustomerOrder> orderWrapper = new QueryWrapper<>();
+            orderWrapper.in("id", orderIds);
+            List<me.zhengjie.modules.customer.order.domain.CustomerOrder> orders = customerOrderMapper.selectList(orderWrapper);
+            for (me.zhengjie.modules.customer.order.domain.CustomerOrder o : orders) {
+                orderMap.put(o.getId(), o);
+            }
+        }
 
+        // 3.3 查询套餐获取套餐名称
+        Set<Long> packageIds = orderMap.values().stream()
+                .map(me.zhengjie.modules.customer.order.domain.CustomerOrder::getParentPackageId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, me.zhengjie.modules.customer.pkg.domain.ParentPackage> packageMap = new HashMap<>();
+        if (!packageIds.isEmpty()) {
+            QueryWrapper<me.zhengjie.modules.customer.pkg.domain.ParentPackage> packageWrapper = new QueryWrapper<>();
+            packageWrapper.in("id", packageIds);
+            List<me.zhengjie.modules.customer.pkg.domain.ParentPackage> packages = parentPackageMapper.selectList(packageWrapper);
+            for (me.zhengjie.modules.customer.pkg.domain.ParentPackage p : packages) {
+                packageMap.put(p.getId(), p);
+            }
+        }
+
+        // 4. 把 mealPlanId -> mealType 映射
+        Map<Long, String> mealPlanMealTypeMap = mealPlans.stream()
+                .collect(Collectors.toMap(MealPlan::getId, MealPlan::getMealType));
+
+        // 5. 按 (mealType, mealPackage) 分组，统计 distinct customerId
         // 复合键: mealType|mealPackage
-        Map<String, Set<Integer>> groupCustomerIds = new LinkedHashMap<>();
+        Map<String, Set<Long>> groupCustomerIds = new LinkedHashMap<>();
 
-        for (CustomerMenuRecord menu : menuRecords) {
-            String mealType = recordMealTypeMap.get(menu.getRecordId());
+        for (MealPlanCustomer pc : planCustomers) {
+            String mealType = mealPlanMealTypeMap.get(pc.getMealPlanId());
             if (mealType == null) continue;
 
-            CustomerDietaryRestrictions customer = customerMap.get(menu.getCustomerId());
-            String mealPackage = (customer != null) ? customer.getMealPackage() : null;
+            me.zhengjie.modules.customer.order.domain.CustomerOrder order = orderMap.get(pc.getOrderId());
+            if (order == null) continue;
+
+            me.zhengjie.modules.customer.pkg.domain.ParentPackage pkg = packageMap.get(order.getParentPackageId());
+            String mealPackage = (pkg != null) ? pkg.getPackageCode() : null;
             if (mealPackage == null) continue;
 
             String key = mealType + "|" + mealPackage;
-            groupCustomerIds.computeIfAbsent(key, k -> new HashSet<>()).add(menu.getCustomerId());
+            groupCustomerIds.computeIfAbsent(key, k -> new HashSet<>()).add(pc.getCustomerId());
         }
 
-        // 5. 组装结果
+        // 6. 组装结果 - 按 (餐次, 套餐) 分组
         List<DailyCustomerStats.MealPackageGroup> groups = new ArrayList<>();
         int totalCount = 0;
 
-        // 按 LUNCH -> DINNER 排序，套餐内部排序
         List<String> sortedKeys = groupCustomerIds.keySet().stream()
                 .sorted((a, b) -> {
                     String aType = a.split("\\|")[0];
@@ -1376,7 +1417,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             String mealType = parts[0];
             String mealPackage = parts[1];
 
-            Set<Integer> customerIdSet = groupCustomerIds.get(key);
+            Set<Long> customerIdSet = groupCustomerIds.get(key);
             int count = customerIdSet != null ? customerIdSet.size() : 0;
             totalCount += count;
 
@@ -1389,18 +1430,18 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             groups.add(group);
         }
 
-        // 6. 按来源分组，统计 distinct customerId
-        Map<String, Set<Integer>> sourceCustomerIds = new LinkedHashMap<>();
-        for (CustomerMenuRecord menu : menuRecords) {
-            CustomerDietaryRestrictions customer = customerMap.get(menu.getCustomerId());
-            if (customer == null) continue;
-            String source = (customer.getSource() != null && !customer.getSource().isEmpty())
-                    ? customer.getSource() : "未知来源";
-            sourceCustomerIds.computeIfAbsent(source, k -> new HashSet<>()).add(menu.getCustomerId());
+        // 7. 按来源分组，统计 distinct customerId
+        Map<String, Set<Long>> sourceCustomerIds = new LinkedHashMap<>();
+        for (MealPlanCustomer pc : planCustomers) {
+            me.zhengjie.modules.customer.profile.domain.CustomerProfile profile = customerProfileMap.get(pc.getCustomerId());
+            if (profile == null) continue;
+            String source = (profile.getPhone() != null && !profile.getPhone().isEmpty())
+                    ? profile.getPhone().substring(0, 7) : "未知来源";  // 用手机号前7位作为来源标识
+            sourceCustomerIds.computeIfAbsent(source, k -> new HashSet<>()).add(pc.getCustomerId());
         }
 
         List<DailyCustomerStats.SourceGroup> sourceGroups = new ArrayList<>();
-        for (Map.Entry<String, Set<Integer>> entry : sourceCustomerIds.entrySet()) {
+        for (Map.Entry<String, Set<Long>> entry : sourceCustomerIds.entrySet()) {
             DailyCustomerStats.SourceGroup sg = new DailyCustomerStats.SourceGroup();
             sg.setSource(entry.getKey());
             sg.setSourceDesc(entry.getKey());
@@ -1416,40 +1457,60 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
     @Override
     public List<Map<String, Object>> getCustomerSourceStats(String date) {
-        LocalDate targetDate = LocalDate.parse(date, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        // 1. 查询指定日期的排餐计划 (新表 meal_plan)
+        QueryWrapper<MealPlan> planWrapper = new QueryWrapper<>();
+        planWrapper.eq("record_date", date).eq("deleted", false);
+        List<MealPlan> mealPlans = mealPlanMapper.selectList(planWrapper);
 
-        QueryWrapper<CustomerDietaryRestrictions> wrapper = new QueryWrapper<>();
-        // 剩余餐数 > 0
-        wrapper.gt("remaining_meals", 0);
-        // startDate <= targetDate
-        wrapper.le("start_date", date);
-        // endDate >= targetDate
-        wrapper.apply("end_date IS NULL OR end_date >= {0}", date);
+        if (mealPlans.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        List<CustomerDietaryRestrictions> customers = customerDietaryRestrictionsMapper.selectList(wrapper);
+        // 2. 查询所有客户排餐计划 (新表 meal_plan_customer)
+        List<Long> mealPlanIds = mealPlans.stream()
+                .map(MealPlan::getId)
+                .collect(Collectors.toList());
 
-        // 构建字典 label 映射
-        Map<String, String> sourceLabelMap = new HashMap<>();
-        List<DictDetail> dictDetails = dictDetailService.getDictByName("customer_source");
-        if (dictDetails != null) {
-            for (DictDetail d : dictDetails) {
-                sourceLabelMap.put(d.getValue(), d.getLabel());
+        QueryWrapper<MealPlanCustomer> customerWrapper = new QueryWrapper<>();
+        customerWrapper.in("meal_plan_id", mealPlanIds).eq("deleted", false);
+        List<MealPlanCustomer> planCustomers = mealPlanCustomerMapper.selectList(customerWrapper);
+
+        if (planCustomers.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 3. 收集客户ID，查询客户档案
+        Set<Long> customerIds = planCustomers.stream()
+                .map(MealPlanCustomer::getCustomerId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<Long, me.zhengjie.modules.customer.profile.domain.CustomerProfile> customerProfileMap = new HashMap<>();
+        if (!customerIds.isEmpty()) {
+            QueryWrapper<me.zhengjie.modules.customer.profile.domain.CustomerProfile> profileWrapper = new QueryWrapper<>();
+            profileWrapper.in("id", customerIds);
+            List<me.zhengjie.modules.customer.profile.domain.CustomerProfile> profiles = customerProfileMapper.selectList(profileWrapper);
+            for (me.zhengjie.modules.customer.profile.domain.CustomerProfile p : profiles) {
+                customerProfileMap.put(p.getId(), p);
             }
         }
 
-        // 按 source 分组计数
+        // 4. 按来源分组计数（用手机号前7位作为来源标识）
         Map<String, Integer> sourceCountMap = new LinkedHashMap<>();
-        for (CustomerDietaryRestrictions c : customers) {
-            String source = (c.getSource() != null && !c.getSource().trim().isEmpty())
-                    ? c.getSource().trim() : "other";
+        for (MealPlanCustomer pc : planCustomers) {
+            me.zhengjie.modules.customer.profile.domain.CustomerProfile profile = customerProfileMap.get(pc.getCustomerId());
+            if (profile == null) continue;
+            String source = (profile.getPhone() != null && !profile.getPhone().isEmpty())
+                    ? profile.getPhone().substring(0, 7) : "other";
             sourceCountMap.merge(source, 1, Integer::sum);
         }
 
+        // 5. 组装结果
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map.Entry<String, Integer> entry : sourceCountMap.entrySet()) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("source", entry.getKey());
-            item.put("sourceDesc", sourceLabelMap.getOrDefault(entry.getKey(), entry.getKey()));
+            item.put("sourceDesc", entry.getKey());
             item.put("customerCount", entry.getValue());
             result.add(item);
         }
