@@ -1446,11 +1446,20 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             sourceCustomerIds.computeIfAbsent(source, k -> new HashSet<>()).add(pc.getCustomerId());
         }
 
+        // 8. 获取字典label映射
+        Map<String, String> sourceLabelMap = new HashMap<>();
+        List<DictDetail> dictDetails = dictDetailService.getDictByName("customer_source");
+        if (dictDetails != null) {
+            for (DictDetail d : dictDetails) {
+                sourceLabelMap.put(d.getValue(), d.getLabel());
+            }
+        }
+
         List<DailyCustomerStats.SourceGroup> sourceGroups = new ArrayList<>();
         for (Map.Entry<String, Set<Long>> entry : sourceCustomerIds.entrySet()) {
             DailyCustomerStats.SourceGroup sg = new DailyCustomerStats.SourceGroup();
             sg.setSource(entry.getKey());
-            sg.setSourceDesc(entry.getKey());
+            sg.setSourceDesc(sourceLabelMap.getOrDefault(entry.getKey(), entry.getKey()));
             sg.setCustomerCount(entry.getValue().size());
             sourceGroups.add(sg);
         }
@@ -1525,12 +1534,21 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             sourceCountMap.merge(source, 1, Integer::sum);
         }
 
-        // 5. 组装结果
+        // 5. 获取字典label映射
+        Map<String, String> sourceLabelMap = new HashMap<>();
+        List<DictDetail> dictDetails = dictDetailService.getDictByName("customer_source");
+        if (dictDetails != null) {
+            for (DictDetail d : dictDetails) {
+                sourceLabelMap.put(d.getValue(), d.getLabel());
+            }
+        }
+
+        // 6. 组装结果
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map.Entry<String, Integer> entry : sourceCountMap.entrySet()) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("source", entry.getKey());
-            item.put("sourceDesc", entry.getKey());
+            item.put("sourceDesc", sourceLabelMap.getOrDefault(entry.getKey(), entry.getKey()));
             item.put("customerCount", entry.getValue());
             result.add(item);
         }
