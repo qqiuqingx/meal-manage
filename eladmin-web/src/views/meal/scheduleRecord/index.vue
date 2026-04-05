@@ -132,8 +132,15 @@
             {{ formatTime(scope.row.createTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" align="center" width="150">
+        <el-table-column label="操作" align="center" width="200">
           <template slot-scope="scope">
+            <el-button
+              type="success"
+              icon="el-icon-document"
+              size="mini"
+              title="查看生产单"
+              @click="openProductionSheet(scope.row)"
+            />
             <el-button
               type="primary"
               icon="el-icon-user"
@@ -339,6 +346,17 @@ export default {
     handleQuery() {
       this.queryParams.page = 0
       this.getList()
+    },
+    openProductionSheet(row) {
+      const routeData = this.$router.resolve({
+        path: '/meal/production-sheet',
+        query: {
+          mealPlanId: row.id,
+          date: row.recordDate,
+          mealType: row.mealType
+        }
+      })
+      window.open(routeData.href, '_blank')
     },
     resetQuery() {
       this.$refs.queryForm.resetFields()

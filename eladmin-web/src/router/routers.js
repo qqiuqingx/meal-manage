@@ -57,6 +57,19 @@ export const constantRouterMap = [
         meta: { title: '个人中心' }
       }
     ]
+  },
+  {
+    path: '/meal',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: 'production-sheet',
+        component: (resolve) => require(['@/views/meal/productionSheet/index'], resolve),
+        name: 'ProductionSheet',
+        meta: { title: '排餐生产单', noCache: true }
+      }
+    ]
   }
 ]
 
