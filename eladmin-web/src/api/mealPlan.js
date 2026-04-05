@@ -38,3 +38,11 @@ export function delMealPlanCustomers(data) {
     data
   })
 }
+
+export function getMealPackageStatistics(params) {
+  return request({
+    url: '/api/meal-plan/statistics-by-date',
+    method: 'get',
+    params
+  })
+}
