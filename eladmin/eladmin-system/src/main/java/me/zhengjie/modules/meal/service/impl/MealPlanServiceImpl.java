@@ -1438,6 +1438,7 @@ public class MealPlanServiceImpl implements MealPlanService {
                     detail.setCustomerId(customer.getCustomerId());
                     detail.setCustomerName(customer.getCustomerName());
                     detail.setPhone(customer.getPhone());
+                    detail.setCustomerCode(customer.getCustomerCode());
                     detail.setOrderId(customer.getOrderId());
                     detail.setParentPackageId(customer.getParentPackageId());
                     detail.setChildPackageId(customer.getChildPackageId());

@@ -78,6 +78,9 @@ public class MealPlanDetailVO {
         @ApiModelProperty(value = "手机号")
         private String phone;
 
+        @ApiModelProperty(value = "客户编码")
+        private String customerCode;
+
         @ApiModelProperty(value = "订单ID")
         private Long orderId;
 
