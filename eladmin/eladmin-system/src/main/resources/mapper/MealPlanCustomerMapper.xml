@@ -8,6 +8,7 @@
         <result column="customer_id" property="customerId"/>
         <result column="customer_name" property="customerName"/>
         <result column="phone" property="phone"/>
+        <result column="customer_code" property="customerCode"/>
         <result column="order_id" property="orderId"/>
         <result column="parent_package_id" property="parentPackageId"/>
         <result column="child_package_id" property="childPackageId"/>
@@ -79,13 +80,16 @@
     </update>
 
     <select id="selectByMealPlanId" resultMap="BaseResultMap">
-        select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
-               status, fail_reason, meat_required_count, veg_required_count, include_soup, include_rice,
-               create_by, update_by, deleted, create_time, update_time
-        from meal_plan_customer
-        where meal_plan_id = #{mealPlanId}
-          and deleted = 0
-        order by id asc
+        select mpc.id, mpc.meal_plan_id, mpc.customer_id, mpc.customer_name, mpc.phone,
+               cp.customer_code, mpc.order_id, mpc.parent_package_id, mpc.child_package_id,
+               mpc.status, mpc.fail_reason, mpc.meat_required_count, mpc.veg_required_count,
+               mpc.include_soup, mpc.include_rice, mpc.create_by, mpc.update_by,
+               mpc.deleted, mpc.create_time, mpc.update_time
+        from meal_plan_customer mpc
+        left join customer_profile cp on mpc.customer_id = cp.id
+        where mpc.meal_plan_id = #{mealPlanId}
+          and mpc.deleted = 0
+        order by mpc.id asc
     </select>
 
 </mapper>
