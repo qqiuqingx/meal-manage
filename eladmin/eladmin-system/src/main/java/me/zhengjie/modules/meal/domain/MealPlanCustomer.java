@@ -16,6 +16,7 @@
 package me.zhengjie.modules.meal.domain;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import io.swagger.annotations.ApiModelProperty;
@@ -50,6 +51,7 @@ public class MealPlanCustomer extends BaseEntity {
     private String phone;
 
     @ApiModelProperty(value = "客户编码")
+    @TableField(exist = false)
     private String customerCode;
 
     @ApiModelProperty(value = "订单ID")
