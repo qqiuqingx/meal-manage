@@ -25,6 +25,12 @@
         <result column="update_time" property="updateTime"/>
     </resultMap>
 
+    <resultMap id="MealPackageStatResultMap" type="me.zhengjie.modules.meal.domain.dto.MealPackageStatDto">
+        <result column="package_code" property="packageCode"/>
+        <result column="package_name" property="packageName"/>
+        <result column="meal_count" property="mealCount"/>
+    </resultMap>
+
     <select id="selectPageByCriteria" resultMap="BaseResultMap">
         select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
                status, fail_reason, meat_required_count, veg_required_count, include_soup, include_rice,
@@ -90,6 +96,21 @@
         where mpc.meal_plan_id = #{mealPlanId}
           and mpc.deleted = 0
         order by mpc.id asc
+    </select>
+
+    <select id="statByDate" resultMap="MealPackageStatResultMap">
+        select
+            pp.package_code,
+            pp.package_name,
+            count(mpc.id) as meal_count
+        from meal_plan mp
+        join meal_plan_customer mpc on mp.id = mpc.meal_plan_id
+        join parent_package pp on mpc.parent_package_id = pp.id
+        where mp.record_date = #{date}
+          and mp.deleted = 0
+          and mpc.deleted = 0
+        group by pp.id, pp.package_code, pp.package_name
+        order by meal_count desc
     </select>
 
 </mapper>
