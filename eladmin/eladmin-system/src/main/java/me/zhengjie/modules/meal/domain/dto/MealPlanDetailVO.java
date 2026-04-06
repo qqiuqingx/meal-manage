@@ -108,6 +108,15 @@ public class MealPlanDetailVO {
         @ApiModelProperty(value = "是否包含米饭")
         private Integer includeRice;
 
+        @ApiModelProperty(value = "是否已核销（0未核销，1已核销）")
+        private Integer isVerified;
+
+        @ApiModelProperty(value = "核销时间")
+        private String verificationTime;
+
+        @ApiModelProperty(value = "核销操作人")
+        private String verificationOperator;
+
         @ApiModelProperty(value = "菜品明细列表")
         private List<MealPlanCustomerItemVO> items;
     }
