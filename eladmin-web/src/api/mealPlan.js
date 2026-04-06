@@ -8,11 +8,14 @@ export function generateMealPlan(data) {
   })
 }
 
-export function getMealPlanList(params) {
+export function getMealPlanList(params, includeDetail = false) {
   return request({
     url: '/api/meal-plan',
     method: 'get',
-    params
+    params: {
+      ...params,
+      includeDetail
+    }
   })
 }
 

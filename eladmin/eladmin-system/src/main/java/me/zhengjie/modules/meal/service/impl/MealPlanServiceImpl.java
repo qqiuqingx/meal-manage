@@ -38,6 +38,7 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
+import me.zhengjie.modules.meal.domain.dto.MealPlanListDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.meal.mapper.DishMapper;
@@ -1213,6 +1214,35 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     @Override
+    public PageResult<MealPlanListDetailVO> queryAllWithDetail(MealPlanQueryCriteria criteria) {
+        Page<MealPlan> page = new Page<>(criteria.getPage(), criteria.getSize());
+        Page<MealPlan> result = mealPlanMapper.selectPageByCriteria(criteria, page);
+        List<MealPlan> plans = result.getRecords();
+        if (plans.isEmpty()) {
+            return new PageResult<>(Collections.emptyList(), result.getTotal());
+        }
+
+        List<Long> mealPlanIds = plans.stream()
+                .map(MealPlan::getId)
+                .collect(Collectors.toList());
+        List<MealPlanCustomer> allCustomers = mealPlanCustomerMapper.selectByMealPlanIds(mealPlanIds);
+        Map<Long, List<MealPlanCustomer>> customersByPlanId = allCustomers.stream()
+                .collect(Collectors.groupingBy(MealPlanCustomer::getMealPlanId));
+        Map<Long, List<MealPlanCustomerItem>> itemsByCustomerPlanId = buildItemsByCustomerPlanId(allCustomers);
+        Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> ingredientsMap =
+                buildIngredientsMapForItems(itemsByCustomerPlanId);
+
+        List<MealPlanListDetailVO> content = plans.stream()
+                .map(plan -> assembleMealPlanListDetail(
+                        plan,
+                        customersByPlanId.getOrDefault(plan.getId(), Collections.emptyList()),
+                        itemsByCustomerPlanId,
+                        ingredientsMap))
+                .collect(Collectors.toList());
+        return new PageResult<>(content, result.getTotal());
+    }
+
+    @Override
     public MealPlan queryById(Long id) {
         return mealPlanMapper.selectById(id);
     }
@@ -1249,6 +1279,93 @@ public class MealPlanServiceImpl implements MealPlanService {
         return items.stream()
                 .map(item -> convertToVO(item, finalIngredientsMap))
                 .collect(Collectors.toList());
+    }
+
+    private Map<Long, List<MealPlanCustomerItem>> buildItemsByCustomerPlanId(List<MealPlanCustomer> customers) {
+        if (customers == null || customers.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<Long> customerPlanIds = customers.stream()
+                .map(MealPlanCustomer::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (customerPlanIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<MealPlanCustomerItem> allItems = mealPlanCustomerItemMapper.selectByCustomerPlanIds(customerPlanIds);
+        if (allItems.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return allItems.stream()
+                .collect(Collectors.groupingBy(MealPlanCustomerItem::getCustomerPlanId));
+    }
+
+    private Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> buildIngredientsMapForItems(
+            Map<Long, List<MealPlanCustomerItem>> itemsByCustomerPlanId) {
+        if (itemsByCustomerPlanId == null || itemsByCustomerPlanId.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<Integer> dishIds = itemsByCustomerPlanId.values().stream()
+                .flatMap(List::stream)
+                .map(MealPlanCustomerItem::getDishId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        return buildDishIngredientsMap(dishIds);
+    }
+
+    private MealPlanDetailVO.CustomerPlanDetail assembleCustomerDetail(
+            MealPlanCustomer customer,
+            Map<Long, List<MealPlanCustomerItem>> itemsByCustomerPlanId,
+            Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> ingredientsMap) {
+        MealPlanDetailVO.CustomerPlanDetail detail = new MealPlanDetailVO.CustomerPlanDetail();
+        detail.setId(customer.getId());
+        detail.setCustomerId(customer.getCustomerId());
+        detail.setCustomerName(customer.getCustomerName());
+        detail.setPhone(customer.getPhone());
+        detail.setCustomerCode(customer.getCustomerCode());
+        detail.setOrderId(customer.getOrderId());
+        detail.setParentPackageId(customer.getParentPackageId());
+        detail.setChildPackageId(customer.getChildPackageId());
+        detail.setStatus(customer.getStatus());
+        detail.setFailReason(customer.getFailReason());
+        detail.setMeatRequiredCount(customer.getMeatRequiredCount());
+        detail.setVegRequiredCount(customer.getVegRequiredCount());
+        detail.setIncludeSoup(customer.getIncludeSoup());
+        detail.setIncludeRice(customer.getIncludeRice());
+        detail.setIsVerified(customer.getIsVerified());
+        detail.setVerificationTime(customer.getVerificationTime() != null ? customer.getVerificationTime().toString() : null);
+        detail.setVerificationOperator(customer.getVerificationOperator());
+
+        List<MealPlanCustomerItem> items = itemsByCustomerPlanId.getOrDefault(customer.getId(), Collections.emptyList());
+        List<MealPlanCustomerItemVO> itemVOs = items.stream()
+                .map(item -> convertToVO(item, ingredientsMap))
+                .collect(Collectors.toList());
+        detail.setItems(itemVOs);
+        return detail;
+    }
+
+    private MealPlanListDetailVO assembleMealPlanListDetail(
+            MealPlan plan,
+            List<MealPlanCustomer> customers,
+            Map<Long, List<MealPlanCustomerItem>> itemsByCustomerPlanId,
+            Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> ingredientsMap) {
+        MealPlanListDetailVO vo = new MealPlanListDetailVO();
+        vo.setId(plan.getId());
+        vo.setRecordDate(plan.getRecordDate() != null ? plan.getRecordDate().toString() : null);
+        vo.setMealType(plan.getMealType());
+        vo.setTotalCount(plan.getTotalCount());
+        vo.setSuccessCount(plan.getSuccessCount());
+        vo.setFailCount(plan.getFailCount());
+        vo.setStatus(plan.getStatus());
+        vo.setGenerateTime(plan.getGenerateTime() != null ? plan.getGenerateTime().toString() : null);
+
+        List<MealPlanDetailVO.CustomerPlanDetail> customerDetails = customers.stream()
+                .map(customer -> assembleCustomerDetail(customer, itemsByCustomerPlanId, ingredientsMap))
+                .collect(Collectors.toList());
+        vo.setCustomers(customerDetails);
+        vo.setTotalCustomers(customerDetails.size());
+        return vo;
     }
 
     private Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> buildDishIngredientsMap(List<Integer> dishIds) {
@@ -1388,34 +1505,9 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         // 查询所有客户列表
         List<MealPlanCustomer> customers = mealPlanCustomerMapper.selectByMealPlanId(mealPlanId);
-        List<Long> customerPlanIds = customers.stream()
-                .map(MealPlanCustomer::getId)
-                .collect(Collectors.toList());
-
-        // 批量查询所有客户的菜品明细
-        Map<Long, List<MealPlanCustomerItem>> itemsMap;
-        if (!customerPlanIds.isEmpty()) {
-            List<MealPlanCustomerItem> allItems = mealPlanCustomerItemMapper.selectByCustomerPlanIds(customerPlanIds);
-            itemsMap = allItems.stream()
-                    .collect(Collectors.groupingBy(MealPlanCustomerItem::getCustomerPlanId));
-        } else {
-            itemsMap = Collections.emptyMap();
-        }
-
-        // 批量查询所有菜品的配料
-        List<Integer> allDishIds = Collections.emptyList();
-        if (!itemsMap.isEmpty()) {
-            Set<Integer> dishIds = itemsMap.values().stream()
-                    .flatMap(List::stream)
-                    .map(MealPlanCustomerItem::getDishId)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toSet());
-            if (!dishIds.isEmpty()) {
-                allDishIds = new ArrayList<>(dishIds);
-            }
-        }
+        Map<Long, List<MealPlanCustomerItem>> itemsMap = buildItemsByCustomerPlanId(customers);
         Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> finalIngredientsMap =
-                buildDishIngredientsMap(allDishIds);
+                buildIngredientsMapForItems(itemsMap);
 
         // 组装返回结果
         MealPlanDetailVO result = new MealPlanDetailVO();
@@ -1432,36 +1524,7 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         // 设置客户列表
         List<MealPlanDetailVO.CustomerPlanDetail> customerDetails = customers.stream()
-                .map(customer -> {
-                    Long customerId = customer.getId();
-                    MealPlanDetailVO.CustomerPlanDetail detail = new MealPlanDetailVO.CustomerPlanDetail();
-                    detail.setId(customerId);
-                    detail.setCustomerId(customer.getCustomerId());
-                    detail.setCustomerName(customer.getCustomerName());
-                    detail.setPhone(customer.getPhone());
-                    detail.setCustomerCode(customer.getCustomerCode());
-                    detail.setOrderId(customer.getOrderId());
-                    detail.setParentPackageId(customer.getParentPackageId());
-                    detail.setChildPackageId(customer.getChildPackageId());
-                    detail.setStatus(customer.getStatus());
-                    detail.setFailReason(customer.getFailReason());
-                    detail.setMeatRequiredCount(customer.getMeatRequiredCount());
-                    detail.setVegRequiredCount(customer.getVegRequiredCount());
-                    detail.setIncludeSoup(customer.getIncludeSoup());
-                    detail.setIncludeRice(customer.getIncludeRice());
-                    detail.setIsVerified(customer.getIsVerified());
-                    detail.setVerificationTime(customer.getVerificationTime() != null ? customer.getVerificationTime().toString() : null);
-                    detail.setVerificationOperator(customer.getVerificationOperator());
-
-                    // 设置菜品明细
-                    List<MealPlanCustomerItem> items = itemsMap.getOrDefault(customerId, Collections.emptyList());
-                    List<MealPlanCustomerItemVO> itemVOs = items.stream()
-                            .map(item -> convertToVO(item, finalIngredientsMap))
-                            .collect(Collectors.toList());
-                    detail.setItems(itemVOs);
-
-                    return detail;
-                })
+                .map(customer -> assembleCustomerDetail(customer, itemsMap, finalIngredientsMap))
                 .collect(Collectors.toList());
 
         result.setCustomers(customerDetails);
