@@ -30,6 +30,7 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateRequest;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
+import me.zhengjie.modules.meal.domain.dto.MealPlanListDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
 import me.zhengjie.modules.meal.service.MealPlanService;
 import me.zhengjie.utils.PageResult;
@@ -80,7 +81,13 @@ public class MealPlanController {
     @ApiOperation("查询排餐计划列表")
     @GetMapping
     @PreAuthorize("@el.check('mealPlan:list')")
-    public ResponseEntity<PageResult<MealPlan>> queryMealPlan(MealPlanQueryCriteria criteria) {
+    public ResponseEntity<?> queryMealPlan(
+            MealPlanQueryCriteria criteria,
+            @ApiParam(value = "是否包含客户和菜品详情") @RequestParam(required = false, defaultValue = "false") Boolean includeDetail) {
+        if (Boolean.TRUE.equals(includeDetail)) {
+            PageResult<MealPlanListDetailVO> result = mealPlanService.queryAllWithDetail(criteria);
+            return new ResponseEntity<>(result, HttpStatus.OK);
+        }
         return new ResponseEntity<>(mealPlanService.queryAll(criteria), HttpStatus.OK);
     }
 

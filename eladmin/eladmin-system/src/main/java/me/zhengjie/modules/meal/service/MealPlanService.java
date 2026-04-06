@@ -22,6 +22,7 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
+import me.zhengjie.modules.meal.domain.dto.MealPlanListDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
 import me.zhengjie.utils.PageResult;
 
@@ -51,6 +52,14 @@ public interface MealPlanService {
      * @return 分页结果
      */
     PageResult<MealPlan> queryAll(MealPlanQueryCriteria criteria);
+
+    /**
+     * 分页查询排餐计划列表（包含客户与菜品详情）
+     *
+     * @param criteria 查询条件
+     * @return 分页结果
+     */
+    PageResult<MealPlanListDetailVO> queryAllWithDetail(MealPlanQueryCriteria criteria);
 
     /**
      * 根据ID查询排餐计划

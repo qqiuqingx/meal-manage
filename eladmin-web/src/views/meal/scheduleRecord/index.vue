@@ -350,12 +350,12 @@ export default {
       if (!params.mealType) {
         delete params.mealType
       }
-      getMealPlanList(params).then(res => {
+      getMealPlanList(params, true).then(res => {
         const list = res.content || []
 
         list.forEach(record => {
           record.recordId = record.id
-          record.customerCount = record.totalCount
+          record.customerCount = record.totalCustomers != null ? record.totalCustomers : record.totalCount
           record.createTime = record.generateTime
 
           if (record.recordDate) {
@@ -375,8 +375,7 @@ export default {
             record.weekNum = 1 + Math.ceil((firstThursday - target) / 604800000)
           }
 
-          // Placeholder for expansion
-          record.customerMenus = null
+          record.customerMenus = this.buildCustomerMenus(record.customers || [])
           record.loadingDetails = false
         })
 
@@ -410,67 +409,59 @@ export default {
     handleExpandChange(row, expandedRows) {
       const isExpanded = expandedRows.some(r => r.recordId === row.recordId)
       if (isExpanded && !row.customerMenus && !row.loadingDetails) {
-        this.$set(row, 'loadingDetails', true)
-        getMealPlanFullDetail(row.id).then(res => {
-          const customers = res.customers || []
-          const rawMenus = []
-          if (customers.length > 0) {
-            customers.forEach(customer => {
-              if (customer.items) {
-                customer.items.forEach(item => {
-                  let ingredientsStr = ''
-                  if (item.ingredients && item.ingredients.length > 0) {
-                    ingredientsStr = item.ingredients.map(ing => ing.ingredientName).join('、')
-                  }
-                  rawMenus.push({
-                    ...item,
-                    customerName: customer.customerName,
-                    dishIngredients: ingredientsStr,
-                    replacementReason: item.replaceReason
-                  })
-                })
+        this.$set(row, 'customerMenus', this.buildCustomerMenus(row.customers || []))
+      }
+    },
+    buildCustomerMenus(customers) {
+      const rawMenus = []
+      if (customers && customers.length > 0) {
+        customers.forEach(customer => {
+          if (customer.items) {
+            customer.items.forEach(item => {
+              let ingredientsStr = ''
+              if (item.ingredients && item.ingredients.length > 0) {
+                ingredientsStr = item.ingredients.map(ing => ing.ingredientName).join('、')
               }
+              rawMenus.push({
+                ...item,
+                customerName: customer.customerName,
+                dishIngredients: ingredientsStr,
+                replacementReason: item.replaceReason
+              })
             })
-
-            const dishGroups = {}
-            rawMenus.forEach(item => {
-              const key = `${item.dishType}_${item.dishName}_${item.isReplaced}_${item.replacementReason || ''}`
-              if (!dishGroups[key]) {
-                dishGroups[key] = {
-                  ...item,
-                  customerNames: [item.customerName]
-                }
-              } else {
-                if (!dishGroups[key].customerNames.includes(item.customerName)) {
-                  dishGroups[key].customerNames.push(item.customerName)
-                }
-              }
-            })
-
-            const newMenus = Object.values(dishGroups).map(g => {
-              return {
-                ...g,
-                customerName: g.customerNames.sort().join('、'),
-                dishCustomerCount: g.customerNames.length
-              }
-            })
-
-            const typeOrder = { 'SOUP': 1, 'MAIN': 2, 'SIDE': 3, 'VEGETABLE': 4, 'RICE': 5 }
-            newMenus.sort((a, b) => {
-              const replacedA = a.isReplaced ? 1 : 0
-              const replacedB = b.isReplaced ? 1 : 0
-              if (replacedA !== replacedB) return replacedA - replacedB
-              return (typeOrder[a.dishType] || 99) - (typeOrder[b.dishType] || 99)
-            })
-            this.$set(row, 'customerMenus', newMenus)
-          } else {
-            this.$set(row, 'customerMenus', [])
           }
-          this.$set(row, 'loadingDetails', false)
-        }).catch(() => {
-          this.$set(row, 'loadingDetails', false)
         })
       }
+
+      const dishGroups = {}
+      rawMenus.forEach(item => {
+        const key = `${item.dishType}_${item.dishName}_${item.isReplaced}_${item.replacementReason || ''}`
+        if (!dishGroups[key]) {
+          dishGroups[key] = {
+            ...item,
+            customerNames: [item.customerName]
+          }
+        } else if (!dishGroups[key].customerNames.includes(item.customerName)) {
+          dishGroups[key].customerNames.push(item.customerName)
+        }
+      })
+
+      const menus = Object.values(dishGroups).map(g => {
+        return {
+          ...g,
+          customerName: g.customerNames.sort().join('、'),
+          dishCustomerCount: g.customerNames.length
+        }
+      })
+
+      const typeOrder = { 'SOUP': 1, 'MAIN': 2, 'SIDE': 3, 'VEGETABLE': 4, 'RICE': 5 }
+      menus.sort((a, b) => {
+        const replacedA = a.isReplaced ? 1 : 0
+        const replacedB = b.isReplaced ? 1 : 0
+        if (replacedA !== replacedB) return replacedA - replacedB
+        return (typeOrder[a.dishType] || 99) - (typeOrder[b.dishType] || 99)
+      })
+      return menus
     },
     openGenerateDialog() {
       // 加载客户列表供选择
