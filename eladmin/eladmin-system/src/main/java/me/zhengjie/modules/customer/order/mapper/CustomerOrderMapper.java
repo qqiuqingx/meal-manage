@@ -74,4 +74,19 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
     List<CustomerOrder> findMealPlanOrders(@Param("targetDate") LocalDate targetDate,
                                            @Param("mealType") String mealType);
 
+    /**
+     * 原子性增加核销餐数（verified_count+1，remaining_count-1）
+     * @param orderId 订单ID
+     * @return 更新行数，0表示失败（如剩余餐数不足）
+     */
+    int incrementVerifiedCount(@Param("orderId") Long orderId);
+
+    /**
+     * 原子性增加核销餐数和金额
+     * @param orderId 订单ID
+     * @param price 单价
+     * @return 更新行数，0表示失败（如剩余餐数不足）
+     */
+    int incrementVerifiedCountAndAmount(@Param("orderId") Long orderId, @Param("price") java.math.BigDecimal price);
+
 }

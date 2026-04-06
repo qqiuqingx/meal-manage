@@ -216,8 +216,15 @@
     </el-dialog>
 
     <!-- 客户排餐管理对话框 -->
-    <el-dialog title="客户排餐管理" :visible.sync="customerDialog.visible" width="600px" @close="resetCustomerDialog">
+    <el-dialog title="客户排餐管理" :visible.sync="customerDialog.visible" width="800px" @close="resetCustomerDialog">
       <div style="margin-bottom: 10px;">
+        <el-button
+          type="primary"
+          icon="el-icon-check"
+          size="small"
+          :disabled="customerDialog.selections.length === 0 || !hasUnverifiedSelections()"
+          @click="handleBatchVerify"
+        >批量核销</el-button>
         <el-button
           type="danger"
           icon="el-icon-delete"
@@ -234,13 +241,43 @@
         @selection-change="handleCustomerSelectionChange"
       >
         <el-table-column type="selection" width="55" align="center" />
-        <el-table-column label="客户" prop="customerName" align="center" />
-        <el-table-column label="操作" align="center" width="100">
+        <el-table-column label="客户" prop="customerName" align="center" min-width="120" />
+        <el-table-column label="核销状态" prop="isVerified" align="center" width="100">
           <template slot-scope="scope">
+            <el-tag v-if="scope.row.isVerified != null && scope.row.isVerified === 1" type="success" size="mini">已核销</el-tag>
+            <el-tag v-else type="info" size="mini">未核销</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" align="center" width="180">
+          <template slot-scope="scope">
+            <el-button
+              v-if="!scope.row.isVerified || scope.row.isVerified !== 1"
+              type="text"
+              style="color: #67C23A;"
+              @click="handleSingleVerify(scope.row)"
+            >核销</el-button>
             <el-button type="text" style="color: #F56C6C;" @click="handleDeleteSingleCustomer(scope.row)">删除排餐</el-button>
           </template>
         </el-table-column>
       </el-table>
+    </el-dialog>
+
+    <!-- 核销确认对话框 -->
+    <el-dialog title="核销确认" :visible.sync="verifyDialog.visible" width="500px">
+      <div v-if="verifyDialog.records && verifyDialog.records.length > 0">
+        <p>即将核销以下 {{ verifyDialog.records.length }} 个客户的排餐：</p>
+        <el-table :data="verifyDialog.records" border size="mini" style="margin-top: 10px;">
+          <el-table-column label="客户名称" prop="customerName" align="center" />
+          <el-table-column label="核销餐数" align="center" width="100">
+            <template>1</template>
+          </el-table-column>
+        </el-table>
+        <p style="margin-top: 15px; color: #F56C6C;">核销后订单剩余餐数将减少1，已核销餐数将增加1</p>
+      </div>
+      <div slot="footer">
+        <el-button @click="verifyDialog.visible = false">取 消</el-button>
+        <el-button type="primary" :loading="verifyDialog.loading" @click="doVerify">确认核销</el-button>
+      </div>
     </el-dialog>
   </div>
 </template>
@@ -248,6 +285,7 @@
 <script>
 import { getMealPlanList, getMealPlanFullDetail, generateMealPlan, delMealPlan, delMealPlanCustomers } from '@/api/mealPlan'
 import { getProfiles } from '@/api/customer/profile'
+import { verifyMeal } from '@/api/mealVerification'
 
 export default {
   name: 'ScheduleRecord',
@@ -293,6 +331,12 @@ export default {
         list: [],
         selections: [],
         currentRecord: null
+      },
+      // 核销确认
+      verifyDialog: {
+        visible: false,
+        loading: false,
+        records: []
       }
     }
   },
@@ -570,6 +614,47 @@ export default {
       this.customerDialog.list = []
       this.customerDialog.selections = []
       this.customerDialog.currentRecord = null
+    },
+    hasUnverifiedSelections() {
+      return this.customerDialog.selections.some(item => item.isVerified !== 1)
+    },
+    handleSingleVerify(row) {
+      this.verifyDialog.records = [row]
+      this.verifyDialog.visible = true
+    },
+    handleBatchVerify() {
+      const unverified = this.customerDialog.selections.filter(item => item.isVerified !== 1)
+      if (unverified.length === 0) {
+        this.$message.warning('请选择未核销的客户')
+        return
+      }
+      this.verifyDialog.records = unverified
+      this.verifyDialog.visible = true
+    },
+    doVerify() {
+      const ids = this.verifyDialog.records.map(item => item.id)
+      this.verifyDialog.loading = true
+      verifyMeal({ customerPlanIds: ids, remark: '' })
+        .then(res => {
+          if (res.failCount > 0) {
+            this.$message.warning(`核销完成：成功 ${res.successCount} 个，失败 ${res.failCount} 个`)
+            if (res.failReasons && res.failReasons.length > 0) {
+              this.$message.error(res.failReasons.join('\n'))
+            }
+          } else {
+            this.$message.success(`核销成功，共核销 ${res.successCount} 个客户`)
+          }
+          this.verifyDialog.visible = false
+          this.getList()
+          this.fetchCustomerList()
+        })
+        .catch(err => {
+          const msg = err && err.response && err.response.data && err.response.data.message
+          this.$message.error(msg || '核销失败，请重试')
+        })
+        .finally(() => {
+          this.verifyDialog.loading = false
+        })
     },
     dishTypeTag(type) {
       const map = {

@@ -62,4 +62,11 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
      * 按日期统计各父套餐餐数
      */
     List<MealPackageStatDto> statByDate(@Param("date") String date);
+
+    /**
+     * 仅在未核销时更新核销状态，避免并发重复核销
+     */
+    int markVerifiedIfPending(@Param("id") Long id,
+                              @Param("verificationTime") java.util.Date verificationTime,
+                              @Param("verificationOperator") String verificationOperator);
 }
