@@ -220,4 +220,28 @@
           AND meal_type IN (#{mealType}, 'ALL')
     </select>
 
+    <!-- 原子性增加核销餐数（verified_count+1，remaining_count-1） -->
+    <update id="incrementVerifiedCount">
+        UPDATE customer_order
+        SET verified_count = verified_count + 1,
+            remaining_count = remaining_count - 1,
+            update_time = NOW()
+        WHERE id = #{orderId}
+          AND remaining_count &gt; 0
+          AND status = 1
+    </update>
+
+    <!-- 原子性增加核销餐数和金额 -->
+    <update id="incrementVerifiedCountAndAmount">
+        UPDATE customer_order
+        SET verified_count = verified_count + 1,
+            verified_amount = verified_amount + #{price},
+            meal_balance = meal_balance - #{price},
+            remaining_count = remaining_count - 1,
+            update_time = NOW()
+        WHERE id = #{orderId}
+          AND remaining_count &gt; 0
+          AND status = 1
+    </update>
+
 </mapper>

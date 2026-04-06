@@ -66,6 +66,15 @@ public class MealPlanCustomer extends BaseEntity {
     @ApiModelProperty(value = "状态")
     private Integer status;
 
+    @ApiModelProperty(value = "是否已核销（0未核销，1已核销）")
+    private Integer isVerified;
+
+    @ApiModelProperty(value = "核销时间")
+    private java.util.Date verificationTime;
+
+    @ApiModelProperty(value = "核销操作人")
+    private String verificationOperator;
+
     @ApiModelProperty(value = "失败原因")
     private String failReason;
 

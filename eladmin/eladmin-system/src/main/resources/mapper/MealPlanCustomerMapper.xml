@@ -13,6 +13,9 @@
         <result column="parent_package_id" property="parentPackageId"/>
         <result column="child_package_id" property="childPackageId"/>
         <result column="status" property="status"/>
+        <result column="is_verified" property="isVerified"/>
+        <result column="verification_time" property="verificationTime"/>
+        <result column="verification_operator" property="verificationOperator"/>
         <result column="fail_reason" property="failReason"/>
         <result column="meat_required_count" property="meatRequiredCount"/>
         <result column="veg_required_count" property="vegRequiredCount"/>
@@ -33,7 +36,8 @@
 
     <select id="selectPageByCriteria" resultMap="BaseResultMap">
         select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
-               status, fail_reason, meat_required_count, veg_required_count, include_soup, include_rice,
+               status, is_verified, verification_time, verification_operator, fail_reason,
+               meat_required_count, veg_required_count, include_soup, include_rice,
                create_by, update_by, deleted, create_time, update_time
         from meal_plan_customer
         <where>
@@ -56,7 +60,8 @@
 
     <select id="selectById" resultMap="BaseResultMap">
         select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
-               status, fail_reason, meat_required_count, veg_required_count, include_soup, include_rice,
+               status, is_verified, verification_time, verification_operator, fail_reason,
+               meat_required_count, veg_required_count, include_soup, include_rice,
                create_by, update_by, deleted, create_time, update_time
         from meal_plan_customer
         where id = #{id}
@@ -65,7 +70,8 @@
 
     <select id="selectByIds" resultMap="BaseResultMap">
         select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
-               status, fail_reason, meat_required_count, veg_required_count, include_soup, include_rice,
+               status, is_verified, verification_time, verification_operator, fail_reason,
+               meat_required_count, veg_required_count, include_soup, include_rice,
                create_by, update_by, deleted, create_time, update_time
         from meal_plan_customer
         where id in
@@ -88,7 +94,8 @@
     <select id="selectByMealPlanId" resultMap="BaseResultMap">
         select mpc.id, mpc.meal_plan_id, mpc.customer_id, mpc.customer_name, mpc.phone,
                cp.customer_code, mpc.order_id, mpc.parent_package_id, mpc.child_package_id,
-               mpc.status, mpc.fail_reason, mpc.meat_required_count, mpc.veg_required_count,
+               mpc.status, mpc.is_verified, mpc.verification_time, mpc.verification_operator,
+               mpc.fail_reason, mpc.meat_required_count, mpc.veg_required_count,
                mpc.include_soup, mpc.include_rice, mpc.create_by, mpc.update_by,
                mpc.deleted, mpc.create_time, mpc.update_time
         from meal_plan_customer mpc
@@ -112,5 +119,16 @@
         group by pp.id, pp.package_code, pp.package_name
         order by meal_count desc
     </select>
+
+    <update id="markVerifiedIfPending">
+        update meal_plan_customer
+        set is_verified = 1,
+            verification_time = #{verificationTime},
+            verification_operator = #{verificationOperator},
+            update_time = now()
+        where id = #{id}
+          and deleted = 0
+          and (is_verified = 0 or is_verified is null)
+    </update>
 
 </mapper>

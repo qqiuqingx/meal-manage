@@ -1449,6 +1449,9 @@ public class MealPlanServiceImpl implements MealPlanService {
                     detail.setVegRequiredCount(customer.getVegRequiredCount());
                     detail.setIncludeSoup(customer.getIncludeSoup());
                     detail.setIncludeRice(customer.getIncludeRice());
+                    detail.setIsVerified(customer.getIsVerified());
+                    detail.setVerificationTime(customer.getVerificationTime() != null ? customer.getVerificationTime().toString() : null);
+                    detail.setVerificationOperator(customer.getVerificationOperator());
 
                     // 设置菜品明细
                     List<MealPlanCustomerItem> items = itemsMap.getOrDefault(customerId, Collections.emptyList());
