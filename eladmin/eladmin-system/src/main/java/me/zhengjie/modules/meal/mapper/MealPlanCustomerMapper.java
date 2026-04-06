@@ -59,6 +59,11 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
     List<MealPlanCustomer> selectByMealPlanId(@Param("mealPlanId") Long mealPlanId);
 
     /**
+     * 根据排餐计划ID列表批量查询所有客户
+     */
+    List<MealPlanCustomer> selectByMealPlanIds(@Param("mealPlanIds") List<Long> mealPlanIds);
+
+    /**
      * 按日期统计各父套餐餐数
      */
     List<MealPackageStatDto> statByDate(@Param("date") String date);

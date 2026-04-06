@@ -105,6 +105,23 @@
         order by mpc.id asc
     </select>
 
+    <select id="selectByMealPlanIds" resultMap="BaseResultMap">
+        select mpc.id, mpc.meal_plan_id, mpc.customer_id, mpc.customer_name, mpc.phone,
+               cp.customer_code, mpc.order_id, mpc.parent_package_id, mpc.child_package_id,
+               mpc.status, mpc.is_verified, mpc.verification_time, mpc.verification_operator,
+               mpc.fail_reason, mpc.meat_required_count, mpc.veg_required_count,
+               mpc.include_soup, mpc.include_rice, mpc.create_by, mpc.update_by,
+               mpc.deleted, mpc.create_time, mpc.update_time
+        from meal_plan_customer mpc
+        left join customer_profile cp on mpc.customer_id = cp.id
+        where mpc.deleted = 0
+          and mpc.meal_plan_id in
+        <foreach collection="mealPlanIds" item="mealPlanId" open="(" separator="," close=")">
+            #{mealPlanId}
+        </foreach>
+        order by mpc.meal_plan_id asc, mpc.id asc
+    </select>
+
     <select id="statByDate" resultMap="MealPackageStatResultMap">
         select
             pp.package_code,
