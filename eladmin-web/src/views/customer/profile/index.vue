@@ -26,6 +26,8 @@
       <el-table-column label="孕周" prop="gestationalWeek" width="60" align="center" />
       <el-table-column label="早餐数" prop="breakfastCount" width="80" align="center" />
       <el-table-column label="午晚数" prop="lunchDinnerCount" width="80" align="center" />
+      <el-table-column label="剩余早餐" prop="remainingBreakfastCount" width="90" align="center" />
+      <el-table-column label="剩余午晚" prop="remainingLunchDinnerCount" width="90" align="center" />
       <el-table-column label="创建时间" prop="createTime" width="150" />
       <el-table-column v-if="checkPer(['admin','customerProfile:edit'])" label="操作" width="180px" align="center" fixed="right">
         <template slot-scope="scope">

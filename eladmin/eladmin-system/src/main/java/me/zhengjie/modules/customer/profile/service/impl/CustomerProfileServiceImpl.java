@@ -5,7 +5,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.domain.SubPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
@@ -61,6 +63,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
     @Autowired
     private CustomerProfilePackageMapper profilePackageMapper;
+
+    @Autowired
+    private MealVerificationLogMapper verificationLogMapper;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -465,6 +470,26 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         if (latestOrder != null) {
             profile.setBreakfastCount(latestOrder.getBreakfastCount());
             profile.setLunchDinnerCount(latestOrder.getLunchDinnerCount());
+
+            // 计算剩余餐数
+            int breakfastVerified = 0;
+            int lunchDinnerVerified = 0;
+            List<OrderVerifiedCountDto> verifiedList = customerOrderMapper.sumVerifiedCountByOrderId(latestOrder.getId());
+            if (verifiedList != null) {
+                for (OrderVerifiedCountDto item : verifiedList) {
+                    String mealType = item.getMealType();
+                    int verifiedCount = item.getVerifiedCount() != null ? item.getVerifiedCount() : 0;
+                    if ("BREAKFAST".equals(mealType)) {
+                        breakfastVerified = verifiedCount;
+                    } else if ("LUNCH".equals(mealType) || "DINNER".equals(mealType)) {
+                        lunchDinnerVerified += verifiedCount;
+                    }
+                }
+            }
+            int totalBreakfast = latestOrder.getBreakfastCount() != null ? latestOrder.getBreakfastCount() : 0;
+            int totalLunchDinner = latestOrder.getLunchDinnerCount() != null ? latestOrder.getLunchDinnerCount() : 0;
+            profile.setRemainingBreakfastCount(Math.max(totalBreakfast - breakfastVerified, 0));
+            profile.setRemainingLunchDinnerCount(Math.max(totalLunchDinner - lunchDinnerVerified, 0));
         }
     }
 

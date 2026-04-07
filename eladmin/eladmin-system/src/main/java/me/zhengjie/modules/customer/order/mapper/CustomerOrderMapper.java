@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
+import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -88,5 +89,12 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      * @return 更新行数，0表示失败（如剩余餐数不足）
      */
     int incrementVerifiedCountAndAmount(@Param("orderId") Long orderId, @Param("price") java.math.BigDecimal price);
+
+    /**
+     * 根据订单ID和餐次类型统计已核销餐数
+     * @param orderId 订单ID
+     * @return 各餐次已核销数列表
+     */
+    List<OrderVerifiedCountDto> sumVerifiedCountByOrderId(@Param("orderId") Long orderId);
 
 }
