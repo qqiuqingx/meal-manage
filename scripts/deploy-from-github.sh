@@ -36,10 +36,21 @@ require_file() {
 }
 
 prepare_repo() {
+  local previous_commit=""
+
   mkdir -p "$(dirname "$DEPLOY_BASE_DIR")"
 
   if [[ -d "$DEPLOY_BASE_DIR/.git" ]]; then
     log "updating repository in $DEPLOY_BASE_DIR"
+    # 存储上一次提交，在任何 git 操作之前
+    previous_commit=$(git -C "$DEPLOY_BASE_DIR" rev-parse HEAD 2>/dev/null || echo "")
+
+    # 检查是否为浅克隆，如果是则获取完整历史
+    if git -C "$DEPLOY_BASE_DIR" rev-parse --is-shallow-repository 2>/dev/null | grep -q true; then
+      log "repository is shallow, fetching full history for change detection"
+      git -C "$DEPLOY_BASE_DIR" fetch --unshallow
+    fi
+
     git -C "$DEPLOY_BASE_DIR" fetch origin "$BRANCH"
     git -C "$DEPLOY_BASE_DIR" checkout "$BRANCH"
     git -C "$DEPLOY_BASE_DIR" reset --hard "origin/$BRANCH"
@@ -47,7 +58,94 @@ prepare_repo() {
     log "cloning repository $REPO_URL to $DEPLOY_BASE_DIR"
     rm -rf "$DEPLOY_BASE_DIR"
     git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$DEPLOY_BASE_DIR"
+    # 首次部署 - 没有上一次提交
+    previous_commit=""
   fi
+
+  # 返回上一次提交
+  echo "$previous_commit"
+}
+
+# 检测两个提交之间的变更文件
+detect_changes() {
+  local previous_commit="$1"
+  local current_commit
+  current_commit=$(git -C "$DEPLOY_BASE_DIR" rev-parse HEAD)
+
+  # 如果没有上一次提交，强制全量重建
+  if [[ -z "$previous_commit" ]]; then
+    log "no previous commit found, forcing full rebuild"
+    echo "force-full-rebuild"
+    return
+  fi
+
+  # 验证上一次提交是否存在
+  if ! git -C "$DEPLOY_BASE_DIR" cat-file -e "$previous_commit" 2>/dev/null; then
+    log "warning: previous commit $previous_commit not found, forcing full rebuild"
+    echo "force-full-rebuild"
+    return
+  fi
+
+  # 获取变更文件列表
+  log "comparing commits: $previous_commit -> $current_commit"
+  local changed_files
+  changed_files=$(git -C "$DEPLOY_BASE_DIR" diff --name-only "$previous_commit" "$current_commit")
+
+  local count
+  count=$(echo "$changed_files" | grep -c . || echo "0")
+  log "detected $count changed file(s)"
+
+  # 如果没有变更文件，返回空字符串
+  if [[ -z "$changed_files" ]]; then
+    echo ""
+  else
+    echo "$changed_files"
+  fi
+}
+
+# 根据变更文件确定需要构建的目标
+determine_build_targets() {
+  local changed_files="$1"
+
+  local rebuild_backend=false
+  local rebuild_frontend=false
+
+  # 如果强制全量重建
+  if [[ "$changed_files" == "force-full-rebuild" ]]; then
+    rebuild_backend=true
+    rebuild_frontend=true
+  elif [[ -n "$changed_files" ]]; then
+    # 检查后端变更
+    if echo "$changed_files" | grep -qE "^eladmin/"; then
+      rebuild_backend=true
+    fi
+    if echo "$changed_files" | grep -qE "^docker/mealserver/"; then
+      rebuild_backend=true
+    fi
+
+    # 检查前端变更
+    if echo "$changed_files" | grep -qE "^eladmin-web/"; then
+      rebuild_frontend=true
+    fi
+    if echo "$changed_files" | grep -qE "^docker/mealweb/"; then
+      rebuild_frontend=true
+    fi
+
+    # 检查共享变更（同时触发后端和前端重建）
+    if echo "$changed_files" | grep -qE "^docker/docker-compose\.yml$"; then
+      rebuild_backend=true
+      rebuild_frontend=true
+    fi
+
+    # 保守策略：如果有意外的文件变更，重建所有
+    if echo "$changed_files" | grep -qvE "^(eladmin/|eladmin-web/|docker/)"; then
+      log "warning: unexpected file change detected, rebuilding both"
+      rebuild_backend=true
+      rebuild_frontend=true
+    fi
+  fi
+
+  echo "backend=$rebuild_backend,frontend=$rebuild_frontend"
 }
 
 # 重试直到成功的辅助函数（用于拉取镜像，网络不稳定时用）
@@ -70,14 +168,31 @@ retry_until_success() {
 }
 
 deploy_compose() {
+  local previous_commit="$1"
   local compose_file="$DEPLOY_BASE_DIR/$COMPOSE_FILE_REL"
 
   require_file "$compose_file"
   require_file "$ENV_FILE"
 
-  # 生成镜像 tag，精确到分钟
+  # 生成镜像 tag，精确到秒（避免同分钟多次部署标签冲突）
   export IMAGE_TAG
-  IMAGE_TAG=$(date '+%Y%m%d%H%M')
+  IMAGE_TAG=$(date '+%Y%m%d%H%M%S')
+
+  # 检测并分类变更
+  local changed_files
+  local build_targets
+  changed_files=$(detect_changes "$previous_commit")
+  build_targets=$(determine_build_targets "$changed_files")
+
+  # 解析构建目标
+  local rebuild_backend
+  local rebuild_frontend
+  rebuild_backend=$(echo "$build_targets" | grep -oP 'backend=\K(true|false)' || echo "false")
+  rebuild_frontend=$(echo "$build_targets" | grep -oP 'frontend=\K(true|false)' || echo "false")
+
+  log "change analysis complete:"
+  log "  - rebuild backend: $rebuild_backend"
+  log "  - rebuild frontend: $rebuild_frontend"
 
   log "rebuilding and starting containers, image tag: $IMAGE_TAG"
   (
@@ -92,16 +207,29 @@ deploy_compose() {
     retry_until_success 3 "pulling nginx:1.25-alpine" \
       docker pull nginx:1.25-alpine || true
 
-    # 串行构建，避免并发内存不足；两个镜像都生成后再统一启动
-    # 部分 Compose 版本在 up 单个服务时仍会探测其他服务，导致 frontend 镜像未构建时报错
-    log "building backend..."
-    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build backend
+    # 根据变更情况条件化构建
+    if [[ "$rebuild_backend" == "true" ]]; then
+      log "building backend..."
+      DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build backend
+    else
+      log "skipping backend build (no changes detected)"
+    fi
 
-    log "building frontend..."
-    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build frontend
+    if [[ "$rebuild_frontend" == "true" ]]; then
+      log "building frontend..."
+      DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build frontend
+    else
+      log "skipping frontend build (no changes detected)"
+    fi
 
+    # 始终启动容器
     log "starting containers..."
-    DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --no-build
+    # 检查镜像是否存在，存在则使用 --no-build
+    if docker images | grep -q "mealserver" && docker images | grep -q "mealweb"; then
+      DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --no-build
+    else
+      DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d
+    fi
   )
 }
 
@@ -122,8 +250,9 @@ main() {
     exit 1
   fi
 
-  prepare_repo
-  deploy_compose
+  local previous_commit
+  previous_commit=$(prepare_repo)
+  deploy_compose "$previous_commit"
   print_summary
 }
 
