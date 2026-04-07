@@ -158,6 +158,35 @@
         </el-col>
       </el-row>
 
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="早餐单价(元)">
+            <el-input-number
+              v-model="form.breakfastPrice"
+              :min="0"
+              :precision="2"
+              :disabled="readonly"
+              controls-position="right"
+              style="width: 100%;"
+              @change="calcTotalAmount"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="午餐晚餐单价(元)">
+            <el-input-number
+              v-model="form.lunchDinnerPrice"
+              :min="0"
+              :precision="2"
+              :disabled="readonly"
+              controls-position="right"
+              style="width: 100%;"
+              @change="calcTotalAmount"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
       <!-- ===== 餐数信息 ===== -->
       <el-divider content-position="left">餐数信息</el-divider>
       <el-row :gutter="20">
@@ -199,32 +228,6 @@
       </el-row>
 
       <el-row :gutter="20">
-        <el-col :span="8">
-          <el-form-item label="早餐单价(元)">
-            <el-input-number
-              v-model="form.breakfastPrice"
-              :min="0"
-              :precision="2"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-              @change="calcTotalAmount"
-            />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="午餐晚餐单价(元)">
-            <el-input-number
-              v-model="form.lunchDinnerPrice"
-              :min="0"
-              :precision="2"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-              @change="calcTotalAmount"
-            />
-          </el-form-item>
-        </el-col>
         <!-- 首单模式：自动计算总价展示 -->
         <el-col v-if="mode === 'firstOrder'" :span="8">
           <el-form-item label="总价(自动)">
@@ -591,8 +594,9 @@ export default {
     onMealCountChange() {
       if (this.mode === 'firstOrder') {
         this.form.totalCount = this.totalCount
-        this.calcTotalAmount()
       }
+      // 两种模式都重新计算总价
+      this.calcTotalAmount()
       this.calcRemaining()
       this.$emit('calc-change')
     },
@@ -610,18 +614,25 @@ export default {
       this.form.remainingCount = Math.max(0, total - verified)
       this.$emit('calc-change')
     },
-    // 计算首单总价（仅首单模式触发自动计算，订单模式手动填写）
+    // 计算总价（两种模式均支持自动计算）
     calcTotalAmount() {
-      if (this.mode !== 'firstOrder') return
+      // 计算基础总价
       const breakfastCount = this.form.breakfastCount || 0
       const lunchDinnerCount = this.form.lunchDinnerCount || 0
       const breakfastPrice = this.form.breakfastPrice || 0
       const lunchDinnerPrice = this.form.lunchDinnerPrice || 0
       const totalAmount = breakfastCount * breakfastPrice + lunchDinnerCount * lunchDinnerPrice
-      this.form.totalAmount = totalAmount
-      // 如果成交金额未填写，默认等于总价
-      if (!this.form.finalAmount && totalAmount > 0) {
-        this.form.finalAmount = totalAmount
+
+      // 首单模式：直接设置总价
+      if (this.mode === 'firstOrder') {
+        this.form.totalAmount = totalAmount
+        // 如果成交金额未填写，默认等于总价
+        if (!this.form.finalAmount && totalAmount > 0) {
+          this.form.finalAmount = totalAmount
+        }
+      } else {
+        // 订单模式：每次都重新计算总金额
+        this.form.totalAmount = totalAmount
       }
       this.$emit('calc-change')
     },
