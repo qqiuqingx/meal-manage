@@ -25,9 +25,28 @@
         </encoder>
     </appender>
 
+    <!-- 核销服务日志文件（每天一个文件，保留30天） -->
+    <appender name="MEAL_VERIFICATION_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>/app/logs/meal-verification.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>/app/logs/meal-verification.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
     <!-- 排餐计划服务日志单独写文件 -->
     <logger name="me.zhengjie.modules.meal.service.impl.MealPlanServiceImpl" level="info" additivity="false">
         <appender-ref ref="MEAL_PLAN_FILE" />
+        <appender-ref ref="console" />
+    </logger>
+
+    <!-- 核销服务日志单独写文件 -->
+    <logger name="me.zhengjie.modules.meal.service.impl.MealVerificationServiceImpl" level="info" additivity="false">
+        <appender-ref ref="MEAL_VERIFICATION_FILE" />
         <appender-ref ref="console" />
     </logger>
 

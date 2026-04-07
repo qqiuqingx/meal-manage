@@ -1529,7 +1529,7 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     @Override
     public MealPlanDetailVO queryMealPlanDetail(Long mealPlanId) {
-        log.info("查询排餐计划完整详情 - 计划ID: {}", mealPlanId);
+      
 
         // 查询排餐计划主表
         MealPlan mealPlan = mealPlanMapper.selectById(mealPlanId);
