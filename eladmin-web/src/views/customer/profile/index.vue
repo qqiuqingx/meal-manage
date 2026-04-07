@@ -8,20 +8,7 @@
         <el-input v-model="query.phone" clearable size="small" placeholder="手机号" style="width: 120px;" class="filter-item" @keyup.enter.native="crud.toQuery" />
         <rrOperation />
       </div>
-      <crudOperation :permission="permission">
-        <template slot="right">
-          <el-button
-            v-if="checkPer(['admin','mealPlan:generate'])"
-            class="filter-item"
-            size="mini"
-            type="warning"
-            icon="el-icon-finished"
-            @click="mealPlanDialogVisible = true; mealPlanResult = null"
-          >
-            生成排餐计划
-          </el-button>
-        </template>
-      </crudOperation>
+      <crudOperation :permission="permission" />
     </div>
 
     <!--表格渲染-->
@@ -181,59 +168,11 @@
       @view-all-orders="handleViewAllOrders"
     />
 
-    <!-- 排餐生成弹窗 -->
-    <el-dialog
-      append-to-body
-      :close-on-click-modal="false"
-      :visible.sync="mealPlanDialogVisible"
-      title="生成排餐计划"
-      width="500px"
-    >
-      <el-form ref="mealPlanForm" :model="mealPlanForm" :rules="mealPlanRules" size="small" label-width="100px">
-        <el-form-item label="排餐日期" prop="recordDate">
-          <el-date-picker
-            v-model="mealPlanForm.recordDate"
-            type="date"
-            value-format="yyyy-MM-dd"
-            placeholder="选择日期"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="餐次" prop="mealType">
-          <el-select v-model="mealPlanForm.mealType" placeholder="请选择" style="width: 100%">
-            <el-option label="测试/所有" value="ALL" />
-            <el-option label="早餐" value="BREAKFAST" />
-            <el-option label="午餐" value="LUNCH" />
-            <el-option label="晚餐" value="DINNER" />
-            <el-option label="午晚" value="LUNCH_DINNER" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <div v-if="mealPlanResult" style="margin-top: 15px; padding: 10px; background-color: #f4f4f5; border-radius: 4px;">
-        <h4 style="margin-top: 0; margin-bottom: 10px;">生成结果：</h4>
-        <p style="margin: 5px 0;">总数：{{ mealPlanResult.totalCount || 0 }}</p>
-        <p style="margin: 5px 0;">成功：<span style="color: #67C23A">{{ mealPlanResult.successCount || 0 }}</span></p>
-        <p style="margin: 5px 0;">失败：<span style="color: #F56C6C">{{ mealPlanResult.failCount || 0 }}</span></p>
-        <div v-if="mealPlanResult.failDetails && mealPlanResult.failDetails.length > 0">
-          <p style="margin: 5px 0;">失败明细：</p>
-          <ul style="margin: 5px 0; padding-left: 20px;">
-            <li v-for="(detail, index) in mealPlanResult.failDetails" :key="index" style="color: #F56C6C">
-              {{ detail.failReason || detail }}
-            </li>
-          </ul>
-        </div>
-      </div>
-      <div slot="footer" class="dialog-footer">
-        <el-button type="text" @click="mealPlanDialogVisible = false">关闭</el-button>
-        <el-button :loading="mealPlanLoading" type="primary" @click="doGenerateMealPlan">生成</el-button>
-      </div>
-    </el-dialog>
   </div>
 </template>
 
 <script>
 import * as profileApi from '@/api/customer/profile'
-import { generateMealPlan } from '@/api/mealPlan'
 import { queryIngredients } from '@/api/dishIngredient'
 import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
@@ -302,18 +241,7 @@ export default {
       allergyLoading: false,
       editRequestId: 0,
       detailDialogVisible: false,
-      currentCustomer: null,
-      mealPlanDialogVisible: false,
-      mealPlanLoading: false,
-      mealPlanForm: {
-        recordDate: null,
-        mealType: null
-      },
-      mealPlanRules: {
-        recordDate: [{ required: true, message: '请选择排餐日期', trigger: 'change' }],
-        mealType: [{ required: true, message: '请选择餐次', trigger: 'change' }]
-      },
-      mealPlanResult: null
+      currentCustomer: null
     }
   },
   computed: {
@@ -517,23 +445,6 @@ export default {
         console.error('searchAllergy error', e)
       } finally {
         this.allergyLoading = false
-      }
-    },
-    async doGenerateMealPlan() {
-      const valid = await new Promise(resolve => {
-        this.$refs.mealPlanForm.validate((v) => resolve(v))
-      })
-      if (!valid) return
-      this.mealPlanLoading = true
-      this.mealPlanResult = null
-      try {
-        const res = await generateMealPlan(this.mealPlanForm)
-        this.mealPlanResult = res.data || res
-        this.$message.success('生成排餐计划执行完成')
-      } catch (e) {
-        console.error('generateMealPlan error', e)
-      } finally {
-        this.mealPlanLoading = false
       }
     }
   }
