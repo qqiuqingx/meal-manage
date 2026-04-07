@@ -12,6 +12,8 @@ BRANCH="${BRANCH:-master}"
 DEPLOY_BASE_DIR="${DEPLOY_BASE_DIR:-/data/meals/meal-manage}"
 ENV_FILE="${ENV_FILE:-/data/meals/.env}"
 COMPOSE_FILE_REL="${COMPOSE_FILE_REL:-docker/docker-compose.yml}"
+# 保留最近 N 个版本的 Docker 镜像
+KEEP_IMAGE_COUNT="${KEEP_IMAGE_COUNT:-3}"
 
 timestamp() {
   date '+%Y-%m-%d %H:%M:%S'
@@ -233,6 +235,45 @@ deploy_compose() {
   )
 }
 
+# 清理旧版本的 Docker 镜像
+cleanup_old_images() {
+  log "正在清理旧版本 Docker 镜像（保留最近 $KEEP_IMAGE_COUNT 个版本）..."
+
+  local cleaned_count=0
+
+  # 清理 mealserver 旧镜像
+  local old_mealserver_images
+  old_mealserver_images=$(docker images --format "{{.Repository}}:{{.Tag}} {{.ID}} {{.CreatedAt}}" | \
+    grep "^mealserver:" | \
+    sort -k3 -r | \
+    tail -n +$((KEEP_IMAGE_COUNT + 1)) || true)
+
+  if [[ -n "$old_mealserver_images" ]]; then
+    while IFS=' ' read -r image_name image_id image_created; do
+      log "  删除旧后端镜像: $image_name (创建时间: $image_created)"
+      docker rmi "$image_id" >/dev/null 2>&1 || true
+      ((cleaned_count++))
+    done <<< "$old_mealserver_images"
+  fi
+
+  # 清理 mealweb 旧镜像
+  local old_mealweb_images
+  old_mealweb_images=$(docker images --format "{{.Repository}}:{{.Tag}} {{.ID}} {{.CreatedAt}}" | \
+    grep "^mealweb:" | \
+    sort -k3 -r | \
+    tail -n +$((KEEP_IMAGE_COUNT + 1)) || true)
+
+  if [[ -n "$old_mealweb_images" ]]; then
+    while IFS=' ' read -r image_name image_id image_created; do
+      log "  删除旧前端镜像: $image_name (创建时间: $image_created)"
+      docker rmi "$image_id" >/dev/null 2>&1 || true
+      ((cleaned_count++))
+    done <<< "$old_mealweb_images"
+  fi
+
+  log "清理完成: 共删除 $cleaned_count 个旧镜像"
+}
+
 print_summary() {
   log "deployment completed"
   log "repository : $REPO_URL"
@@ -253,6 +294,7 @@ main() {
   local previous_commit
   previous_commit=$(prepare_repo)
   deploy_compose "$previous_commit"
+  cleanup_old_images
   print_summary
 }
 
