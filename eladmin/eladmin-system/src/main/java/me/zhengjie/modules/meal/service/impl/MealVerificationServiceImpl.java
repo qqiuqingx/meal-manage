@@ -16,6 +16,8 @@
 package me.zhengjie.modules.meal.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+
+import cn.hutool.json.JSONUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.exception.BadRequestException;
@@ -81,6 +83,7 @@ public class MealVerificationServiceImpl implements MealVerificationService {
         if (customerPlan == null) {
             throw new BadRequestException("客户排餐记录不存在");
         }
+        log.info("开始核销：{}",JSONUtil.toJsonStr(customerPlan));
 
         // 2. 检查是否已核销
         if (customerPlan.getIsVerified() != null && customerPlan.getIsVerified() == 1) {
