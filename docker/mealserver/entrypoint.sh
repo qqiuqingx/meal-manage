@@ -3,9 +3,12 @@
 
 set -e
 
-# 创建日志目录并设置权限
-mkdir -p /app/logs
-chmod 777 /app/logs
+# 创建日志目录（如果不存在）
+# 如果目录已存在（挂载的），则不修改权限
+if [ ! -d /app/logs ]; then
+    mkdir -p /app/logs
+    chmod 777 /app/logs
+fi
 
 # 解决日志中文乱码
 export JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8 -Duser.language=zh -Duser.country=CN"
