@@ -14,9 +14,9 @@
 
     <!-- 排餐计划业务日志文件（每天一个文件，保留30天） -->
     <appender name="MEAL_PLAN_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/meal-plan.log</file>
+        <file>/app/logs/meal-plan.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/meal-plan.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>/app/logs/meal-plan.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder>
@@ -26,7 +26,7 @@
     </appender>
 
     <!-- 排餐计划服务日志单独写文件 -->
-    <logger name="me.zhengjie.modules.meal.service.impl.MealPlanServiceImpl" level="INFO" additivity="false">
+    <logger name="me.zhengjie.modules.meal.service.impl.MealPlanServiceImpl" level="info" additivity="false">
         <appender-ref ref="MEAL_PLAN_FILE" />
         <appender-ref ref="console" />
     </logger>
