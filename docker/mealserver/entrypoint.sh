@@ -3,6 +3,15 @@
 
 set -e
 
+# 创建日志目录并设置权限
+mkdir -p /app/logs
+chmod 777 /app/logs
+
+# 解决日志中文乱码
+export JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8 -Duser.language=zh -Duser.country=CN"
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+
 # JVM tuning
 JAVA_OPTS="${JAVA_OPTS:-}"
 JAVA_OPTS="${JAVA_OPTS} -Xms${BACKEND_JVM_HEAP_MIN:-256m}"
