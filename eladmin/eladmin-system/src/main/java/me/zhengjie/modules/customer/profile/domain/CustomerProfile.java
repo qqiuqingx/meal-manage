@@ -126,4 +126,16 @@ public class CustomerProfile implements Serializable {
      */
     @TableField(exist = false)
     private String endDate;
+
+    /**
+     * 剩余早餐数(查询时计算)
+     */
+    @TableField(exist = false)
+    private Integer remainingBreakfastCount;
+
+    /**
+     * 剩余午晚数(午餐+晚餐)(查询时计算)
+     */
+    @TableField(exist = false)
+    private Integer remainingLunchDinnerCount;
 }

@@ -244,4 +244,17 @@
           AND status = 1
     </update>
 
+    <!-- 根据订单ID统计各餐次已核销餐数 -->
+    <select id="sumVerifiedCountByOrderId" resultMap="VerifiedCountResultMap">
+        SELECT meal_type, SUM(verification_count) AS verified_count
+        FROM meal_verification_log
+        WHERE order_id = #{orderId}
+        GROUP BY meal_type
+    </select>
+
+    <resultMap id="VerifiedCountResultMap" type="me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto">
+        <result column="meal_type" property="mealType"/>
+        <result column="verified_count" property="verifiedCount"/>
+    </resultMap>
+
 </mapper>
