@@ -12,6 +12,10 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      # 解决日志中文乱码
+      JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8 -Duser.language=zh -Duser.country=CN
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT:-13306}
       DB_NAME: ${DB_NAME}
@@ -31,6 +35,7 @@ services:
       - "8000"
     volumes:
       - backend_files:/home/eladmin
+      - /data/logs:/app/logs
     networks:
       - eladmin-net
     healthcheck:
