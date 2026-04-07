@@ -76,6 +76,12 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
                                            @Param("mealType") String mealType);
 
     /**
+     * 查询指定日期范围内的所有订单（用于日志对比）
+     */
+    List<CustomerOrder> findByDateRangeAndMealType(@Param("targetDate") LocalDate targetDate,
+                                                    @Param("mealType") String mealType);
+
+    /**
      * 原子性增加核销餐数（verified_count+1，remaining_count-1）
      * @param orderId 订单ID
      * @return 更新行数，0表示失败（如剩余餐数不足）

@@ -322,50 +322,85 @@ public class MealPlanServiceImpl implements MealPlanService {
      */
     private List<CustomerOrder> loadValidOrders(LocalDate targetDate, String mealType, Long customerId) {
         long startTime = System.currentTimeMillis();
-        log.debug("查询候选订单 - 日期: {}, 餐次: {}, 客户ID: {}", targetDate, mealType, customerId);
+        log.info("开始查询有效订单 - 日期: {}, 餐次: {}, 客户ID: {}", targetDate, mealType, customerId);
+
+        // 先查询所有符合日期范围的订单，用于对比过滤情况
+        List<CustomerOrder> allOrdersByDate = customerOrderMapper.findByDateRangeAndMealType(targetDate, mealType);
+        log.info("符合日期范围的订单总数 - 日期: {}, 餐次: {}, 订单数: {}", targetDate, mealType, allOrdersByDate.size());
+
+        // 记录被基础条件过滤的订单
+        for (CustomerOrder order : allOrdersByDate) {
+            if (order.getStatus() == null || order.getStatus() != 1) {
+                log.info("订单被过滤 - 订单ID: {}, 客户ID: {}, 状态: {} (非有效状态)",
+                        order.getId(), order.getCustomerId(), order.getStatus());
+            } else if (order.getRemainingCount() == null || order.getRemainingCount() <= 0) {
+                log.info("订单被过滤 - 订单ID: {}, 客户ID: {}, 剩余餐数: {} (餐数用完)",
+                        order.getId(), order.getCustomerId(), order.getRemainingCount());
+            } else if (!"LUNCH".equals(mealType) && !"ALL".equals(order.getMealType())) {
+                log.info("订单被过滤 - 订单ID: {}, 客户ID: {}, 订单餐次: {}, 目标餐次: {} (餐次不匹配)",
+                        order.getId(), order.getCustomerId(), order.getMealType(), mealType);
+            }
+        }
 
         List<CustomerOrder> candidateOrders = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
-        log.debug("查询到候选订单 - 数量: {}", candidateOrders.size());
+        log.info("基础条件过滤后的候选订单 - 数量: {}", candidateOrders.size());
 
         List<CustomerOrder> validOrders = new ArrayList<>();
         for (CustomerOrder order : candidateOrders) {
             if (customerId != null && !Objects.equals(order.getCustomerId(), customerId)) {
                 continue;
             }
-            if (!scheduleModeMatches(order, targetDate)) {
-                log.debug("订单不匹配配送模式 - 订单ID: {}, 配送模式: {}",
-                        order.getId(), order.getScheduleMode());
+            String matchReason = getScheduleModeMatchReason(order, targetDate);
+            if (matchReason != null) {
+                log.info("订单被过滤 - 订单ID: {}, 客户ID: {}, 餐次: {}, 配送模式: {}, 原因: {}",
+                        order.getId(), order.getCustomerId(), order.getMealType(), order.getScheduleMode(), matchReason);
                 continue;
             }
             validOrders.add(order);
         }
 
-        log.debug("有效订单过滤完成 - 候选数: {}, 有效数: {}, 耗时: {}ms",
-                candidateOrders.size(), validOrders.size(),
+        log.info("有效订单过滤完成 - 日期: {}, 餐次: {}, 日期范围内订单: {}, 基础过滤后: {}, 最终有效数: {}, 耗时: {}ms",
+                targetDate, mealType, allOrdersByDate.size(), candidateOrders.size(), validOrders.size(),
                 System.currentTimeMillis() - startTime);
 
         return validOrders;
     }
 
     /**
-     * 判断订单配送模式是否命中目标日期。
+     * 获取配送模式匹配失败的原因，如果匹配则返回 null。
      */
-    private boolean scheduleModeMatches(CustomerOrder order, LocalDate targetDate) {
+    private String getScheduleModeMatchReason(CustomerOrder order, LocalDate targetDate) {
         String scheduleMode = order.getScheduleMode();
         if (scheduleMode == null || SCHEDULE_MODE_DAILY.equals(scheduleMode)) {
-            return true;
+            return null; // 匹配
         }
         if (SCHEDULE_MODE_SCHEDULE.equals(scheduleMode)) {
             List<String> deliveryDates = parseJsonArray(order.getDeliveryDates());
-            return deliveryDates.contains(targetDate.toString());
+            if (deliveryDates.contains(targetDate.toString())) {
+                return null; // 匹配
+            }
+            return String.format("SCHEDULE模式 - 今日(%s)不在配送日列表中: %s", targetDate, deliveryDates);
         }
         if (SCHEDULE_MODE_WEEKDAY.equals(scheduleMode)) {
-            return ScheduleKeyUtil.isWeekday(targetDate);
+            if (ScheduleKeyUtil.isWeekday(targetDate)) {
+                return null; // 匹配
+            }
+            return String.format("WEEKDAY模式 - 今日(%s)是周末", targetDate);
         }
         if (SCHEDULE_MODE_WEEKEND.equals(scheduleMode)) {
-            return ScheduleKeyUtil.isWeekend(targetDate);
+            if (ScheduleKeyUtil.isWeekend(targetDate)) {
+                return null; // 匹配
+            }
+            return String.format("WEEKEND模式 - 今日(%s)是工作日", targetDate);
         }
-        return false;
+        return String.format("未知的配送模式: %s", scheduleMode);
+    }
+
+    /**
+     * 判断订单配送模式是否命中目标日期。
+     */
+    private boolean scheduleModeMatches(CustomerOrder order, LocalDate targetDate) {
+        return getScheduleModeMatchReason(order, targetDate) == null;
     }
 
     /**

@@ -220,6 +220,16 @@
           AND meal_type IN (#{mealType}, 'ALL')
     </select>
 
+    <!-- 查询指定日期范围内的所有订单（用于日志对比） -->
+    <select id="findByDateRangeAndMealType" resultMap="BaseResultMap">
+        SELECT *
+        FROM customer_order
+        WHERE start_date &lt;= #{targetDate}
+          AND end_date &gt;= #{targetDate}
+          AND meal_type IN (#{mealType}, 'ALL')
+        ORDER BY id
+    </select>
+
     <!-- 原子性增加核销餐数（verified_count+1，remaining_count-1） -->
     <update id="incrementVerifiedCount">
         UPDATE customer_order
