@@ -3,4 +3,81 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="me.zhengjie.modules.meal.mapper.MealVerificationLogMapper">
+
+    <resultMap id="VerificationLogVOResultMap" type="me.zhengjie.modules.meal.domain.dto.MealVerificationLogVO">
+        <id column="id" property="id"/>
+        <result column="meal_plan_customer_id" property="mealPlanCustomerId"/>
+        <result column="meal_plan_id" property="mealPlanId"/>
+        <result column="customer_id" property="customerId"/>
+        <result column="order_id" property="orderId"/>
+        <result column="record_date" property="recordDate"/>
+        <result column="meal_type" property="mealType"/>
+        <result column="verification_count" property="verificationCount"/>
+        <result column="remaining_before" property="remainingBefore"/>
+        <result column="remaining_after" property="remainingAfter"/>
+        <result column="verified_total_before" property="verifiedTotalBefore"/>
+        <result column="verified_total_after" property="verifiedTotalAfter"/>
+        <result column="operator" property="operator"/>
+        <result column="operate_time" property="operateTime"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="customer_name" property="customerName"/>
+        <result column="customer_code" property="customerCode"/>
+        <result column="parent_package_name" property="parentPackageName"/>
+    </resultMap>
+
+    <select id="selectPageByCriteria" resultMap="VerificationLogVOResultMap">
+        select
+            v.id,
+            v.meal_plan_customer_id,
+            v.meal_plan_id,
+            v.customer_id,
+            v.order_id,
+            v.record_date,
+            v.meal_type,
+            v.verification_count,
+            v.remaining_before,
+            v.remaining_after,
+            v.verified_total_before,
+            v.verified_total_after,
+            v.operator,
+            v.operate_time,
+            v.remark,
+            v.create_time,
+            cp.customer_name,
+            cp.customer_code,
+            pp.package_name as parent_package_name
+        from meal_verification_log v
+        left join customer_profile cp on v.customer_id = cp.id
+        left join customer_order co on v.order_id = co.id
+        left join parent_package pp on co.parent_package_id = pp.id
+        <where>
+            <if test="criteria.customerName != null and criteria.customerName != ''">
+                and cp.customer_name like concat('%', #{criteria.customerName}, '%')
+            </if>
+            <if test="criteria.orderId != null">
+                and v.order_id = #{criteria.orderId}
+            </if>
+            <if test="criteria.mealType != null and criteria.mealType != ''">
+                and v.meal_type = #{criteria.mealType}
+            </if>
+            <if test="criteria.recordDateStart != null and criteria.recordDateStart != ''">
+                and v.record_date >= #{criteria.recordDateStart}
+            </if>
+            <if test="criteria.recordDateEnd != null and criteria.recordDateEnd != ''">
+                and v.record_date &lt;= #{criteria.recordDateEnd}
+            </if>
+            <if test="criteria.operateTimeStart != null and criteria.operateTimeStart != ''">
+                and date(v.operate_time) >= #{criteria.operateTimeStart}
+            </if>
+            <if test="criteria.operateTimeEnd != null and criteria.operateTimeEnd != ''">
+                and date(v.operate_time) &lt;= #{criteria.operateTimeEnd}
+            </if>
+            <if test="criteria.operator != null and criteria.operator != ''">
+                and v.operator = #{criteria.operator}
+            </if>
+        </where>
+        order by v.operate_time desc, v.id desc
+    </select>
+
 </mapper>

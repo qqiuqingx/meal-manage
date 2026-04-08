@@ -1,5 +1,13 @@
 import request from '@/utils/request'
 
+export function queryVerificationLogs(params) {
+  return request({
+    url: 'api/meal-verification/logs',
+    method: 'get',
+    params
+  })
+}
+
 export function verifyMeal(data) {
   return request({
     url: 'api/meal-verification/verify',
@@ -23,6 +31,7 @@ export function getVerificationLogsByOrderId(orderId) {
 }
 
 export default {
+  queryVerificationLogs,
   verifyMeal,
   getVerificationLog,
   getVerificationLogsByOrderId

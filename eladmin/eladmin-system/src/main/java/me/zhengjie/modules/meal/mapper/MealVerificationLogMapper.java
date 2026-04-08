@@ -16,7 +16,10 @@
 package me.zhengjie.modules.meal.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.meal.domain.MealVerificationLog;
+import me.zhengjie.modules.meal.domain.dto.MealVerificationLogQueryCriteria;
+import me.zhengjie.modules.meal.domain.dto.MealVerificationLogVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -27,4 +30,13 @@ import org.apache.ibatis.annotations.Param;
  **/
 @Mapper
 public interface MealVerificationLogMapper extends BaseMapper<MealVerificationLog> {
+
+    /**
+     * 分页查询核销记录
+     * @param criteria 查询条件
+     * @param page     分页参数
+     * @return 核销记录分页结果
+     */
+    Page<MealVerificationLogVO> selectPageByCriteria(@Param("criteria") MealVerificationLogQueryCriteria criteria,
+                                                      Page<MealVerificationLogVO> page);
 }
