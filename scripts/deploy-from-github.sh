@@ -15,9 +15,13 @@ COMPOSE_FILE_REL="${COMPOSE_FILE_REL:-docker/docker-compose.yml}"
 # 保留最近 N 个版本的 Docker 镜像
 KEEP_IMAGE_COUNT="${KEEP_IMAGE_COUNT:-3}"
 
-# 校验 KEEP_IMAGE_COUNT 必须为正整数
+# 校验 KEEP_IMAGE_COUNT 必须为正整数，且至少为 2（保证回退脚本始终有镜像可选）
 if ! [[ "$KEEP_IMAGE_COUNT" =~ ^[1-9][0-9]*$ ]]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] KEEP_IMAGE_COUNT must be a positive integer, got: $KEEP_IMAGE_COUNT" >&2
+  exit 1
+fi
+if (( KEEP_IMAGE_COUNT < 2 )); then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] KEEP_IMAGE_COUNT must be >= 2 to support rollback (got: $KEEP_IMAGE_COUNT)" >&2
   exit 1
 fi
 
