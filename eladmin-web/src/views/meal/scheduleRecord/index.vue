@@ -327,7 +327,12 @@ export default {
       // 当前查询的 mealPlan 原始记录（用于删除）
       currentRecord: null,
 
-      queryDate: null,
+      queryDate: (() => {
+        const d = new Date()
+        const fmt = n => String(n).padStart(2, '0')
+        const bd = new Date(d.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }))
+        return `${bd.getFullYear()}-${fmt(bd.getMonth() + 1)}-${fmt(bd.getDate())}`
+      })(),
       queryMealType: 'LUNCH',
 
       dishTypeMap: {
