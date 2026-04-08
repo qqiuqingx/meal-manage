@@ -17,7 +17,10 @@ package me.zhengjie.modules.meal.service;
 
 import me.zhengjie.modules.meal.domain.MealVerificationLog;
 import me.zhengjie.modules.meal.domain.dto.MealVerificationDto;
+import me.zhengjie.modules.meal.domain.dto.MealVerificationLogQueryCriteria;
+import me.zhengjie.modules.meal.domain.dto.MealVerificationLogVO;
 import me.zhengjie.modules.meal.domain.dto.MealVerificationResultDto;
+import me.zhengjie.utils.PageResult;
 
 import java.util.List;
 
@@ -34,6 +37,13 @@ public interface MealVerificationService {
      * @return 核销结果
      */
     MealVerificationResultDto verify(MealVerificationDto dto);
+
+    /**
+     * 分页查询核销记录
+     * @param criteria 查询条件
+     * @return 分页结果
+     */
+    PageResult<MealVerificationLogVO> queryAll(MealVerificationLogQueryCriteria criteria);
 
     /**
      * 根据ID查询核销日志

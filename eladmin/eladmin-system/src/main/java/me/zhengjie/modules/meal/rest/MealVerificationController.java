@@ -21,8 +21,11 @@ import lombok.RequiredArgsConstructor;
 import me.zhengjie.annotation.Log;
 import me.zhengjie.modules.meal.domain.MealVerificationLog;
 import me.zhengjie.modules.meal.domain.dto.MealVerificationDto;
+import me.zhengjie.modules.meal.domain.dto.MealVerificationLogQueryCriteria;
+import me.zhengjie.modules.meal.domain.dto.MealVerificationLogVO;
 import me.zhengjie.modules.meal.domain.dto.MealVerificationResultDto;
 import me.zhengjie.modules.meal.service.MealVerificationService;
+import me.zhengjie.utils.PageResult;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -48,6 +51,17 @@ import java.util.List;
 public class MealVerificationController {
 
     private final MealVerificationService mealVerificationService;
+
+    /**
+     * 分页查询核销记录
+     */
+    @Log("查询核销记录列表")
+    @ApiOperation("分页查询核销记录")
+    @GetMapping("/logs")
+    @PreAuthorize("@el.check('mealPlan:list')")
+    public ResponseEntity<PageResult<MealVerificationLogVO>> queryVerificationLogs(MealVerificationLogQueryCriteria criteria) {
+        return new ResponseEntity<>(mealVerificationService.queryAll(criteria), HttpStatus.OK);
+    }
 
     /**
      * 执行核销

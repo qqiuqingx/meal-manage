@@ -248,7 +248,7 @@ public ResponseEntity<Object> createDish(...) { ... }
 **分页（Controller → Service）：**
 ```java
 // Controller：前端 0 基，MyBatis-Plus 1 基，需 +1 转换
-Page<Object> page = new Page<>(criteria.getPage() + 1, criteria.getSize());
+Page<Object> page = new Page<>(criteria.getPage(), criteria.getSize());
 return new ResponseEntity<>(dishService.queryAll(criteria, page), HttpStatus.OK);
 ```
 

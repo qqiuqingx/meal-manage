@@ -68,6 +68,12 @@ export const constantRouterMap = [
         component: (resolve) => require(['@/views/meal/productionSheet/index'], resolve),
         name: 'ProductionSheet',
         meta: { title: '排餐生产单', noCache: true }
+      },
+      {
+        path: 'verification-log',
+        component: (resolve) => require(['@/views/meal/verificationLog/index'], resolve),
+        name: 'VerificationLog',
+        meta: { title: '核销记录', noCache: true }
       }
     ]
   }

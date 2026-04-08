@@ -16,6 +16,7 @@
 package me.zhengjie.modules.meal.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import cn.hutool.json.JSONUtil;
 import lombok.RequiredArgsConstructor;
@@ -27,11 +28,14 @@ import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.MealVerificationLog;
 import me.zhengjie.modules.meal.domain.dto.MealVerificationDto;
+import me.zhengjie.modules.meal.domain.dto.MealVerificationLogQueryCriteria;
+import me.zhengjie.modules.meal.domain.dto.MealVerificationLogVO;
 import me.zhengjie.modules.meal.domain.dto.MealVerificationResultDto;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
 import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
 import me.zhengjie.modules.meal.service.MealVerificationService;
+import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.SecurityUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +58,13 @@ public class MealVerificationServiceImpl implements MealVerificationService {
     private final MealPlanCustomerMapper mealPlanCustomerMapper;
     private final MealPlanMapper mealPlanMapper;
     private final CustomerOrderMapper customerOrderMapper;
+
+    @Override
+    public PageResult<MealVerificationLogVO> queryAll(MealVerificationLogQueryCriteria criteria) {
+        Page<MealVerificationLogVO> page = new Page<>(criteria.getPage() + 1, criteria.getSize());
+        verificationLogMapper.selectPageByCriteria(criteria, page);
+        return new PageResult<>(page.getRecords(), page.getTotal());
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
