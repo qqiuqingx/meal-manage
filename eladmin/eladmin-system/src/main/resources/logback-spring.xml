@@ -4,6 +4,9 @@
     <property name="log.charset" value="utf-8" />
     <property name="log.pattern" value="%contextName- %red(%d{yyyy-MM-dd HH:mm:ss}) %green([%thread]) %highlight(%-5level) %boldMagenta(%logger{36}) - %msg%n" />
 
+    <!-- 从 Spring 环境读取日志目录（dev: ./logs，prod: /app/logs） -->
+    <springProperty scope="context" name="log.path" source="logging.path" defaultValue="./logs"/>
+
     <!-- 输出到控制台 -->
     <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
@@ -14,9 +17,9 @@
 
     <!-- 排餐计划业务日志文件（每天一个文件，保留30天） -->
     <appender name="MEAL_PLAN_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>/app/logs/meal-plan.log</file>
+        <file>${log.path}/meal-plan.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>/app/logs/meal-plan.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>${log.path}/meal-plan.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder>
@@ -27,9 +30,9 @@
 
     <!-- 核销服务日志文件（每天一个文件，保留30天） -->
     <appender name="MEAL_VERIFICATION_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>/app/logs/meal-verification.log</file>
+        <file>${log.path}/meal-verification.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>/app/logs/meal-verification.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>${log.path}/meal-verification.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder>

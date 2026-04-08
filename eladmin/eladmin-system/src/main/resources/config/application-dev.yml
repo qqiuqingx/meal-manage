@@ -102,6 +102,10 @@ generator:
 swagger:
   enabled: true
 
+# 日志输出目录
+logging:
+  path: ./logs
+
 # 文件存储路径
 file:
   mac:
