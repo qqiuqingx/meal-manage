@@ -546,6 +546,13 @@ export default {
       if (!this.planData || !this.planData.mealPlan) return
       const mp = this.planData.mealPlan
       const mealLabel = mp.mealType === 'LUNCH' ? '午餐' : '晚餐'
+      // 校验：存在已核销的客户记录时禁止删除整条计划
+      const verifiedCustomers = (this.planData.customers || []).filter(c => c.isVerified === 1)
+      if (verifiedCustomers.length > 0) {
+        const names = verifiedCustomers.map(c => c.customerName).join('、')
+        this.$message.error(`该排餐计划存在已核销的客户，无法删除。已核销客户：${names}`)
+        return
+      }
       this.$confirm(
         `确认删除 ${mp.recordDate} 的 ${mealLabel} 排餐计划吗？将同时删除相关的明细数据！`,
         '危险操作',
@@ -580,10 +587,18 @@ export default {
     },
     handleBatchDeleteCustomers() {
       if (this.customerDialog.selections.length === 0) return
-      const ids = this.customerDialog.selections.map(item => item.id)
-      this.$confirm(
-        `确认删除选定的 ${ids.length} 个客户的排餐计划吗？将同时删除相关的明细数据！`,
-        '危险操作',
+      // 过滤掉已核销的客户，只允许删除未核销的
+      const toDelete = this.customerDialog.selections.filter(item => item.isVerified !== 1)
+      if (toDelete.length === 0) {
+        this.$message.warning('选中的客户均已核销，无法删除')
+        return
+      }
+      const ids = toDelete.map(item => item.id)
+      const skipCount = this.customerDialog.selections.length - toDelete.length
+      const msg = skipCount > 0
+        ? `选中的 ${this.customerDialog.selections.length} 个客户中有 ${skipCount} 个已核销，将只删除未核销的 ${ids.length} 个客户，确认继续？`
+        : `确认删除选定的 ${ids.length} 个客户的排餐计划吗？将同时删除相关的明细数据！`
+      this.$confirm(msg, '危险操作',
         { confirmButtonText: '确定删除', cancelButtonText: '取消', type: 'error' }
       ).then(() => {
         this.doDeleteCustomers(ids)
@@ -604,6 +619,9 @@ export default {
         this.fetchCustomerList()
         // 刷新生产单数据
         this.loadByDateAndMeal()
+      }).catch(err => {
+        const msg = err && err.response && err.response.data && err.response.data.message
+        this.$message.error(msg || '删除失败，请重试')
       })
     },
     resetCustomerDialog() {
