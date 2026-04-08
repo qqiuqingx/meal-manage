@@ -113,6 +113,10 @@ generator:
 swagger:
   enabled: false
 
+# 日志输出目录
+logging:
+  path: /app/logs
+
 # 文件存储路径
 file:
   mac:
