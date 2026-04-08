@@ -109,7 +109,7 @@ Backend reads from:
 - **API Documentation**:
   - Knife4j (Swagger) available at `/doc.html` (runtime)
   - **All new/modified APIs must be documented in `doc/` directory as Markdown files**
-  - Example: `eladmin/doc/customer-dietary-restrictions-api.md`
+  - Example: `eladmin/doc/客户饮食限制接口文档.md`
 - **Code Generation**: Both backend and frontend CRUD code can be generated via the generator module
 
 ## Adding New Business Modules
@@ -142,4 +142,4 @@ eladmin-system/src/main/java/me/zhengjie/modules/meal/
 
 - **meal**: 饮食限制模块 (customer_dietary_restrictions 表)
   - Code: `eladmin-system/src/main/java/me/zhengjie/modules/meal/`
-  - API Doc: `eladmin/doc/customer-dietary-restrictions-api.md`
+  - API Doc: `eladmin/doc/客户饮食限制接口文档.md`
