@@ -226,8 +226,9 @@ deploy_compose() {
 
     # 始终启动容器
     log "starting containers..."
-    # 检查镜像是否存在，存在则使用 --no-build
-    if docker images | grep -q "mealserver" && docker images | grep -q "mealweb"; then
+    # 仅在前后端镜像都已存在时跳过构建
+    if docker images --format '{{.Repository}}' | grep -qx 'mealserver' && \
+       docker images --format '{{.Repository}}' | grep -qx 'mealweb'; then
       DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --no-build
     else
       DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d
@@ -243,31 +244,44 @@ cleanup_old_images() {
 
   # 清理 mealserver 旧镜像
   local old_mealserver_images
-  old_mealserver_images=$(docker images --format "{{.Repository}}:{{.Tag}} {{.ID}} {{.CreatedAt}}" | \
+  old_mealserver_images=$(docker images --format "{{.Repository}}:{{.Tag}}	{{.ID}}	{{.CreatedAt}}" | \
     grep "^mealserver:" | \
-    sort -k3 -r | \
+    sort -t $'\t' -k3 -r | \
     tail -n +$((KEEP_IMAGE_COUNT + 1)) || true)
 
   if [[ -n "$old_mealserver_images" ]]; then
-    while IFS=' ' read -r image_name image_id image_created; do
+    while IFS=$'\t' read -r image_name image_id image_created; do
       log "  删除旧后端镜像: $image_name (创建时间: $image_created)"
-      docker rmi "$image_id" >/dev/null 2>&1 || true
-      ((cleaned_count++))
+      # 仅忽略"镜像不存在"错误（exit 1），其他错误（如被占用、认证失败）打印警告
+      if docker rmi "$image_id" 2>/dev/null; then
+        ((cleaned_count++)) || true
+      else
+        exit_code=$?
+        if (( exit_code != 1 )); then
+          log "  警告: 无法删除镜像 $image_name，exit $exit_code"
+        fi
+      fi
     done <<< "$old_mealserver_images"
   fi
 
   # 清理 mealweb 旧镜像
   local old_mealweb_images
-  old_mealweb_images=$(docker images --format "{{.Repository}}:{{.Tag}} {{.ID}} {{.CreatedAt}}" | \
+  old_mealweb_images=$(docker images --format "{{.Repository}}:{{.Tag}}	{{.ID}}	{{.CreatedAt}}" | \
     grep "^mealweb:" | \
-    sort -k3 -r | \
+    sort -t $'\t' -k3 -r | \
     tail -n +$((KEEP_IMAGE_COUNT + 1)) || true)
 
   if [[ -n "$old_mealweb_images" ]]; then
-    while IFS=' ' read -r image_name image_id image_created; do
+    while IFS=$'\t' read -r image_name image_id image_created; do
       log "  删除旧前端镜像: $image_name (创建时间: $image_created)"
-      docker rmi "$image_id" >/dev/null 2>&1 || true
-      ((cleaned_count++))
+      if docker rmi "$image_id" 2>/dev/null; then
+        ((cleaned_count++)) || true
+      else
+        exit_code=$?
+        if (( exit_code != 1 )); then
+          log "  警告: 无法删除镜像 $image_name，exit $exit_code"
+        fi
+      fi
     done <<< "$old_mealweb_images"
   fi
 
