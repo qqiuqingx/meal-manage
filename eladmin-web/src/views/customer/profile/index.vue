@@ -212,7 +212,12 @@ export default {
       url: '/api/customerProfile',
       idField: 'id',
       sort: 'id,desc',
-      crudMethod: { ...profileApi }
+      crudMethod: { ...profileApi },
+      query: {
+        customerCode: '',
+        customerName: '',
+        phone: ''
+      }
     })
   },
   data() {
@@ -221,11 +226,6 @@ export default {
         add: ['admin', 'customerProfile:add'],
         edit: ['admin', 'customerProfile:edit'],
         del: ['admin', 'customerProfile:del']
-      },
-      query: {
-        customerCode: '',
-        customerName: '',
-        phone: ''
       },
       rules: {
         customerName: [{ required: true, message: '请输入客户姓名', trigger: 'blur' }],
