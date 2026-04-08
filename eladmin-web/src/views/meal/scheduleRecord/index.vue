@@ -281,7 +281,13 @@
               style="color: #67C23A;"
               @click="handleSingleVerify(scope.row)"
             >核销</el-button>
-            <el-button type="text" style="color: #F56C6C;" @click="handleDeleteSingleCustomer(scope.row)">删除排餐</el-button>
+            <el-button
+              type="text"
+              :disabled="scope.row.isVerified === 1"
+              :title="scope.row.isVerified === 1 ? '已核销，无法删除' : ''"
+              :style="scope.row.isVerified === 1 ? 'color: #C0C4CC; cursor: not-allowed;' : 'color: #F56C6C;'"
+              @click="handleDeleteSingleCustomer(scope.row)"
+            >删除排餐</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -544,6 +550,7 @@ export default {
     // ─── 删除排餐记录 ────────────────────────────
     handleDeleteCurrent() {
       if (!this.planData || !this.planData.mealPlan) return
+      console.log('删除排餐记录')
       const mp = this.planData.mealPlan
       const mealLabel = mp.mealType === 'LUNCH' ? '午餐' : '晚餐'
       // 校验：存在已核销的客户记录时禁止删除整条计划
@@ -586,6 +593,7 @@ export default {
       this.customerDialog.selections = val
     },
     handleBatchDeleteCustomers() {
+      console.log('123332')
       if (this.customerDialog.selections.length === 0) return
       // 过滤掉已核销的客户，只允许删除未核销的
       const toDelete = this.customerDialog.selections.filter(item => item.isVerified !== 1)
@@ -605,6 +613,11 @@ export default {
       }).catch(() => {})
     },
     handleDeleteSingleCustomer(row) {
+      // 校验：已核销的客户不允许删除
+      if (row.isVerified === 1) {
+        this.$message.warning(`客户 "${row.customerName}" 已核销，无法删除排餐计划`)
+        return
+      }
       this.$confirm(
         `确认删除客户 "${row.customerName}" 的排餐计划吗？将同时删除相关的明细数据！`,
         '危险操作',
