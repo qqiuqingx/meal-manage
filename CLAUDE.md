@@ -82,7 +82,7 @@ npm run lint
 
 ## Key Technologies
 
-- **Backend**: Spring Boot 2.7.18, Java 8, Mybatis-Plus 3.5.3.1, Spring Security, JWT, Redis (Lettuce), Redisson
+- **Backend**: Spring Boot 2.7.18, Java 17, Mybatis-Plus 3.5.3.1, Spring Security, JWT, Redis (Lettuce), Redisson
 - **Database**: MySQL 9.2.0, Druid 1.2.19
 - **Serialization**: fastjson2 (NOT Jackson - it's excluded in pom.xml)
 - **Frontend**: Vue 2.7.16, element-ui 2.15.14, Vuex 3.1, vue-router 3.0

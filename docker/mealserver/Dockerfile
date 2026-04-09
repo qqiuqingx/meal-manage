@@ -3,7 +3,7 @@
 # =============================================================================
 # Stage 1: Build backend JAR with Maven
 # =============================================================================
-FROM maven:3.8.8-eclipse-temurin-8 AS builder
+FROM maven:3.9.9-eclipse-temurin-17 AS builder
 
 WORKDIR /build
 
@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=/root/.m2/repository \
 # =============================================================================
 # Stage 2: Runtime image
 # =============================================================================
-FROM eclipse-temurin:8-jre
+FROM eclipse-temurin:17-jre
 
 # Install dumb-init for proper signal handling and wget for healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -41,18 +41,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Create runtime directories and grant the non-root user write access
-RUN mkdir -p /home/eladmin/file /home/eladmin/avatar /app/logs && \
-    chown -R ubuntu:ubuntu /home/eladmin /app
+# Create runtime user and grant write access
+RUN groupadd -r eladmin && useradd -r -g eladmin -d /home/eladmin -m eladmin && \
+    mkdir -p /home/eladmin/file /home/eladmin/avatar /app/logs && \
+    chown -R eladmin:eladmin /home/eladmin /app
 
 # Copy built JAR from the builder stage
-COPY --from=builder --chown=ubuntu:ubuntu /build/eladmin/eladmin-system/target/eladmin-system-1.1.jar /app/app.jar
+COPY --from=builder --chown=eladmin:eladmin /build/eladmin/eladmin-system/target/eladmin-system-1.1.jar /app/app.jar
 
 # Copy startup script
-COPY --chown=ubuntu:ubuntu docker/mealserver/entrypoint.sh /app/entrypoint.sh
+COPY --chown=eladmin:eladmin docker/mealserver/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-USER ubuntu
+USER eladmin
 
 EXPOSE 8000
 
