@@ -147,6 +147,12 @@ public class MealVerificationServiceImpl implements MealVerificationService {
             throw new BadRequestException("订单更新失败，可能是并发操作导致");
         }
 
+        // 8.5. 检查是否需要更新订单状态为已完成
+        int statusUpdated = customerOrderMapper.updateStatusToCompletedWhenFinished(order.getId());
+        if (statusUpdated > 0) {
+            log.info("订单剩余餐数为0，自动更新订单状态为已完成，订单ID: {}", order.getId());
+        }
+
         // 9. 重新读取订单，基于最新状态生成准确日志
         CustomerOrder latestOrder = customerOrderMapper.selectById(customerPlan.getOrderId());
         if (latestOrder == null) {
