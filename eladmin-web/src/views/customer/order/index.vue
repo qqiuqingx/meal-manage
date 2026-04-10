@@ -150,7 +150,7 @@ export default {
   components: { crudOperation, rrOperation, OrderForm },
   mixins: [presenter(), header(), form(createOrderDefaultForm()), crud()],
   cruds() {
-    return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }})
+    return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }, query: { orderCode: '', customerName: '', status: null, customerSource: null }})
   },
   data() {
     return {
@@ -158,12 +158,6 @@ export default {
         add: ['admin', 'customerOrder:add'],
         edit: ['admin', 'customerOrder:edit'],
         del: ['admin', 'customerOrder:del']
-      },
-      query: {
-        orderCode: '',
-        customerName: '',
-        status: null,
-        customerSource: null
       },
       submitLoading: false,
       customerSourceOptions: [],
