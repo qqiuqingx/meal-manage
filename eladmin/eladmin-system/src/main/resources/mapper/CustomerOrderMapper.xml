@@ -147,6 +147,13 @@
         LIMIT 1
     </select>
 
+    <!-- 根据客户ID查询所有有效订单（status=1，按成交时间倒序） -->
+    <select id="findActiveOrdersByCustomerId" resultMap="BaseResultMap">
+        SELECT * FROM customer_order
+        WHERE customer_id = #{customerId} AND status = 1
+        ORDER BY deal_time DESC
+    </select>
+
     <!-- 统计同一客户在同一时间段内的订单数量 -->
     <select id="countOverlappingOrders" resultType="int">
         SELECT COUNT(*)

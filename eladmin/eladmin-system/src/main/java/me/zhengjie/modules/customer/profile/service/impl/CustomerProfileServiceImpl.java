@@ -466,28 +466,37 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     }
 
     private void fillLatestOrderInfo(CustomerProfile profile) {
-        CustomerOrder latestOrder = customerOrderMapper.findLatestByCustomerId(profile.getId());
-        if (latestOrder != null) {
-            profile.setBreakfastCount(latestOrder.getBreakfastCount());
-            profile.setLunchDinnerCount(latestOrder.getLunchDinnerCount());
+        List<CustomerOrder> activeOrders = customerOrderMapper.findActiveOrdersByCustomerId(profile.getId());
+        if (activeOrders != null && !activeOrders.isEmpty()) {
+            // 汇总所有有效订单的总餐数
+            int totalBreakfast = 0;
+            int totalLunchDinner = 0;
+            for (CustomerOrder order : activeOrders) {
+                int breakfastCount = order.getBreakfastCount() != null ? order.getBreakfastCount() : 0;
+                int lunchDinnerCount = order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0;
+                totalBreakfast += breakfastCount;
+                totalLunchDinner += lunchDinnerCount;
+            }
+            profile.setBreakfastCount(totalBreakfast);
+            profile.setLunchDinnerCount(totalLunchDinner);
 
-            // 计算剩余餐数
+            // 汇总所有有效订单的核销数据
             int breakfastVerified = 0;
             int lunchDinnerVerified = 0;
-            List<OrderVerifiedCountDto> verifiedList = customerOrderMapper.sumVerifiedCountByOrderId(latestOrder.getId());
-            if (verifiedList != null) {
-                for (OrderVerifiedCountDto item : verifiedList) {
-                    String mealType = item.getMealType();
-                    int verifiedCount = item.getVerifiedCount() != null ? item.getVerifiedCount() : 0;
-                    if ("BREAKFAST".equals(mealType)) {
-                        breakfastVerified = verifiedCount;
-                    } else if ("LUNCH".equals(mealType) || "DINNER".equals(mealType)) {
-                        lunchDinnerVerified += verifiedCount;
+            for (CustomerOrder order : activeOrders) {
+                List<OrderVerifiedCountDto> verifiedList = customerOrderMapper.sumVerifiedCountByOrderId(order.getId());
+                if (verifiedList != null) {
+                    for (OrderVerifiedCountDto item : verifiedList) {
+                        String mealType = item.getMealType();
+                        int verifiedCount = item.getVerifiedCount() != null ? item.getVerifiedCount() : 0;
+                        if ("BREAKFAST".equals(mealType)) {
+                            breakfastVerified += verifiedCount;
+                        } else if ("LUNCH".equals(mealType) || "DINNER".equals(mealType)) {
+                            lunchDinnerVerified += verifiedCount;
+                        }
                     }
                 }
             }
-            int totalBreakfast = latestOrder.getBreakfastCount() != null ? latestOrder.getBreakfastCount() : 0;
-            int totalLunchDinner = latestOrder.getLunchDinnerCount() != null ? latestOrder.getLunchDinnerCount() : 0;
             profile.setRemainingBreakfastCount(Math.max(totalBreakfast - breakfastVerified, 0));
             profile.setRemainingLunchDinnerCount(Math.max(totalLunchDinner - lunchDinnerVerified, 0));
         }
