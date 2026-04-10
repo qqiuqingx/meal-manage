@@ -38,6 +38,13 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
     CustomerOrder findLatestByCustomerId(@Param("customerId") Long customerId);
 
     /**
+     * 根据客户ID查询所有有效订单（status=1）
+     * @param customerId 客户ID
+     * @return 有效订单列表，按成交时间倒序
+     */
+    List<CustomerOrder> findActiveOrdersByCustomerId(@Param("customerId") Long customerId);
+
+    /**
      * 统计同一客户在同一时间段内的订单数量
      */
     int countOverlappingOrders(@Param("customerId") Long customerId,
