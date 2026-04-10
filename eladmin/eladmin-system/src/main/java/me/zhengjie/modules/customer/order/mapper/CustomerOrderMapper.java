@@ -97,6 +97,13 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
     int incrementVerifiedCountAndAmount(@Param("orderId") Long orderId, @Param("price") java.math.BigDecimal price);
 
     /**
+     * 当剩余餐数为0时，原子性更新订单状态为已完成
+     * @param orderId 订单ID
+     * @return 更新行数，0表示无需更新（订单未完成或已完成）
+     */
+    int updateStatusToCompletedWhenFinished(@Param("orderId") Long orderId);
+
+    /**
      * 根据订单ID和餐次类型统计已核销餐数
      * @param orderId 订单ID
      * @return 各餐次已核销数列表

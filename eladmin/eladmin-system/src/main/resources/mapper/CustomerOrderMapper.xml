@@ -254,6 +254,16 @@
           AND status = 1
     </update>
 
+    <!-- 当剩余餐数为0时，原子性更新订单状态为已完成 -->
+    <update id="updateStatusToCompletedWhenFinished">
+        UPDATE customer_order
+        SET status = 2,
+            update_time = NOW()
+        WHERE id = #{orderId}
+          AND remaining_count = 0
+          AND status = 1
+    </update>
+
     <!-- 根据订单ID统计各餐次已核销餐数 -->
     <select id="sumVerifiedCountByOrderId" resultMap="VerifiedCountResultMap">
         SELECT meal_type, SUM(verification_count) AS verified_count
