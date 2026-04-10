@@ -143,3 +143,37 @@ eladmin-system/src/main/java/me/zhengjie/modules/meal/
 - **meal**: 饮食限制模块 (customer_dietary_restrictions 表)
   - Code: `eladmin-system/src/main/java/me/zhengjie/modules/meal/`
   - API Doc: `eladmin/doc/客户饮食限制接口文档.md`
+
+## Business Rules
+
+### 订单剩余餐数计算规则
+
+**餐数分类**：早餐餐数和午餐+晚餐餐数是区分开的，独立计算。
+
+**剩余餐数计算公式：**
+```
+剩余早餐数 = 订单早餐数 - 已核销早餐数
+剩余午餐晚餐数 = 订单午餐晚餐数 - 已核销午餐数 - 已核销晚餐数
+```
+
+**数据来源（订单维度）：**
+- 订单表字段：`CustomerOrder.breakfastCount`, `CustomerOrder.lunchDinnerCount`
+- 核销统计：通过 `MealVerificationLog` 表按 `mealType` + `orderID` 分组统计已核销数量
+- 计算位置：`CustomerProfileServiceImpl.fillLatestOrderInfo()` 方法
+
+**使用场景（客户维度）：**
+- 客户档案视图中显示该客户最新订单的剩余餐数
+- 通过 `customerOrderMapper.findLatestByCustomerId(customerId)` 获取最新订单
+- 使用该订单的 ID 统计核销数量并计算剩余餐数
+
+**核销类型映射：**
+- `BREAKFAST` → 计入早餐核销数
+- `LUNCH` → 计入午餐晚餐核销数
+- `DINNER` → 计入午餐晚餐核销数
+
+**业务规则说明：**
+- 剩余餐数基于订单表字段和核销记录实时计算，非订单表存储字段
+- 午餐和晚餐共享一个餐数池（lunchDinnerCount），核销时累加计算
+- 不依赖排餐记录的创建或删除
+- 删除排餐记录时不会影响剩余餐数（因为排餐不消耗餐数，仅核销消耗）
+- 剩余餐数最小值为 0（使用 `Math.max(..., 0)` 保证）
