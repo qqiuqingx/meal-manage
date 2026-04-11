@@ -640,13 +640,17 @@ public class MealPlanServiceImpl implements MealPlanService {
         String mainReplaceReason = null;
         String sideReplaceReason = null;
 
-        // 回退1: MAIN过敏，用SIDE作为MAIN
+        // 回退1: MAIN过敏，用SIDE作为MAIN（暂不启用）
+        // if (mainDish == null && sideDish != null) {
+        //     log.info("主菜全部过敏，改用副菜作为主菜");
+        //     originalMainDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
+        //     mainReplaceReason = "ALLERGY";
+        //     mainDish = sideDish;
+        //     sideDish = null; // 重新选择SIDE
+        // }
         if (mainDish == null && sideDish != null) {
-            log.info("主菜全部过敏，改用副菜作为主菜");
-            originalMainDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
-            mainReplaceReason = "ALLERGY";
-            mainDish = sideDish;
-            sideDish = null; // 重新选择SIDE
+            Dish originalMainDishTmp = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
+            log.info("【暂跳过替换菜品】二荤一素主菜全部过敏，原本想选的菜品: {}", originalMainDishTmp != null ? originalMainDishTmp.getName() : "无");
         }
 
         // 回退2: 重新选择SIDE
@@ -654,33 +658,38 @@ public class MealPlanServiceImpl implements MealPlanService {
             sideDish = selectDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, dishIngredientMap);
         }
 
-        // 回退3: 当日不足，尝试次日菜品
+        // 回退3: 当日不足，尝试次日菜品（暂不启用）
+        // if (mainDish == null || sideDish == null) {
+        //     log.warn("当日荤菜不足，尝试次日菜品");
+        //     Map<String, List<Dish>> nextDayDishTypeMap = loadNextDayDishTypeMap(targetDate, mealType, parentPackageId, parentPackageMap);
+        //     Map<Integer, Set<String>> nextDayIngredients = loadDishIngredients(
+        //             nextDayDishTypeMap.values().stream().flatMap(List::stream).collect(Collectors.toList()));
+        //
+        //     if (mainDish == null) {
+        //         if (originalMainDish == null) {
+        //             originalMainDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
+        //         }
+        //         mainDish = selectDish(nextDayDishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, allergyTags, nextDayIngredients);
+        //         if (mainDish != null) {
+        //             log.info("次日主菜选择成功 - 菜品: {}", mainDish.getName());
+        //             mainReplaceReason = mainReplaceReason == null ? "NEXT_DAY" : mainReplaceReason;
+        //         }
+        //     }
+        //     if (sideDish == null) {
+        //         if (originalSideDish == null) {
+        //             originalSideDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, dishIngredientMap);
+        //         }
+        //         sideDish = selectDish(nextDayDishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, nextDayIngredients);
+        //         if (sideDish != null) {
+        //             log.info("次日副菜选择成功 - 菜品: {}", sideDish.getName());
+        //             sideReplaceReason = sideReplaceReason == null ? "NEXT_DAY" : sideReplaceReason;
+        //         }
+        //     }
+        // }
         if (mainDish == null || sideDish == null) {
-            log.warn("当日荤菜不足，尝试次日菜品");
-            Map<String, List<Dish>> nextDayDishTypeMap = loadNextDayDishTypeMap(targetDate, mealType, parentPackageId, parentPackageMap);
-            Map<Integer, Set<String>> nextDayIngredients = loadDishIngredients(
-                    nextDayDishTypeMap.values().stream().flatMap(List::stream).collect(Collectors.toList()));
-
-            if (mainDish == null) {
-                if (originalMainDish == null) {
-                    originalMainDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
-                }
-                mainDish = selectDish(nextDayDishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, allergyTags, nextDayIngredients);
-                if (mainDish != null) {
-                    log.info("次日主菜选择成功 - 菜品: {}", mainDish.getName());
-                    mainReplaceReason = mainReplaceReason == null ? "NEXT_DAY" : mainReplaceReason;
-                }
-            }
-            if (sideDish == null) {
-                if (originalSideDish == null) {
-                    originalSideDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, dishIngredientMap);
-                }
-                sideDish = selectDish(nextDayDishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, nextDayIngredients);
-                if (sideDish != null) {
-                    log.info("次日副菜选择成功 - 菜品: {}", sideDish.getName());
-                    sideReplaceReason = sideReplaceReason == null ? "NEXT_DAY" : sideReplaceReason;
-                }
-            }
+            log.warn("【暂跳过替换菜品】当日荤菜不足（mainDish={}, sideDish={}），未尝试次日菜品",
+                    mainDish != null ? mainDish.getName() : "无",
+                    sideDish != null ? sideDish.getName() : "无");
         }
 
         if (mainDish == null || sideDish == null) {
@@ -762,44 +771,41 @@ public class MealPlanServiceImpl implements MealPlanService {
         if (fallbackType != null) {
             // 记录原本想选的菜品（首选类型的第一个候选）
             Dish originalDish = getFirstAvailableDish(dishTypeMap.get(primaryType), selectedDishIds, dishIngredientMap);
-            log.info("{}类型菜品全部过敏，改用{}类型", primaryType, fallbackType);
-            dish = selectDish(dishTypeMap.get(fallbackType), selectedDishIds, allergyTags, dishIngredientMap);
-            if (dish != null) {
-                return DishSelectResult.withReplace(dish, originalDish, "ALLERGY");
-            }
+            // TODO: 暂不生成替换菜品，注释备用
+            // dish = selectDish(dishTypeMap.get(fallbackType), selectedDishIds, allergyTags, dishIngredientMap);
+            // if (dish != null) {
+            //     return DishSelectResult.withReplace(dish, originalDish, "ALLERGY");
+            // }
+            log.info("【暂跳过替换菜品】primaryType={}, fallbackType={}, 客户过敏, 原本想选的菜品: {}",
+                    primaryType, fallbackType, originalDish != null ? originalDish.getName() : "无");
         }
 
         // 尝试次日菜品
-        log.warn("当日{}类型菜品不足，尝试次日菜品", primaryType);
-        Map<String, List<Dish>> nextDayDishTypeMap = loadNextDayDishTypeMap(targetDate, mealType, parentPackageId, parentPackageMap);
-        if (nextDayDishTypeMap.isEmpty()) {
-            return null;
-        }
-
-        Map<Integer, Set<String>> nextDayIngredients = loadDishIngredients(
-                nextDayDishTypeMap.values().stream().flatMap(List::stream).collect(Collectors.toList()));
-
-        // 记录原本想选的菜品
-        Dish originalDish = getFirstAvailableDish(dishTypeMap.get(primaryType), selectedDishIds, dishIngredientMap);
-        if (originalDish == null && fallbackType != null) {
-            originalDish = getFirstAvailableDish(dishTypeMap.get(fallbackType), selectedDishIds, dishIngredientMap);
-        }
-
-        // 优先尝试次日首选类型
-        dish = selectDish(nextDayDishTypeMap.get(primaryType), selectedDishIds, allergyTags, nextDayIngredients);
-        if (dish != null) {
-            log.info("次日{}类型选择成功 - 菜品: {}", primaryType, dish.getName());
-            return DishSelectResult.withReplace(dish, originalDish, "NEXT_DAY");
-        }
-
-        // 如果次选类型存在，尝试次日次选类型
-        if (fallbackType != null) {
-            dish = selectDish(nextDayDishTypeMap.get(fallbackType), selectedDishIds, allergyTags, nextDayIngredients);
-            if (dish != null) {
-                log.info("次日{}类型选择成功 - 菜品: {}", fallbackType, dish.getName());
-                return DishSelectResult.withReplace(dish, originalDish, "NEXT_DAY");
-            }
-        }
+        log.warn("【暂跳过替换菜品】当日{}类型菜品不足，未尝试次日菜品", primaryType);
+        // Map<String, List<Dish>> nextDayDishTypeMap = loadNextDayDishTypeMap(targetDate, mealType, parentPackageId, parentPackageMap);
+        // if (nextDayDishTypeMap.isEmpty()) {
+        //     return null;
+        // }
+        // Map<Integer, Set<String>> nextDayIngredients = loadDishIngredients(
+        //         nextDayDishTypeMap.values().stream().flatMap(List::stream).collect(Collectors.toList()));
+        // Dish originalDish = getFirstAvailableDish(dishTypeMap.get(primaryType), selectedDishIds, dishIngredientMap);
+        // if (originalDish == null && fallbackType != null) {
+        //     originalDish = getFirstAvailableDish(dishTypeMap.get(fallbackType), selectedDishIds, dishIngredientMap);
+        // }
+        // // 优先尝试次日首选类型
+        // dish = selectDish(nextDayDishTypeMap.get(primaryType), selectedDishIds, allergyTags, nextDayIngredients);
+        // if (dish != null) {
+        //     log.info("次日{}类型选择成功 - 菜品: {}", primaryType, dish.getName());
+        //     return DishSelectResult.withReplace(dish, originalDish, "NEXT_DAY");
+        // }
+        // // 如果次选类型存在，尝试次日次选类型
+        // if (fallbackType != null) {
+        //     dish = selectDish(nextDayDishTypeMap.get(fallbackType), selectedDishIds, allergyTags, nextDayIngredients);
+        //     if (dish != null) {
+        //         log.info("次日{}类型选择成功 - 菜品: {}", fallbackType, dish.getName());
+        //         return DishSelectResult.withReplace(dish, originalDish, "NEXT_DAY");
+        //     }
+        // }
 
         return null;
     }
