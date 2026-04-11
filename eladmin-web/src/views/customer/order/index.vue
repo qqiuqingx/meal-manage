@@ -30,6 +30,19 @@
       <el-table-column label="订单编号" prop="orderCode" width="140" />
       <el-table-column label="客户编号" prop="customerCode" width="120" />
       <el-table-column label="客户姓名" prop="customerName" width="100" />
+      <el-table-column label="套餐" width="130">
+        <template slot-scope="scope">
+          {{ [scope.row.parentPackageName, scope.row.childPackageName].filter(Boolean).join(' / ') || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="过敏" width="150">
+        <template slot-scope="scope">
+          <span v-if="!scope.row.allergyTags || scope.row.allergyTags.length === 0">-</span>
+          <el-tag v-for="tag in scope.row.allergyTags" v-else :key="tag" size="mini" type="warning" style="margin-right: 4px;">
+            {{ tag }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="手机号" prop="phone" width="120" />
       <el-table-column label="定金" prop="depositAmount" width="90" align="right">
         <template slot-scope="scope">
