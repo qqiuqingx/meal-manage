@@ -375,7 +375,7 @@ public class MealPlanServiceImpl implements MealPlanService {
             return null; // 匹配
         }
         if (SCHEDULE_MODE_SCHEDULE.equals(scheduleMode)) {
-            List<String> deliveryDates = parseJsonArray(order.getDeliveryDates());
+            List<String> deliveryDates = parseDeliveryDatesWithMealTypes(order.getDeliveryDates());
             if (deliveryDates.contains(targetDate.toString())) {
                 return null; // 匹配
             }
@@ -1139,6 +1139,60 @@ public class MealPlanServiceImpl implements MealPlanService {
         } catch (Exception e) {
             log.warn("解析deliveryDates失败: {}", json);
             return Collections.emptyList();
+        }
+    }
+
+    /**
+     * 解析带餐次信息的配送日期JSON数组。
+     * 支持新旧两种格式：
+     * - 新格式: [{"date": "2026-04-01", "mealTypes": ["BREAKFAST", "LUNCH"]}]
+     * - 旧格式: ["2026-04-01", "2026-04-02"]
+     */
+    private List<String> parseDeliveryDatesWithMealTypes(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            String trimmed = json.trim();
+            // 检查是否是对象数组（新格式以 [{ 开头）
+            if (trimmed.startsWith("[{")) {
+                // 新格式: [{"date": "...", "mealTypes": [...]}]
+                List<DeliveryDateWithMealTypes> dates = JSON.parseArray(json, DeliveryDateWithMealTypes.class);
+                return dates.stream()
+                        .filter(d -> d.getDate() != null)
+                        .map(DeliveryDateWithMealTypes::getDate)
+                        .collect(Collectors.toList());
+            } else {
+                // 旧格式: ["2026-04-01", "2026-04-02"]
+                return JSON.parseArray(json, String.class);
+            }
+        } catch (Exception e) {
+            log.warn("解析deliveryDates失败: {}", json, e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * 内部类：配送日期及餐次信息
+     */
+    private static class DeliveryDateWithMealTypes {
+        private String date;
+        private List<String> mealTypes;
+
+        public String getDate() {
+            return date;
+        }
+
+        public void setDate(String date) {
+            this.date = date;
+        }
+
+        public List<String> getMealTypes() {
+            return mealTypes;
+        }
+
+        public void setMealTypes(List<String> mealTypes) {
+            this.mealTypes = mealTypes;
         }
     }
 

@@ -68,16 +68,13 @@
       <el-row v-if="form.scheduleMode === 'SCHEDULE'" :gutter="20">
         <el-col :span="24">
           <el-form-item label="送餐日期">
-            <el-select
-              v-model="form.deliveryDates"
-              multiple
-              filterable
-              allow-create
-              placeholder="选择或输入送餐日期（格式：yyyy-MM-dd）"
-              style="width: 100%;"
-            >
-              <el-option v-for="date in availableDates" :key="date" :label="date" :value="date" />
-            </el-select>
+            <MealScheduleCalendar
+              v-model="form.deliveryDatesWithMealTypes"
+              :start-date="form.startDate"
+              :end-date="form.endDate"
+              :readonly="readonly"
+              @selection-change="onCalendarSelectionChange"
+            />
           </el-form-item>
         </el-col>
       </el-row>
@@ -373,6 +370,8 @@
 import * as profileApi from '@/api/customer/profile'
 import * as packageApi from '@/api/customer/package'
 import * as dictDetailApi from '@/api/system/dictDetail'
+import MealScheduleCalendar from '@/components/Calendar/MealScheduleCalendar.vue'
+import { normalizeDeliveryDates } from '@/utils/calendar'
 
 // 订单模式默认数据
 export function createOrderDefaultForm() {
@@ -430,6 +429,9 @@ export function createFirstOrderDefaultForm() {
 
 export default {
   name: 'OrderForm',
+  components: {
+    MealScheduleCalendar
+  },
   props: {
     // 表单数据（通过 v-model 双向绑定）
     value: {
@@ -486,16 +488,31 @@ export default {
       const breakfast = this.form.breakfastCount || 0
       const lunchDinner = this.form.lunchDinnerCount || 0
       return breakfast + lunchDinner
+    },
+    // 日历组件使用的格式：[{date: 'yyyy-MM-dd', mealTypes: [...]}, ...]
+    deliveryDatesWithMealTypes: {
+      get() {
+        return this.form.deliveryDatesWithMealTypes || []
+      },
+      set(val) {
+        this.form.deliveryDatesWithMealTypes = val
+      }
     }
   },
   watch: {
     value: {
       handler(val) {
-        // 当外部 value 变化时（如编辑时加载数据），同步子套餐列表
+        console.log('[OrderForm] watch.value triggered, deliveryDates:', val && val.deliveryDates)
+        // 当外部 value 变化时（如编辑时加载数据），同步子套餐列表和日历数据
         if (val.parentPackageId) {
           this.loadChildPackages(val.parentPackageId)
         }
-        this.normalizeDeliveryDates(val)
+        // 直接计算 deliveryDatesWithMealTypes 并存入 form（供 Calendar 使用）
+        const normalized = normalizeDeliveryDates(val && val.deliveryDates)
+        console.log('[OrderForm] normalized deliveryDatesWithMealTypes:', JSON.stringify(normalized))
+        this.$set(this.form, 'deliveryDatesWithMealTypes', normalized)
+        // 同步 deliveryDates（供后端保存）
+        this.$set(this.form, 'deliveryDates', normalized && normalized.length > 0 ? JSON.stringify(normalized) : null)
       },
       immediate: true
     }
@@ -527,6 +544,12 @@ export default {
         console.error('loadCustomerSourceDict error', e)
       }
     },
+    // 日历选择变更处理
+    onCalendarSelectionChange(mealCounts) {
+      this.$set(this.form, 'breakfastCount', mealCounts.breakfastCount)
+      this.$set(this.form, 'lunchDinnerCount', mealCounts.lunchDinnerCount)
+      this.onMealCountChange()
+    },
     // 初始化可选日期（未来30天）
     initAvailableDates() {
       const dates = []
@@ -540,33 +563,6 @@ export default {
         dates.push(`${year}-${month}-${day}`)
       }
       this.availableDates = dates
-    },
-    normalizeDeliveryDates(form) {
-      if (!form) return
-      const normalized = this.parseDeliveryDates(form.deliveryDates)
-      const same = Array.isArray(form.deliveryDates) &&
-        normalized.length === form.deliveryDates.length &&
-        normalized.every((item, index) => item === form.deliveryDates[index])
-      if (!same) {
-        this.$set(form, 'deliveryDates', normalized)
-      }
-    },
-    parseDeliveryDates(value) {
-      if (Array.isArray(value)) {
-        return value.filter(Boolean)
-      }
-      if (!value) {
-        return []
-      }
-      if (typeof value === 'string') {
-        try {
-          const parsed = JSON.parse(value)
-          return Array.isArray(parsed) ? parsed.filter(Boolean) : []
-        } catch (e) {
-          return value.split(',').map(item => item.trim()).filter(Boolean)
-        }
-      }
-      return []
     },
     // 远程搜索客户
     async searchCustomer(query) {

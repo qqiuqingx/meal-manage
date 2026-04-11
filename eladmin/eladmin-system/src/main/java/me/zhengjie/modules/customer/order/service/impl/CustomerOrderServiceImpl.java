@@ -263,7 +263,9 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         order.setStatus(dto.getStatus());
         order.setMealType(dto.getMealType());
         order.setScheduleMode(dto.getScheduleMode());
-        order.setDeliveryDates(dto.getDeliveryDates());
+        order.setDeliveryDates(StringUtils.isNotBlank(dto.getDeliveryDatesWithMealTypes())
+                ? dto.getDeliveryDatesWithMealTypes()
+                : dto.getDeliveryDates());
         order.setRemark(dto.getRemark());
         order.setCustomerSource(dto.getCustomerSource());
     }

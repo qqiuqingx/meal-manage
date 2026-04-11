@@ -148,6 +148,12 @@ public class CustomerOrderSaveDto implements Serializable {
     private String deliveryDates;
 
     /**
+     * 送餐日期及餐次（新格式，供前端日历使用）
+     * 格式：[{"date":"2026-04-15","mealTypes":["BREAKFAST","LUNCH","DINNER"]},...]
+     */
+    private String deliveryDatesWithMealTypes;
+
+    /**
      * 备注
      */
     private String remark;
