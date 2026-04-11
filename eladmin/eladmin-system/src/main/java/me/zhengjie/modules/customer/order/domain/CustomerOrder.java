@@ -10,6 +10,7 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 客户订单实体
@@ -204,4 +205,10 @@ public class CustomerOrder implements Serializable {
      */
     @TableField(exist = false)
     private String childPackageName;
+
+    /**
+     * 客户过敏标签(查询时填充，来自 customer_profile.allergy_tags)
+     */
+    @TableField(exist = false)
+    private List<String> allergyTags;
 }
