@@ -59,6 +59,9 @@
             <if test="criteria.customerId != null">
                 AND o.customer_id = #{criteria.customerId}
             </if>
+            <if test="criteria.customerCode != null and criteria.customerCode != ''">
+                AND o.customer_code = #{criteria.customerCode}
+            </if>
             <if test="criteria.customerName != null and criteria.customerName != ''">
                 AND cp.customer_name LIKE CONCAT('%', #{criteria.customerName}, '%')
             </if>
@@ -97,6 +100,9 @@
             </if>
             <if test="criteria.customerId != null">
                 AND o.customer_id = #{criteria.customerId}
+            </if>
+            <if test="criteria.customerCode != null and criteria.customerCode != ''">
+                AND o.customer_code = #{criteria.customerCode}
             </if>
             <if test="criteria.customerName != null and criteria.customerName != ''">
                 AND cp.customer_name LIKE CONCAT('%', #{criteria.customerName}, '%')
