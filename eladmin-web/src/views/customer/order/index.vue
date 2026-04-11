@@ -4,6 +4,7 @@
     <div class="head-container">
       <div v-if="crud.props.searchToggle">
         <el-input v-model="query.orderCode" clearable size="small" placeholder="订单编号" style="width: 150px;" class="filter-item" @keyup.enter.native="crud.toQuery" />
+        <el-input v-model="query.customerCode" clearable size="small" placeholder="客户编号" style="width: 120px;" class="filter-item" @keyup.enter.native="crud.toQuery" />
         <el-input v-model="query.customerName" clearable size="small" placeholder="客户姓名" style="width: 120px;" class="filter-item" @keyup.enter.native="crud.toQuery" />
         <el-select v-model="query.status" clearable size="small" placeholder="订单状态" class="filter-item" style="width: 100px" @change="crud.toQuery">
           <el-option label="进行中" :value="1" />
@@ -27,6 +28,7 @@
     >
       <el-table-column :selectable="checkboxT" type="selection" width="55" />
       <el-table-column label="订单编号" prop="orderCode" width="140" />
+      <el-table-column label="客户编号" prop="customerCode" width="120" />
       <el-table-column label="客户姓名" prop="customerName" width="100" />
       <el-table-column label="手机号" prop="phone" width="120" />
       <el-table-column label="定金" prop="depositAmount" width="90" align="right">
@@ -150,7 +152,7 @@ export default {
   components: { crudOperation, rrOperation, OrderForm },
   mixins: [presenter(), header(), form(createOrderDefaultForm()), crud()],
   cruds() {
-    return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }, query: { orderCode: '', customerName: '', status: null, customerSource: null }})
+    return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }, query: { orderCode: '', customerCode: '', customerName: '', status: null, customerSource: null }})
   },
   data() {
     return {
