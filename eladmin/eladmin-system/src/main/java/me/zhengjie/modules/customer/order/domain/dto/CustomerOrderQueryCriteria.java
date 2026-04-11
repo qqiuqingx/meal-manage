@@ -21,6 +21,8 @@ public class CustomerOrderQueryCriteria implements Serializable {
 
     private Long customerId;
 
+    private String customerCode;
+
     /**
      * 订单状态: 0=已取消, 1=进行中, 2=已完成
      */
