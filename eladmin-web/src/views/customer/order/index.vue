@@ -188,17 +188,6 @@ export default {
     this.loadCustomerSourceDict()
   },
   methods: {
-    serializeDeliveryDates(value) {
-      if (Array.isArray(value)) {
-        const dates = value.map(item => String(item || '').trim()).filter(Boolean)
-        return dates.length ? JSON.stringify(dates) : null
-      }
-      if (typeof value === 'string') {
-        const trimmed = value.trim()
-        return trimmed || null
-      }
-      return null
-    },
     loadCustomerSourceDict() {
       dictDetailApi.get('customer_source').then(res => {
         this.customerSourceOptions = (res.content || res.data || res || []).map(item => ({
@@ -236,8 +225,8 @@ export default {
       const valid = await this.$refs.orderFormRef.validate().catch(() => false)
       if (!valid) return
       const payload = {
-        ...this.form,
-        deliveryDates: this.serializeDeliveryDates(this.form.deliveryDates)
+        ...this.form
+        // deliveryDates 已在 OrderForm 中处理好，不需要再次序列化
       }
 
       // 先校验订单冲突（提交前校验）
