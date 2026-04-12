@@ -49,7 +49,6 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      */
     int countOverlappingOrders(@Param("customerId") Long customerId,
                               @Param("startDate") java.time.LocalDate startDate,
-                              @Param("endDate") java.time.LocalDate endDate,
                               @Param("excludeId") Long excludeId);
 
     /**
@@ -57,7 +56,6 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      */
     int countAllMealTypeOrders(@Param("customerId") Long customerId,
                                @Param("startDate") java.time.LocalDate startDate,
-                               @Param("endDate") java.time.LocalDate endDate,
                                @Param("excludeId") Long excludeId);
 
     /**
@@ -65,7 +63,6 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      */
     int countMealTypeOrders(@Param("customerId") Long customerId,
                            @Param("startDate") java.time.LocalDate startDate,
-                           @Param("endDate") java.time.LocalDate endDate,
                            @Param("mealType") String mealType,
                            @Param("excludeId") Long excludeId);
 
