@@ -191,12 +191,12 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             throw new BadRequestException("成交金额不能超过总金额");
         }
 
-        // 日期校验
-        if (dto.getStartDate() != null && dto.getEndDate() != null) {
-            if (dto.getEndDate().isBefore(dto.getStartDate())) {
-                throw new BadRequestException("订单结束日期不能早于开始日期");
-            }
-        }
+        // 日期校验：结束日期不再做硬性校验
+        // if (dto.getStartDate() != null && dto.getEndDate() != null) {
+        //     if (dto.getEndDate().isBefore(dto.getStartDate())) {
+        //         throw new BadRequestException("订单结束日期不能早于开始日期");
+        //     }
+        // }
 
         // 核销数校验
         int totalCount = getTotalCount(dto);
@@ -358,36 +358,35 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
     @Override
     public void validateOrderConflict(CustomerOrderSaveDto dto, Long excludeId) {
-        // 如果没有日期范围，不进行校验
-        if (dto.getStartDate() == null || dto.getEndDate() == null) {
+        // 如果没有开始日期，不进行校验
+        if (dto.getStartDate() == null) {
             return;
         }
 
         LocalDate startDate = dto.getStartDate();
-        LocalDate endDate = dto.getEndDate();
 
-        // 校验规则：
-        // 1. 如果是全餐次订单，同一时间段只能有1个订单
+        // 校验规则（去除结束日期限制）：
+        // 1. 如果是全餐次订单，同一开始日期只能有1个订单
         if ("ALL".equals(dto.getMealType())) {
-            int count = orderMapper.countAllMealTypeOrders(dto.getCustomerId(), startDate, endDate, excludeId);
+            int count = orderMapper.countAllMealTypeOrders(dto.getCustomerId(), startDate, excludeId);
             if (count > 0) {
-                throw new BadRequestException("同一时间段已存在全餐次订单，不能重复创建");
+                throw new BadRequestException("同一开始日期已存在全餐次订单，不能重复创建");
             }
             return;
         }
 
-        // 2. 如果是午餐或晚餐订单，同一时间段最多2个不同餐次的订单
+        // 2. 如果是午餐或晚餐订单，同一开始日期最多2个不同餐次的订单
         if ("LUNCH".equals(dto.getMealType()) || "DINNER".equals(dto.getMealType())) {
-            // 先检查同一时间段的总订单数
-            int totalCount = orderMapper.countOverlappingOrders(dto.getCustomerId(), startDate, endDate, excludeId);
+            // 先检查同一开始日期的总订单数
+            int totalCount = orderMapper.countOverlappingOrders(dto.getCustomerId(), startDate, excludeId);
             if (totalCount >= 2) {
-                throw new BadRequestException("同一时间段最多只能有两个不同餐次的订单");
+                throw new BadRequestException("同一开始日期最多只能有两个不同餐次的订单");
             }
 
             // 检查是否已存在相同餐次的订单
-            int sameTypeCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, endDate, dto.getMealType(), excludeId);
+            int sameTypeCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, dto.getMealType(), excludeId);
             if (sameTypeCount > 0) {
-                throw new BadRequestException("同一时间段已存在相同餐次的订单");
+                throw new BadRequestException("同一开始日期已存在相同餐次的订单");
             }
         }
 
