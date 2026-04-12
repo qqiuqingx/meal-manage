@@ -348,8 +348,8 @@ public class MealPlanServiceImpl implements MealPlanService {
             }
             String matchReason = getScheduleModeMatchReason(order, mealType,targetDate);
             if (matchReason != null) {
-                log.info("订单被过滤 - 订单ID: {}, 客户ID: {}, 餐次: {}, 配送模式: {}, 原因: {}",
-                        order.getId(), order.getCustomerId(), order.getMealType(), order.getScheduleMode(), matchReason);
+                log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 餐次: {}, 配送模式: {}, 原因: {}",
+                        order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(), order.getMealType(), order.getScheduleMode(), matchReason);
                 continue;
             }
             validOrders.add(order);
