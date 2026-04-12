@@ -66,4 +66,10 @@ public class MealPlanCustomerItem extends BaseEntity {
 
     @ApiModelProperty(value = "替换原因：ALLERGY-过敏，NOT_FOUND-当日不足，NEXT_DAY-次日回退")
     private String replaceReason;
+
+    @ApiModelProperty(value = "是否因过敏被过滤")
+    private Boolean isAllergyFiltered;
+
+    @ApiModelProperty(value = "触发的过敏标签，多个用逗号分隔")
+    private String allergyReasons;
 }

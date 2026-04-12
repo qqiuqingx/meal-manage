@@ -53,6 +53,12 @@ public class MealPlanCustomerItemVO {
     @ApiModelProperty(value = "替换原因（ALLERGY过敏/NEXT_DAY次日回退）")
     private String replaceReason;
 
+    @ApiModelProperty(value = "是否因过敏被过滤")
+    private Boolean isAllergyFiltered;
+
+    @ApiModelProperty(value = "触发的过敏标签，多个用逗号分隔")
+    private String allergyReasons;
+
     @ApiModelProperty(value = "配料列表")
     private java.util.List<DishIngredientItemVO> ingredients;
 }

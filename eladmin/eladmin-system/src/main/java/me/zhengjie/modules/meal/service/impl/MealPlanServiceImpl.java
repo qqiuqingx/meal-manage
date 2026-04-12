@@ -223,6 +223,10 @@ public class MealPlanServiceImpl implements MealPlanService {
                 saveSuccessPlan(mealPlan.getId(), order, customer, subPackage, customerPlan);
                 successCount++;
                 log.debug("订单处理成功 - 订单ID: {}", order.getId());
+            } catch (MealPlanBuildException e) {
+                log.warn("订单处理失败 - 订单ID: {}, 客户ID: {}, 失败原因: {}",
+                        order.getId(), order.getCustomerId(), e.getMessage());
+                failCount += saveFailPlan(mealPlan.getId(), order, customer, subPackage, e.getMessage(), failDetails, e.getCustomerPlan());
             } catch (BadRequestException e) {
                 log.warn("订单处理失败 - 订单ID: {}, 客户ID: {}, 失败原因: {}",
                         order.getId(), order.getCustomerId(), e.getMessage());
@@ -591,16 +595,20 @@ public class MealPlanServiceImpl implements MealPlanService {
         List<String> allergyTags = customer.getAllergyTags() == null ? Collections.emptyList() : customer.getAllergyTags();
         Set<Integer> selectedDishIds = new HashSet<>();
         List<SelectedDish> selectedDishes = new ArrayList<>();
-        pickRequiredDishes(subPackage.getMeatCount(), selectedDishes, selectedDishIds, dishTypeMap, allergyTags,
-                dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap);
-        pickVegetables(subPackage.getVegCount(), selectedDishes, selectedDishIds, dishTypeMap, allergyTags,
-                dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap);
-        pickOptionalDish(Boolean.TRUE.equals(subPackage.getIncludeSoup()), DISH_TYPE_SOUP, selectedDishes, selectedDishIds,
-                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap);
-        pickOptionalDish(Boolean.TRUE.equals(subPackage.getIncludeRice()), DISH_TYPE_RICE, selectedDishes, selectedDishIds,
-                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap);
+        List<String> failureReasons = new ArrayList<>();
         CustomerMealPlan customerMealPlan = new CustomerMealPlan();
+        pickRequiredDishes(subPackage.getMeatCount(), selectedDishes, selectedDishIds, dishTypeMap, allergyTags,
+                dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons);
+        pickVegetables(subPackage.getVegCount(), selectedDishes, selectedDishIds, dishTypeMap, allergyTags,
+                dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons);
+        pickOptionalDish(Boolean.TRUE.equals(subPackage.getIncludeSoup()), DISH_TYPE_SOUP, selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons);
+        pickOptionalDish(Boolean.TRUE.equals(subPackage.getIncludeRice()), DISH_TYPE_RICE, selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons);
         customerMealPlan.setSelectedDishes(selectedDishes);
+        if (!failureReasons.isEmpty()) {
+            throw new MealPlanBuildException(String.join("；", failureReasons), customerMealPlan);
+        }
         return customerMealPlan;
     }
 
@@ -609,36 +617,47 @@ public class MealPlanServiceImpl implements MealPlanService {
      */
     private void pickRequiredDishes(Integer meatCount, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                     Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
-                                    LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap) {
+                                    LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap,
+                                    CustomerMealPlan customerMealPlan, List<String> failureReasons) {
         int requiredCount = meatCount == null ? 0 : meatCount;
         if (requiredCount <= 0) {
             return;
         }
         if (requiredCount == 1) {
-            // 一荤: MAIN -> SIDE -> 次日MAIN -> 次日SIDE
-            DishSelectResult result = selectDishWithFallback(DISH_TYPE_MAIN, DISH_TYPE_SIDE, selectedDishIds, allergyTags,
+            DishSelectResult result = selectDishWithFallback(DISH_TYPE_MAIN, null, selectedDishIds, allergyTags,
                     dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
-            if (result == null || result.getDish() == null) {
-                throw new BadRequestException("荤菜不足");
+            // 收集过敏菜品
+            for (SkippedAllergyDish sad : result.getSkippedAllergyDishes()) {
+                customerMealPlan.addSkippedAllergyDish(sad);
+            }
+            if (result.getDish() == null) {
+                if (!isAllergyFilteredOut(result)) {
+                    failureReasons.add("荤菜不足");
+                }
+                return;
             }
             selectedDishes.add(new SelectedDish(result.getDish().getDishType(), result.getDish(),
-                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason()));
+                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
             selectedDishIds.add(result.getDish().getId());
             return;
         }
         if (requiredCount != 2) {
-            throw new BadRequestException("荤菜数量配置不支持");
+            failureReasons.add("荤菜数量配置不支持");
+            return;
         }
         // 二荤一素: 需要同时有MAIN和SIDE
-        // 尝试从当日选择MAIN和SIDE
-        Dish mainDish = selectDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, allergyTags, dishIngredientMap);
-        Dish sideDish = selectDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, dishIngredientMap);
+        DishSelectResult mainResult = selectDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, allergyTags, dishIngredientMap);
+        DishSelectResult sideResult = selectDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, dishIngredientMap);
+        Dish mainDish = mainResult.getDish();
+        Dish sideDish = sideResult.getDish();
 
         // 记录原本想选的菜品
         Dish originalMainDish = mainDish;
         Dish originalSideDish = sideDish;
         String mainReplaceReason = null;
         String sideReplaceReason = null;
+        Set<String> mainAllergyReasons = mainResult.getMatchedAllergyTags();
+        Set<String> sideAllergyReasons = sideResult.getMatchedAllergyTags();
 
         // 回退1: MAIN过敏，用SIDE作为MAIN（暂不启用）
         // if (mainDish == null && sideDish != null) {
@@ -646,7 +665,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         //     originalMainDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
         //     mainReplaceReason = "ALLERGY";
         //     mainDish = sideDish;
-        //     sideDish = null; // 重新选择SIDE
+        //     sideDish = null;
         // }
         if (mainDish == null && sideDish != null) {
             Dish originalMainDishTmp = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
@@ -655,37 +674,22 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         // 回退2: 重新选择SIDE
         if (sideDish == null) {
-            sideDish = selectDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, dishIngredientMap);
+            sideResult = selectDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, dishIngredientMap);
+            sideDish = sideResult.getDish();
+            sideAllergyReasons = sideResult.getMatchedAllergyTags();
+        }
+
+        // 收集所有过敏菜品
+        for (SkippedAllergyDish sad : mainResult.getSkippedAllergyDishes()) {
+            customerMealPlan.addSkippedAllergyDish(sad);
+        }
+        for (SkippedAllergyDish sad : sideResult.getSkippedAllergyDishes()) {
+            customerMealPlan.addSkippedAllergyDish(sad);
         }
 
         // 回退3: 当日不足，尝试次日菜品（暂不启用）
-        // if (mainDish == null || sideDish == null) {
-        //     log.warn("当日荤菜不足，尝试次日菜品");
-        //     Map<String, List<Dish>> nextDayDishTypeMap = loadNextDayDishTypeMap(targetDate, mealType, parentPackageId, parentPackageMap);
-        //     Map<Integer, Set<String>> nextDayIngredients = loadDishIngredients(
-        //             nextDayDishTypeMap.values().stream().flatMap(List::stream).collect(Collectors.toList()));
-        //
-        //     if (mainDish == null) {
-        //         if (originalMainDish == null) {
-        //             originalMainDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
-        //         }
-        //         mainDish = selectDish(nextDayDishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, allergyTags, nextDayIngredients);
-        //         if (mainDish != null) {
-        //             log.info("次日主菜选择成功 - 菜品: {}", mainDish.getName());
-        //             mainReplaceReason = mainReplaceReason == null ? "NEXT_DAY" : mainReplaceReason;
-        //         }
-        //     }
-        //     if (sideDish == null) {
-        //         if (originalSideDish == null) {
-        //             originalSideDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, dishIngredientMap);
-        //         }
-        //         sideDish = selectDish(nextDayDishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, nextDayIngredients);
-        //         if (sideDish != null) {
-        //             log.info("次日副菜选择成功 - 菜品: {}", sideDish.getName());
-        //             sideReplaceReason = sideReplaceReason == null ? "NEXT_DAY" : sideReplaceReason;
-        //         }
-        //     }
-        // }
+        // ... (注释代码保持不变)
+
         if (mainDish == null || sideDish == null) {
             log.warn("【暂跳过替换菜品】当日荤菜不足（mainDish={}, sideDish={}），未尝试次日菜品",
                     mainDish != null ? mainDish.getName() : "无",
@@ -693,12 +697,17 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
 
         if (mainDish == null || sideDish == null) {
-            throw new BadRequestException("荤菜不足，必须同时选出主菜和副菜");
+            boolean mainMissedByAllergy = mainDish == null && isAllergyFilteredOut(mainResult);
+            boolean sideMissedByAllergy = sideDish == null && isAllergyFilteredOut(sideResult);
+            if (!mainMissedByAllergy && !sideMissedByAllergy) {
+                failureReasons.add("荤菜不足，必须同时选出主菜和副菜");
+            }
+            return;
         }
         selectedDishes.add(new SelectedDish(DISH_TYPE_MAIN, mainDish,
-                mainReplaceReason != null, originalMainDish, mainReplaceReason));
+                mainReplaceReason != null, originalMainDish, mainReplaceReason, mainAllergyReasons));
         selectedDishes.add(new SelectedDish(DISH_TYPE_SIDE, sideDish,
-                sideReplaceReason != null, originalSideDish, sideReplaceReason));
+                sideReplaceReason != null, originalSideDish, sideReplaceReason, sideAllergyReasons));
         selectedDishIds.add(mainDish.getId());
         selectedDishIds.add(sideDish.getId());
     }
@@ -708,16 +717,24 @@ public class MealPlanServiceImpl implements MealPlanService {
      */
     private void pickVegetables(Integer vegCount, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                 Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
-                                LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap) {
+                                LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap,
+                                CustomerMealPlan customerMealPlan, List<String> failureReasons) {
         int requiredCount = vegCount == null ? 0 : vegCount;
         for (int i = 0; i < requiredCount; i++) {
             DishSelectResult result = selectDishWithFallback(DISH_TYPE_VEGETABLE, null, selectedDishIds, allergyTags,
                     dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
-            if (result == null || result.getDish() == null) {
-                throw new BadRequestException("素菜不足");
+            // 收集过敏菜品
+            for (SkippedAllergyDish sad : result.getSkippedAllergyDishes()) {
+                customerMealPlan.addSkippedAllergyDish(sad);
+            }
+            if (result.getDish() == null) {
+                if (!isAllergyFilteredOut(result)) {
+                    failureReasons.add("素菜不足");
+                }
+                continue;
             }
             selectedDishes.add(new SelectedDish(DISH_TYPE_VEGETABLE, result.getDish(),
-                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason()));
+                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
             selectedDishIds.add(result.getDish().getId());
         }
     }
@@ -727,18 +744,25 @@ public class MealPlanServiceImpl implements MealPlanService {
      */
     private void pickOptionalDish(boolean required, String dishType, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                   Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
-                                  LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap) {
+                                  LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap,
+                                  CustomerMealPlan customerMealPlan, List<String> failureReasons) {
         if (!required) {
             return;
         }
-        // log.info("pickOptionalDish_dishTypeMap:"+JSONUtil.toJsonStr(dishTypeMap));
         DishSelectResult result = selectDishWithFallback(dishType, null, selectedDishIds, allergyTags,
                 dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
-        if (result == null || result.getDish() == null) {
-            throw new BadRequestException(dishType + "类型菜品不足");
+        // 收集过敏菜品
+        for (SkippedAllergyDish sad : result.getSkippedAllergyDishes()) {
+            customerMealPlan.addSkippedAllergyDish(sad);
+        }
+        if (result.getDish() == null) {
+            if (!isAllergyFilteredOut(result)) {
+                failureReasons.add(dishType + "类型菜品不足");
+            }
+            return;
         }
         selectedDishes.add(new SelectedDish(dishType, result.getDish(),
-                result.isReplaced(), result.getOriginalDish(), result.getReplaceReason()));
+                result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
         selectedDishIds.add(result.getDish().getId());
     }
 
@@ -762,52 +786,36 @@ public class MealPlanServiceImpl implements MealPlanService {
                                        LocalDate targetDate, String mealType, Long parentPackageId,
                                        Map<Long, ParentPackage> parentPackageMap) {
         // 尝试首选类型
-        Dish dish = selectDish(dishTypeMap.get(primaryType), selectedDishIds, allergyTags, dishIngredientMap);
-        if (dish != null) {
-            return DishSelectResult.noReplace(dish);
+        DishSelectResult result = selectDish(dishTypeMap.get(primaryType), selectedDishIds, allergyTags, dishIngredientMap);
+        if (result.getDish() != null) {
+            return result;
         }
 
-        // 尝试次选类型
+        // 收集首选类型中被过敏过滤的菜品
+        List<SkippedAllergyDish> allSkipped = new ArrayList<>(result.getSkippedAllergyDishes());
+
         if (fallbackType != null) {
-            // 记录原本想选的菜品（首选类型的第一个候选）
-            Dish originalDish = getFirstAvailableDish(dishTypeMap.get(primaryType), selectedDishIds, dishIngredientMap);
-            // TODO: 暂不生成替换菜品，注释备用
-            // dish = selectDish(dishTypeMap.get(fallbackType), selectedDishIds, allergyTags, dishIngredientMap);
-            // if (dish != null) {
-            //     return DishSelectResult.withReplace(dish, originalDish, "ALLERGY");
-            // }
-            log.info("【暂跳过替换菜品】primaryType={}, fallbackType={}, 客户过敏, 原本想选的菜品: {}",
-                    primaryType, fallbackType, originalDish != null ? originalDish.getName() : "无");
+            log.info("当前未启用类型替换 - primaryType={}, fallbackType={}", primaryType, fallbackType);
         }
 
-        // 尝试次日菜品
-        log.warn("【暂跳过替换菜品】当日{}类型菜品不足，未尝试次日菜品", primaryType);
+        // 尝试次日菜品（暂不启用）
+        if (allSkipped.isEmpty()) {
+            log.warn("【暂跳过替换菜品】当日{}类型菜品不足，未尝试次日菜品", primaryType);
+        } else {
+            log.info("当日{}类型菜品因过敏被过滤，未尝试次日菜品", primaryType);
+        }
         // Map<String, List<Dish>> nextDayDishTypeMap = loadNextDayDishTypeMap(targetDate, mealType, parentPackageId, parentPackageMap);
-        // if (nextDayDishTypeMap.isEmpty()) {
-        //     return null;
-        // }
-        // Map<Integer, Set<String>> nextDayIngredients = loadDishIngredients(
-        //         nextDayDishTypeMap.values().stream().flatMap(List::stream).collect(Collectors.toList()));
-        // Dish originalDish = getFirstAvailableDish(dishTypeMap.get(primaryType), selectedDishIds, dishIngredientMap);
-        // if (originalDish == null && fallbackType != null) {
-        //     originalDish = getFirstAvailableDish(dishTypeMap.get(fallbackType), selectedDishIds, dishIngredientMap);
-        // }
-        // // 优先尝试次日首选类型
-        // dish = selectDish(nextDayDishTypeMap.get(primaryType), selectedDishIds, allergyTags, nextDayIngredients);
-        // if (dish != null) {
-        //     log.info("次日{}类型选择成功 - 菜品: {}", primaryType, dish.getName());
-        //     return DishSelectResult.withReplace(dish, originalDish, "NEXT_DAY");
-        // }
-        // // 如果次选类型存在，尝试次日次选类型
-        // if (fallbackType != null) {
-        //     dish = selectDish(nextDayDishTypeMap.get(fallbackType), selectedDishIds, allergyTags, nextDayIngredients);
-        //     if (dish != null) {
-        //         log.info("次日{}类型选择成功 - 菜品: {}", fallbackType, dish.getName());
-        //         return DishSelectResult.withReplace(dish, originalDish, "NEXT_DAY");
-        //     }
-        // }
+        // ... (注释中的备用代码保持不变)
 
-        return null;
+        // 返回空结果，附带收集到的所有过敏菜品
+        if (!allSkipped.isEmpty()) {
+            return new DishSelectResult(null, false, null, null, Collections.emptySet(), allSkipped);
+        }
+        return DishSelectResult.noDish();
+    }
+
+    private boolean isAllergyFilteredOut(DishSelectResult result) {
+        return result != null && result.getDish() == null && !result.getSkippedAllergyDishes().isEmpty();
     }
 
     /**
@@ -855,31 +863,39 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
-     * 从候选列表中挑选首个未重复且不过敏的菜品。
+     * 从候选列表中挑选首个未重复且不过敏的菜品，返回选择结果（含匹配的过敏标签和被过滤的过敏菜品）。
      */
-    private Dish selectDish(List<Dish> dishes, Set<Integer> selectedDishIds, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap) {
+    private DishSelectResult selectDish(List<Dish> dishes, Set<Integer> selectedDishIds, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap) {
         if (dishes == null || dishes.isEmpty()) {
-            return null;
+            return DishSelectResult.noDish();
         }
+        List<SkippedAllergyDish> skippedAllergies = new ArrayList<>();
         for (Dish dish : dishes) {
             if (selectedDishIds.contains(dish.getId())) {
                 continue;
             }
-            if (containsAllergy(allergyTags, dishIngredientMap.get(dish.getId()))) {
-                log.warn("过敏菜品：{}",JSONUtil.toJsonStr(dish));
+            Set<String> matchedAllergies = getMatchedAllergyTags(allergyTags, dishIngredientMap.get(dish.getId()));
+            if (!matchedAllergies.isEmpty()) {
+                log.warn("过敏菜品：{}", JSONUtil.toJsonStr(dish));
+                skippedAllergies.add(new SkippedAllergyDish(dish, matchedAllergies));
                 continue;
             }
-            return dish;
+            return DishSelectResult.noReplace(dish, Collections.emptySet(), skippedAllergies);
         }
-        return null;
+        // 所有候选都过敏或无候选，返回空结果并附上被过滤的过敏菜品
+        if (!skippedAllergies.isEmpty()) {
+            return new DishSelectResult(null, false, null, null, Collections.emptySet(), skippedAllergies);
+        }
+        return DishSelectResult.noDish();
     }
 
     /**
-     * 判断菜品食材是否与客户过敏标签精确命中。
+     * 判断菜品食材是否与客户过敏标签精确命中，返回匹配到的过敏标签集合。
      */
-    private boolean containsAllergy(List<String> allergyTags, Set<String> ingredientNames) {
+    private Set<String> getMatchedAllergyTags(List<String> allergyTags, Set<String> ingredientNames) {
+        Set<String> matched = new HashSet<>();
         if (allergyTags == null || allergyTags.isEmpty() || ingredientNames == null || ingredientNames.isEmpty()) {
-            return false;
+            return matched;
         }
         for (String allergyTag : allergyTags) {
             if (allergyTag == null) {
@@ -887,12 +903,12 @@ public class MealPlanServiceImpl implements MealPlanService {
             }
             for (String ingredientName : ingredientNames) {
                 if (allergyTag.equals(ingredientName)) {
-                    log.warn("过敏--{}",allergyTag);
-                    return true;
+                    log.warn("过敏--{}", allergyTag);
+                    matched.add(allergyTag);
                 }
             }
         }
-        return false;
+        return matched;
     }
 
     /**
@@ -906,16 +922,55 @@ public class MealPlanServiceImpl implements MealPlanService {
         MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, subPackage, 1, "");
         mealPlanCustomerMapper.insert(entity);
 
+        saveSelectedItems(entity.getId(), entity.getCustomerName(), customerPlan);
+        saveAllergyFilteredItems(entity.getId(), entity.getCustomerName(), customerPlan);
+
+        log.debug("成功排餐计划保存完成 - 客户计划ID: {}, 选菜数量: {}, 过敏菜品数量: {}",
+                entity.getId(), customerPlan.getSelectedDishes().size(), customerPlan.getSkippedAllergyDishes().size());
+    }
+
+    /**
+     * 记录单个订单的失败结果，并追加失败原因到返回结果。
+     */
+    private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
+                             String failReason, List<MealPlanGenerateResult.FailDetail> failDetails) {
+        return saveFailPlan(mealPlanId, order, customer, subPackage, failReason, failDetails, null);
+    }
+
+    private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
+                             String failReason, List<MealPlanGenerateResult.FailDetail> failDetails,
+                             CustomerMealPlan customerPlan) {
+        log.debug("保存失败排餐计划 - 计划ID: {}, 订单ID: {}, 客户ID: {}, 失败原因: {}",
+                mealPlanId, order.getId(),
+                customer != null ? customer.getId() : order.getCustomerId(),
+                failReason);
+
+        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, subPackage, 0, failReason);
+        mealPlanCustomerMapper.insert(entity);
+        saveSelectedItems(entity.getId(), entity.getCustomerName(), customerPlan);
+        saveAllergyFilteredItems(entity.getId(), entity.getCustomerName(), customerPlan);
+
+        MealPlanGenerateResult.FailDetail failDetail = new MealPlanGenerateResult.FailDetail();
+        failDetail.setFailReason(failReason);
+        failDetails.add(failDetail);
+
+        log.warn("排餐计划保存失败 - 客户计划ID: {}, 失败原因: {}", entity.getId(), failReason);
+        return 1;
+    }
+
+    private void saveSelectedItems(Long customerPlanId, String customerName, CustomerMealPlan customerPlan) {
+        if (customerPlan == null || customerPlan.getSelectedDishes() == null || customerPlan.getSelectedDishes().isEmpty()) {
+            return;
+        }
         int seq = 1;
         for (SelectedDish selectedDish : customerPlan.getSelectedDishes()) {
             MealPlanCustomerItem item = new MealPlanCustomerItem();
-            item.setCustomerPlanId(entity.getId());
+            item.setCustomerPlanId(customerPlanId);
             item.setDishType(selectedDish.getDishType());
             item.setDishId(selectedDish.getDish().getId());
             item.setDishName(selectedDish.getDish().getName());
             item.setSeq(seq++);
             item.setDeleted(false);
-            // 记录替换信息
             if (selectedDish.isReplaced()) {
                 item.setIsReplaced(true);
                 if (selectedDish.getOriginalDish() != null) {
@@ -924,37 +979,40 @@ public class MealPlanServiceImpl implements MealPlanService {
                 }
                 item.setReplaceReason(selectedDish.getReplaceReason());
             }
+            Set<String> matchedAllergies = selectedDish.getMatchedAllergyTags();
+            if (matchedAllergies != null && !matchedAllergies.isEmpty()) {
+                item.setIsAllergyFiltered(true);
+                item.setAllergyReasons(String.join(",", matchedAllergies));
+                log.info("【过敏记录】客户: {}, 菜品: {}, 过敏标签: {}",
+                        customerName, selectedDish.getDish().getName(), String.join(",", matchedAllergies));
+            }
             mealPlanCustomerItemMapper.insert(item);
-
-            log.debug("保存客户菜品明细 - 客户计划ID: {}, 菜品ID: {}, 菜品类型: {}, 菜品名称: {}, 是否替换: {}, 替换原因: {}",
-                    entity.getCustomerName(), selectedDish.getDish().getId(),
+            log.debug("保存客户菜品明细 - 客户: {}, 菜品ID: {}, 菜品类型: {}, 菜品名称: {}, 是否替换: {}, 替换原因: {}",
+                    customerName, selectedDish.getDish().getId(),
                     selectedDish.getDishType(), selectedDish.getDish().getName(),
                     selectedDish.isReplaced(), selectedDish.getReplaceReason());
         }
-
-        log.debug("成功排餐计划保存完成 - 客户计划ID: {}, 选菜数量: {}",
-                entity.getId(), customerPlan.getSelectedDishes().size());
     }
 
-    /**
-     * 记录单个订单的失败结果，并追加失败原因到返回结果。
-     */
-    private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
-                             String failReason, List<MealPlanGenerateResult.FailDetail> failDetails) {
-        log.debug("保存失败排餐计划 - 计划ID: {}, 订单ID: {}, 客户ID: {}, 失败原因: {}",
-                mealPlanId, order.getId(),
-                customer != null ? customer.getId() : order.getCustomerId(),
-                failReason);
-
-        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, subPackage, 0, failReason);
-        mealPlanCustomerMapper.insert(entity);
-
-        MealPlanGenerateResult.FailDetail failDetail = new MealPlanGenerateResult.FailDetail();
-        failDetail.setFailReason(failReason);
-        failDetails.add(failDetail);
-
-        log.warn("排餐计划保存失败 - 客户计划ID: {}, 失败原因: {}", entity.getId(), failReason);
-        return 1;
+    private void saveAllergyFilteredItems(Long customerPlanId, String customerName, CustomerMealPlan customerPlan) {
+        if (customerPlan == null || customerPlan.getSkippedAllergyDishes() == null || customerPlan.getSkippedAllergyDishes().isEmpty()) {
+            return;
+        }
+        int allergySeq = 100; // 用较大序号区分
+        for (SkippedAllergyDish sad : customerPlan.getSkippedAllergyDishes()) {
+            MealPlanCustomerItem allergyItem = new MealPlanCustomerItem();
+            allergyItem.setCustomerPlanId(customerPlanId);
+            allergyItem.setDishType(sad.getDish().getDishType());
+            allergyItem.setDishId(sad.getDish().getId());
+            allergyItem.setDishName(sad.getDish().getName());
+            allergyItem.setSeq(allergySeq++);
+            allergyItem.setDeleted(false);
+            allergyItem.setIsAllergyFiltered(true);
+            allergyItem.setAllergyReasons(String.join(",", sad.getAllergyReasons()));
+            mealPlanCustomerItemMapper.insert(allergyItem);
+            log.info("【过敏记录-写入】客户: {}, 菜品: {}, 过敏标签: {}",
+                    customerName, sad.getDish().getName(), String.join(",", sad.getAllergyReasons()));
+        }
     }
 
     /**
@@ -1204,6 +1262,7 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     private static class CustomerMealPlan {
         private List<SelectedDish> selectedDishes = new ArrayList<>();
+        private List<SkippedAllergyDish> skippedAllergyDishes = new ArrayList<>();
 
         public List<SelectedDish> getSelectedDishes() {
             return selectedDishes;
@@ -1212,46 +1271,100 @@ public class MealPlanServiceImpl implements MealPlanService {
         public void setSelectedDishes(List<SelectedDish> selectedDishes) {
             this.selectedDishes = selectedDishes;
         }
+
+        public List<SkippedAllergyDish> getSkippedAllergyDishes() {
+            return skippedAllergyDishes;
+        }
+
+        public void addSkippedAllergyDish(SkippedAllergyDish dish) {
+            this.skippedAllergyDishes.add(dish);
+        }
+
+        public void addSkippedAllergyDishes(List<SkippedAllergyDish> dishes) {
+            this.skippedAllergyDishes.addAll(dishes);
+        }
+    }
+
+    private static class MealPlanBuildException extends BadRequestException {
+        private final CustomerMealPlan customerPlan;
+
+        private MealPlanBuildException(String msg, CustomerMealPlan customerPlan) {
+            super(msg);
+            this.customerPlan = customerPlan;
+        }
+
+        public CustomerMealPlan getCustomerPlan() {
+            return customerPlan;
+        }
     }
 
     /**
-     * 菜品选择结果，包含选中的菜品和替换信息
+     * 被过敏过滤掉的菜品信息
+     */
+    private static class SkippedAllergyDish {
+        private final Dish dish;
+        private final Set<String> allergyReasons;
+
+        private SkippedAllergyDish(Dish dish, Set<String> allergyReasons) {
+            this.dish = dish;
+            this.allergyReasons = allergyReasons;
+        }
+
+        public Dish getDish() { return dish; }
+        public Set<String> getAllergyReasons() { return allergyReasons; }
+    }
+
+    /**
+     * 菜品选择结果，包含选中的菜品、替换信息和匹配的过敏标签
      */
     private static class DishSelectResult {
         private final Dish dish;
         private final boolean isReplaced;
         private final Dish originalDish;
         private final String replaceReason;
+        private final Set<String> matchedAllergyTags;
+        private final List<SkippedAllergyDish> skippedAllergyDishes;
 
-        private DishSelectResult(Dish dish, boolean isReplaced, Dish originalDish, String replaceReason) {
+        private DishSelectResult(Dish dish, boolean isReplaced, Dish originalDish, String replaceReason,
+                                Set<String> matchedAllergyTags, List<SkippedAllergyDish> skippedAllergyDishes) {
             this.dish = dish;
             this.isReplaced = isReplaced;
             this.originalDish = originalDish;
             this.replaceReason = replaceReason;
+            this.matchedAllergyTags = matchedAllergyTags;
+            this.skippedAllergyDishes = skippedAllergyDishes;
         }
 
-        public static DishSelectResult noReplace(Dish dish) {
-            return new DishSelectResult(dish, false, null, null);
+        public static DishSelectResult noDish() {
+            return new DishSelectResult(null, false, null, null, Collections.emptySet(), Collections.emptyList());
+        }
+
+        public static DishSelectResult noReplace(Dish dish, Set<String> matchedAllergyTags) {
+            return new DishSelectResult(dish, false, null, null, matchedAllergyTags, Collections.emptyList());
+        }
+
+        public static DishSelectResult noReplace(Dish dish, Set<String> matchedAllergyTags, List<SkippedAllergyDish> skippedAllergyDishes) {
+            return new DishSelectResult(dish, false, null, null, matchedAllergyTags, skippedAllergyDishes);
+        }
+
+        public static DishSelectResult noDishWithSkipped(List<SkippedAllergyDish> skippedAllergyDishes) {
+            return new DishSelectResult(null, false, null, null, Collections.emptySet(), skippedAllergyDishes);
         }
 
         public static DishSelectResult withReplace(Dish dish, Dish originalDish, String reason) {
-            return new DishSelectResult(dish, true, originalDish, reason);
+            return new DishSelectResult(dish, true, originalDish, reason, Collections.emptySet(), Collections.emptyList());
         }
 
-        public Dish getDish() {
-            return dish;
+        public Dish getDish() { return dish; }
+        public boolean isReplaced() { return isReplaced; }
+        public Dish getOriginalDish() { return originalDish; }
+        public String getReplaceReason() { return replaceReason; }
+        public Set<String> getMatchedAllergyTags() { return matchedAllergyTags; }
+        public List<SkippedAllergyDish> getSkippedAllergyDishes() {
+            return skippedAllergyDishes != null ? skippedAllergyDishes : Collections.emptyList();
         }
-
-        public boolean isReplaced() {
-            return isReplaced;
-        }
-
-        public Dish getOriginalDish() {
-            return originalDish;
-        }
-
-        public String getReplaceReason() {
-            return replaceReason;
+        public boolean hasMatchedAllergies() {
+            return matchedAllergyTags != null && !matchedAllergyTags.isEmpty();
         }
     }
 
@@ -1261,6 +1374,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         private final boolean isReplaced;
         private final Dish originalDish;
         private final String replaceReason;
+        private final Set<String> matchedAllergyTags;
 
         private SelectedDish(String dishType, Dish dish) {
             this.dishType = dishType;
@@ -1268,14 +1382,16 @@ public class MealPlanServiceImpl implements MealPlanService {
             this.isReplaced = false;
             this.originalDish = null;
             this.replaceReason = null;
+            this.matchedAllergyTags = Collections.emptySet();
         }
 
-        private SelectedDish(String dishType, Dish dish, boolean isReplaced, Dish originalDish, String replaceReason) {
+        private SelectedDish(String dishType, Dish dish, boolean isReplaced, Dish originalDish, String replaceReason, Set<String> matchedAllergyTags) {
             this.dishType = dishType;
             this.dish = dish;
             this.isReplaced = isReplaced;
             this.originalDish = originalDish;
             this.replaceReason = replaceReason;
+            this.matchedAllergyTags = matchedAllergyTags != null ? matchedAllergyTags : Collections.emptySet();
         }
 
         public String getDishType() {
@@ -1296,6 +1412,10 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         public String getReplaceReason() {
             return replaceReason;
+        }
+
+        public Set<String> getMatchedAllergyTags() {
+            return matchedAllergyTags;
         }
     }
 
@@ -1495,6 +1615,8 @@ public class MealPlanServiceImpl implements MealPlanService {
         vo.setOriginalDishId(item.getOriginalDishId());
         vo.setOriginalDishName(item.getOriginalDishName());
         vo.setReplaceReason(item.getReplaceReason());
+        vo.setIsAllergyFiltered(item.getIsAllergyFiltered());
+        vo.setAllergyReasons(item.getAllergyReasons());
         return vo;
     }
 
