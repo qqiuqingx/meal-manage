@@ -57,15 +57,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.sql.Timestamp;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -354,7 +346,7 @@ public class MealPlanServiceImpl implements MealPlanService {
             if (customerId != null && !Objects.equals(order.getCustomerId(), customerId)) {
                 continue;
             }
-            String matchReason = getScheduleModeMatchReason(order, targetDate);
+            String matchReason = getScheduleModeMatchReason(order, mealType,targetDate);
             if (matchReason != null) {
                 log.info("订单被过滤 - 订单ID: {}, 客户ID: {}, 餐次: {}, 配送模式: {}, 原因: {}",
                         order.getId(), order.getCustomerId(), order.getMealType(), order.getScheduleMode(), matchReason);
@@ -373,7 +365,7 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 获取配送模式匹配失败的原因，如果匹配则返回 null。
      */
-    private String getScheduleModeMatchReason(CustomerOrder order, LocalDate targetDate) {
+    private String getScheduleModeMatchReason(CustomerOrder order,String targetMealType, LocalDate targetDate) {
         String scheduleMode = order.getScheduleMode();
         if (scheduleMode == null || SCHEDULE_MODE_DAILY.equals(scheduleMode)) {
             return null; // 匹配
@@ -381,8 +373,20 @@ public class MealPlanServiceImpl implements MealPlanService {
         if (SCHEDULE_MODE_SCHEDULE.equals(scheduleMode)) {
             List<String> deliveryDates = parseDeliveryDatesWithMealTypes(order.getDeliveryDates());
             if (deliveryDates.contains(targetDate.toString())) {
-                return null; // 匹配
+                // 旧格式仅记录日期，不区分餐次；命中日期时沿用旧逻辑直接通过
+                DeliveryDateWithMealTypes deliveryDateWithMealTypes = parseDElivery(order.getDeliveryDates(), targetDate.toString(), targetMealType);
+                if (deliveryDateWithMealTypes == null) {
+                    return null;
+                }
+                if (deliveryDateWithMealTypes.getMealTypes().contains(targetMealType)){
+                    return null;
+                }
+
+
+                return  String.format("SCHEDULE模式 - 今日餐次(%s)不在配送日餐次中: %s", targetMealType, JSONUtil.toJsonStr(deliveryDateWithMealTypes.getMealTypes()));
             }
+
+
             return String.format("SCHEDULE模式 - 今日(%s)不在配送日列表中: %s", targetDate, deliveryDates);
         }
         if (SCHEDULE_MODE_WEEKDAY.equals(scheduleMode)) {
@@ -404,7 +408,7 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 判断订单配送模式是否命中目标日期。
      */
     private boolean scheduleModeMatches(CustomerOrder order, LocalDate targetDate) {
-        return getScheduleModeMatchReason(order, targetDate) == null;
+        return getScheduleModeMatchReason(order,order.getMealType(), targetDate) == null;
     }
 
     /**
@@ -1234,6 +1238,28 @@ public class MealPlanServiceImpl implements MealPlanService {
             log.warn("解析deliveryDates失败: {}", json, e);
             return Collections.emptyList();
         }
+    }
+
+    /**
+     * 校验客户的餐次是否在排期餐次中
+     *
+     * @param json 新格式: [{"date": "2026-04-01", "mealTypes": ["BREAKFAST", "LUNCH"]}]
+     * @return true 匹配成功
+     */
+    public DeliveryDateWithMealTypes parseDElivery(String json,String targetDate,String targetMealType) {
+        String trimmed = json.trim();
+        if (trimmed.startsWith("[{")) {
+            List<DeliveryDateWithMealTypes> deliveryDateWithMealTypes = JSON.parseArray(json, DeliveryDateWithMealTypes.class);
+            return deliveryDateWithMealTypes.stream()
+                    .filter(d -> d.getDate() != null)
+                    .filter(d -> d.getDate().equals(targetDate))
+
+                    .findFirst().orElse(null);
+        } else {
+            // 旧格式: ["2026-04-01", "2026-04-02"]
+            return  null;
+        }
+
     }
 
     /**
