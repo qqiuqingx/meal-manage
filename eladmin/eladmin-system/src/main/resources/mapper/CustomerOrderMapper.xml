@@ -230,7 +230,7 @@
         WHERE status = 1
           AND remaining_count &gt; 0
           AND start_date &lt;= #{targetDate}
-          AND end_date &gt;= #{targetDate}
+          AND (end_date IS NULL OR end_date &gt;= #{targetDate})
           AND meal_type IN (#{mealType}, 'ALL')
     </select>
 
@@ -239,7 +239,7 @@
         SELECT *
         FROM customer_order
         WHERE start_date &lt;= #{targetDate}
-          AND end_date &gt;= #{targetDate}
+          AND (end_date IS NULL OR end_date &gt;= #{targetDate})
           AND meal_type IN (#{mealType}, 'ALL')
         ORDER BY id
     </select>
