@@ -393,15 +393,24 @@ export default {
     },
     regularDishes() {
       if (!this.planData) return []
-      const replacedCodesByOriginalName = {}
+
+      const allergyFilteredCodesByDishName = {}
       ;(this.planData.customers || []).forEach(customer => {
         const code = customer.customerCode || customer.customerName || ''
-        ;(customer.items || []).filter(item => item.isReplaced && item.originalDishName).forEach(item => {
-          const origName = item.originalDishName
-          if (!replacedCodesByOriginalName[origName]) {
-            replacedCodesByOriginalName[origName] = new Set()
+        ;(customer.items || []).forEach(item => {
+          if (item.isAllergyFiltered) {
+            const filterDishName = (item.isReplaced && item.originalDishName) ? item.originalDishName : item.dishName
+            if (filterDishName) {
+              if (!allergyFilteredCodesByDishName[filterDishName]) {
+                allergyFilteredCodesByDishName[filterDishName] = new Set()
+              }
+              let displayText = code
+              if (item.allergyReasons) {
+                displayText = `${code}(${item.allergyReasons})`
+              }
+              allergyFilteredCodesByDishName[filterDishName].add(displayText)
+            }
           }
-          replacedCodesByOriginalName[origName].add(code)
         })
       })
 
@@ -413,8 +422,10 @@ export default {
           if (!groups[key]) {
             groups[key] = { dishType: item.dishType, dishName: item.dishName, eatCodes: [] }
           }
-          if (!groups[key].eatCodes.includes(code)) {
-            groups[key].eatCodes.push(code)
+          if (!item.isAllergyFiltered) {
+            if (!groups[key].eatCodes.includes(code)) {
+              groups[key].eatCodes.push(code)
+            }
           }
         })
       })
@@ -422,7 +433,7 @@ export default {
       return Object.values(groups)
         .sort((a, b) => (this.dishTypeOrder[a.dishType] || 99) - (this.dishTypeOrder[b.dishType] || 99))
         .map(g => {
-          const excludedSet = replacedCodesByOriginalName[g.dishName]
+          const excludedSet = allergyFilteredCodesByDishName[g.dishName]
           const excludedCodes = excludedSet ? Array.from(excludedSet) : []
           return {
             ...g,
@@ -932,9 +943,9 @@ export default {
 }
 .dish-table tr:nth-child(even) td { background: rgba(248, 250, 252, 0.4); }
 .dish-table tr:hover td { background: #f0fdf9; }
-.col-name { font-weight: 600; color: #1e293b; }
+.col-name { font-weight: 600; color: #1e293b; width: 28%; }
 .col-count { font-weight: 700; color: #006b5c; font-size: 15px; }
-.col-codes { font-size: 11px; color: #94a3b8; font-style: italic; word-break: break-all; }
+.col-codes { font-size: 11px; color: #94a3b8; font-style: italic; word-break: break-word; }
 .empty-row { text-align: center; color: #c0c4cc; font-style: italic; padding: 20px 0; }
 
 /* 菜品类型标签 */
