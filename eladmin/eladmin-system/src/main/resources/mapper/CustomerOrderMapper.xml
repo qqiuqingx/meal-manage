@@ -161,51 +161,39 @@
         ORDER BY deal_time DESC
     </select>
 
-    <!-- 统计同一客户在同一时间段内的订单数量 -->
+    <!-- 统计同一客户在同一时间段内的订单数量（去除结束日期限制） -->
     <select id="countOverlappingOrders" resultType="int">
         SELECT COUNT(*)
         FROM customer_order
         WHERE customer_id = #{customerId}
-          AND status != 0
-          AND (
-            (start_date &lt;= #{endDate} AND end_date &gt;= #{startDate})
-            OR (start_date BETWEEN #{startDate} AND #{endDate})
-            OR (end_date BETWEEN #{startDate} AND #{endDate})
-          )
+          AND status = 1
+          AND start_date &gt;= #{startDate}
         <if test="excludeId != null">
             AND id != #{excludeId}
         </if>
     </select>
 
-    <!-- 统计同一客户在同一时间段内的全餐次订单数量 -->
+    <!-- 统计同一客户在同一时间段内的全餐次订单数量（去除结束日期限制） -->
     <select id="countAllMealTypeOrders" resultType="int">
         SELECT COUNT(*)
         FROM customer_order
         WHERE customer_id = #{customerId}
           AND meal_type = 'ALL'
-          AND status != 0
-          AND (
-            (start_date &lt;= #{endDate} AND end_date &gt;= #{startDate})
-            OR (start_date BETWEEN #{startDate} AND #{endDate})
-            OR (end_date BETWEEN #{startDate} AND #{endDate})
-          )
+          AND status =1
+          AND start_date &gt;= #{startDate}
         <if test="excludeId != null">
             AND id != #{excludeId}
         </if>
     </select>
 
-    <!-- 统计同一客户在同一时间段内的指定餐次订单数量 -->
+    <!-- 统计同一客户在同一时间段内的指定餐次订单数量（去除结束日期限制） -->
     <select id="countMealTypeOrders" resultType="int">
         SELECT COUNT(*)
         FROM customer_order
         WHERE customer_id = #{customerId}
           AND meal_type = #{mealType}
-          AND status != 0
-          AND (
-            (start_date &lt;= #{endDate} AND end_date &gt;= #{startDate})
-            OR (start_date BETWEEN #{startDate} AND #{endDate})
-            OR (end_date BETWEEN #{startDate} AND #{endDate})
-          )
+          AND status =1
+          AND start_date &gt;= #{startDate}
         <if test="excludeId != null">
             AND id != #{excludeId}
         </if>
@@ -223,23 +211,21 @@
         GROUP BY customer_id
     </select>
 
-    <!-- 查询指定日期和餐次的有效订单候选 -->
+    <!-- 查询指定日期和餐次的有效订单候选（去除结束日期限制） -->
     <select id="findMealPlanOrders" resultMap="BaseResultMap">
         SELECT *
         FROM customer_order
         WHERE status = 1
           AND remaining_count &gt; 0
           AND start_date &lt;= #{targetDate}
-          AND (end_date IS NULL OR end_date &gt;= #{targetDate})
           AND meal_type IN (#{mealType}, 'ALL')
     </select>
 
-    <!-- 查询指定日期范围内的所有订单（用于日志对比） -->
+    <!-- 查询指定日期范围内的所有订单（用于日志对比，去除结束日期限制） -->
     <select id="findByDateRangeAndMealType" resultMap="BaseResultMap">
         SELECT *
         FROM customer_order
         WHERE start_date &lt;= #{targetDate}
-          AND (end_date IS NULL OR end_date &gt;= #{targetDate})
           AND meal_type IN (#{mealType}, 'ALL')
         ORDER BY id
     </select>
