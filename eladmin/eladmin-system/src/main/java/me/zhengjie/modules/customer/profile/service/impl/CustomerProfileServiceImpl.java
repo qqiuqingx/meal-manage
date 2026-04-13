@@ -369,15 +369,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         if (orderInfo.getBreakfastCount() == null && orderInfo.getLunchDinnerCount() == null) {
             throw new BadRequestException("早餐数与午餐+晚餐数至少填写一个");
         }
-//        if (StringUtils.isBlank(orderInfo.getStartDate()) || StringUtils.isBlank(orderInfo.getEndDate())) {
-//            throw new BadRequestException("首单开始日期和结束日期不能为空");
-//        }
-
-        LocalDate startDate = LocalDate.parse(orderInfo.getStartDate(), DATE_FORMATTER);
-        LocalDate endDate = LocalDate.parse(orderInfo.getEndDate(), DATE_FORMATTER);
-        if (endDate.isBefore(startDate)) {
-            throw new BadRequestException("签约结束日期不能早于开始日期");
+        if (StringUtils.isBlank(orderInfo.getStartDate()) ) {
+            throw new BadRequestException("首单开始日期不能为空");
         }
+
+
 
         int breakfastCount = orderInfo.getBreakfastCount() != null ? orderInfo.getBreakfastCount() : 0;
         int lunchDinnerCount = orderInfo.getLunchDinnerCount() != null ? orderInfo.getLunchDinnerCount() : 0;
@@ -436,7 +432,10 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         order.setMealBalance(orderInfo.getFinalAmount() != null ? orderInfo.getFinalAmount() : BigDecimal.ZERO);
         order.setRemainingCount(orderInfo.getTotalCount());
         order.setStartDate(LocalDate.parse(orderInfo.getStartDate(), DATE_FORMATTER));
-        order.setEndDate(LocalDate.parse(orderInfo.getEndDate(), DATE_FORMATTER));
+        if (!StringUtils.isBlank(orderInfo.getEndDate())){
+            order.setEndDate(LocalDate.parse(orderInfo.getEndDate(), DATE_FORMATTER));
+        }
+
         order.setFirstDeliveryTime(null);
         order.setDealTime(java.time.LocalDateTime.now());
         order.setStatus(1);
