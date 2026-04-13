@@ -1,0 +1,225 @@
+2026-04-12 15:17:23 [http-nio-8000-exec-10] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 按日期统计各父套餐餐数 - 日期: 2026-04-12
+2026-04-12 15:17:23 [http-nio-8000-exec-10] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 按日期统计各父套餐餐数完成 - 日期: 2026-04-12, 结果数量: 0
+2026-04-12 15:17:37 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 43, 客户数: 2
+2026-04-12 15:17:48 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始生成排餐计划 - 日期: 2026-04-02, 餐次: LUNCH, 客户ID: null
+2026-04-12 15:17:48 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 找到现有排餐计划，开始软删除 - 计划ID: 33, 日期: 2026-04-02, 餐次: LUNCH
+2026-04-12 15:17:48 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 现有排餐计划软删除完成 - 计划ID: 33
+2026-04-12 15:17:48 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始查询有效订单 - 日期: 2026-04-02, 餐次: LUNCH, 客户ID: null
+2026-04-12 15:17:48 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 符合日期范围的订单总数 - 日期: 2026-04-02, 餐次: LUNCH, 订单数: 4
+2026-04-12 15:17:48 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 13, 客户ID: 15, 状态: 2 (非有效状态)
+2026-04-12 15:17:48 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 基础条件过滤后的候选订单 - 数量: 3
+2026-04-12 15:17:48 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 有效订单过滤完成 - 日期: 2026-04-02, 餐次: LUNCH, 日期范围内订单: 4, 基础过滤后: 3, 最终有效数: 3, 耗时: 156ms
+2026-04-12 15:17:49 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 创建排餐计划主记录 - 日期: 2026-04-02, 餐次: LUNCH, 订单总数: 3
+2026-04-12 15:17:49 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录创建成功 - 计划ID: 45
+2026-04-12 15:17:49 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录获取成功 - ID: 45, 总订单数: 3
+2026-04-12 15:17:49 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 1/3 - 订单ID: 11, 客户ID: A010,客户code教授 1, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 15:17:50 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 2/3 - 订单ID: 14, 客户ID: B001,客户code测试, 父套餐ID: null, 子套餐ID: 标准餐
+2026-04-12 15:17:50 [http-nio-8000-exec-6] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏--羊肉
+2026-04-12 15:17:50 [http-nio-8000-exec-6] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏菜品：{"id":188,"name":"葱香多宝鱼（开后一天的盐焗鸡）","ingredients":"萝卜, 多宝鱼, 鱼, 胡萝卜, 葱, 羊肉","dishType":"MAIN","mealTypes":["LUNCH"],"mealPackages":["1","2","3"],"schedule":["1-4","2-4","3-4","4-4"],"sort":11,"enabled":true,"createTime":1773732529000,"updateTime":1775380366000}
+2026-04-12 15:17:50 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 【暂跳过替换菜品】primaryType=MAIN, fallbackType=SIDE, 客户过敏, 原本想选的菜品: 葱香多宝鱼（开后一天的盐焗鸡）
+2026-04-12 15:17:50 [http-nio-8000-exec-6] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 【暂跳过替换菜品】当日MAIN类型菜品不足，未尝试次日菜品
+2026-04-12 15:17:50 [http-nio-8000-exec-6] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 订单处理失败 - 订单ID: 14, 客户ID: 6, 失败原因: 荤菜不足
+2026-04-12 15:17:50 [http-nio-8000-exec-6] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划保存失败 - 客户计划ID: 88, 失败原因: 荤菜不足
+2026-04-12 15:17:50 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 3/3 - 订单ID: 15, 客户ID: A006,客户code王五, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 15:17:51 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划汇总信息更新完成 - 计划ID: 45, 最终状态: 部分成功, 成功: 2, 失败: 1
+2026-04-12 15:17:51 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划生成完成 - 耗时: 3320ms, 计划ID: 45, 成功数: 2, 失败数: 1
+2026-04-12 15:17:53 [http-nio-8000-exec-1] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 45, 客户数: 3
+2026-04-12 15:29:38 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始生成排餐计划 - 日期: 2026-04-02, 餐次: LUNCH, 客户ID: null
+2026-04-12 15:29:38 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 找到现有排餐计划，开始软删除 - 计划ID: 45, 日期: 2026-04-02, 餐次: LUNCH
+2026-04-12 15:29:38 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 现有排餐计划软删除完成 - 计划ID: 45
+2026-04-12 15:29:38 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始查询有效订单 - 日期: 2026-04-02, 餐次: LUNCH, 客户ID: null
+2026-04-12 15:29:38 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 符合日期范围的订单总数 - 日期: 2026-04-02, 餐次: LUNCH, 订单数: 4
+2026-04-12 15:29:38 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 13, 客户ID: 15, 状态: 2 (非有效状态)
+2026-04-12 15:29:38 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 基础条件过滤后的候选订单 - 数量: 3
+2026-04-12 15:29:38 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 有效订单过滤完成 - 日期: 2026-04-02, 餐次: LUNCH, 日期范围内订单: 4, 基础过滤后: 3, 最终有效数: 3, 耗时: 154ms
+2026-04-12 15:29:39 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 创建排餐计划主记录 - 日期: 2026-04-02, 餐次: LUNCH, 订单总数: 3
+2026-04-12 15:29:39 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录创建成功 - 计划ID: 46
+2026-04-12 15:29:39 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录获取成功 - ID: 46, 总订单数: 3
+2026-04-12 15:29:39 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 1/3 - 订单ID: 11, 客户ID: A010,客户code教授 1, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 15:29:40 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 2/3 - 订单ID: 14, 客户ID: B001,客户code测试, 父套餐ID: null, 子套餐ID: 标准餐
+2026-04-12 15:29:40 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏--羊肉
+2026-04-12 15:29:40 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏菜品：{"id":188,"name":"葱香多宝鱼（开后一天的盐焗鸡）","ingredients":"萝卜, 多宝鱼, 鱼, 胡萝卜, 葱, 羊肉","dishType":"MAIN","mealTypes":["LUNCH"],"mealPackages":["1","2","3"],"schedule":["1-4","2-4","3-4","4-4"],"sort":11,"enabled":true,"createTime":1773732529000,"updateTime":1775380366000}
+2026-04-12 15:29:40 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 【暂跳过替换菜品】primaryType=MAIN, fallbackType=SIDE, 客户过敏, 原本想选的菜品: 葱香多宝鱼（开后一天的盐焗鸡）
+2026-04-12 15:29:40 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 【暂跳过替换菜品】当日MAIN类型菜品不足，未尝试次日菜品
+2026-04-12 15:29:40 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 订单处理失败 - 订单ID: 14, 客户ID: 6, 失败原因: 荤菜不足
+2026-04-12 15:29:40 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划保存失败 - 客户计划ID: 91, 失败原因: 荤菜不足
+2026-04-12 15:29:40 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 3/3 - 订单ID: 15, 客户ID: A006,客户code王五, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 15:29:41 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划汇总信息更新完成 - 计划ID: 46, 最终状态: 部分成功, 成功: 2, 失败: 1
+2026-04-12 15:29:41 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划生成完成 - 耗时: 2990ms, 计划ID: 46, 成功数: 2, 失败数: 1
+2026-04-12 15:29:42 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 46, 客户数: 3
+2026-04-12 15:36:23 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始生成排餐计划 - 日期: 2026-04-02, 餐次: LUNCH, 客户ID: null
+2026-04-12 15:36:23 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 找到现有排餐计划，开始软删除 - 计划ID: 46, 日期: 2026-04-02, 餐次: LUNCH
+2026-04-12 15:36:23 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 现有排餐计划软删除完成 - 计划ID: 46
+2026-04-12 15:36:23 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始查询有效订单 - 日期: 2026-04-02, 餐次: LUNCH, 客户ID: null
+2026-04-12 15:36:23 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 符合日期范围的订单总数 - 日期: 2026-04-02, 餐次: LUNCH, 订单数: 4
+2026-04-12 15:36:23 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 13, 客户ID: 15, 状态: 2 (非有效状态)
+2026-04-12 15:36:23 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 基础条件过滤后的候选订单 - 数量: 3
+2026-04-12 15:36:23 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 有效订单过滤完成 - 日期: 2026-04-02, 餐次: LUNCH, 日期范围内订单: 4, 基础过滤后: 3, 最终有效数: 3, 耗时: 158ms
+2026-04-12 15:36:24 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 创建排餐计划主记录 - 日期: 2026-04-02, 餐次: LUNCH, 订单总数: 3
+2026-04-12 15:36:24 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录创建成功 - 计划ID: 47
+2026-04-12 15:36:24 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录获取成功 - ID: 47, 总订单数: 3
+2026-04-12 15:36:24 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 1/3 - 订单ID: 11, 客户ID: A010,客户code教授 1, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 15:36:25 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 2/3 - 订单ID: 14, 客户ID: B001,客户code测试, 父套餐ID: null, 子套餐ID: 标准餐
+2026-04-12 15:36:25 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏--羊肉
+2026-04-12 15:36:25 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏菜品：{"id":188,"name":"葱香多宝鱼（开后一天的盐焗鸡）","ingredients":"萝卜, 多宝鱼, 鱼, 胡萝卜, 葱, 羊肉","dishType":"MAIN","mealTypes":["LUNCH"],"mealPackages":["1","2","3"],"schedule":["1-4","2-4","3-4","4-4"],"sort":11,"enabled":true,"createTime":1773732529000,"updateTime":1775380366000}
+2026-04-12 15:36:25 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 【暂跳过替换菜品】primaryType=MAIN, fallbackType=SIDE, 客户过敏, 原本想选的菜品: 葱香多宝鱼（开后一天的盐焗鸡）
+2026-04-12 15:36:25 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 【暂跳过替换菜品】当日MAIN类型菜品不足，未尝试次日菜品
+2026-04-12 15:36:25 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 订单处理失败 - 订单ID: 14, 客户ID: 6, 失败原因: 荤菜不足
+2026-04-12 15:36:25 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划保存失败 - 客户计划ID: 94, 失败原因: 荤菜不足
+2026-04-12 15:36:25 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 3/3 - 订单ID: 15, 客户ID: A006,客户code王五, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 15:36:26 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划汇总信息更新完成 - 计划ID: 47, 最终状态: 部分成功, 成功: 2, 失败: 1
+2026-04-12 15:36:26 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划生成完成 - 耗时: 3072ms, 计划ID: 47, 成功数: 2, 失败数: 1
+2026-04-12 15:36:27 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 47, 客户数: 3
+2026-04-12 15:41:36 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始生成排餐计划 - 日期: 2026-04-02, 餐次: LUNCH, 客户ID: null
+2026-04-12 15:41:36 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 找到现有排餐计划，开始软删除 - 计划ID: 47, 日期: 2026-04-02, 餐次: LUNCH
+2026-04-12 15:41:36 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 现有排餐计划软删除完成 - 计划ID: 47
+2026-04-12 15:41:36 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始查询有效订单 - 日期: 2026-04-02, 餐次: LUNCH, 客户ID: null
+2026-04-12 15:41:37 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 符合日期范围的订单总数 - 日期: 2026-04-02, 餐次: LUNCH, 订单数: 4
+2026-04-12 15:41:37 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 13, 客户ID: 15, 状态: 2 (非有效状态)
+2026-04-12 15:41:37 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 基础条件过滤后的候选订单 - 数量: 3
+2026-04-12 15:41:37 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 有效订单过滤完成 - 日期: 2026-04-02, 餐次: LUNCH, 日期范围内订单: 4, 基础过滤后: 3, 最终有效数: 3, 耗时: 149ms
+2026-04-12 15:41:37 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 创建排餐计划主记录 - 日期: 2026-04-02, 餐次: LUNCH, 订单总数: 3
+2026-04-12 15:41:37 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录创建成功 - 计划ID: 48
+2026-04-12 15:41:37 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录获取成功 - ID: 48, 总订单数: 3
+2026-04-12 15:41:37 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 1/3 - 订单ID: 11, 客户ID: A010,客户code教授 1, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 15:41:38 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 2/3 - 订单ID: 14, 客户ID: B001,客户code测试, 父套餐ID: null, 子套餐ID: 标准餐
+2026-04-12 15:41:38 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏--羊肉
+2026-04-12 15:41:38 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏菜品：{"id":188,"name":"葱香多宝鱼（开后一天的盐焗鸡）","ingredients":"萝卜, 多宝鱼, 鱼, 胡萝卜, 葱, 羊肉","dishType":"MAIN","mealTypes":["LUNCH"],"mealPackages":["1","2","3"],"schedule":["1-4","2-4","3-4","4-4"],"sort":11,"enabled":true,"createTime":1773732529000,"updateTime":1775380366000}
+2026-04-12 15:41:38 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 【暂跳过替换菜品】primaryType=MAIN, fallbackType=SIDE, 客户过敏, 原本想选的菜品: 葱香多宝鱼（开后一天的盐焗鸡）
+2026-04-12 15:41:38 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 【暂跳过替换菜品】当日MAIN类型菜品不足，未尝试次日菜品
+2026-04-12 15:41:38 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 订单处理失败 - 订单ID: 14, 客户ID: 6, 失败原因: 荤菜不足
+2026-04-12 15:41:38 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 【过敏记录-写入】客户: 测试, 菜品: 葱香多宝鱼（开后一天的盐焗鸡）, 过敏标签: 羊肉
+2026-04-12 15:41:38 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划保存失败 - 客户计划ID: 97, 失败原因: 荤菜不足
+2026-04-12 15:41:38 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 3/3 - 订单ID: 15, 客户ID: A006,客户code王五, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 15:41:39 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划汇总信息更新完成 - 计划ID: 48, 最终状态: 部分成功, 成功: 2, 失败: 1
+2026-04-12 15:41:39 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划生成完成 - 耗时: 3022ms, 计划ID: 48, 成功数: 2, 失败数: 1
+2026-04-12 15:41:41 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 48, 客户数: 3
+2026-04-12 15:48:58 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始生成排餐计划 - 日期: 2026-04-02, 餐次: LUNCH, 客户ID: null
+2026-04-12 15:48:58 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 找到现有排餐计划，开始软删除 - 计划ID: 48, 日期: 2026-04-02, 餐次: LUNCH
+2026-04-12 15:48:58 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 现有排餐计划软删除完成 - 计划ID: 48
+2026-04-12 15:48:58 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始查询有效订单 - 日期: 2026-04-02, 餐次: LUNCH, 客户ID: null
+2026-04-12 15:48:58 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 符合日期范围的订单总数 - 日期: 2026-04-02, 餐次: LUNCH, 订单数: 4
+2026-04-12 15:48:58 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 13, 客户ID: 15, 状态: 2 (非有效状态)
+2026-04-12 15:48:58 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 基础条件过滤后的候选订单 - 数量: 3
+2026-04-12 15:48:58 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 有效订单过滤完成 - 日期: 2026-04-02, 餐次: LUNCH, 日期范围内订单: 4, 基础过滤后: 3, 最终有效数: 3, 耗时: 190ms
+2026-04-12 15:48:59 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 创建排餐计划主记录 - 日期: 2026-04-02, 餐次: LUNCH, 订单总数: 3
+2026-04-12 15:48:59 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录创建成功 - 计划ID: 49
+2026-04-12 15:48:59 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录获取成功 - ID: 49, 总订单数: 3
+2026-04-12 15:48:59 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 1/3 - 订单ID: 11, 客户ID: A010,客户code教授 1, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 15:49:00 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 2/3 - 订单ID: 14, 客户ID: B001,客户code测试, 父套餐ID: null, 子套餐ID: 标准餐
+2026-04-12 15:49:00 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏--羊肉
+2026-04-12 15:49:00 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏菜品：{"id":188,"name":"葱香多宝鱼（开后一天的盐焗鸡）","ingredients":"萝卜, 多宝鱼, 鱼, 胡萝卜, 葱, 羊肉","dishType":"MAIN","mealTypes":["LUNCH"],"mealPackages":["1","2","3"],"schedule":["1-4","2-4","3-4","4-4"],"sort":11,"enabled":true,"createTime":1773732529000,"updateTime":1775380366000}
+2026-04-12 15:49:00 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 【暂跳过替换菜品】当日MAIN类型菜品不足，未尝试次日菜品
+2026-04-12 15:49:00 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 订单处理失败 - 订单ID: 14, 客户ID: 6, 失败原因: 荤菜不足
+2026-04-12 15:49:01 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 【过敏记录-写入】客户: 测试, 菜品: 葱香多宝鱼（开后一天的盐焗鸡）, 过敏标签: 羊肉
+2026-04-12 15:49:01 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划保存失败 - 客户计划ID: 100, 失败原因: 荤菜不足
+2026-04-12 15:49:01 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 3/3 - 订单ID: 15, 客户ID: A006,客户code王五, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 15:49:02 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划汇总信息更新完成 - 计划ID: 49, 最终状态: 部分成功, 成功: 2, 失败: 1
+2026-04-12 15:49:02 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划生成完成 - 耗时: 3911ms, 计划ID: 49, 成功数: 2, 失败数: 1
+2026-04-12 15:49:03 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 49, 客户数: 3
+2026-04-12 15:49:45 [http-nio-8000-exec-5] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 49, 客户数: 3
+2026-04-12 15:55:55 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始生成排餐计划 - 日期: 2026-04-02, 餐次: LUNCH, 客户ID: null
+2026-04-12 15:55:55 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 找到现有排餐计划，开始软删除 - 计划ID: 49, 日期: 2026-04-02, 餐次: LUNCH
+2026-04-12 15:55:55 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 现有排餐计划软删除完成 - 计划ID: 49
+2026-04-12 15:55:55 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始查询有效订单 - 日期: 2026-04-02, 餐次: LUNCH, 客户ID: null
+2026-04-12 15:55:55 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 符合日期范围的订单总数 - 日期: 2026-04-02, 餐次: LUNCH, 订单数: 4
+2026-04-12 15:55:55 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 13, 客户ID: 15, 状态: 2 (非有效状态)
+2026-04-12 15:55:55 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 基础条件过滤后的候选订单 - 数量: 3
+2026-04-12 15:55:55 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 有效订单过滤完成 - 日期: 2026-04-02, 餐次: LUNCH, 日期范围内订单: 4, 基础过滤后: 3, 最终有效数: 3, 耗时: 164ms
+2026-04-12 15:55:56 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 创建排餐计划主记录 - 日期: 2026-04-02, 餐次: LUNCH, 订单总数: 3
+2026-04-12 15:55:56 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录创建成功 - 计划ID: 50
+2026-04-12 15:55:56 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录获取成功 - ID: 50, 总订单数: 3
+2026-04-12 15:55:56 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 1/3 - 订单ID: 11, 客户ID: A010,客户code教授 1, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 15:55:57 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 2/3 - 订单ID: 14, 客户ID: B001,客户code测试, 父套餐ID: null, 子套餐ID: 标准餐
+2026-04-12 15:55:57 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏--羊肉
+2026-04-12 15:55:57 [http-nio-8000-exec-2] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏菜品：{"id":188,"name":"葱香多宝鱼（开后一天的盐焗鸡）","ingredients":"萝卜, 多宝鱼, 鱼, 胡萝卜, 葱, 羊肉","dishType":"MAIN","mealTypes":["LUNCH"],"mealPackages":["1","2","3"],"schedule":["1-4","2-4","3-4","4-4"],"sort":11,"enabled":true,"createTime":1773732529000,"updateTime":1775380366000}
+2026-04-12 15:55:57 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 当日MAIN类型菜品因过敏被过滤，未尝试次日菜品
+2026-04-12 15:55:57 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 【过敏记录-写入】客户: 测试, 菜品: 葱香多宝鱼（开后一天的盐焗鸡）, 过敏标签: 羊肉
+2026-04-12 15:55:57 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 3/3 - 订单ID: 15, 客户ID: A006,客户code王五, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 15:55:58 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划汇总信息更新完成 - 计划ID: 50, 最终状态: 全部成功, 成功: 3, 失败: 0
+2026-04-12 15:55:58 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划生成完成 - 耗时: 3683ms, 计划ID: 50, 成功数: 3, 失败数: 0
+2026-04-12 15:56:00 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 50, 客户数: 3
+2026-04-12 16:00:42 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 50, 客户数: 3
+2026-04-12 16:11:25 [http-nio-8000-exec-10] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 按日期统计各父套餐餐数 - 日期: 2026-04-12
+2026-04-12 16:11:26 [http-nio-8000-exec-10] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 按日期统计各父套餐餐数完成 - 日期: 2026-04-12, 结果数量: 0
+2026-04-12 16:11:35 [http-nio-8000-exec-3] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 50, 客户数: 3
+2026-04-12 16:11:39 [http-nio-8000-exec-5] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 50, 客户数: 3
+2026-04-12 16:20:52 [http-nio-8000-exec-10] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 50, 客户数: 3
+2026-04-12 16:23:38 [http-nio-8000-exec-6] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 50, 客户数: 3
+2026-04-12 22:41:23 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始生成排餐计划 - 日期: 2026-04-12, 餐次: LUNCH, 客户ID: null
+2026-04-12 22:41:23 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 未找到现有排餐计划，跳过清理 - 日期: 2026-04-12, 餐次: LUNCH
+2026-04-12 22:41:23 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始查询有效订单 - 日期: 2026-04-12, 餐次: LUNCH, 客户ID: null
+2026-04-12 22:41:23 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 符合日期范围的订单总数 - 日期: 2026-04-12, 餐次: LUNCH, 订单数: 5
+2026-04-12 22:41:23 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 13, 客户ID: 15, 状态: 2 (非有效状态)
+2026-04-12 22:41:23 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 基础条件过滤后的候选订单 - 数量: 4
+2026-04-12 22:41:23 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 11, 客户ID: 13, 餐次: LUNCH, 配送模式: SCHEDULE, 原因: SCHEDULE模式 - 今日(2026-04-12)不在配送日列表中: [2026-03-31, 2026-04-01, 2026-04-02, 2026-04-03, 2026-04-04]
+2026-04-12 22:41:30 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 有效订单过滤完成 - 日期: 2026-04-12, 餐次: LUNCH, 日期范围内订单: 5, 基础过滤后: 4, 最终有效数: 3, 耗时: 7391ms
+2026-04-12 22:41:30 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 创建排餐计划主记录 - 日期: 2026-04-12, 餐次: LUNCH, 订单总数: 3
+2026-04-12 22:41:30 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录创建成功 - 计划ID: 51
+2026-04-12 22:41:30 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录获取成功 - ID: 51, 总订单数: 3
+2026-04-12 22:41:30 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 1/3 - 订单ID: 14, 客户ID: B001,客户code测试, 父套餐ID: null, 子套餐ID: 标准餐
+2026-04-12 22:41:31 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 2/3 - 订单ID: 15, 客户ID: A006,客户code王五, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 22:41:31 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 3/3 - 订单ID: 16, 客户ID: A008,客户code12 测试, 父套餐ID: null, 子套餐ID: 两荤一素
+2026-04-12 22:41:32 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划汇总信息更新完成 - 计划ID: 51, 最终状态: 全部成功, 成功: 3, 失败: 0
+2026-04-12 22:41:32 [http-nio-8000-exec-8] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划生成完成 - 耗时: 8904ms, 计划ID: 51, 成功数: 3, 失败数: 0
+2026-04-12 22:41:32 [http-nio-8000-exec-10] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 51, 客户数: 3
+2026-04-12 22:42:34 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始生成排餐计划 - 日期: 2026-04-13, 餐次: LUNCH, 客户ID: null
+2026-04-12 22:42:34 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 未找到现有排餐计划，跳过清理 - 日期: 2026-04-13, 餐次: LUNCH
+2026-04-12 22:42:34 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始查询有效订单 - 日期: 2026-04-13, 餐次: LUNCH, 客户ID: null
+2026-04-12 22:42:35 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 符合日期范围的订单总数 - 日期: 2026-04-13, 餐次: LUNCH, 订单数: 5
+2026-04-12 22:42:35 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 13, 客户ID: 15, 状态: 2 (非有效状态)
+2026-04-12 22:42:35 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 基础条件过滤后的候选订单 - 数量: 4
+2026-04-12 22:42:35 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 11, 客户ID: 13, 餐次: LUNCH, 配送模式: SCHEDULE, 原因: SCHEDULE模式 - 今日(2026-04-13)不在配送日列表中: [2026-03-31, 2026-04-01, 2026-04-02, 2026-04-03, 2026-04-04]
+2026-04-12 22:42:57 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 16, 客户ID: 11, 餐次: ALL, 配送模式: SCHEDULE, 原因: SCHEDULE模式 - 今日餐次(LUNCH)不在配送日餐次中: []
+2026-04-12 22:42:57 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 有效订单过滤完成 - 日期: 2026-04-13, 餐次: LUNCH, 日期范围内订单: 5, 基础过滤后: 4, 最终有效数: 2, 耗时: 22584ms
+2026-04-12 22:42:57 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 创建排餐计划主记录 - 日期: 2026-04-13, 餐次: LUNCH, 订单总数: 2
+2026-04-12 22:42:57 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录创建成功 - 计划ID: 52
+2026-04-12 22:42:57 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录获取成功 - ID: 52, 总订单数: 2
+2026-04-12 22:42:57 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 1/2 - 订单ID: 14, 客户ID: B001,客户code测试, 父套餐ID: null, 子套餐ID: 标准餐
+2026-04-12 22:42:58 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 2/2 - 订单ID: 15, 客户ID: A006,客户code王五, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 22:42:58 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划汇总信息更新完成 - 计划ID: 52, 最终状态: 全部成功, 成功: 2, 失败: 0
+2026-04-12 22:42:58 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划生成完成 - 耗时: 23682ms, 计划ID: 52, 成功数: 2, 失败数: 0
+2026-04-12 22:42:59 [http-nio-8000-exec-7] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 52, 客户数: 2
+2026-04-12 22:45:59 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始生成排餐计划 - 日期: 2026-04-13, 餐次: LUNCH, 客户ID: null
+2026-04-12 22:45:59 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 找到现有排餐计划，开始软删除 - 计划ID: 52, 日期: 2026-04-13, 餐次: LUNCH
+2026-04-12 22:46:00 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 现有排餐计划软删除完成 - 计划ID: 52
+2026-04-12 22:46:00 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始查询有效订单 - 日期: 2026-04-13, 餐次: LUNCH, 客户ID: null
+2026-04-12 22:46:00 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 符合日期范围的订单总数 - 日期: 2026-04-13, 餐次: LUNCH, 订单数: 5
+2026-04-12 22:46:00 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 13, 客户ID: 15, 状态: 2 (非有效状态)
+2026-04-12 22:46:00 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 基础条件过滤后的候选订单 - 数量: 4
+2026-04-12 22:46:00 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 11, 客户名称+编号: null-A010, 餐次: LUNCH, 配送模式: SCHEDULE, 原因: SCHEDULE模式 - 今日(2026-04-13)不在配送日列表中: [2026-03-31, 2026-04-01, 2026-04-02, 2026-04-03, 2026-04-04]
+2026-04-12 22:46:05 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 16, 客户名称+编号: null-A008, 餐次: ALL, 配送模式: SCHEDULE, 原因: SCHEDULE模式 - 今日餐次(LUNCH)不在配送日餐次中: []
+2026-04-12 22:46:05 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 有效订单过滤完成 - 日期: 2026-04-13, 餐次: LUNCH, 日期范围内订单: 5, 基础过滤后: 4, 最终有效数: 2, 耗时: 5527ms
+2026-04-12 22:46:05 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 创建排餐计划主记录 - 日期: 2026-04-13, 餐次: LUNCH, 订单总数: 2
+2026-04-12 22:46:05 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录创建成功 - 计划ID: 53
+2026-04-12 22:46:05 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录获取成功 - ID: 53, 总订单数: 2
+2026-04-12 22:46:05 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 1/2 - 订单ID: 14, 客户ID: B001,客户code测试, 父套餐ID: null, 子套餐ID: 标准餐
+2026-04-12 22:46:06 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 2/2 - 订单ID: 15, 客户ID: A006,客户code王五, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 22:46:06 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划汇总信息更新完成 - 计划ID: 53, 最终状态: 全部成功, 成功: 2, 失败: 0
+2026-04-12 22:46:06 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划生成完成 - 耗时: 7179ms, 计划ID: 53, 成功数: 2, 失败数: 0
+2026-04-12 22:46:07 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 53, 客户数: 2
+2026-04-12 22:48:47 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始生成排餐计划 - 日期: 2026-04-13, 餐次: LUNCH, 客户ID: null
+2026-04-12 22:48:47 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 找到现有排餐计划，开始软删除 - 计划ID: 53, 日期: 2026-04-13, 餐次: LUNCH
+2026-04-12 22:48:47 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 现有排餐计划软删除完成 - 计划ID: 53
+2026-04-12 22:48:47 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 开始查询有效订单 - 日期: 2026-04-13, 餐次: LUNCH, 客户ID: null
+2026-04-12 22:48:48 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 符合日期范围的订单总数 - 日期: 2026-04-13, 餐次: LUNCH, 订单数: 5
+2026-04-12 22:48:48 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 13, 客户ID: 15, 状态: 2 (非有效状态)
+2026-04-12 22:48:48 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 基础条件过滤后的候选订单 - 数量: 4
+2026-04-12 22:48:48 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 订单被过滤 - 订单ID: 11, 客户名称+编号: null-A010, 餐次: LUNCH, 配送模式: SCHEDULE, 原因: SCHEDULE模式 - 今日(2026-04-13)不在配送日列表中: [2026-03-31, 2026-04-01, 2026-04-02, 2026-04-03, 2026-04-04]
+2026-04-12 22:48:58 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 有效订单过滤完成 - 日期: 2026-04-13, 餐次: LUNCH, 日期范围内订单: 5, 基础过滤后: 4, 最终有效数: 3, 耗时: 10037ms
+2026-04-12 22:48:58 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 创建排餐计划主记录 - 日期: 2026-04-13, 餐次: LUNCH, 订单总数: 3
+2026-04-12 22:48:58 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录创建成功 - 计划ID: 54
+2026-04-12 22:48:58 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划主记录获取成功 - ID: 54, 总订单数: 3
+2026-04-12 22:48:58 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 1/3 - 订单ID: 14, 客户ID: B001,客户code测试, 父套餐ID: null, 子套餐ID: 标准餐
+2026-04-12 22:48:58 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 2/3 - 订单ID: 15, 客户ID: A006,客户code王五, 父套餐ID: null, 子套餐ID: 汤-一荤一素
+2026-04-12 22:48:58 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 处理订单 3/3 - 订单ID: 16, 客户ID: A008,客户code12 测试, 父套餐ID: null, 子套餐ID: 两荤一素
+2026-04-12 22:48:58 [http-nio-8000-exec-4] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏--南瓜
+2026-04-12 22:48:59 [http-nio-8000-exec-4] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 过敏菜品：{"id":185,"name":"贝贝南瓜蒸排骨","ingredients":"1、贝贝南瓜半个切成3厘米2.5厘米长1厘米宽的块状，共计5块\n2、排骨4-5块见3厘米长\n3、枸杞1颗","dishType":"MAIN","mealTypes":["LUNCH"],"mealPackages":["1","2","3"],"schedule":["1-1","2-1","3-1","4-1"],"sort":8,"enabled":true,"createTime":1773732528000,"updateTime":1774855689000}
+2026-04-12 22:48:59 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 【暂跳过替换菜品】二荤一素主菜全部过敏，原本想选的菜品: 贝贝南瓜蒸排骨
+2026-04-12 22:48:59 [http-nio-8000-exec-4] WARN  m.z.m.m.s.impl.MealPlanServiceImpl - 【暂跳过替换菜品】当日荤菜不足（mainDish=无, sideDish=黄油大虾），未尝试次日菜品
+2026-04-12 22:48:59 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 【过敏记录-写入】客户: 12 测试, 菜品: 贝贝南瓜蒸排骨, 过敏标签: 南瓜
+2026-04-12 22:48:59 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划汇总信息更新完成 - 计划ID: 54, 最终状态: 全部成功, 成功: 3, 失败: 0
+2026-04-12 22:48:59 [http-nio-8000-exec-4] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 排餐计划生成完成 - 耗时: 11671ms, 计划ID: 54, 成功数: 3, 失败数: 0
+2026-04-12 22:49:00 [http-nio-8000-exec-5] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 查询排餐计划完整详情完成 - 计划ID: 54, 客户数: 3
+2026-04-12 23:29:13 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 按日期统计各父套餐餐数 - 日期: 2026-04-12
+2026-04-12 23:29:13 [http-nio-8000-exec-2] INFO  m.z.m.m.s.impl.MealPlanServiceImpl - 按日期统计各父套餐餐数完成 - 日期: 2026-04-12, 结果数量: 2
