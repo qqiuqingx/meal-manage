@@ -12,14 +12,39 @@
           </select>
           <span class="el-icon-arrow-down selector-icon" />
         </div>
-        <p class="text-primary font-bold tracking-widest text-xs uppercase mb-1 mt-2">排餐视图全景</p>
-        <h1 class="editorial-title tracking-tight text-4xl">每周排餐计划</h1>
+        <p class="text-primary font-bold tracking-widest text-xs uppercase mb-1 mt-2">菜单视图全景</p>
+        <h1 class="editorial-title tracking-tight text-4xl">每周菜单</h1>
       </div>
       <div class="header-actions">
         <div class="tab-switcher shadow-inner">
           <button class="tab-btn active">当前周</button>
           <button class="tab-btn inactive" @click="handlePrint">下一周</button>
         </div>
+        <!-- 行显示控制 -->
+        <el-popover placement="bottom-end" trigger="click" width="260" popper-class="row-filter-popover">
+          <div class="row-filter-panel">
+            <p class="row-filter-title">控制显示行</p>
+            <div class="row-filter-tags">
+              <span
+                v-for="type in dishTypes"
+                :key="type.key"
+                class="row-tag"
+                :class="{ 'row-tag-active': !type.hidden, 'row-tag-hidden': type.hidden }"
+                @click="type.hidden = !type.hidden"
+              >
+                <i :class="type.hidden ? 'el-icon-minus' : 'el-icon-check'" class="row-tag-icon" />
+                {{ type.cn }}
+              </span>
+            </div>
+            <div class="row-filter-footer">
+              <span class="row-filter-hint">点击 tag 切换行的显示/隐藏</span>
+            </div>
+          </div>
+          <button slot="reference" class="btn-outlined flex items-center gap-2">
+            <i class="el-icon-menu" /> 显示行
+            <span v-if="dishTypes.some(t => t.hidden)" class="row-filter-badge">{{ dishTypes.filter(t => t.hidden).length }}</span>
+          </button>
+        </el-popover>
         <button class="btn-outlined flex items-center gap-2" @click="handlePrint">
           <i class="el-icon-printer" /> 打印视图
         </button>
@@ -45,7 +70,7 @@
             <span class="rotated-text text-primary font-extrabold">午餐</span>
           </div>
 
-          <div v-for="type in dishTypes" :key="'lunch-' + type.key" class="meal-grid border-b">
+          <div v-for="type in visibleDishTypes" :key="'lunch-' + type.key" class="meal-grid border-b">
             <div class="row-header">
               <span class="text-xs font-bold text-slate-400">{{ type.cn }} / {{ type.en }}</span>
             </div>
@@ -95,7 +120,7 @@
             <span class="rotated-text text-tertiary font-extrabold">晚餐</span>
           </div>
 
-          <div v-for="type in dishTypes" :key="'dinner-' + type.key" class="meal-grid border-b">
+          <div v-for="type in visibleDishTypes" :key="'dinner-' + type.key" class="meal-grid border-b">
             <div class="row-header">
               <span class="text-xs font-bold text-slate-400">{{ type.cn }} / {{ type.en }}</span>
             </div>
@@ -142,12 +167,85 @@
     </div>
 
     <!-- Global Floating Add Button -->
-    <button class="fab-btn editorial-gradient shadow-2xl transition-transform transform active:scale-95 hover:scale-110" @click="handleAddGlobal">
+    <button class="fab-btn editorial-gradient shadow-2xl transition-transform transform active:scale-95 hover:scale-110 no-print" @click="handleAddGlobal">
       <i class="el-icon-plus text-white font-bold text-2xl leading-none" />
     </button>
 
     <!-- 新增/编辑弹窗 -->
     <dish-form ref="dishForm" @refresh="getList" @saved="handleDishFormSaved" />
+
+    <!-- ═══════════════════════════════════════════════
+         打印预览区 — 屏幕上隐藏，打印时完整显示
+    ═══════════════════════════════════════════════ -->
+    <div class="print-sheet">
+      <!-- 打印页头 -->
+      <div class="ps-header">
+        <div class="ps-header__brand">
+          <span class="ps-label">每周菜单</span>
+          <span class="ps-week">第{{ currentWeek }}周</span>
+        </div>
+        <div class="ps-header__meta">
+          <span>打印时间：{{ printTime }}</span>
+        </div>
+      </div>
+
+      <!-- 午餐打印表格 -->
+      <div class="ps-section">
+        <div class="ps-section-title">🍜 午餐</div>
+        <table class="ps-table">
+          <thead>
+            <tr>
+              <th class="ps-th-type">类别</th>
+              <th v-for="(d, i) in days" :key="'ph-l-' + i" class="ps-th-day">{{ d.cn }}<br><span class="ps-day-en">{{ d.en }}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="type in visibleDishTypes" :key="'prl-' + type.key">
+              <td class="ps-td-type">
+                <span :class="'ps-type-tag ps-type-' + type.key.toLowerCase()">{{ type.cn }}</span>
+              </td>
+              <td v-for="dayIdx in 7" :key="'plc-' + type.key + '-' + dayIdx" class="ps-td-cell">
+                <div v-for="slot in matrix['LUNCH'][type.key][dayIdx - 1]" :key="slot.id" class="ps-dish-name">
+                  {{ slot.dish ? slot.dish.name : ('菜品' + slot.dishId) }}
+                </div>
+                <span v-if="matrix['LUNCH'][type.key][dayIdx - 1].length === 0" class="ps-empty">—</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 晚餐打印表格 -->
+      <div class="ps-section">
+        <div class="ps-section-title">🍲 晚餐</div>
+        <table class="ps-table">
+          <thead>
+            <tr>
+              <th class="ps-th-type">类别</th>
+              <th v-for="(d, i) in days" :key="'ph-d-' + i" class="ps-th-day">{{ d.cn }}<br><span class="ps-day-en">{{ d.en }}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="type in visibleDishTypes" :key="'prd-' + type.key">
+              <td class="ps-td-type">
+                <span :class="'ps-type-tag ps-type-' + type.key.toLowerCase()">{{ type.cn }}</span>
+              </td>
+              <td v-for="dayIdx in 7" :key="'pdc-' + type.key + '-' + dayIdx" class="ps-td-cell">
+                <div v-for="slot in matrix['DINNER'][type.key][dayIdx - 1]" :key="slot.id" class="ps-dish-name">
+                  {{ slot.dish ? slot.dish.name : ('菜品' + slot.dishId) }}
+                </div>
+                <span v-if="matrix['DINNER'][type.key][dayIdx - 1].length === 0" class="ps-empty">—</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="ps-footer">
+        <span>© 菜单管理系统 · 第{{ currentWeek }}周菜单</span>
+        <span>本表格由系统自动生成，仅显示当前可见行</span>
+      </div>
+    </div>
 
     <!-- 落位选择弹窗 -->
     <el-dialog :visible.sync="selectorVisible" title="选择菜品入库" width="500px" append-to-body>
@@ -222,15 +320,23 @@ export default {
         { en: 'Sun', cn: '星期日' }
       ],
       dishTypes: [
-        { key: 'SOUP', cn: '汤', en: 'Soup' },
-        { key: 'MAIN', cn: '主菜', en: 'Main' },
-        { key: 'SIDE', cn: '副菜', en: 'Side' },
-        { key: 'VEGETABLE', cn: '素菜', en: 'Veg' },
-        { key: 'RICE', cn: '米饭', en: 'Rice' }
+        { key: 'SOUP', cn: '汤', en: 'Soup', hidden: false },
+        { key: 'MAIN', cn: '主菜', en: 'Main', hidden: false },
+        { key: 'SIDE', cn: '副菜', en: 'Side', hidden: false },
+        { key: 'VEGETABLE', cn: '素菜', en: 'Veg', hidden: false },
+        { key: 'RICE', cn: '米饭', en: 'Rice', hidden: false }
       ]
     }
   },
   computed: {
+    visibleDishTypes() {
+      return this.dishTypes.filter(t => !t.hidden)
+    },
+    printTime() {
+      const now = new Date()
+      const fmt = n => String(n).padStart(2, '0')
+      return `${now.getFullYear()}-${fmt(now.getMonth() + 1)}-${fmt(now.getDate())} ${fmt(now.getHours())}:${fmt(now.getMinutes())}`
+    },
     matrix() {
       const layout = {
         LUNCH: { SOUP: [], MAIN: [], SIDE: [], VEGETABLE: [], RICE: [] },
@@ -372,7 +478,7 @@ export default {
       }
     },
     handlePrint() {
-      this.$message.info('导出/打印功能正在开发中...')
+      window.print()
     }
   }
 }
@@ -688,6 +794,243 @@ export default {
   align-items: center;
   justify-content: center;
   z-index: 40;
+}
+
+/* ─── 打印区（屏幕隐藏、打印显示） ─── */
+.print-sheet {
+  display: none;
+}
+
+/* Row filter popover */
+.row-filter-panel {
+  padding: 4px 0;
+}
+.row-filter-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 12px;
+}
+.row-filter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.row-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+  border: 1.5px solid transparent;
+}
+.row-tag-active {
+  background-color: rgba(0, 107, 92, 0.1);
+  color: var(--primary);
+  border-color: rgba(0, 107, 92, 0.25);
+}
+.row-tag-active:hover {
+  background-color: rgba(0, 107, 92, 0.18);
+}
+.row-tag-hidden {
+  background-color: #f1f5f9;
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.2);
+  text-decoration: line-through;
+}
+.row-tag-hidden:hover {
+  background-color: #e2e8f0;
+  color: #64748b;
+}
+.row-tag-icon {
+  font-size: 11px;
+}
+.row-filter-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(230, 232, 234, 0.8);
+}
+.row-filter-hint {
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+.row-filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--tertiary);
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  margin-left: 2px;
+}
+
+/* ─── @media print ─── */
+@media print {
+  /* 隐藏所有交互元素 */
+  .no-print,
+  header,
+  .matrix-canvas-wrapper,
+  .fab-btn { display: none !important; }
+
+  /* 显示打印区 */
+  .print-sheet { display: block !important; }
+
+  .editorial-app {
+    padding: 0 !important;
+    background: #fff !important;
+  }
+}
+</style>
+
+<!-- 全局打印：隐藏 eladmin 框架导航 -->
+<style>
+@media print {
+  .navbar, .app-header-wrapper, .el-header { display: none !important; }
+  .tags-view-container, .tagsView-container, .tags-view-wrapper { display: none !important; }
+  .sidebar-container, .side-bar, .el-aside { display: none !important; }
+  .footer, .el-footer, .app-footer { display: none !important; }
+  .main-container, .app-main, .el-main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  .app-wrapper, #app {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  /* 打印表格样式 */
+  .print-sheet {
+    font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    padding: 16px 20px;
+    color: #1e293b;
+  }
+  .ps-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 2px solid #006b5c;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+  }
+  .ps-header__brand { display: flex; align-items: baseline; gap: 12px; }
+  .ps-label {
+    font-size: 22px;
+    font-weight: 900;
+    color: #006b5c;
+    letter-spacing: -0.5px;
+  }
+  .ps-week {
+    font-size: 14px;
+    font-weight: 700;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 2px 10px;
+    border-radius: 4px;
+  }
+  .ps-header__meta {
+    font-size: 11px;
+    color: #94a3b8;
+  }
+  .ps-section {
+    margin-bottom: 24px;
+    break-inside: avoid;
+  }
+  .ps-section-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #475569;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+    padding: 4px 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .ps-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .ps-th-type {
+    width: 52px;
+    text-align: center;
+    font-weight: 900;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: #64748b;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 6px 4px;
+  }
+  .ps-th-day {
+    text-align: center;
+    font-weight: 700;
+    font-size: 11px;
+    color: #334155;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 6px 4px;
+    line-height: 1.3;
+  }
+  .ps-day-en {
+    font-size: 9px;
+    color: #94a3b8;
+    font-weight: 500;
+  }
+  .ps-td-type {
+    text-align: center;
+    border: 1px solid #e2e8f0;
+    padding: 6px 4px;
+    background: #fafafa;
+  }
+  .ps-type-tag {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .ps-type-soup      { background: #e0f2fe; color: #0369a1; }
+  .ps-type-main      { background: #fee2e2; color: #991b1b; }
+  .ps-type-side      { background: #fef3c7; color: #92400e; }
+  .ps-type-vegetable { background: #dcfce7; color: #166534; }
+  .ps-type-rice      { background: #f3f4f6; color: #374151; }
+  .ps-td-cell {
+    border: 1px solid #e2e8f0;
+    padding: 6px 8px;
+    vertical-align: top;
+    min-height: 36px;
+  }
+  .ps-dish-name {
+    font-weight: 600;
+    color: #1e293b;
+    line-height: 1.5;
+    font-size: 11px;
+  }
+  .ps-empty {
+    color: #cbd5e1;
+    font-size: 10px;
+  }
+  .ps-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 16px;
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 9px;
+    color: #94a3b8;
+  }
 }
 </style>
 
