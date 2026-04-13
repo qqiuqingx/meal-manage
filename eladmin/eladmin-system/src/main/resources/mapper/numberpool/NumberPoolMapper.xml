@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="me.zhengjie.modules.customer.numberpool.mapper.NumberPoolMapper">
+
+    <!--
+        查询 [pool_start, pool_end] 范围内已被占用的编号.
+
+        重要约束（per PITFALLS.md Pitfall 2）：
+        只返回"有进行中订单"的编号 — co.status = 1 的订单占住编号，不能被复用。
+        已取消(status=0)或已完成(status=2)的订单对应的编号视为可用。
+
+        INNER JOIN 确保只有与 customer_profile 关联的进行中订单才算"占用".
+
+        注意：CONCAT('A1', '001') = 'A1001' 在 MySQL 中拼接前缀和数字。
+        WHERE 子句用 >= 和 <= 做闭区间比较。
+    -->
+    <select id="findUsedCodesInRange" resultType="java.lang.String">
+        SELECT cp.customer_code
+        FROM customer_profile cp
+        INNER JOIN customer_order co ON co.customer_id = cp.id
+        WHERE cp.customer_code LIKE CONCAT(#{poolPrefix}, '%')
+          AND cp.customer_code &gt;= CONCAT(#{poolPrefix}, #{poolStart})
+          AND cp.customer_code &lt;= CONCAT(#{poolPrefix}, #{poolEnd})
+          AND co.status = 1
+        ORDER BY cp.customer_code ASC
+    </select>
+
+</mapper>
