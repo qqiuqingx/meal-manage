@@ -140,7 +140,7 @@ public class NumberPoolReleaseTest {
         CustomerOrder activeOrderEntity = orderMapper.selectList(null).stream()
             .filter(o -> o.getCustomerId().equals(c1.getId()))
             .findFirst()
-            .orElseThrow();
+            .orElseThrow(() -> new RuntimeException("Expected value not found"));
         CustomerOrderSaveDto cancelDto = buildDtoFromOrder(activeOrderEntity);
         cancelDto.setId(activeOrderEntity.getId());
         cancelDto.setStatus(0); // 已取消
@@ -210,7 +210,7 @@ public class NumberPoolReleaseTest {
         CustomerOrder activeOrderEntity = orderMapper.selectList(null).stream()
             .filter(o -> o.getCustomerId().equals(c1.getId()))
             .findFirst()
-            .orElseThrow();
+            .orElseThrow(() -> new RuntimeException("Expected value not found"));
         CustomerOrderSaveDto completeDto = buildDtoFromOrder(activeOrderEntity);
         completeDto.setId(activeOrderEntity.getId());
         completeDto.setStatus(2); // 已完成
@@ -283,7 +283,7 @@ public class NumberPoolReleaseTest {
         CustomerOrder customer2Order = orderMapper.selectList(null).stream()
             .filter(o -> o.getCustomerId().equals(customerIds[1]))
             .findFirst()
-            .orElseThrow();
+            .orElseThrow(() -> new RuntimeException("Expected value not found"));
         CustomerOrderSaveDto cancelDto = buildDtoFromOrder(customer2Order);
         cancelDto.setId(customer2Order.getId());
         cancelDto.setStatus(0);
