@@ -1,0 +1,1 @@
+sql- [31m2026-04-09 12:08:35[0m [32m[Time: 44ms][0m - SELECT job_id, job_name, bean_name, method_name, params, cron_expression, is_pause, person_in_charge, email, sub_task, pause_after_failure, description, create_time, update_time, create_by, update_by FROM sys_quartz_job WHERE is_pause = 0;

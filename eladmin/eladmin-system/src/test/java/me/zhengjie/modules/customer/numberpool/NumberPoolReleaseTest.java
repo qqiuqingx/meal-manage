@@ -15,7 +15,7 @@
  */
 package me.zhengjie.modules.customer.numberpool;
 
-import me.zhengjie.modules.customer.numberpool.service.NumberPoolServiceImpl;
+import me.zhengjie.modules.customer.numberpool.service.impl.NumberPoolServiceImpl;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
