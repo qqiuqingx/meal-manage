@@ -80,6 +80,14 @@
           />
         </template>
       </el-table-column>
+      <el-table-column prop="poolUsage" label="编号池使用" width="130" align="center">
+        <template #default="{ row }">
+          <span v-if="row.poolStart != null && row.poolEnd != null">
+            {{ getPoolUsedCount(row) }}/{{ row.poolEnd - row.poolStart + 1 }}
+          </span>
+          <span v-else style="color: #909399;">—</span>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="200" align="center">
         <template #default="{ row }">
           <el-button type="text" size="small" @click="handleEditParent(row)">编辑</el-button>
@@ -339,6 +347,13 @@ export default {
         // rollback
         this.getTree()
       })
+    },
+
+    getPoolUsedCount(row) {
+      // POOL-12 bonus: 显示已用/总量
+      // 后端尚未提供 per-package 已用数量统计，此处显示 "?" 待后续实现
+      // 后续可添加 GET api/package/usage/{id} 接口返回已用数量
+      return '?'
     },
 
     resetForm() {
