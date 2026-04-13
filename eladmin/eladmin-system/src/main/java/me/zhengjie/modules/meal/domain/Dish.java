@@ -63,7 +63,7 @@ public class Dish implements Serializable {
 
     @ApiModelProperty(value = "所属套餐（父套餐ID列表）")
     @TableField(value = "meal_packages", typeHandler = JacksonTypeHandler.class)
-    @JsonIgnore
+
     private List<String> mealPackages;
 
     @ApiModelProperty(value = "所属套餐详情列表（查询时显示用，非数据库字段）")

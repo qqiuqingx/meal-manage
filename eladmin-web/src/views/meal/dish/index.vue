@@ -57,24 +57,34 @@
             >
               <div class="dish-stack">
                 <div
-                  v-for="dish in matrix['LUNCH'][type.key][dayIdx - 1]"
-                  :key="dish.id"
+                  v-for="slot in matrix['LUNCH'][type.key][dayIdx - 1]"
+                  :key="slot.id"
                   class="dish-card lunch-dish group"
-                  @click="handleUpdate(dish)"
+                  @click="handleUpdate(slot.dish)"
                 >
-                  <p class="dish-name">{{ dish.name }}</p>
-                  <i class="el-icon-edit edit-icon" />
+                  <p class="dish-name">{{ slot.dish ? slot.dish.name : ('菜品' + slot.dishId) }}</p>
+                  <i class="el-icon-circle-close remove-icon text-red-500 absolute top-1 right-1 opacity-0 group-hover-opacity-100 transition-opacity" title="移出该日排期" @click.stop="handleRemoveSlot(slot)" />
                 </div>
               </div>
 
-              <button
-                v-if="matrix['LUNCH'][type.key][dayIdx - 1].length === 0"
-                class="add-btn group-icon"
-                @click.prevent="handleCellClick('LUNCH', type.key, dayIdx)"
-              >
-                <i class="el-icon-circle-plus" />
-                <span class="add-text">ADD</span>
-              </button>
+              <div v-if="matrix['LUNCH'][type.key][dayIdx - 1].length === 0" class="flex items-center justify-center gap-1">
+                <button
+                  class="add-btn group-icon"
+                  title="直接新建菜品"
+                  @click.prevent="handleCellClick('LUNCH', type.key, dayIdx)"
+                >
+                  <i class="el-icon-circle-plus" />
+                  <span class="add-text">新建</span>
+                </button>
+                <button
+                  class="add-btn group-icon"
+                  title="从库中选择"
+                  @click.prevent="openSelector('LUNCH', type.key, dayIdx)"
+                >
+                  <i class="el-icon-search" />
+                  <span class="add-text">选择</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -97,24 +107,34 @@
             >
               <div class="dish-stack">
                 <div
-                  v-for="dish in matrix['DINNER'][type.key][dayIdx - 1]"
-                  :key="dish.id"
+                  v-for="slot in matrix['DINNER'][type.key][dayIdx - 1]"
+                  :key="slot.id"
                   class="dish-card dinner-dish group"
-                  @click="handleUpdate(dish)"
+                  @click="handleUpdate(slot.dish)"
                 >
-                  <p class="dish-name">{{ dish.name }}</p>
-                  <i class="el-icon-edit edit-icon" />
+                  <p class="dish-name">{{ slot.dish ? slot.dish.name : ('菜品' + slot.dishId) }}</p>
+                  <i class="el-icon-circle-close remove-icon text-red-500 absolute top-1 right-1 opacity-0 group-hover-opacity-100 transition-opacity" title="移出该日排期" @click.stop="handleRemoveSlot(slot)" />
                 </div>
               </div>
 
-              <button
-                v-if="matrix['DINNER'][type.key][dayIdx - 1].length === 0"
-                class="add-btn group-icon"
-                @click.prevent="handleCellClick('DINNER', type.key, dayIdx)"
-              >
-                <i class="el-icon-circle-plus" />
-                <span class="add-text">ADD</span>
-              </button>
+              <div v-if="matrix['DINNER'][type.key][dayIdx - 1].length === 0" class="flex items-center justify-center gap-1">
+                <button
+                  class="add-btn group-icon"
+                  title="直接新建菜品"
+                  @click.prevent="handleCellClick('DINNER', type.key, dayIdx)"
+                >
+                  <i class="el-icon-circle-plus" />
+                  <span class="add-text">新建</span>
+                </button>
+                <button
+                  class="add-btn group-icon"
+                  title="从库中选择"
+                  @click.prevent="openSelector('DINNER', type.key, dayIdx)"
+                >
+                  <i class="el-icon-search" />
+                  <span class="add-text">选择</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -127,12 +147,47 @@
     </button>
 
     <!-- 新增/编辑弹窗 -->
-    <dish-form ref="dishForm" @refresh="getList" />
+    <dish-form ref="dishForm" @refresh="getList" @saved="handleDishFormSaved" />
+
+    <!-- 落位选择弹窗 -->
+    <el-dialog :visible.sync="selectorVisible" title="选择菜品入库" width="500px" append-to-body>
+      <div class="p-4">
+        <p class="mb-4 text-sm text-on-surface-variant">为 <strong>本周{{ selectorQuery.day }}</strong> 的 <strong>{{ selectorQuery.mealType === 'LUNCH' ? '午餐' : '晚餐' }}</strong> 挑选菜品：</p>
+        <el-select
+          v-model="selectedDishId"
+          filterable
+          remote
+          reserve-keyword
+          placeholder="请输入菜品名称搜索..."
+          :remote-method="searchDishes"
+          :loading="selectorLoading"
+          class="w-full mb-6"
+          size="large"
+        >
+          <el-option
+            v-for="item in selectorOptions"
+            :key="item.id"
+            :label="item.name"
+            :value="item.id"
+          >
+            <div class="flex items-center gap-3">
+              <img v-if="item.imageUrl" :src="item.imageUrl" class="w-8 h-8 rounded object-cover">
+              <span>{{ item.name }}</span>
+            </div>
+          </el-option>
+        </el-select>
+        <div class="flex justify-end gap-3 mt-4">
+          <el-button @click="selectorVisible = false">取消</el-button>
+          <el-button type="primary" :loading="submitting" class="editorial-gradient text-white border-none" @click="confirmAddSlot">确认落位</el-button>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script>
 import { queryDishes } from '@/api/dish'
+import { queryMealSchedule, addMealSchedule, deleteMealSchedule } from '@/api/mealSchedule'
 import DishForm from './dish'
 
 export default {
@@ -144,7 +199,19 @@ export default {
     return {
       loading: true,
       currentWeek: '1',
-      dishList: [],
+      slots: [],
+      selectorVisible: false,
+      selectorLoading: false,
+      selectedDishId: null,
+      selectorOptions: [],
+      submitting: false,
+      selectorQuery: {
+        weekNum: 1,
+        day: 1,
+        mealType: '',
+        dishCategory: ''
+      },
+      pendingScheduleSlot: null,
       days: [
         { en: 'Mon', cn: '星期一' },
         { en: 'Tue', cn: '星期二' },
@@ -175,24 +242,18 @@ export default {
         }
       }
 
-      this.dishList.forEach(dish => {
-        if (!dish.schedule || !dish.mealTypes) return
-        dish.schedule.forEach(sched => {
-          // split format like "1-1" or "1-7"
-          const parts = sched.split('-')
-          if (parts.length === 2 && parts[0] === this.currentWeek) {
-            const day = parseInt(parts[1]) - 1 // 0 to 6
-            if (day >= 0 && day <= 6 && dish.dishType) {
-              dish.mealTypes.forEach(mt => {
-                if (layout[mt] && layout[mt][dish.dishType]) {
-                  layout[mt][dish.dishType][day].push(dish)
-                }
-              })
-            }
-          }
-        })
+      this.slots.forEach(slot => {
+        const dayIdx = slot.dayOfWeek - 1 // 0 to 6
+        if (dayIdx >= 0 && dayIdx <= 6 && layout[slot.mealTime] && layout[slot.mealTime][slot.dishCategory]) {
+          layout[slot.mealTime][slot.dishCategory][dayIdx].push(slot)
+        }
       })
       return layout
+    }
+  },
+  watch: {
+    currentWeek() {
+      this.getList()
     }
   },
   created() {
@@ -201,12 +262,24 @@ export default {
   methods: {
     getList() {
       this.loading = true
-      // Fetch maximum available dishes to construct the board natively
-      queryDishes({ page: 0, size: 9999 }).then(response => {
-        this.dishList = response.content || []
+      queryMealSchedule({ weekNum: parseInt(this.currentWeek) }).then(response => {
+        this.slots = response.slots || []
         this.loading = false
       }).catch(() => {
         this.loading = false
+      })
+    },
+    handleRemoveSlot(slot) {
+      const dishName = slot.dish ? slot.dish.name : '该菜品'
+      this.$confirm(`确定要从排餐坑位中移出【${dishName}】吗？`, '移除提示', {
+        confirmButtonText: '移出',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        deleteMealSchedule(slot.id).then(() => {
+          this.$message.success('已移出排餐坑位')
+          this.getList()
+        })
       })
     },
     handleUpdate(dish) {
@@ -215,16 +288,85 @@ export default {
       }
     },
     handleCellClick(mealType, dishType, day) {
+      this.pendingScheduleSlot = {
+        weekNum: parseInt(this.currentWeek),
+        day: day,
+        mealType: mealType,
+        dishCategory: dishType
+      }
       if (this.$refs.dishForm) {
-        this.$refs.dishForm.handleAdd({
-          week: this.currentWeek,
-          day: day,
-          mealType: mealType,
-          dishType: dishType
-        })
+        this.$refs.dishForm.handleAdd()
       }
     },
+    handleDishFormSaved(form) {
+      // 捕获菜品保存成功事件。如果是通过格子"新建"打开的，则自动发起落位绑定。
+      if (this.pendingScheduleSlot && !form.id) {
+        queryDishes({ name: form.name, page: 0, size: 1 }).then(res => {
+          if (res.content && res.content.length > 0) {
+            const newDishId = res.content[0].id
+            const payload = {
+              weekNum: this.pendingScheduleSlot.weekNum,
+              dayOfWeek: this.pendingScheduleSlot.day,
+              mealTime: this.pendingScheduleSlot.mealType,
+              dishCategory: this.pendingScheduleSlot.dishCategory,
+              dishId: newDishId
+            }
+            addMealSchedule(payload).then(() => {
+              this.pendingScheduleSlot = null
+              this.getList()
+            })
+          }
+        }).catch(() => { this.pendingScheduleSlot = null })
+      } else {
+        this.pendingScheduleSlot = null
+      }
+    },
+    openSelector(mealType, dishType, day) {
+      this.selectorQuery = {
+        weekNum: parseInt(this.currentWeek),
+        day: day,
+        mealType: mealType,
+        dishCategory: dishType
+      }
+      this.selectedDishId = null
+      this.selectorOptions = []
+      this.selectorVisible = true
+      this.searchDishes('')
+    },
+    searchDishes(query) {
+      this.selectorLoading = true
+      queryDishes({ name: query, page: 0, size: 50, enabled: true }).then(res => {
+        this.selectorOptions = res.content || []
+        this.selectorLoading = false
+      }).catch(() => {
+        this.selectorLoading = false
+      })
+    },
+    confirmAddSlot() {
+      if (!this.selectedDishId) {
+        this.$message.warning('请先选择一道菜品')
+        return
+      }
+      this.submitting = true
+      const payload = {
+        weekNum: this.selectorQuery.weekNum,
+        dayOfWeek: this.selectorQuery.day,
+        mealTime: this.selectorQuery.mealType,
+        dishCategory: this.selectorQuery.dishCategory,
+        dishId: this.selectedDishId
+      }
+      addMealSchedule(payload).then(() => {
+        this.$message.success('落位成功')
+        this.selectorVisible = false
+        this.submitting = false
+        this.getList()
+      }).catch(err => {
+        this.submitting = false
+        console.error(err)
+      })
+    },
     handleAddGlobal() {
+      this.pendingScheduleSlot = null
       if (this.$refs.dishForm) {
         this.$refs.dishForm.handleAdd()
       }
@@ -464,6 +606,13 @@ export default {
   transition: opacity 0.2s;
 }
 .dish-card:hover .edit-icon { opacity: 1; }
+.remove-icon {
+  opacity: 0;
+  background: white;
+  border-radius: 50%;
+  padding: 2px;
+}
+.dish-card:hover .remove-icon { opacity: 1; }
 
 .lunch-dish {
   background-color: rgba(0, 191, 165, 0.1);
