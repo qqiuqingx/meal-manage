@@ -34,6 +34,7 @@ import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.MealPlanCustomerItem;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
+import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
@@ -1787,5 +1788,10 @@ public class MealPlanServiceImpl implements MealPlanService {
         List<MealPackageStatDto> result = mealPlanCustomerMapper.statByDate(date);
         log.info("按日期统计各父套餐餐数完成 - 日期: {}, 结果数量: {}", date, result.size());
         return result;
+    }
+
+    @Override
+    public List<MealPlanCustomerAddressVO> queryCustomerAddresses(Long mealPlanId) {
+        return mealPlanCustomerMapper.selectCustomerAddresses(mealPlanId);
     }
 }

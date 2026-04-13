@@ -25,6 +25,7 @@ import me.zhengjie.aspect.LimitType;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
+import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
@@ -138,6 +139,18 @@ public class MealPlanController {
             MealPlanCustomerQueryCriteria criteria) {
         criteria.setMealPlanId(mealPlanId);
         return new ResponseEntity<>(mealPlanService.queryCustomers(criteria), HttpStatus.OK);
+    }
+
+    /**
+     * 根据排餐计划ID查询客户配送地址信息。
+     */
+    @Log("查询排餐计划客户配送地址")
+    @ApiOperation("查询排餐计划客户配送地址")
+    @GetMapping("/{mealPlanId}/customer-addresses")
+    @PreAuthorize("@el.check('mealPlan:list')")
+    public ResponseEntity<List<MealPlanCustomerAddressVO>> queryCustomerAddresses(
+            @ApiParam(value = "排餐计划ID", required = true) @PathVariable Long mealPlanId) {
+        return new ResponseEntity<>(mealPlanService.queryCustomerAddresses(mealPlanId), HttpStatus.OK);
     }
 
     /**
