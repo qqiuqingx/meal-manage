@@ -15,6 +15,7 @@ import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.meal.mapper.DishMapper;
+import me.zhengjie.modules.meal.mapper.MealSchedulePlanMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerItemMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
@@ -61,6 +62,8 @@ class MealPlanServiceImplTest {
     private DishMapper dishMapper;
     @Mock
     private DishIngredientMapper dishIngredientMapper;
+    @Mock
+    private MealSchedulePlanMapper mealSchedulePlanMapper;
 
     @InjectMocks
     private MealPlanServiceImpl mealPlanService;
@@ -89,7 +92,7 @@ class MealPlanServiceImplTest {
         when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
         when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
-        when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, vegDish, soupDish));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, vegDish, soupDish));
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(mainIngredient, vegIngredient, soupIngredient));
 
         MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
@@ -98,7 +101,7 @@ class MealPlanServiceImplTest {
         assertEquals(1, result.getSuccessCount());
         assertEquals(0, result.getFailCount());
         assertTrue(result.getFailDetails().isEmpty());
-        verify(dishMapper).findBySchedule(1, 3, "LUNCH");
+        verify(mealSchedulePlanMapper).findBySchedule(1, 3, "LUNCH");
         verify(dishMapper, never()).selectList(null);
         verify(customerOrderMapper, never()).selectList(null);
         verify(mealPlanMapper).insert(any(MealPlan.class));
@@ -120,7 +123,7 @@ class MealPlanServiceImplTest {
         when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
         when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
-        when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.singletonList(mainIngredient));
 
         MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
@@ -140,7 +143,7 @@ class MealPlanServiceImplTest {
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(existingPlan);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.emptyList());
-        when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.emptyList());
 
         mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
@@ -167,7 +170,7 @@ class MealPlanServiceImplTest {
         when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
         when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
-        when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, sideDish));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, sideDish));
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(mainIngredient, sideIngredient));
 
         mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
@@ -193,7 +196,7 @@ class MealPlanServiceImplTest {
         when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
         when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
-        when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(blockedDish, allowedDish));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(blockedDish, allowedDish));
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(blockedIngredient, allowedIngredient));
 
         mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);

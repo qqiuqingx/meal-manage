@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="me.zhengjie.modules.meal.mapper.MealSchedulePlanMapper">
+
+    <resultMap id="BaseResultMap" type="me.zhengjie.modules.meal.domain.MealSchedulePlan">
+        <id column="id" property="id"/>
+        <result column="week_num" property="weekNum"/>
+        <result column="day_of_week" property="dayOfWeek"/>
+        <result column="meal_time" property="mealTime"/>
+        <result column="dish_category" property="dishCategory"/>
+        <result column="dish_id" property="dishId"/>
+        <result column="enabled" property="enabled"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <association property="dish" javaType="me.zhengjie.modules.meal.domain.Dish">
+            <id column="dish_ref_id" property="id"/>
+            <result column="dish_name" property="name"/>
+            <result column="dish_image_url" property="imageUrl"/>
+        </association>
+    </resultMap>
+
+    <resultMap id="DishScheduleResultMap" type="me.zhengjie.modules.meal.domain.Dish">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="cooking_method" property="cookingMethod"/>
+        <result column="ingredients" property="ingredients"/>
+        <result column="image_url" property="imageUrl"/>
+        <result column="dish_type" property="dishType"/>
+        <result column="meal_packages" property="mealPackages" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="sort" property="sort"/>
+        <result column="enabled" property="enabled"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="findBySchedule" resultMap="DishScheduleResultMap">
+        select d.id,
+               d.name,
+               d.cooking_method,
+               d.ingredients,
+               d.image_url,
+               msp.dish_category as dish_type,
+               d.meal_packages,
+               d.sort,
+               d.enabled,
+               d.create_time,
+               d.update_time
+        from meal_schedule_plan msp
+        join dish d on d.id = msp.dish_id
+        where msp.enabled = 1
+          and d.enabled = 1
+          and msp.week_num = #{weekNum}
+          and msp.day_of_week = #{dayOfWeek}
+          and msp.meal_time = #{mealTime}
+        order by d.sort asc, d.id asc
+    </select>
+
+    <select id="findByWeek" resultMap="BaseResultMap">
+        select msp.id,
+               msp.week_num,
+               msp.day_of_week,
+               msp.meal_time,
+               msp.dish_category,
+               msp.dish_id,
+               msp.enabled,
+               msp.create_time,
+               msp.update_time,
+               d.id as dish_ref_id,
+               d.name as dish_name,
+               d.image_url as dish_image_url
+        from meal_schedule_plan msp
+        join dish d on d.id = msp.dish_id
+        where msp.week_num = #{weekNum}
+        order by msp.day_of_week asc,
+                 field(msp.meal_time, 'BREAKFAST', 'LUNCH', 'DINNER') asc,
+                 field(msp.dish_category, 'SOUP', 'MAIN', 'SIDE', 'VEGETABLE', 'RICE') asc,
+                 msp.id asc
+    </select>
+
+    <select id="countBySlot" resultType="int">
+        select count(1)
+        from meal_schedule_plan
+        where week_num = #{weekNum}
+          and day_of_week = #{dayOfWeek}
+          and meal_time = #{mealTime}
+          and dish_category = #{dishCategory}
+          <if test="excludeId != null">
+              and id != #{excludeId}
+          </if>
+    </select>
+
+    <select id="findByWeekForCopy" resultMap="BaseResultMap">
+        select msp.id,
+               msp.week_num,
+               msp.day_of_week,
+               msp.meal_time,
+               msp.dish_category,
+               msp.dish_id,
+               msp.enabled,
+               msp.create_time,
+               msp.update_time
+        from meal_schedule_plan msp
+        where msp.week_num = #{weekNum}
+        order by msp.id asc
+    </select>
+</mapper>

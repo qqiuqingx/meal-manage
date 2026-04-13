@@ -142,7 +142,7 @@
 </template>
 
 <script>
-import { addDish, editDish, queryPackages } from '@/api/dish'
+import { addDish, editDish, queryPackages, getDish } from '@/api/dish'
 import { queryIngredients } from '@/api/dishIngredient'
 
 export default {
@@ -161,18 +161,14 @@ export default {
         dishType: 'MAIN',
         mealTypes: ['LUNCH'],
         mealPackages: [],
-        schedule: [],
         sort: 0,
         enabled: true,
         ingredientList: []
       },
       rules: {
-        name: [{ required: true, message: '菜品名称不能为空', trigger: 'blur' }],
-        dishType: [{ required: true, message: '菜品类型不能为空', trigger: 'change' }],
-        mealTypes: [{ required: true, message: '餐次不能为空', trigger: 'change' }]
+        name: [{ required: true, message: '菜品名称不能为空', trigger: 'blur' }]
       },
-      selectedWeeks: [],
-      selectedDays: [],
+
       // 配料搜索相关
       selectIngredientId: null,
       ingredientOptions: [],
@@ -181,58 +177,43 @@ export default {
       ingredientMap: {}
     }
   },
-  watch: {
-    selectedWeeks() {
-      this.updateSchedule()
-    },
-    selectedDays() {
-      this.updateSchedule()
-    }
-  },
+
   methods: {
     loadPackages() {
       queryPackages().then(response => {
         this.packageOptions = response || []
       })
     },
-    handleAdd(defaults = {}) {
+    handleAdd() {
       this.title = '编辑/新增菜品'
       this.showImageInput = false
       this.resetForm()
-
-      // Auto-populate from grid clicking if available
-      if (defaults.week && defaults.day) {
-        this.selectedWeeks = [defaults.week.toString()]
-        this.selectedDays = [defaults.day.toString()]
-        this.updateSchedule()
-      }
-      if (defaults.mealType) {
-        this.form.mealTypes = [defaults.mealType]
-      }
-      if (defaults.dishType) {
-        this.form.dishType = defaults.dishType
-      }
-
       this.loadPackages()
       this.dialogVisible = true
     },
     handleUpdate(row) {
       this.title = '编辑/新增菜品'
       this.showImageInput = false
-      // 列表接口已返回完整 ingredientList 和 mealPackageDetails，直接使用
-      this.form = JSON.parse(JSON.stringify(row))
-      if (!this.form.ingredientList) {
-        this.form.ingredientList = []
-      }
-      // 将 mealPackageDetails 中的 id 反填到 mealPackages（DB 存的是 ID）
-      if (this.form.mealPackageDetails && this.form.mealPackageDetails.length > 0) {
-        this.form.mealPackages = this.form.mealPackageDetails.map(pkg => pkg.id)
-      } else {
-        this.form.mealPackages = []
-      }
-      this.parseSchedule()
       this.loadPackages()
-      this.dialogVisible = true
+
+      getDish(row.id).then(fullDish => {
+        this.form = JSON.parse(JSON.stringify(fullDish))
+
+        // 补充被后端 @JsonIgnore 或历史剥离导致丢失的字段，避免 Vue 双向绑定失效 (使用 $set)
+        if (!this.form.ingredientList) {
+          this.$set(this.form, 'ingredientList', [])
+        }
+        this.$set(this.form, 'dishType', this.form.dishType || 'MAIN')
+        this.$set(this.form, 'mealTypes', this.form.mealTypes || ['LUNCH'])
+
+        // 将 mealPackageDetails 中的 id 反填到 mealPackages（DB 存的是 ID）
+        if (this.form.mealPackageDetails && this.form.mealPackageDetails.length > 0) {
+          this.$set(this.form, 'mealPackages', this.form.mealPackageDetails.map(pkg => pkg.id))
+        } else {
+          this.$set(this.form, 'mealPackages', [])
+        }
+        this.dialogVisible = true
+      })
     },
     submitForm() {
       this.$refs.form.validate(valid => {
@@ -241,6 +222,7 @@ export default {
           action(this.form).then(() => {
             this.$message.success('保存成功')
             this.dialogVisible = false
+            this.$emit('saved', { ...this.form, isEdit: !!this.form.id })
             this.$emit('refresh')
           })
         }
@@ -261,41 +243,17 @@ export default {
         dishType: 'MAIN',
         mealTypes: ['LUNCH'],
         mealPackages: [],
-        schedule: [],
         sort: 0,
         enabled: true,
         ingredientList: []
       }
-      this.selectedWeeks = []
-      this.selectedDays = []
       this.selectIngredientId = null
       this.ingredientOptions = []
       if (this.$refs.form) {
         this.$refs.form.resetFields()
       }
     },
-    updateSchedule() {
-      const schedule = []
-      this.selectedWeeks.forEach(week => {
-        this.selectedDays.forEach(day => {
-          schedule.push(`${week}-${day}`)
-        })
-      })
-      this.form.schedule = schedule
-    },
-    parseSchedule() {
-      const weeks = new Set()
-      const days = new Set()
-      if (this.form.schedule && this.form.schedule.length) {
-        this.form.schedule.forEach(s => {
-          const [week, day] = s.split('-')
-          weeks.add(week)
-          days.add(day)
-        })
-      }
-      this.selectedWeeks = Array.from(weeks)
-      this.selectedDays = Array.from(days)
-    },
+
     searchIngredients(query) {
       if (query !== '') {
         this.ingredientLoading = true

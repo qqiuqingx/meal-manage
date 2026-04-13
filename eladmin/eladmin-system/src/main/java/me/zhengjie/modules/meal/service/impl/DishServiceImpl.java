@@ -263,6 +263,16 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         return list;
     }
 
+    @Override
+    public Dish getById(java.io.Serializable id) {
+        Dish dish = super.getById(id);
+        if (dish != null) {
+            fillIngredientsBatch(Collections.singletonList(dish));
+            fillMealPackageDetailsBatch(Collections.singletonList(dish));
+        }
+        return dish;
+    }
+
     /**
      * 将 DishIngredientRelation 转换为 DishIngredientDto
      */
