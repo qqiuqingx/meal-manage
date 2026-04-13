@@ -5,13 +5,26 @@
     <!--
         查询 [pool_start, pool_end] 范围内已被占用的编号.
 
-        重要约束（per PITFALLS.md Pitfall 2）：
-        只返回"有进行中订单"的编号 — co.status = 1 的订单占住编号，不能被复用。
+        释放机制（被动式）— POOL-09, POOL-10, POOL-11:
+
+        当 customer_order.status 从 1（进行中）变为 0（已取消）或 2（已完成）时，
+        该客户的编号会自动从结果集中排除，无需任何显式"释放"操作。
+
+        这是 POOL-09（自动释放）、POOL-10（分配和释放在不同事务）、
+        POOL-11（只排除有进行中订单的编号）的实现。
+
+        流程示意：
+        1. allocate() 调用 findUsedCodesInRange()，仅返回 status=1 的客户编号
+        2. 用户取消/完成订单，UPDATE customer_order SET status=0/2（独立事务）
+        3. 下一次 allocate() 调用 findUsedCodesInRange()，该编号已不在结果集中
+        4. allocate() 将其分配给新的客户档案
+
+        无需 CustomerOrderServiceImpl 调用任何 release() 方法。
+
+        技术细节：
+        INNER JOIN 确保只有与 customer_profile 关联的进行中订单才算"占用"。
         已取消(status=0)或已完成(status=2)的订单对应的编号视为可用。
-
-        INNER JOIN 确保只有与 customer_profile 关联的进行中订单才算"占用".
-
-        注意：CONCAT('A1', '001') = 'A1001' 在 MySQL 中拼接前缀和数字。
+        CONCAT('A1', '001') = 'A1001' 在 MySQL 中拼接前缀和数字。
         WHERE 子句用 >= 和 <= 做闭区间比较。
     -->
     <select id="findUsedCodesInRange" resultType="java.lang.String">
