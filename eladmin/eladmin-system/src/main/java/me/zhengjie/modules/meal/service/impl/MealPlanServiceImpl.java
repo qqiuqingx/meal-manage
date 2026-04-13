@@ -42,6 +42,7 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanListDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.meal.mapper.DishMapper;
+import me.zhengjie.modules.meal.mapper.MealSchedulePlanMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerItemMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
@@ -98,6 +99,7 @@ public class MealPlanServiceImpl implements MealPlanService {
     private final SubPackageMapper subPackageMapper;
     private final DishMapper dishMapper;
     private final DishIngredientMapper dishIngredientMapper;
+    private final MealSchedulePlanMapper mealSchedulePlanMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -534,7 +536,7 @@ public class MealPlanServiceImpl implements MealPlanService {
                 ScheduleKeyUtil.calcDay(targetDate),
                 mealType);
 
-        List<Dish> scheduledDishes = dishMapper.findBySchedule(
+        List<Dish> scheduledDishes = mealSchedulePlanMapper.findBySchedule(
                 ScheduleKeyUtil.calcWeek(targetDate),
                 ScheduleKeyUtil.calcDay(targetDate),
                 mealType);
