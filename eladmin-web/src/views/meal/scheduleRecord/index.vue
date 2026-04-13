@@ -1,7 +1,7 @@
 <template>
   <div class="production-sheet-wrapper">
     <!-- ── 顶部操作栏 ── -->
-    <div class="action-bar">
+    <div class="action-bar no-print">
       <div class="action-bar__left">
         <span class="action-bar__title">排餐生产单</span>
       </div>
