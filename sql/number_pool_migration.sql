@@ -24,6 +24,9 @@
 --   - pool_start: auto-calculated as max used code number + 1
 --   - pool_end: default 1199, can be adjusted in Phase 4 admin UI
 --
+-- Note:
+--   customer_profile 和 parent_package 通过 customer_code LIKE prefix 关联（非 parent_package_id）
+--
 -- Execution:
 --   1. Run BEFORE Phase 2-4 code is deployed
 --   2. Run AFTER number_pool_schema.sql (Phase 1)
@@ -42,26 +45,34 @@ SELECT
   pp.package_name,
   pp.prefix AS old_prefix,
   pp.pool_prefix AS current_pool_prefix,
-  COUNT(cp.id) AS existing_customers,
-  COALESCE(MAX(CAST(SUBSTRING(cp.customer_code, LENGTH(pp.pool_prefix)+1) AS UNSIGNED)), 0) AS max_used_number
+  (
+    SELECT COUNT(*)
+    FROM customer_profile cp
+    WHERE cp.customer_code LIKE CONCAT(pp.prefix, '%')
+      AND cp.customer_code IS NOT NULL
+  ) AS existing_customers,
+  (
+    SELECT COALESCE(MAX(CAST(SUBSTRING(cp.customer_code, LENGTH(pp.prefix)+1) AS UNSIGNED)), 0)
+    FROM customer_profile cp
+    WHERE cp.customer_code LIKE CONCAT(pp.prefix, '%')
+      AND cp.customer_code IS NOT NULL
+  ) AS max_used_number
 FROM parent_package pp
-LEFT JOIN customer_profile cp ON cp.parent_package_id = pp.id AND cp.customer_code IS NOT NULL
-GROUP BY pp.id, pp.package_name, pp.prefix, pp.pool_prefix
 ORDER BY pp.id;
 
 -- Step 2: Update pool_prefix, pool_start, pool_end for all existing packages
+-- For each package:
+--   pool_prefix = prefix + '1'  (e.g., A -> A1)
+--   pool_start   = max used number for this prefix + 1  (e.g., max is A1050 -> pool_start = 1051)
+--   pool_end     = 1199 (default, can be adjusted in Phase 4 admin UI)
 UPDATE parent_package pp
 SET
   pool_prefix = CONCAT(pp.prefix, '1'),
-  pool_start  = COALESCE(
-    (
-      SELECT MAX(CAST(SUBSTRING(cp.customer_code, LENGTH(CONCAT(pp.prefix, '1'))+1) AS UNSIGNED))
-      FROM customer_profile cp
-      WHERE cp.parent_package_id = pp.id
-        AND cp.customer_code LIKE CONCAT(pp.prefix, '%')
-        AND cp.customer_code IS NOT NULL
-    ),
-    1000
+  pool_start  = (
+    SELECT COALESCE(MAX(CAST(SUBSTRING(cp.customer_code, LENGTH(pp.prefix)+1) AS UNSIGNED)), 1000)
+    FROM customer_profile cp
+    WHERE cp.customer_code LIKE CONCAT(pp.prefix, '%')
+      AND cp.customer_code IS NOT NULL
   ) + 1,
   pool_end    = 1199
 WHERE pp.pool_prefix IS NULL OR pp.pool_prefix = pp.prefix;
@@ -75,10 +86,13 @@ SELECT
   pp.pool_prefix,
   pp.pool_start,
   pp.pool_end,
-  COUNT(cp.id) AS existing_customers
+  (
+    SELECT COUNT(*)
+    FROM customer_profile cp
+    WHERE cp.customer_code LIKE CONCAT(pp.pool_prefix, '%')
+      AND cp.customer_code IS NOT NULL
+  ) AS existing_customers
 FROM parent_package pp
-LEFT JOIN customer_profile cp ON cp.parent_package_id = pp.id
-GROUP BY pp.id, pp.package_name, pp.prefix, pp.pool_prefix, pp.pool_start, pp.pool_end
 ORDER BY pp.id;
 
 -- Step 4: Verify - Check for duplicate customer_codes
