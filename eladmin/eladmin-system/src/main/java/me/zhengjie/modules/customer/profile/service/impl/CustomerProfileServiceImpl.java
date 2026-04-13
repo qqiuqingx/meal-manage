@@ -25,6 +25,8 @@ import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.PageUtil;
 import me.zhengjie.utils.SecurityUtils;
 import me.zhengjie.utils.StringUtils;
+import me.zhengjie.modules.customer.numberpool.domain.NumberPoolConfig;
+import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,6 +68,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
     @Autowired
     private MealVerificationLogMapper verificationLogMapper;
+
+    @Autowired
+    private NumberPoolService numberPoolService;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -229,6 +234,32 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             throw new BadRequestException("父套餐未配置编号前缀");
         }
 
+        // --- Backward compatibility: pool fields NULL → fall back to sequential allocation ---
+        // Phase 5 migration will populate pool fields for all packages.
+        // Before migration, packages with NULL pool fields use the original sequential logic.
+        if (StringUtils.isBlank(parent.getPoolPrefix())
+                || parent.getPoolStart() == null
+                || parent.getPoolEnd() == null) {
+            return generateCodeSequential(parent);
+        }
+
+        // --- Pool-based allocation (per POOL-05, POOL-06, POOL-07, POOL-08) ---
+        // Delegates to NumberPoolService which holds SELECT FOR UPDATE on the package row.
+        NumberPoolConfig config = new NumberPoolConfig();
+        config.setPackageId(parent.getId());
+        config.setPoolPrefix(parent.getPoolPrefix());
+        config.setPoolStart(parent.getPoolStart());
+        config.setPoolEnd(parent.getPoolEnd());
+
+        return numberPoolService.allocate(config);
+    }
+
+    /**
+     * Fallback: sequential allocation without pool (for packages with NULL pool fields).
+     * Preserves existing behavior for packages migrated in Phase 5.
+     * No locking — only used for packages without pool configuration.
+     */
+    private String generateCodeSequential(ParentPackage parent) {
         QueryWrapper<CustomerProfile> wrapper = new QueryWrapper<>();
         wrapper.likeRight("customer_code", parent.getPrefix())
             .orderByDesc("customer_code")
@@ -245,7 +276,6 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 nextNum = 1;
             }
         }
-
         return parent.getPrefix() + String.format("%03d", nextNum);
     }
 
