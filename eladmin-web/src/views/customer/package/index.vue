@@ -97,6 +97,15 @@
         <el-form-item label="前缀" prop="prefix">
           <el-input v-model="form.prefix" placeholder="单个大写字母，如 A" maxlength="1" style="width: 200px;" />
         </el-form-item>
+        <el-form-item label="编号池前缀" prop="poolPrefix">
+          <el-input v-model="form.poolPrefix" placeholder="如 A1" style="width: 200px;" />
+        </el-form-item>
+        <el-form-item label="起始号" prop="poolStart">
+          <el-input-number v-model="form.poolStart" :min="1" placeholder="如 1001" style="width: 200px;" />
+        </el-form-item>
+        <el-form-item label="结束号" prop="poolEnd">
+          <el-input-number v-model="form.poolEnd" :min="1" placeholder="如 1199" style="width: 200px;" />
+        </el-form-item>
         <el-form-item label="套餐名称" prop="packageName">
           <el-input v-model="form.packageName" placeholder="请输入套餐名称" />
         </el-form-item>
@@ -156,7 +165,11 @@ const defaultParentForm = {
   packageName: '',
   remark: '',
   status: 1,
-  children: []
+  children: [],
+  // 编号池配置
+  poolPrefix: '',
+  poolStart: null,
+  poolEnd: null
 }
 
 const defaultSubForm = {
@@ -195,6 +208,25 @@ export default {
         ],
         packageName: [
           { required: true, message: '请输入套餐名称', trigger: 'blur' }
+        ],
+        poolPrefix: [
+          { required: true, message: '编号池前缀不能为空', trigger: 'blur' }
+        ],
+        poolStart: [
+          { required: true, message: '起始号不能为空', trigger: 'blur' }
+        ],
+        poolEnd: [
+          { required: true, message: '结束号不能为空', trigger: 'blur' },
+          {
+            validator: (rule, value, callback) => {
+              if (value !== null && this.form.poolStart !== null && value <= this.form.poolStart) {
+                callback(new Error('结束号必须大于起始号'))
+              } else {
+                callback()
+              }
+            },
+            trigger: 'blur'
+          }
         ]
       },
       subRules: {
@@ -249,7 +281,11 @@ export default {
         packageName: row.packageName,
         remark: row.remark || '',
         status: row.status,
-        children: (row.subPackages || []).map(child => ({ id: child.id }))
+        children: (row.subPackages || []).map(child => ({ id: child.id })),
+        // 编号池配置（从列表行回填）
+        poolPrefix: row.poolPrefix || '',
+        poolStart: row.poolStart || null,
+        poolEnd: row.poolEnd || null
       }
       this.dialogTitle = '编辑套餐'
       this.dialogVisible = true
@@ -266,7 +302,11 @@ export default {
           packageName: this.form.packageName,
           remark: this.form.remark,
           status: this.form.status,
-          children: this.form.children
+          children: this.form.children,
+          // 编号池配置
+          poolPrefix: this.form.poolPrefix,
+          poolStart: this.form.poolStart,
+          poolEnd: this.form.poolEnd
         }
         const action = this.form.id ? api.edit(data) : api.add(data)
         action.then(() => {
