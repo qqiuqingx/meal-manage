@@ -19,6 +19,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
+import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -74,4 +75,9 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
     int markVerifiedIfPending(@Param("id") Long id,
                               @Param("verificationTime") java.util.Date verificationTime,
                               @Param("verificationOperator") String verificationOperator);
+
+    /**
+     * 根据排餐计划ID查询客户的配送地址信息
+     */
+    List<MealPlanCustomerAddressVO> selectCustomerAddresses(@Param("mealPlanId") Long mealPlanId);
 }

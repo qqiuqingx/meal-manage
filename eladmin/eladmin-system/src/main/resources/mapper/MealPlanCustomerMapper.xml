@@ -148,4 +148,46 @@
           and (is_verified = 0 or is_verified is null)
     </update>
 
+    <resultMap id="MealPlanCustomerAddressVOMap" type="me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO">
+        <result column="customer_id" property="customerId"/>
+        <result column="customer_code" property="customerCode"/>
+        <result column="phone" property="phone"/>
+        <result column="address_detail" property="addressDetail"/>
+        <result column="address_type" property="addressType"/>
+    </resultMap>
+
+    <select id="selectCustomerAddresses" resultMap="MealPlanCustomerAddressVOMap">
+        SELECT
+            mpc.customer_id,
+            cp.customer_code,
+            mpc.phone,
+            COALESCE(
+                (SELECT cpa.address_detail FROM customer_profile_address cpa
+                 WHERE cpa.customer_id = mpc.customer_id
+                   AND cpa.address_type = CASE WHEN DAYOFWEEK(mp.record_date) IN (1, 7) THEN 'WEEKEND' ELSE 'WORKDAY' END
+                 LIMIT 1),
+                (SELECT cpa.address_detail FROM customer_profile_address cpa
+                 WHERE cpa.customer_id = mpc.customer_id
+                   AND cpa.address_type = 'DEFAULT'
+                 LIMIT 1)
+            ) AS address_detail,
+            CASE
+                WHEN EXISTS (SELECT 1 FROM customer_profile_address cpa2
+                             WHERE cpa2.customer_id = mpc.customer_id
+                               AND cpa2.address_type = CASE WHEN DAYOFWEEK(mp.record_date) IN (1, 7) THEN 'WEEKEND' ELSE 'WORKDAY' END)
+                THEN CASE WHEN DAYOFWEEK(mp.record_date) IN (1, 7) THEN 'WEEKEND' ELSE 'WORKDAY' END
+                WHEN EXISTS (SELECT 1 FROM customer_profile_address cpa3
+                             WHERE cpa3.customer_id = mpc.customer_id
+                               AND cpa3.address_type = 'DEFAULT')
+                THEN 'DEFAULT'
+                ELSE NULL
+            END AS address_type
+        FROM meal_plan_customer mpc
+        JOIN meal_plan mp ON mpc.meal_plan_id = mp.id
+        LEFT JOIN customer_profile cp ON mpc.customer_id = cp.id
+        WHERE mpc.meal_plan_id = #{mealPlanId}
+          AND mpc.deleted = 0
+        ORDER BY mpc.id ASC
+    </select>
+
 </mapper>
