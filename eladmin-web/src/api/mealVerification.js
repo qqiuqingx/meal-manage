@@ -30,9 +30,18 @@ export function getVerificationLogsByOrderId(orderId) {
   })
 }
 
+export function deleteVerificationLog(id, reason) {
+  return request({
+    url: 'api/meal-verification/logs/' + id,
+    method: 'delete',
+    params: { reason }
+  })
+}
+
 export default {
   queryVerificationLogs,
   verifyMeal,
   getVerificationLog,
-  getVerificationLogsByOrderId
+  getVerificationLogsByOrderId,
+  deleteVerificationLog
 }
