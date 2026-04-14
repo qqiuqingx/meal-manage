@@ -209,6 +209,24 @@ public class MealVerificationServiceImpl implements MealVerificationService {
             throw new BadRequestException("该记录已删除，请刷新列表");
         }
 
+        // 查询订单，获取价格
+        CustomerOrder order = customerOrderMapper.selectById(logRecord.getOrderId());
+        if (order == null) {
+            throw new BadRequestException("关联订单不存在");
+        }
+
+        // 根据 mealType 决定核销单价
+        BigDecimal price;
+        String mealType = logRecord.getMealType();
+        if ("LUNCH".equals(mealType) || "DINNER".equals(mealType)) {
+            price = order.getLunchDinnerPrice();
+        } else {
+            price = order.getBreakfastPrice();
+        }
+        if (price == null) {
+            price = BigDecimal.ZERO;
+        }
+
         Date deleteTime = new Date();
         String deletedBy = SecurityUtils.getCurrentUsername();
         int deletedRows = verificationLogMapper.softDeleteIfActive(id, deletedBy, deleteTime);
@@ -216,8 +234,14 @@ public class MealVerificationServiceImpl implements MealVerificationService {
             throw new BadRequestException("该记录已删除，请刷新列表");
         }
 
-        // 回退 CustomerOrder: verifiedCount-1, remainingCount+1, 如果已完成则回退为进行中
-        int revertedOrderRows = customerOrderMapper.revertVerification(logRecord.getOrderId(), logRecord.getMealType());
+        // 回退 MealPlanCustomer: is_verified=0
+        int revertedPlanRows = mealPlanCustomerMapper.revertVerified(logRecord.getMealPlanCustomerId());
+        if (revertedPlanRows == 0) {
+            throw new BadRequestException("关联排餐状态异常，无法回退核销");
+        }
+
+        // 回退 CustomerOrder: verifiedCount-1, remainingCount+1, verifiedAmount-price, 如果已完成则回退为进行中
+        int revertedOrderRows = customerOrderMapper.revertVerification(logRecord.getOrderId(), price);
         if (revertedOrderRows == 0) {
             throw new BadRequestException("关联订单状态异常，无法回退核销");
         }

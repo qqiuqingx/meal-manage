@@ -116,10 +116,11 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
 
     /**
      * 回退核销状态（删除核销日志时调用）
-     * verified_count-1, remaining_count+1, 如果订单状态为已完成则回退为进行中
+     * verified_count-1, remaining_count+1, verified_amount-price, 如果订单状态为已完成则回退为进行中
      * @param orderId 订单ID
+     * @param price 核销单价（根据 mealType 决定使用 breakfastPrice 或 lunchDinnerPrice）
      * @return 更新行数
      */
-    int revertVerification(@Param("orderId") Long orderId, @Param("mealType") String mealType);
+    int revertVerification(@Param("orderId") Long orderId, @Param("price") java.math.BigDecimal price);
 
 }
