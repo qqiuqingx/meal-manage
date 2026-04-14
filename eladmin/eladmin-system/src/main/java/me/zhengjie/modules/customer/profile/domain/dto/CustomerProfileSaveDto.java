@@ -25,6 +25,11 @@ public class CustomerProfileSaveDto implements Serializable {
 
     private List<String> allergyTags;
 
+    /**
+     * 排除菜品ID列表
+     */
+    private List<Integer> excludedDishIds;
+
     private String medicalRequirements;
 
     // 备注

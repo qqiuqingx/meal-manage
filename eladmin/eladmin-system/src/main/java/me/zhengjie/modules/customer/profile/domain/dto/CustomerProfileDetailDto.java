@@ -20,6 +20,7 @@ public class CustomerProfileDetailDto implements Serializable {
     private String phone;
     private Integer gestationalWeek;
     private List<String> allergyTags;
+    private List<Integer> excludedDishIds;
     private String medicalRequirements;
     //
     private String remark;
