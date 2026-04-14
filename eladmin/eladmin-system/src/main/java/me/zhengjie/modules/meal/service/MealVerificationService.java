@@ -58,4 +58,11 @@ public interface MealVerificationService {
      * @return 核销日志列表
      */
     List<MealVerificationLog> queryByOrderId(Long orderId);
+
+    /**
+     * 删除核销日志（软删除）
+     * @param id 核销日志ID
+     * @param reason 删除原因
+     */
+    void deleteVerificationLog(Long id, String reason);
 }
