@@ -13,6 +13,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
@@ -197,7 +198,7 @@ class CustomerProfileServiceImplTest {
      * Invalid date format should throw BadRequestException.
      */
     @Test
-    void testValidateInvalidDateFormat() {
+    void testValidateInvalidDateFormat() throws Exception {
         ExcludedDateDto dto = new ExcludedDateDto();
         dto.setDate("2026/04/15");  // Wrong format
         dto.setMealTypes(Arrays.asList("BREAKFAST"));
@@ -205,7 +206,11 @@ class CustomerProfileServiceImplTest {
         List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
 
         BadRequestException exception = assertThrows(BadRequestException.class, () -> {
-            invokeValidateExcludedDates(excludedDates);
+            try {
+                invokeValidateExcludedDates(excludedDates);
+            } catch (InvocationTargetException e) {
+                throw (RuntimeException) e.getCause();
+            }
         });
         assertTrue(exception.getMessage().contains("排除日期格式错误"));
     }
@@ -215,7 +220,7 @@ class CustomerProfileServiceImplTest {
      * Another invalid format variation should throw BadRequestException.
      */
     @Test
-    void testValidateInvalidDateFormat_SlashDate() {
+    void testValidateInvalidDateFormat_SlashDate() throws Exception {
         ExcludedDateDto dto = new ExcludedDateDto();
         dto.setDate("15/04/2026");
         dto.setMealTypes(Arrays.asList("BREAKFAST"));
@@ -223,7 +228,11 @@ class CustomerProfileServiceImplTest {
         List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
 
         BadRequestException exception = assertThrows(BadRequestException.class, () -> {
-            invokeValidateExcludedDates(excludedDates);
+            try {
+                invokeValidateExcludedDates(excludedDates);
+            } catch (InvocationTargetException e) {
+                throw (RuntimeException) e.getCause();
+            }
         });
         assertTrue(exception.getMessage().contains("排除日期格式错误"));
     }
@@ -233,7 +242,7 @@ class CustomerProfileServiceImplTest {
      * Empty mealTypes list should throw BadRequestException.
      */
     @Test
-    void testValidateEmptyMealTypes() {
+    void testValidateEmptyMealTypes() throws Exception {
         ExcludedDateDto dto = new ExcludedDateDto();
         dto.setDate("2026-04-15");
         dto.setMealTypes(Arrays.asList());  // Empty list
@@ -241,7 +250,11 @@ class CustomerProfileServiceImplTest {
         List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
 
         BadRequestException exception = assertThrows(BadRequestException.class, () -> {
-            invokeValidateExcludedDates(excludedDates);
+            try {
+                invokeValidateExcludedDates(excludedDates);
+            } catch (InvocationTargetException e) {
+                throw (RuntimeException) e.getCause();
+            }
         });
         assertTrue(exception.getMessage().contains("排除日期必须指定至少一个餐次"));
     }
@@ -251,7 +264,7 @@ class CustomerProfileServiceImplTest {
      * Null mealTypes should throw BadRequestException.
      */
     @Test
-    void testValidateNullMealTypes() {
+    void testValidateNullMealTypes() throws Exception {
         ExcludedDateDto dto = new ExcludedDateDto();
         dto.setDate("2026-04-15");
         dto.setMealTypes(null);
@@ -259,7 +272,11 @@ class CustomerProfileServiceImplTest {
         List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
 
         BadRequestException exception = assertThrows(BadRequestException.class, () -> {
-            invokeValidateExcludedDates(excludedDates);
+            try {
+                invokeValidateExcludedDates(excludedDates);
+            } catch (InvocationTargetException e) {
+                throw (RuntimeException) e.getCause();
+            }
         });
         assertTrue(exception.getMessage().contains("排除日期必须指定至少一个餐次"));
     }
@@ -269,7 +286,7 @@ class CustomerProfileServiceImplTest {
      * Invalid mealType value should throw BadRequestException.
      */
     @Test
-    void testValidateInvalidMealType() {
+    void testValidateInvalidMealType() throws Exception {
         ExcludedDateDto dto = new ExcludedDateDto();
         dto.setDate("2026-04-15");
         dto.setMealTypes(Arrays.asList("SNACK"));  // Invalid mealType
@@ -277,7 +294,11 @@ class CustomerProfileServiceImplTest {
         List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
 
         BadRequestException exception = assertThrows(BadRequestException.class, () -> {
-            invokeValidateExcludedDates(excludedDates);
+            try {
+                invokeValidateExcludedDates(excludedDates);
+            } catch (InvocationTargetException e) {
+                throw (RuntimeException) e.getCause();
+            }
         });
         assertTrue(exception.getMessage().contains("无效的餐次类型"));
     }
@@ -287,7 +308,7 @@ class CustomerProfileServiceImplTest {
      * Mixed valid and invalid mealTypes should fail on invalid one.
      */
     @Test
-    void testValidateInvalidMealType_MixedValidInvalid() {
+    void testValidateInvalidMealType_MixedValidInvalid() throws Exception {
         ExcludedDateDto dto = new ExcludedDateDto();
         dto.setDate("2026-04-15");
         dto.setMealTypes(Arrays.asList("BREAKFAST", "INVALID"));
@@ -295,7 +316,11 @@ class CustomerProfileServiceImplTest {
         List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
 
         BadRequestException exception = assertThrows(BadRequestException.class, () -> {
-            invokeValidateExcludedDates(excludedDates);
+            try {
+                invokeValidateExcludedDates(excludedDates);
+            } catch (InvocationTargetException e) {
+                throw (RuntimeException) e.getCause();
+            }
         });
         assertTrue(exception.getMessage().contains("无效的餐次类型"));
     }
