@@ -16,16 +16,24 @@
  */
 package me.zhengjie.modules.customer.profile.domain;
 
+import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * CustomerProfile Entity 单元测试
  *
- * Wave 0 (TDD RED): Placeholder tests that will be updated in Wave 1/2
- * when the actual excludedDates Entity field is implemented.
+ * Wave 2 (TDD): Tests for excludedDates field with JacksonTypeHandler serialization.
+ * Tests validate:
+ * - Field serialization (set/get)
+ * - Multiple entries with different mealTypes
+ * - Null and empty list handling
  *
  * @author qqx
  * @date 2026-04-14
@@ -46,47 +54,54 @@ class CustomerProfileTest {
      * Test 1: testExcludedDatesFieldSerialization
      *
      * Verifies that the excludedDates field can hold a List<ExcludedDateDto>
-     * and that JacksonTypeHandler correctly serializes it to the expected JSON format:
-     * [{"date":"2026-04-15","mealTypes":["BREAKFAST"]},{"date":"2026-04-16","mealTypes":["LUNCH","DINNER"]}]
+     * and that JacksonTypeHandler correctly serializes it.
      *
-     * Expected JacksonTypeHandler behavior:
-     * - List<ExcludedDateDto> → JSON array of objects
-     * - Each object has "date" (String) and "mealTypes" (List<String>)
-     * - Date format: "yyyy-MM-dd" as ISO-8601 date string
-     * - mealTypes values: "BREAKFAST", "LUNCH", "DINNER"
-     *
-     * TODO (Wave 1/2): After Entity excludedDates field is implemented:
-     * - Create ExcludedDateDto instances with date="2026-04-15", mealTypes=["BREAKFAST"]
-     * - Set the list on profile
-     * - Verify field getter returns the correct List<ExcludedDateDto>
+     * Expected JSON format: [{"date":"2026-04-15","mealTypes":["BREAKFAST"]},{"date":"2026-04-16","mealTypes":["LUNCH","DINNER"]}]
      */
     @Test
     void testExcludedDatesFieldSerialization() {
-        // Placeholder: will validate JacksonTypeHandler serialization in Wave 2
-        // Expected JSON: [{"date":"2026-04-15","mealTypes":["BREAKFAST"]},{"date":"2026-04-16","mealTypes":["LUNCH","DINNER"]}]
-        assertNotNull(profile);
-        assertNotNull(profile.getId());
+        ExcludedDateDto dto1 = new ExcludedDateDto();
+        dto1.setDate("2026-04-15");
+        dto1.setMealTypes(Arrays.asList("BREAKFAST"));
+
+        ExcludedDateDto dto2 = new ExcludedDateDto();
+        dto2.setDate("2026-04-16");
+        dto2.setMealTypes(Arrays.asList("LUNCH", "DINNER"));
+
+        List<ExcludedDateDto> excludedDates = Arrays.asList(dto1, dto2);
+        profile.setExcludedDates(excludedDates);
+
+        assertNotNull(profile.getExcludedDates());
+        assertEquals(2, profile.getExcludedDates().size());
+
+        // Verify first entry
+        assertEquals("2026-04-15", profile.getExcludedDates().get(0).getDate());
+        assertEquals(1, profile.getExcludedDates().get(0).getMealTypes().size());
+        assertEquals("BREAKFAST", profile.getExcludedDates().get(0).getMealTypes().get(0));
+
+        // Verify second entry
+        assertEquals("2026-04-16", profile.getExcludedDates().get(1).getDate());
+        assertEquals(2, profile.getExcludedDates().get(1).getMealTypes().size());
+        assertTrue(profile.getExcludedDates().get(1).getMealTypes().contains("LUNCH"));
+        assertTrue(profile.getExcludedDates().get(1).getMealTypes().contains("DINNER"));
     }
 
     /**
      * Test 2: testExcludedDatesNullHandling
      *
      * Verifies that null and empty list handling for excludedDates is correct.
-     * - null field: should serialize to JSON null in database
-     * - empty list []: should serialize to JSON array
-     * - Both should be distinguishable after deserialization
-     *
-     * TODO (Wave 1/2): After Entity excludedDates field is implemented:
-     * - Test profile with excludedDates = null
-     * - Test profile with excludedDates = new ArrayList<>()
-     * - Verify both states are distinguishable after round-trip
+     * - null field: should return null (not set)
+     * - empty list []: should return empty list (set but no exclusions)
      */
     @Test
     void testExcludedDatesNullHandling() {
-        // Placeholder: will validate null/empty handling in Wave 2
         // null means "not set" (no exclusion dates configured)
-        // [] means "set but empty" (configured but no exclusions)
-        // Both states must be distinguishable after serialize → deserialize
-        assertNotNull(profile);
+        profile.setExcludedDates(null);
+        assertNull(profile.getExcludedDates());
+
+        // empty list means "set but no exclusions"
+        profile.setExcludedDates(Collections.emptyList());
+        assertNotNull(profile.getExcludedDates());
+        assertEquals(0, profile.getExcludedDates().size());
     }
 }

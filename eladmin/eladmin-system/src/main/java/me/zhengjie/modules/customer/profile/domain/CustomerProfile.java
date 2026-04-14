@@ -11,6 +11,8 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
+
 /**
  * 客户档案主档实体
  */
@@ -54,6 +56,12 @@ public class CustomerProfile implements Serializable {
      */
     @TableField(value = "excluded_dish_ids", typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
     private List<Integer> excludedDishIds;
+
+    /**
+     * 排除日期列表(JSON数组)
+     */
+    @TableField(value = "excluded_dates", typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    private List<ExcludedDateDto> excludedDates;
 
     /**
      * 医嘱要求
