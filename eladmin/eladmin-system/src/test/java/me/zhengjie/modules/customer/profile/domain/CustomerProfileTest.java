@@ -20,6 +20,7 @@ import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -103,5 +104,56 @@ class CustomerProfileTest {
         profile.setExcludedDates(Collections.emptyList());
         assertNotNull(profile.getExcludedDates());
         assertEquals(0, profile.getExcludedDates().size());
+    }
+
+    // ===== isExcluded() method tests =====
+
+    /**
+     * Test: shouldMatchExcludedDate
+     * isExcluded(date, mealType) returns true when date+mealType both match an exclusion entry.
+     */
+    @Test
+    void shouldMatchExcludedDate() {
+        ExcludedDateDto dto = new ExcludedDateDto();
+        dto.setDate("2026-04-15");
+        dto.setMealTypes(Arrays.asList("BREAKFAST"));
+        profile.setExcludedDates(Collections.singletonList(dto));
+
+        assertTrue(profile.isExcluded(LocalDate.of(2026, 4, 15), "BREAKFAST"));
+    }
+
+    /**
+     * Test: shouldReturnFalseWhenExcludedDatesIsNull
+     * isExcluded() returns false (no NPE) when excludedDates is null.
+     */
+    @Test
+    void shouldReturnFalseWhenExcludedDatesIsNull() {
+        profile.setExcludedDates(null);
+        assertFalse(profile.isExcluded(LocalDate.of(2026, 4, 15), "LUNCH"));
+    }
+
+    /**
+     * Test: shouldReturnFalseWhenExcludedDatesIsEmpty
+     * isExcluded() returns false when excludedDates is an empty list.
+     */
+    @Test
+    void shouldReturnFalseWhenExcludedDatesIsEmpty() {
+        profile.setExcludedDates(Collections.emptyList());
+        assertFalse(profile.isExcluded(LocalDate.of(2026, 4, 15), "LUNCH"));
+    }
+
+    /**
+     * Test: shouldReturnFalseWhenMealTypeNotInList
+     * isExcluded() returns false when date matches but mealType is not in the exclusion list.
+     */
+    @Test
+    void shouldReturnFalseWhenMealTypeNotInList() {
+        ExcludedDateDto dto = new ExcludedDateDto();
+        dto.setDate("2026-04-15");
+        dto.setMealTypes(Arrays.asList("BREAKFAST"));
+        profile.setExcludedDates(Collections.singletonList(dto));
+
+        assertFalse(profile.isExcluded(LocalDate.of(2026, 4, 15), "LUNCH"));
+        assertFalse(profile.isExcluded(LocalDate.of(2026, 4, 15), "DINNER"));
     }
 }
