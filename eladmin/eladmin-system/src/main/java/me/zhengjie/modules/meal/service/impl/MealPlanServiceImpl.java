@@ -56,6 +56,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.util.CollectionUtils;
 
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -84,6 +85,7 @@ public class MealPlanServiceImpl implements MealPlanService {
     private static final String PLAN_STATUS_GENERATING = "GENERATING";
     private static final String PLAN_STATUS_SUCCESS = "SUCCESS";
     private static final String PLAN_STATUS_FAILED = "FAILED";
+    private static final String REPLACE_REASON_EXCLUDED = "EXCLUDED";
     private static final String DISH_TYPE_MAIN = "MAIN";
     private static final String DISH_TYPE_SIDE = "SIDE";
     private static final String DISH_TYPE_VEGETABLE = "VEGETABLE";
@@ -612,11 +614,59 @@ public class MealPlanServiceImpl implements MealPlanService {
                 dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons);
         pickOptionalDish(Boolean.TRUE.equals(subPackage.getIncludeRice()), DISH_TYPE_RICE, selectedDishes, selectedDishIds,
                 dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons);
-        customerMealPlan.setSelectedDishes(selectedDishes);
+        //处理客户需要显示排除的菜品
+        List<SkippedAllergyDish> skippedAllergyDishes = customerMealPlan.getSkippedAllergyDishes();
+        List<SelectedDish> selectedDishes1 = markExcludedDishes(selectedDishes,skippedAllergyDishes, customer);
+
+        customerMealPlan.setSelectedDishes(selectedDishes1);
+
         if (!failureReasons.isEmpty()) {
             throw new MealPlanBuildException(String.join("；", failureReasons), customerMealPlan);
         }
         return customerMealPlan;
+    }
+
+    /**
+     * 客户显式排除的菜品。
+     */
+    private List<SelectedDish> markExcludedDishes(List<SelectedDish> selectedDishes,List<SkippedAllergyDish> skippedAllergyDishes, CustomerProfile customerProfile) {
+        List<Integer> excludedDishIds = customerProfile.getExcludedDishIds();
+        if (selectedDishes == null || selectedDishes.isEmpty() || excludedDishIds == null || excludedDishIds.isEmpty()) {
+            return selectedDishes;
+        }
+
+        Set<Integer> excludedDishIdSet = new HashSet<>(excludedDishIds);
+        List<SelectedDish> result = new ArrayList<>(selectedDishes.size());
+        for (SelectedDish selectedDish : selectedDishes) {
+            Dish dish = selectedDish.getDish();
+            if (dish == null || dish.getId() == null || !excludedDishIdSet.contains(dish.getId())) {
+                result.add(selectedDish);
+                continue;
+            }
+            if (selectedDish.isReplaced&& !CollectionUtils.isEmpty(selectedDish.getMatchedAllergyTags())){
+                log.info("已被过敏排除的菜品：{},不再校验 排除菜品ID列表", dish.getName());
+                result.add(selectedDish);
+                continue;
+            }
+
+
+
+            String replaceReason = selectedDish.getReplaceReason() != null
+                    ? selectedDish.getReplaceReason()
+                    : REPLACE_REASON_EXCLUDED;
+            Set<String> strings = new LinkedHashSet<>(selectedDish.getMatchedAllergyTags());
+            strings.add(dish.getName());
+            log.info("客户{} 编号{}被排除的菜品：{}，id:{}。原因：{}",
+                    customerProfile.getCustomerName(), customerProfile.getCustomerCode(),
+                    dish.getName(),dish.getId(), replaceReason);
+            skippedAllergyDishes.add(new SkippedAllergyDish(
+
+                    dish,
+
+
+                    strings, replaceReason));
+        }
+        return result;
     }
 
     /**
@@ -674,6 +724,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         //     mainDish = sideDish;
         //     sideDish = null;
         // }
+
         if (mainDish == null && sideDish != null) {
             Dish originalMainDishTmp = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
             log.info("【暂跳过替换菜品】二荤一素主菜全部过敏，原本想选的菜品: {}", originalMainDishTmp != null ? originalMainDishTmp.getName() : "无");
@@ -884,7 +935,7 @@ public class MealPlanServiceImpl implements MealPlanService {
             Set<String> matchedAllergies = getMatchedAllergyTags(allergyTags, dishIngredientMap.get(dish.getId()));
             if (!matchedAllergies.isEmpty()) {
                 log.warn("过敏菜品：{}", JSONUtil.toJsonStr(dish));
-                skippedAllergies.add(new SkippedAllergyDish(dish, matchedAllergies));
+                skippedAllergies.add(new SkippedAllergyDish(dish, matchedAllergies,"GUOM"));
                 continue;
             }
             return DishSelectResult.noReplace(dish, Collections.emptySet(), skippedAllergies);
@@ -1333,11 +1384,18 @@ public class MealPlanServiceImpl implements MealPlanService {
     private static class SkippedAllergyDish {
         private final Dish dish;
         private final Set<String> allergyReasons;
+        private  final String replaceReason;
 
-        private SkippedAllergyDish(Dish dish, Set<String> allergyReasons) {
+        private SkippedAllergyDish(Dish dish, Set<String> allergyReasons,String replaceReason) {
             this.dish = dish;
             this.allergyReasons = allergyReasons;
+            this.replaceReason = replaceReason;
         }
+
+        public String getReplaceReason() {
+            return replaceReason;
+        }
+
 
         public Dish getDish() { return dish; }
         public Set<String> getAllergyReasons() { return allergyReasons; }
