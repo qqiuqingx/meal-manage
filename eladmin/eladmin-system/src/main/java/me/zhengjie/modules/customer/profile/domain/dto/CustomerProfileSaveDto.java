@@ -30,6 +30,11 @@ public class CustomerProfileSaveDto implements Serializable {
      */
     private List<Integer> excludedDishIds;
 
+    /**
+     * 排除日期列表（日期+餐次组合，Wave 1/2 完整实现）
+     */
+    private java.util.List<ExcludedDateDto> excludedDates;
+
     private String medicalRequirements;
 
     // 备注
