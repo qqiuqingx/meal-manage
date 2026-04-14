@@ -107,6 +107,29 @@
         </el-row>
         <el-row :gutter="20">
           <el-col :span="24">
+            <el-form-item label="排除菜品">
+              <el-select
+                v-model="form.excludedDishIds"
+                multiple
+                filterable
+                remote
+                :remote-method="searchExcludedDish"
+                :loading="excludedDishLoading"
+                placeholder="输入菜品名称搜索并选择排除"
+                style="width: 100%;"
+              >
+                <el-option
+                  v-for="item in excludedDishOptions"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
             <el-form-item label="医嘱要求">
               <el-input v-model="form.medicalRequirements" type="textarea" :rows="2" placeholder="请输入医嘱要求" />
             </el-form-item>
@@ -176,6 +199,7 @@
 <script>
 import * as profileApi from '@/api/customer/profile'
 import { queryIngredients } from '@/api/dishIngredient'
+import { queryDishes } from '@/api/dish'
 import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
@@ -196,6 +220,7 @@ const defaultForm = {
   phone: null,
   gestationalWeek: null,
   allergyTags: [],
+  excludedDishIds: [],
   medicalRequirements: null,
   remark: null,
   addresses: createDefaultAddresses(),
@@ -241,6 +266,8 @@ export default {
       submitLoading: false,
       allergyOptions: [],
       allergyLoading: false,
+      excludedDishOptions: [],
+      excludedDishLoading: false,
       editRequestId: 0,
       detailDialogVisible: false,
       currentCustomer: null
@@ -301,6 +328,7 @@ export default {
         phone: formData.phone,
         gestationalWeek: formData.gestationalWeek,
         allergyTags: Array.isArray(formData.allergyTags) ? formData.allergyTags : [],
+        excludedDishIds: Array.isArray(formData.excludedDishIds) ? formData.excludedDishIds : [],
         medicalRequirements: formData.medicalRequirements,
         remark: formData.remark,
         addresses: this.createAddressesFromForm(formData)
@@ -380,6 +408,14 @@ export default {
       if (!this.form.allergyTags || !Array.isArray(this.form.allergyTags)) {
         this.$set(this.form, 'allergyTags', [])
       }
+      // 确保排除菜品是数组
+      if (!this.form.excludedDishIds || !Array.isArray(this.form.excludedDishIds)) {
+        this.$set(this.form, 'excludedDishIds', [])
+      }
+      // 回填排除菜品的选项（编辑时详情已有 ids，需要把对应菜品预加载到 options 中）
+      if (this.form.excludedDishIds.length > 0) {
+        this.preloadExcludedDishes(this.form.excludedDishIds)
+      }
       // 确保地址完整
       const existingTypes = (this.form.addresses || []).map(a => a.addressType)
       const requiredTypes = ['DEFAULT', 'WORKDAY', 'WEEKEND']
@@ -447,6 +483,37 @@ export default {
         console.error('searchAllergy error', e)
       } finally {
         this.allergyLoading = false
+      }
+    },
+    async searchExcludedDish(query) {
+      if (!query) {
+        this.excludedDishOptions = []
+        return
+      }
+      this.excludedDishLoading = true
+      try {
+        const res = await queryDishes({ name: query, page: 0, size: 20 })
+        this.excludedDishOptions = res.content || []
+      } catch (e) {
+        console.error('searchExcludedDish error', e)
+      } finally {
+        this.excludedDishLoading = false
+      }
+    },
+    async preloadExcludedDishes(ids) {
+      // 编辑时将已选的 excludedDishIds 对应菜品信息加载到选项中，保证 label 正常显示
+      try {
+        const res = await queryDishes({ ids: ids.join(','), page: 0, size: ids.length + 10 })
+        const dishes = res.content || []
+        // 合并已有选项，避免覆盖用户当前搜索结果
+        const existingIds = new Set(this.excludedDishOptions.map(d => d.id))
+        dishes.forEach(d => {
+          if (!existingIds.has(d.id)) {
+            this.excludedDishOptions.push(d)
+          }
+        })
+      } catch (e) {
+        console.error('preloadExcludedDishes error', e)
       }
     }
   }

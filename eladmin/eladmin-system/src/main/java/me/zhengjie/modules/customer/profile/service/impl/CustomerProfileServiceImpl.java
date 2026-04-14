@@ -571,8 +571,14 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         if (dishes == null || dishes.isEmpty()) {
             return null;
         }
-        return dishes.stream()
-            .map(me.zhengjie.modules.meal.domain.Dish::getName)
+        Map<Integer, String> dishNameMap = dishes.stream()
+            .collect(Collectors.toMap(
+                me.zhengjie.modules.meal.domain.Dish::getId,
+                me.zhengjie.modules.meal.domain.Dish::getName,
+                (existing, replacement) -> existing
+            ));
+        return dishIds.stream()
+            .map(dishNameMap::get)
             .collect(Collectors.toList());
     }
 }
