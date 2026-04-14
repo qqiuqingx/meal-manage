@@ -38,6 +38,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -473,6 +474,10 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 .eq("customer_id", profile.getId())
                 .orderByAsc("address_type")
         );
+
+        if (addresses == null) {
+            addresses = Collections.emptyList();
+        }
 
         StringBuilder allAddresses = new StringBuilder();
         for (CustomerProfileAddress addr : addresses) {
