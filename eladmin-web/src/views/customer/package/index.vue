@@ -27,7 +27,6 @@
               <el-button type="primary" size="mini" icon="el-icon-plus" plain @click="handleAddSub(row)">新增子套餐</el-button>
             </div>
             <el-table :data="row.subPackages || []" border size="small" empty-text="暂无子套餐">
-              <el-table-column prop="subPackageCode" label="子套餐编码" width="150" />
               <el-table-column prop="subPackageName" label="子套餐名称" min-width="150" />
               <el-table-column prop="meatCount" label="荤菜数" width="90" align="center" />
               <el-table-column prop="vegCount" label="素菜数" width="90" align="center" />
@@ -66,10 +65,11 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="packageCode" label="套餐编码" width="150" />
-      <el-table-column prop="prefix" label="前缀" width="80" align="center" />
-      <el-table-column prop="packageName" label="套餐名称" min-width="200" />
-      <el-table-column prop="remark" label="备注" min-width="200" show-overflow-tooltip />
+      <el-table-column prop="packageName" label="套餐名称" min-width="150" />
+      <el-table-column prop="poolPrefix" label="编号池前缀" width="110" align="center" />
+      <el-table-column prop="poolStart" label="编号池起始号" width="120" align="center" />
+      <el-table-column prop="poolEnd" label="编号池结束号" width="120" align="center" />
+      <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
       <el-table-column prop="status" label="状态" width="100" align="center">
         <template #default="{ row }">
           <el-switch
@@ -99,12 +99,6 @@
     <!-- 新增/编辑父套餐弹窗 -->
     <el-dialog :title="dialogTitle" :visible.sync="dialogVisible" width="580px" append-to-body :close-on-click-modal="false" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <el-form-item label="套餐编码" prop="packageCode">
-          <el-input v-model="form.packageCode" placeholder="请输入套餐编码" />
-        </el-form-item>
-        <el-form-item label="前缀" prop="prefix">
-          <el-input v-model="form.prefix" placeholder="单个大写字母，如 A" maxlength="1" style="width: 200px;" />
-        </el-form-item>
         <el-form-item label="编号池前缀" prop="poolPrefix">
           <el-input v-model="form.poolPrefix" placeholder="如 A1" style="width: 200px;" />
         </el-form-item>
@@ -132,9 +126,6 @@
       <el-form ref="subFormRef" :model="subForm" :rules="subRules" label-width="100px">
         <el-form-item label="所属套餐">
           <el-input :value="subForm.parentPackageName || '-'" disabled />
-        </el-form-item>
-        <el-form-item label="子套餐编码" prop="subPackageCode">
-          <el-input v-model="subForm.subPackageCode" placeholder="请输入子套餐编码" />
         </el-form-item>
         <el-form-item label="子套餐名称" prop="subPackageName">
           <el-input v-model="subForm.subPackageName" placeholder="请输入子套餐名称" />
@@ -168,8 +159,6 @@ import * as api from '@/api/customer/package'
 
 const defaultParentForm = {
   id: null,
-  packageCode: '',
-  prefix: '',
   packageName: '',
   remark: '',
   status: 1,
@@ -182,7 +171,6 @@ const defaultParentForm = {
 
 const defaultSubForm = {
   id: null,
-  subPackageCode: '',
   subPackageName: '',
   meatCount: 0,
   vegCount: 0,
@@ -207,13 +195,6 @@ export default {
       form: { ...defaultParentForm },
       subForm: { ...defaultSubForm },
       rules: {
-        packageCode: [
-          { required: true, message: '请输入套餐编码', trigger: 'blur' }
-        ],
-        prefix: [
-          { required: true, message: '请输入前缀', trigger: 'blur' },
-          { pattern: /^[A-Z]$/, message: '前缀必须为单个大写字母', trigger: 'blur' }
-        ],
         packageName: [
           { required: true, message: '请输入套餐名称', trigger: 'blur' }
         ],
@@ -238,9 +219,6 @@ export default {
         ]
       },
       subRules: {
-        subPackageCode: [
-          { required: true, message: '请输入子套餐编码', trigger: 'blur' }
-        ],
         subPackageName: [
           { required: true, message: '请输入子套餐名称', trigger: 'blur' }
         ],
@@ -284,8 +262,6 @@ export default {
     handleEditParent(row) {
       this.form = {
         id: row.id,
-        packageCode: row.packageCode,
-        prefix: row.prefix,
         packageName: row.packageName,
         remark: row.remark || '',
         status: row.status,
@@ -305,8 +281,6 @@ export default {
         this.submitLoading = true
         const data = {
           id: this.form.id,
-          packageCode: this.form.packageCode,
-          prefix: this.form.prefix,
           packageName: this.form.packageName,
           remark: this.form.remark,
           status: this.form.status,
@@ -350,10 +324,8 @@ export default {
     },
 
     getPoolUsedCount(row) {
-      // POOL-12 bonus: 显示已用/总量
-      // 后端尚未提供 per-package 已用数量统计，此处显示 "?" 待后续实现
-      // 后续可添加 GET api/package/usage/{id} 接口返回已用数量
-      return '?'
+      // 后端尚未提供 per-package 已用数量统计接口（GET api/package/usage/{id}）
+      return '—'
     },
 
     resetForm() {
@@ -365,7 +337,6 @@ export default {
     handleAddSub(parentRow) {
       this.subForm = {
         id: null,
-        subPackageCode: '',
         subPackageName: '',
         meatCount: 0,
         vegCount: 0,
@@ -384,7 +355,6 @@ export default {
       api.getSubById(row.id).then(dto => {
         this.subForm = {
           id: dto.id,
-          subPackageCode: dto.subPackageCode,
           subPackageName: dto.subPackageName,
           meatCount: dto.meatCount,
           vegCount: dto.vegCount,
@@ -407,7 +377,6 @@ export default {
           // 编辑：发送完整 SubPackage 实体
           const payload = {
             id: this.subForm.id,
-            subPackageCode: this.subForm.subPackageCode,
             subPackageName: this.subForm.subPackageName,
             meatCount: this.subForm.meatCount,
             vegCount: this.subForm.vegCount,
@@ -423,7 +392,6 @@ export default {
         } else {
           // 新增：发送 SubPackageCreateDto
           api.addSub({
-            subPackageCode: this.subForm.subPackageCode,
             subPackageName: this.subForm.subPackageName,
             meatCount: this.subForm.meatCount,
             vegCount: this.subForm.vegCount,
