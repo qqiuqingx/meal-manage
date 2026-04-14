@@ -46,6 +46,14 @@
           @click="handleDeleteCurrent"
         >删除排餐记录</el-button>
         <el-divider direction="vertical" />
+        <!-- 查询客户配送地址 -->
+        <el-button
+          size="small"
+          type="info"
+          icon="el-icon-location"
+          :disabled="!planData"
+          @click="openAddressDialog"
+        >配送地址</el-button>
         <!-- 打印 -->
         <el-button size="small" icon="el-icon-printer" @click="handlePrint">打印预览</el-button>
       </div>
@@ -310,11 +318,38 @@
         <el-button type="primary" :loading="verifyDialog.loading" @click="doVerify">确认核销</el-button>
       </div>
     </el-dialog>
+
+    <!-- 客户配送地址对话框 -->
+    <el-dialog title="客户配送地址" :visible.sync="addressDialog.visible" width="800px">
+      <el-table
+        v-loading="addressDialog.loading"
+        :data="addressDialog.list"
+        border
+        size="small"
+        max-height="500"
+      >
+        <el-table-column label="客户编号" prop="customerCode" align="center" width="120" />
+        <el-table-column label="手机号" prop="phone" align="center" width="120" />
+        <el-table-column label="配送地址" prop="addressDetail" align="center" min-width="200">
+          <template slot-scope="scope">
+            {{ scope.row.addressDetail || '暂无地址' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="地址类型" prop="addressType" align="center" width="120">
+          <template slot-scope="scope">
+            <el-tag v-if="scope.row.addressType" :type="scope.row.addressType === 'WEEKEND' ? 'warning' : (scope.row.addressType === 'WORKDAY' ? 'success' : 'info')" size="mini">
+              {{ addressTypeMap[scope.row.addressType] || scope.row.addressType }}
+            </el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { getMealPlanList, getMealPlanFullDetail, generateMealPlan, delMealPlan, delMealPlanCustomers } from '@/api/mealPlan'
+import { getMealPlanList, getMealPlanFullDetail, generateMealPlan, delMealPlan, delMealPlanCustomers, getMealPlanCustomerAddresses } from '@/api/mealPlan'
 import { getProfiles } from '@/api/customer/profile'
 import { verifyMeal } from '@/api/mealVerification'
 
@@ -377,6 +412,17 @@ export default {
         visible: false,
         loading: false,
         records: []
+      },
+      // 客户配送地址弹窗
+      addressDialog: {
+        visible: false,
+        loading: false,
+        list: []
+      },
+      addressTypeMap: {
+        DEFAULT: '默认地址',
+        WORKDAY: '工作日地址',
+        WEEKEND: '周末地址'
       }
     }
   },
@@ -700,6 +746,21 @@ export default {
         .finally(() => {
           this.verifyDialog.loading = false
         })
+    },
+
+    // ─── 配送地址查询 ──────────────────────────────
+    openAddressDialog() {
+      if (!this.planData || !this.planData.mealPlan) return
+      this.addressDialog.visible = true
+      this.addressDialog.loading = true
+      this.addressDialog.list = []
+      getMealPlanCustomerAddresses(this.planData.mealPlan.id).then(res => {
+        this.addressDialog.list = res || []
+      }).catch(() => {
+        this.$message.error('获取配送地址失败')
+      }).finally(() => {
+        this.addressDialog.loading = false
+      })
     },
 
     // ─── 工具方法 ─────────────────────────────────

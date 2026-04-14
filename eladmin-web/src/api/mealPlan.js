@@ -26,6 +26,13 @@ export function getMealPlanFullDetail(id) {
   })
 }
 
+export function getMealPlanCustomerAddresses(id) {
+  return request({
+    url: `/api/meal-plan/${id}/customer-addresses`,
+    method: 'get'
+  })
+}
+
 export function delMealPlan(params) {
   return request({
     url: '/api/meal-plan',
