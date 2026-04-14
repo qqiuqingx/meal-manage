@@ -1,8 +1,10 @@
 package me.zhengjie.modules.customer.profile.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
+import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -21,6 +24,11 @@ import static org.mockito.Mockito.when;
 
 /**
  * CustomerProfileServiceImpl 单元测试
+ *
+ * Wave 2 (TDD): Tests for excludedDates validation via validateExcludedDates method.
+ *
+ * @author qqx
+ * @date 2026-04-14
  */
 @ExtendWith(MockitoExtension.class)
 class CustomerProfileServiceImplTest {
@@ -76,14 +84,11 @@ class CustomerProfileServiceImplTest {
 
     @Test
     void testFillDefaultAddress_WithMultipleAddresses() throws Exception {
-        // 准备测试数据
         List<CustomerProfileAddress> addresses = Arrays.asList(address1, address2, address3);
         when(addressMapper.selectList(any(QueryWrapper.class))).thenReturn(addresses);
 
-        // 执行测试
         invokeFillDefaultAddress(profile);
 
-        // 验证结果
         assertNotNull(profile.getDefaultAddress());
         assertEquals("[默认] 北京市朝阳区xxx街道123号, [工作日] 北京市海淀区xxx路456号, [周末] 北京市西城区xxx胡同789号",
                      profile.getDefaultAddress());
@@ -91,38 +96,31 @@ class CustomerProfileServiceImplTest {
 
     @Test
     void testFillDefaultAddress_WithSingleAddress() throws Exception {
-        // 准备测试数据 - 只有默认地址
         List<CustomerProfileAddress> singleAddress = Arrays.asList(address1);
         when(addressMapper.selectList(any(QueryWrapper.class))).thenReturn(singleAddress);
 
-        // 执行测试
         invokeFillDefaultAddress(profile);
 
-        // 验证结果
         assertNotNull(profile.getDefaultAddress());
         assertEquals("[默认] 北京市朝阳区xxx街道123号", profile.getDefaultAddress());
     }
 
     @Test
     void testFillDefaultAddress_WithEmptyAddresses() throws Exception {
-        // 准备测试数据 - 空地址列表
         List<CustomerProfileAddress> emptyAddresses = Arrays.asList(
             new CustomerProfileAddress(),
             new CustomerProfileAddress()
         );
         when(addressMapper.selectList(any(QueryWrapper.class))).thenReturn(emptyAddresses);
 
-        // 执行测试
         invokeFillDefaultAddress(profile);
 
-        // 验证结果
         assertNotNull(profile.getDefaultAddress());
         assertEquals("", profile.getDefaultAddress());
     }
 
     @Test
     void testFillDefaultAddress_WithSomeEmptyAddresses() throws Exception {
-        // 准备测试数据 - 混合空和非空地址
         CustomerProfileAddress emptyAddress = new CustomerProfileAddress();
         emptyAddress.setId(4L);
         emptyAddress.setCustomerId(1L);
@@ -138,24 +136,208 @@ class CustomerProfileServiceImplTest {
         List<CustomerProfileAddress> mixedAddresses = Arrays.asList(emptyAddress, address2, emptyAddress2);
         when(addressMapper.selectList(any(QueryWrapper.class))).thenReturn(mixedAddresses);
 
-        // 执行测试
         invokeFillDefaultAddress(profile);
 
-        // 验证结果
         assertNotNull(profile.getDefaultAddress());
         assertEquals("[工作日] 北京市海淀区xxx路456号", profile.getDefaultAddress());
     }
 
     @Test
     void testFillDefaultAddress_WithNullAddresses() throws Exception {
-        // 准备测试数据 - null地址列表
         when(addressMapper.selectList(any(QueryWrapper.class))).thenReturn(null);
 
-        // 执行测试
         invokeFillDefaultAddress(profile);
 
-        // 验证结果
         assertNotNull(profile.getDefaultAddress());
         assertEquals("", profile.getDefaultAddress());
+    }
+
+    // ========== excludedDates 校验测试 ==========
+
+    private void invokeValidateExcludedDates(List<ExcludedDateDto> excludedDates) throws Exception {
+        Method method = CustomerProfileServiceImpl.class.getDeclaredMethod(
+            "validateExcludedDates", List.class);
+        method.setAccessible(true);
+        method.invoke(customerProfileService, excludedDates);
+    }
+
+    /**
+     * Test: testValidateExcludedDatesFormat
+     * Valid date format (yyyy-MM-dd) with valid mealTypes should pass.
+     */
+    @Test
+    void testValidateExcludedDatesFormat() throws Exception {
+        ExcludedDateDto dto = new ExcludedDateDto();
+        dto.setDate("2026-04-15");
+        dto.setMealTypes(Arrays.asList("BREAKFAST"));
+
+        List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
+
+        // No exception thrown = validation passed
+        invokeValidateExcludedDates(excludedDates);
+    }
+
+    /**
+     * Test: testValidateExcludedDatesMultipleMealTypes
+     * Multiple mealTypes in one entry should pass.
+     */
+    @Test
+    void testValidateExcludedDatesMultipleMealTypes() throws Exception {
+        ExcludedDateDto dto = new ExcludedDateDto();
+        dto.setDate("2026-04-16");
+        dto.setMealTypes(Arrays.asList("LUNCH", "DINNER"));
+
+        List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
+
+        invokeValidateExcludedDates(excludedDates);
+    }
+
+    /**
+     * Test: testValidateInvalidDateFormat
+     * Invalid date format should throw BadRequestException.
+     */
+    @Test
+    void testValidateInvalidDateFormat() {
+        ExcludedDateDto dto = new ExcludedDateDto();
+        dto.setDate("2026/04/15");  // Wrong format
+        dto.setMealTypes(Arrays.asList("BREAKFAST"));
+
+        List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> {
+            invokeValidateExcludedDates(excludedDates);
+        });
+        assertTrue(exception.getMessage().contains("排除日期格式错误"));
+    }
+
+    /**
+     * Test: testValidateInvalidDateFormat_SlashDate
+     * Another invalid format variation should throw BadRequestException.
+     */
+    @Test
+    void testValidateInvalidDateFormat_SlashDate() {
+        ExcludedDateDto dto = new ExcludedDateDto();
+        dto.setDate("15/04/2026");
+        dto.setMealTypes(Arrays.asList("BREAKFAST"));
+
+        List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> {
+            invokeValidateExcludedDates(excludedDates);
+        });
+        assertTrue(exception.getMessage().contains("排除日期格式错误"));
+    }
+
+    /**
+     * Test: testValidateEmptyMealTypes
+     * Empty mealTypes list should throw BadRequestException.
+     */
+    @Test
+    void testValidateEmptyMealTypes() {
+        ExcludedDateDto dto = new ExcludedDateDto();
+        dto.setDate("2026-04-15");
+        dto.setMealTypes(Arrays.asList());  // Empty list
+
+        List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> {
+            invokeValidateExcludedDates(excludedDates);
+        });
+        assertTrue(exception.getMessage().contains("排除日期必须指定至少一个餐次"));
+    }
+
+    /**
+     * Test: testValidateNullMealTypes
+     * Null mealTypes should throw BadRequestException.
+     */
+    @Test
+    void testValidateNullMealTypes() {
+        ExcludedDateDto dto = new ExcludedDateDto();
+        dto.setDate("2026-04-15");
+        dto.setMealTypes(null);
+
+        List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> {
+            invokeValidateExcludedDates(excludedDates);
+        });
+        assertTrue(exception.getMessage().contains("排除日期必须指定至少一个餐次"));
+    }
+
+    /**
+     * Test: testValidateInvalidMealType
+     * Invalid mealType value should throw BadRequestException.
+     */
+    @Test
+    void testValidateInvalidMealType() {
+        ExcludedDateDto dto = new ExcludedDateDto();
+        dto.setDate("2026-04-15");
+        dto.setMealTypes(Arrays.asList("SNACK"));  // Invalid mealType
+
+        List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> {
+            invokeValidateExcludedDates(excludedDates);
+        });
+        assertTrue(exception.getMessage().contains("无效的餐次类型"));
+    }
+
+    /**
+     * Test: testValidateInvalidMealType_MixedValidInvalid
+     * Mixed valid and invalid mealTypes should fail on invalid one.
+     */
+    @Test
+    void testValidateInvalidMealType_MixedValidInvalid() {
+        ExcludedDateDto dto = new ExcludedDateDto();
+        dto.setDate("2026-04-15");
+        dto.setMealTypes(Arrays.asList("BREAKFAST", "INVALID"));
+
+        List<ExcludedDateDto> excludedDates = Arrays.asList(dto);
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> {
+            invokeValidateExcludedDates(excludedDates);
+        });
+        assertTrue(exception.getMessage().contains("无效的餐次类型"));
+    }
+
+    /**
+     * Test: testValidateNullExcludedDates
+     * null excludedDates should pass (optional field).
+     */
+    @Test
+    void testValidateNullExcludedDates() throws Exception {
+        invokeValidateExcludedDates(null);  // Should not throw
+    }
+
+    /**
+     * Test: testValidateEmptyExcludedDates
+     * Empty list excludedDates should pass (optional field).
+     */
+    @Test
+    void testValidateEmptyExcludedDates() throws Exception {
+        invokeValidateExcludedDates(Collections.emptyList());  // Should not throw
+    }
+
+    /**
+     * Test: testValidateMultipleDates
+     * Multiple valid date entries should pass.
+     */
+    @Test
+    void testValidateMultipleDates() throws Exception {
+        ExcludedDateDto dto1 = new ExcludedDateDto();
+        dto1.setDate("2026-04-15");
+        dto1.setMealTypes(Arrays.asList("BREAKFAST"));
+
+        ExcludedDateDto dto2 = new ExcludedDateDto();
+        dto2.setDate("2026-04-16");
+        dto2.setMealTypes(Arrays.asList("LUNCH", "DINNER"));
+
+        ExcludedDateDto dto3 = new ExcludedDateDto();
+        dto3.setDate("2026-04-17");
+        dto3.setMealTypes(Arrays.asList("BREAKFAST", "LUNCH", "DINNER"));
+
+        List<ExcludedDateDto> excludedDates = Arrays.asList(dto1, dto2, dto3);
+
+        invokeValidateExcludedDates(excludedDates);
     }
 }
