@@ -114,4 +114,12 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      */
     List<OrderVerifiedCountDto> sumVerifiedCountByOrderId(@Param("orderId") Long orderId);
 
+    /**
+     * 回退核销状态（删除核销日志时调用）
+     * verified_count-1, remaining_count+1, 如果订单状态为已完成则回退为进行中
+     * @param orderId 订单ID
+     * @return 更新行数
+     */
+    int revertVerification(@Param("orderId") Long orderId);
+
 }

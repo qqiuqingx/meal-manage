@@ -148,6 +148,17 @@
           and (is_verified = 0 or is_verified is null)
     </update>
 
+    <!-- 回退核销状态（删除核销日志时调用） -->
+    <update id="revertVerified">
+        update meal_plan_customer
+        set is_verified = 0,
+            verification_time = null,
+            verification_operator = null,
+            update_time = now()
+        where id = #{id}
+          and deleted = 0
+    </update>
+
     <resultMap id="MealPlanCustomerAddressVOMap" type="me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO">
         <result column="customer_id" property="customerId"/>
         <result column="customer_code" property="customerCode"/>

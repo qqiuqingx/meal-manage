@@ -269,8 +269,32 @@
         SELECT meal_type, SUM(verification_count) AS verified_count
         FROM meal_verification_log
         WHERE order_id = #{orderId}
+          AND (deleted = 0 OR deleted IS NULL)
         GROUP BY meal_type
     </select>
+
+    <!-- 回退核销状态（删除核销日志时调用） -->
+    <update id="revertVerification">
+        UPDATE customer_order
+        SET verified_count = GREATEST(COALESCE(verified_count, 0) - 1, 0),
+            verified_amount = GREATEST(COALESCE(verified_amount, 0) - (
+                CASE
+                    WHEN EXISTS (SELECT 1 FROM meal_verification_log v
+                                 WHERE v.id = (
+                                     SELECT max_id FROM (
+                                         SELECT MAX(id) AS max_id FROM meal_verification_log
+                                         WHERE order_id = #{orderId} AND (deleted = 0 OR deleted IS NULL)
+                                     ) t
+                                 ) AND v.meal_type IN ('LUNCH', 'DINNER'))
+                    THEN (SELECT lunch_dinner_price FROM customer_order WHERE id = #{orderId})
+                    ELSE (SELECT breakfast_price FROM customer_order WHERE id = #{orderId})
+                END
+            ), 0),
+            remaining_count = remaining_count + 1,
+            status = CASE WHEN status = 2 THEN 1 ELSE status END,
+            update_time = NOW()
+        WHERE id = #{orderId}
+    </update>
 
     <resultMap id="VerifiedCountResultMap" type="me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto">
         <result column="meal_type" property="mealType"/>
