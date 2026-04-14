@@ -28,7 +28,9 @@ import me.zhengjie.modules.customer.order.service.CustomerOrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.web.socket.server.standard.ServerEndpointExporter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -51,6 +53,9 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @SpringBootTest
 public class NumberPoolReleaseTest {
+
+    @MockBean(name = "serverEndpointExporter")
+    private ServerEndpointExporter serverEndpointExporter;
 
     @Autowired
     private NumberPoolServiceImpl numberPoolService;
@@ -81,6 +86,7 @@ public class NumberPoolReleaseTest {
 
         // Insert test package with small pool (10 slots: R12001-R12010)
         ParentPackage pkg = new ParentPackage();
+        pkg.setPackageCode("RELEASE-TEST-PKG");
         pkg.setPackageName("RELEASE-TEST-PKG");
         pkg.setPrefix("R");
         pkg.setPoolPrefix(POOL_PREFIX);
@@ -301,6 +307,50 @@ public class NumberPoolReleaseTest {
         assertEquals(POOL_PREFIX + "2002", code4,
             "Released code (R12002) should be reused before moving to next pool number. " +
             "Expected R12002 but got " + code4);
+    }
+
+    @Test
+    public void testAllocate_withShortRange_usesSameZeroPaddingAsRangeQuery() {
+        ParentPackage shortRangePkg = new ParentPackage();
+        shortRangePkg.setPackageCode("SHORT-RANGE-PKG");
+        shortRangePkg.setPackageName("SHORT-RANGE-PKG");
+        shortRangePkg.setPrefix("A");
+        shortRangePkg.setPoolPrefix("A1");
+        shortRangePkg.setPoolStart(1);
+        shortRangePkg.setPoolEnd(199);
+        shortRangePkg.setStatus(true);
+        parentPackageMapper.insert(shortRangePkg);
+
+        CustomerProfile c1 = new CustomerProfile();
+        c1.setCustomerName("Short-Range-Customer-1");
+        c1.setPhone("13800006666");
+        c1.setGestationalWeek(20);
+        c1.setCustomerCode("A1001");
+        profileMapper.insert(c1);
+
+        CustomerOrderSaveDto activeOrder = new CustomerOrderSaveDto();
+        activeOrder.setCustomerId(c1.getId());
+        activeOrder.setParentPackageId(shortRangePkg.getId());
+        activeOrder.setBreakfastCount(10);
+        activeOrder.setLunchDinnerCount(10);
+        activeOrder.setTotalAmount(new BigDecimal("1000"));
+        activeOrder.setFinalAmount(new BigDecimal("900"));
+        activeOrder.setStatus(1);
+        activeOrder.setMealType("ALL");
+        activeOrder.setStartDate(LocalDate.now());
+        activeOrder.setEndDate(LocalDate.now().plusDays(30));
+        orderService.create(activeOrder);
+
+        NumberPoolConfig config = new NumberPoolConfig();
+        config.setPackageId(shortRangePkg.getId());
+        config.setPoolPrefix("A1");
+        config.setPoolStart(1);
+        config.setPoolEnd(199);
+
+        String code = numberPoolService.allocate(config);
+
+        assertEquals("A1002", code,
+            "Range query must recognize A1001 as occupied when pool is configured as 1..199.");
     }
 
     // -------------------------------------------------------------------------
