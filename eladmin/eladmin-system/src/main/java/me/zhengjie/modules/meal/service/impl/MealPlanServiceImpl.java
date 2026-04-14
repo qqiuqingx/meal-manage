@@ -52,6 +52,7 @@ import me.zhengjie.modules.meal.util.ScheduleKeyUtil;
 import me.zhengjie.utils.PageResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import me.zhengjie.utils.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -935,7 +936,7 @@ public class MealPlanServiceImpl implements MealPlanService {
             Set<String> matchedAllergies = getMatchedAllergyTags(allergyTags, dishIngredientMap.get(dish.getId()));
             if (!matchedAllergies.isEmpty()) {
                 log.warn("过敏菜品：{}", JSONUtil.toJsonStr(dish));
-                skippedAllergies.add(new SkippedAllergyDish(dish, matchedAllergies,"GUOM"));
+                skippedAllergies.add(new SkippedAllergyDish(dish, matchedAllergies,"ALLERGY"));
                 continue;
             }
             return DishSelectResult.noReplace(dish, Collections.emptySet(), skippedAllergies);
@@ -1067,9 +1068,19 @@ public class MealPlanServiceImpl implements MealPlanService {
             allergyItem.setDeleted(false);
             allergyItem.setIsAllergyFiltered(true);
             allergyItem.setAllergyReasons(String.join(",", sad.getAllergyReasons()));
+            allergyItem.setReplaceReason(sad.getReplaceReason());
+
             mealPlanCustomerItemMapper.insert(allergyItem);
-            log.info("【过敏记录-写入】客户: {}, 菜品: {}, 过敏标签: {}",
-                    customerName, sad.getDish().getName(), String.join(",", sad.getAllergyReasons()));
+            String replaceReason = sad.getReplaceReason();
+
+            if (org.apache.commons.lang3.StringUtils.equals(replaceReason, "ALLERGY")) {
+                log.info("【过敏记录-写入】客户: {}, 菜品: {},  allergy-过敏",
+                        customerName, sad.getDish().getName());
+            }else if (org.apache.commons.lang3.StringUtils.equals(replaceReason, REPLACE_REASON_EXCLUDED)) {
+                log.info("【客户过滤菜品-写入】客户: {}, 菜品: {}",
+                        customerName, sad.getDish().getName());
+            }
+
         }
     }
 
