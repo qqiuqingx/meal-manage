@@ -347,6 +347,18 @@ public class MealPlanServiceImpl implements MealPlanService {
         List<CustomerOrder> candidateOrders = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
         log.info("基础条件过滤后的候选订单 - 数量: {}", candidateOrders.size());
 
+        // 批量加载客户档案（用于排除日期检查）
+        Map<Long, CustomerProfile> customerMap = new HashMap<>();
+        if (!candidateOrders.isEmpty()) {
+            Set<Long> customerIds = candidateOrders.stream().map(CustomerOrder::getCustomerId)
+                    .filter(Objects::nonNull).collect(Collectors.toSet());
+            if (!customerIds.isEmpty()) {
+                for (CustomerProfile c : customerProfileMapper.findByIds(customerIds)) {
+                    customerMap.put(c.getId(), c);
+                }
+            }
+        }
+
         List<CustomerOrder> validOrders = new ArrayList<>();
         for (CustomerOrder order : candidateOrders) {
             if (customerId != null && !Objects.equals(order.getCustomerId(), customerId)) {
@@ -356,6 +368,13 @@ public class MealPlanServiceImpl implements MealPlanService {
             if (matchReason != null) {
                 log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 餐次: {}, 配送模式: {}, 原因: {}",
                         order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(), order.getMealType(), order.getScheduleMode(), matchReason);
+                continue;
+            }
+            // 检查客户是否排除了该日期+餐次
+            CustomerProfile customer = customerMap.get(order.getCustomerId());
+            if (customer != null && customer.isExcluded(targetDate, mealType)) {
+                log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 日期: {}, 餐次: {}, 原因: 排除日期",
+                        order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(), targetDate, mealType);
                 continue;
             }
             validOrders.add(order);
@@ -1064,9 +1083,12 @@ public class MealPlanServiceImpl implements MealPlanService {
             allergyItem.setDishType(sad.getDish().getDishType());
             allergyItem.setDishId(sad.getDish().getId());
             allergyItem.setDishName(sad.getDish().getName());
+            allergyItem.setOriginalDishId(sad.getDish().getId());
+            allergyItem.setOriginalDishName(sad.getDish().getName());
             allergyItem.setSeq(allergySeq++);
             allergyItem.setDeleted(false);
             allergyItem.setIsAllergyFiltered(true);
+            allergyItem.setIsReplaced(true);
             allergyItem.setAllergyReasons(String.join(",", sad.getAllergyReasons()));
             allergyItem.setReplaceReason(sad.getReplaceReason());
 
