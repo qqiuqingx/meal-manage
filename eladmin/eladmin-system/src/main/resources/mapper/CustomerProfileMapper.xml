@@ -10,6 +10,8 @@
         <result column="gestational_week" property="gestationalWeek"/>
         <result column="allergy_tags" property="allergyTags"
                 typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="excluded_dish_ids" property="excludedDishIds"
+                typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
         <result column="medical_requirements" property="medicalRequirements"/>
         <result column="remark" property="remark"/>
         <result column="create_by" property="createBy"/>
