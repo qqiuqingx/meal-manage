@@ -32,6 +32,19 @@
         SELECT * FROM customer_profile WHERE id = #{id}
     </select>
 
+    <!-- 查询客户排除菜品详情 -->
+    <select id="selectExcludedDishDetails" resultType="me.zhengjie.modules.customer.profile.domain.dto.ExcludedDishDetailDto">
+        SELECT
+            cp.id,
+            cp.customer_code,
+            cp.customer_name,
+            cp.excluded_dish_ids,
+            JSON_CONTAINS(dish_types, CONCAT('"', dish.id, '"')) AS dish_match
+        FROM customer_profile cp
+        LEFT JOIN dish ON JSON_CONTAINS(cp.excluded_dish_ids, CONCAT('"', dish.id, '"'))
+        WHERE cp.id = #{customerId}
+    </select>
+
     <!-- 条件查询客户档案列表 -->
     <select id="findAll" resultMap="BaseResultMap">
         SELECT * FROM customer_profile
