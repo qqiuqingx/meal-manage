@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -62,6 +63,27 @@ public class CustomerProfile implements Serializable {
      */
     @TableField(value = "excluded_dates", typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
     private List<ExcludedDateDto> excludedDates;
+
+    /**
+     * 判断指定日期+餐次是否被排除
+     * @param date 目标日期
+     * @param mealType 餐次类型（LUNCH/DINNER）
+     * @return true=被排除，应跳过该日期的排餐
+     */
+    public boolean isExcluded(LocalDate date, String mealType) {
+        if (excludedDates == null || excludedDates.isEmpty()) {
+            return false;
+        }
+        String targetDateStr = date.toString();  // ISO-8601: "yyyy-MM-dd"
+        for (ExcludedDateDto excluded : excludedDates) {
+            if (targetDateStr.equals(excluded.getDate())
+                    && excluded.getMealTypes() != null
+                    && excluded.getMealTypes().contains(mealType)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /**
      * 医嘱要求
