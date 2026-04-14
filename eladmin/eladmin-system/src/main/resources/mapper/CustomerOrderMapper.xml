@@ -277,13 +277,7 @@
     <update id="revertVerification">
         UPDATE customer_order
         SET verified_count = GREATEST(COALESCE(verified_count, 0) - 1, 0),
-            verified_amount = GREATEST(COALESCE(verified_amount, 0) - (
-                CASE
-                    WHEN #{mealType} IN ('LUNCH', 'DINNER')
-                    THEN COALESCE((SELECT lunch_dinner_price FROM customer_order WHERE id = #{orderId}), 0)
-                    ELSE COALESCE((SELECT breakfast_price FROM customer_order WHERE id = #{orderId}), 0)
-                END
-            ), 0),
+            verified_amount = GREATEST(COALESCE(verified_amount, 0) - #{price}, 0),
             remaining_count = remaining_count + 1,
             status = CASE WHEN status = 2 THEN 1 ELSE status END,
             update_time = NOW()
