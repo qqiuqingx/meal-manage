@@ -22,6 +22,10 @@ public class CustomerProfileDetailDto implements Serializable {
     private List<String> allergyTags;
     private List<Integer> excludedDishIds;
     private List<String> excludedDishNames;
+    /**
+     * 排除日期列表（日期+餐次组合，Wave 1/2 完整实现）
+     */
+    private java.util.List<ExcludedDateDto> excludedDates;
     private String medicalRequirements;
     //
     private String remark;
