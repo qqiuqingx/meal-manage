@@ -120,6 +120,6 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      * @param orderId 订单ID
      * @return 更新行数
      */
-    int revertVerification(@Param("orderId") Long orderId);
+    int revertVerification(@Param("orderId") Long orderId, @Param("mealType") String mealType);
 
 }

@@ -180,6 +180,7 @@ public class MealVerificationServiceImpl implements MealVerificationService {
         log.setOperator(operator);
         log.setOperateTime(verificationTime);
         log.setRemark(remark);
+        log.setDeleted(0);
         verificationLogMapper.insert(log);
     }
 
@@ -191,7 +192,9 @@ public class MealVerificationServiceImpl implements MealVerificationService {
     @Override
     public List<MealVerificationLog> queryByOrderId(Long orderId) {
         QueryWrapper<MealVerificationLog> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("order_id", orderId).eq("deleted", 0).orderByDesc("operate_time", "id");
+        queryWrapper.eq("order_id", orderId)
+                .and(wrapper -> wrapper.eq("deleted", 0).or().isNull("deleted"))
+                .orderByDesc("operate_time", "id");
         return verificationLogMapper.selectList(queryWrapper);
     }
 
@@ -206,16 +209,17 @@ public class MealVerificationServiceImpl implements MealVerificationService {
             throw new BadRequestException("该记录已删除，请刷新列表");
         }
 
-        // 1. 回退 MealPlanCustomer.isVerified = 0
-        mealPlanCustomerMapper.revertVerified(logRecord.getMealPlanCustomerId());
+        Date deleteTime = new Date();
+        String deletedBy = SecurityUtils.getCurrentUsername();
+        int deletedRows = verificationLogMapper.softDeleteIfActive(id, deletedBy, deleteTime);
+        if (deletedRows == 0) {
+            throw new BadRequestException("该记录已删除，请刷新列表");
+        }
 
-        // 2. 回退 CustomerOrder: verifiedCount-1, remainingCount+1, 如果已完成则回退为进行中
-        customerOrderMapper.revertVerification(logRecord.getOrderId());
-
-        // 3. 软删除核销日志
-        logRecord.setDeleted(1);
-        logRecord.setDeleteTime(new Date());
-        logRecord.setDeletedBy(SecurityUtils.getCurrentUsername());
-        verificationLogMapper.updateById(logRecord);
+        // 回退 CustomerOrder: verifiedCount-1, remainingCount+1, 如果已完成则回退为进行中
+        int revertedOrderRows = customerOrderMapper.revertVerification(logRecord.getOrderId(), logRecord.getMealType());
+        if (revertedOrderRows == 0) {
+            throw new BadRequestException("关联订单状态异常，无法回退核销");
+        }
     }
 }
