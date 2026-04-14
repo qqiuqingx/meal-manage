@@ -50,6 +50,12 @@ public class CustomerProfile implements Serializable {
     private List<String> allergyTags;
 
     /**
+     * 排除菜品ID列表(JSON数组)
+     */
+    @TableField(value = "excluded_dish_ids", typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    private List<Integer> excludedDishIds;
+
+    /**
      * 医嘱要求
      */
     private String medicalRequirements;
