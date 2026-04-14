@@ -24,16 +24,15 @@
         技术细节：
         INNER JOIN 确保只有与 customer_profile 关联的进行中订单才算"占用"。
         已取消(status=0)或已完成(status=2)的订单对应的编号视为可用。
-        CONCAT('A1', '001') = 'A1001' 在 MySQL 中拼接前缀和数字。
-        WHERE 子句用 >= 和 <= 做闭区间比较。
+        Java 和 SQL 都使用同一套补零后的完整编号边界，避免 1..199 这类配置发生字符串比较错位。
     -->
     <select id="findUsedCodesInRange" resultType="java.lang.String">
-        SELECT cp.customer_code
+        SELECT DISTINCT cp.customer_code
         FROM customer_profile cp
         INNER JOIN customer_order co ON co.customer_id = cp.id
         WHERE cp.customer_code LIKE CONCAT(#{poolPrefix}, '%')
-          AND cp.customer_code &gt;= CONCAT(#{poolPrefix}, #{poolStart})
-          AND cp.customer_code &lt;= CONCAT(#{poolPrefix}, #{poolEnd})
+          AND cp.customer_code &gt;= #{rangeStartCode}
+          AND cp.customer_code &lt;= #{rangeEndCode}
           AND co.status = 1
         ORDER BY cp.customer_code ASC
     </select>

@@ -39,9 +39,6 @@ ALTER TABLE parent_package
   ADD COLUMN pool_start  INT UNSIGNED  DEFAULT NULL COMMENT '编号池起始号（如1001）' AFTER pool_prefix,
   ADD COLUMN pool_end    INT UNSIGNED  DEFAULT NULL COMMENT '编号池结束号（如1199）' AFTER pool_start;
 
--- Step 2: Add unique index on customer_profile.customer_code
--- MySQL unique index permits multiple NULL values (new profiles before allocation),
--- which is the desired behavior. DB-level constraint is the last line of defense
--- against duplicate allocations.
-ALTER TABLE customer_profile
-  ADD UNIQUE INDEX uk_customer_code (customer_code);
+-- Step 2: DO NOT add a unique index on customer_profile.customer_code
+-- customer_code is intentionally reusable once a customer's orders are no longer active.
+-- Occupancy is determined by customer_order.status = 1, not by historical profile rows.
