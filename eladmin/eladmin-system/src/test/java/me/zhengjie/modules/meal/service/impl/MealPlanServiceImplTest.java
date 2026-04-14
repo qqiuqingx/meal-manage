@@ -26,6 +26,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -38,11 +40,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class MealPlanServiceImplTest {
 
     @Mock
@@ -90,7 +95,23 @@ class MealPlanServiceImplTest {
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
-        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        // Stub insert to return 1 and assign an ID to the inserted record
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
         when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
         when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, vegDish, soupDish));
@@ -107,7 +128,8 @@ class MealPlanServiceImplTest {
         verify(customerOrderMapper, never()).selectList(null);
         verify(mealPlanMapper).insert(any(MealPlan.class));
         verify(mealPlanCustomerMapper).insert(any());
-        verify(mealPlanCustomerItemMapper).insert(any());
+        // 3 dishes (MAIN, VEGETABLE, SOUP) each get one insert call
+        verify(mealPlanCustomerItemMapper, org.mockito.Mockito.times(3)).insert(any());
     }
 
     @Test
@@ -121,7 +143,22 @@ class MealPlanServiceImplTest {
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
-        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        lenient().when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
         when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
         when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
@@ -144,8 +181,8 @@ class MealPlanServiceImplTest {
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(existingPlan);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.emptyList());
-        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
-        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.emptyList());
+        lenient().when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
+        lenient().when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.emptyList());
 
         mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
 
@@ -168,7 +205,22 @@ class MealPlanServiceImplTest {
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
-        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        lenient().when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
         when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
         when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, sideDish));
@@ -194,7 +246,22 @@ class MealPlanServiceImplTest {
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
-        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        lenient().when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
         when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
         when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(blockedDish, allowedDish));
@@ -203,8 +270,11 @@ class MealPlanServiceImplTest {
         mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
 
         ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomerItem> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomerItem.class);
-        verify(mealPlanCustomerItemMapper).insert(captor.capture());
-        assertEquals(12, captor.getValue().getDishId());
+        // selected dish (1 insert) + allergy filtered dish (1 insert) = 2 inserts total
+        verify(mealPlanCustomerItemMapper, org.mockito.Mockito.times(2)).insert(captor.capture());
+        // captor.getAllValues() returns in insertion order; last = allergy record (dishId=11)
+        assertEquals(11, captor.getAllValues().get(1).getDishId());
+        assertEquals("白灼虾", captor.getAllValues().get(1).getDishName());
     }
 
     @Test
@@ -219,7 +289,22 @@ class MealPlanServiceImplTest {
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
-        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        lenient().when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
         when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
         when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
@@ -228,7 +313,9 @@ class MealPlanServiceImplTest {
         mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
 
         ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomerItem> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomerItem.class);
-        verify(mealPlanCustomerItemMapper).insert(captor.capture());
+        // excluded dish replacement record (1 insert)
+        verify(mealPlanCustomerItemMapper, org.mockito.Mockito.times(1)).insert(captor.capture());
+        // Only allergy-filtered items are inserted for excluded dishes
         assertTrue(captor.getValue().getIsReplaced());
         assertEquals(11, captor.getValue().getDishId());
         assertEquals(11, captor.getValue().getOriginalDishId());
@@ -295,7 +382,22 @@ class MealPlanServiceImplTest {
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
-        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
         when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
         when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, vegDish, soupDish));
