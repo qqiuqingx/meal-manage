@@ -279,15 +279,9 @@
         SET verified_count = GREATEST(COALESCE(verified_count, 0) - 1, 0),
             verified_amount = GREATEST(COALESCE(verified_amount, 0) - (
                 CASE
-                    WHEN EXISTS (SELECT 1 FROM meal_verification_log v
-                                 WHERE v.id = (
-                                     SELECT max_id FROM (
-                                         SELECT MAX(id) AS max_id FROM meal_verification_log
-                                         WHERE order_id = #{orderId} AND (deleted = 0 OR deleted IS NULL)
-                                     ) t
-                                 ) AND v.meal_type IN ('LUNCH', 'DINNER'))
-                    THEN (SELECT lunch_dinner_price FROM customer_order WHERE id = #{orderId})
-                    ELSE (SELECT breakfast_price FROM customer_order WHERE id = #{orderId})
+                    WHEN #{mealType} IN ('LUNCH', 'DINNER')
+                    THEN COALESCE((SELECT lunch_dinner_price FROM customer_order WHERE id = #{orderId}), 0)
+                    ELSE COALESCE((SELECT breakfast_price FROM customer_order WHERE id = #{orderId}), 0)
                 END
             ), 0),
             remaining_count = remaining_count + 1,
