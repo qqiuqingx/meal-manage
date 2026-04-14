@@ -102,14 +102,41 @@ npm run lint
 Backend reads from:
 - `REDIS_HOST`, `REDIS_PORT`, `REDIS_PWD`, `REDIS_DB`
 
+## Git Commit
+
+- **提交描述使用中文**，描述本次改动的内容和原因
+- type 使用英文：`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
+- 示例：`feat: 新增套餐编号池功能`
+
 ## Important Patterns
 
 - **JSON Serialization**: Uses fastjson2, NOT Jackson. Custom serializers go in `eladmin-common` config.
 - **Security**: JWT + Spring Security. Token-based authentication.
 - **API Documentation**:
   - Knife4j (Swagger) available at `/doc.html` (runtime)
-  - **All new/modified APIs must be documented in `doc/` directory as Markdown files**
-  - Example: `eladmin/doc/客户饮食限制接口文档.md`
+  - **All new/modified APIs must be documented in `doc/apidoc/` directory as Markdown files**
+  - Example: `eladmin/doc/apidoc/客户饮食限制接口文档.md`
+  - Current API docs:
+    - `eladmin/doc/apidoc/菜品管理接口文档.md`
+    - `eladmin/doc/apidoc/客户档案管理接口文档.md`
+    - `eladmin/doc/apidoc/客户订单管理接口文档.md`
+    - `eladmin/doc/apidoc/客户统计接口文档.md`
+    - `eladmin/doc/apidoc/客户饮食限制接口文档.md`
+    - `eladmin/doc/apidoc/核销管理接口文档.md`
+    - `eladmin/doc/apidoc/排餐计划接口文档.md`
+    - `eladmin/doc/apidoc/排餐计划生成接口.md`
+    - `eladmin/doc/apidoc/订单排餐日历接口文档.md`
+    - `eladmin/doc/apidoc/父套餐餐数统计接口.md`
+- **Business Documentation**:
+  - Business docs are in `doc/business/` directory
+  - Read these before modifying business logic — they explain concepts, table relationships, and cross-module dependencies
+  - Current business docs:
+    - `eladmin/doc/business/配菜管理业务说明.md` — 菜品主档、配料字典、排期生成、忌口过滤
+    - `eladmin/doc/business/套餐管理业务说明.md` — 父子套餐结构、编号池、套餐与餐品线的关系
+    - `eladmin/doc/business/客户管理业务说明.md` — 客户档案、地址、套餐分类、签约记录、剩余餐数计算
+    - `eladmin/doc/business/订单管理业务说明.md` — 订单生命周期、餐数体系、金额体系、排餐模式、核销联动
+    - `eladmin/doc/business/排餐管理业务说明.md` — 三层表结构、scheduleKey、生效订单过滤、幂等生成、过敏过滤、子套餐规格选菜
+    - `eladmin/doc/business/核销管理业务说明.md` — 核销链路校验、自动完单、金额扣减、日志快照、批量核销
 - **Code Generation**: Both backend and frontend CRUD code can be generated via the generator module
 
 ## Adding New Business Modules
@@ -142,7 +169,7 @@ eladmin-system/src/main/java/me/zhengjie/modules/meal/
 
 - **meal**: 饮食限制模块 (customer_dietary_restrictions 表)
   - Code: `eladmin-system/src/main/java/me/zhengjie/modules/meal/`
-  - API Doc: `eladmin/doc/客户饮食限制接口文档.md`
+  - API Doc: `eladmin/doc/apidoc/客户饮食限制接口文档.md`
 
 ## Business Rules
 
