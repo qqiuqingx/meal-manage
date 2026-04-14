@@ -8,6 +8,7 @@ import me.zhengjie.modules.customer.pkg.domain.SubPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.meal.domain.Dish;
 import me.zhengjie.modules.meal.domain.DishIngredientRelation;
@@ -204,6 +205,131 @@ class MealPlanServiceImplTest {
         ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomerItem> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomerItem.class);
         verify(mealPlanCustomerItemMapper).insert(captor.capture());
         assertEquals(12, captor.getValue().getDishId());
+    }
+
+    @Test
+    void shouldMarkExcludedSelectedDishAsReplaced() {
+        CustomerOrder order = buildOrder();
+        CustomerProfile customer = buildCustomer();
+        customer.setExcludedDishIds(Collections.singletonList(11));
+        SubPackage subPackage = buildSubPackage(1, 0, false, false);
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.singletonList(mainIngredient));
+
+        mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomerItem> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomerItem.class);
+        verify(mealPlanCustomerItemMapper).insert(captor.capture());
+        assertTrue(captor.getValue().getIsReplaced());
+        assertEquals(11, captor.getValue().getDishId());
+        assertEquals(11, captor.getValue().getOriginalDishId());
+        assertEquals("红烧鸡", captor.getValue().getOriginalDishName());
+        assertEquals("EXCLUDED", captor.getValue().getReplaceReason());
+    }
+
+    // ===== Wave 0 TDD Tests: excluded-date filtering in loadValidOrders() =====
+
+    /**
+     * Test: shouldSkipExcludedDateMealType
+     *
+     * When customer has excludedDates = [ExcludedDateDto{date="2026-04-01", mealTypes=["LUNCH"]}],
+     * calling generateMealPlan("2026-04-01", "LUNCH", null) should skip the order entirely.
+     * Expected: totalCount=0, no customer records inserted, no item records inserted.
+     */
+    @Test
+    void shouldSkipExcludedDateMealType() {
+        CustomerOrder order = buildOrder();
+        CustomerProfile customer = buildCustomer();
+        // Set up excluded date: 2026-04-01 is excluded for LUNCH
+        ExcludedDateDto excludedDate = new ExcludedDateDto();
+        excludedDate.setDate("2026-04-01");
+        excludedDate.setMealTypes(Collections.singletonList("LUNCH"));
+        customer.setExcludedDates(Collections.singletonList(excludedDate));
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(0, result.getTotalCount());
+        assertEquals(0, result.getSuccessCount());
+        // No records should be inserted for excluded date+mealType
+        verify(mealPlanCustomerMapper, never()).insert(any());
+        verify(mealPlanCustomerItemMapper, never()).insert(any());
+        verify(customerOrderMapper, never()).selectList(null);
+    }
+
+    /**
+     * Test: shouldNotSkipNonExcludedOrder
+     *
+     * When customer's excludedDates = [ExcludedDateDto{date="2026-04-02", mealTypes=["LUNCH"]}]
+     * but we generate for "2026-04-01", the order should be processed normally.
+     */
+    @Test
+    void shouldNotSkipNonExcludedOrder() {
+        CustomerOrder order = buildOrder();
+        CustomerProfile customer = buildCustomer();
+        // Set up excluded date for DIFFERENT date (2026-04-02)
+        ExcludedDateDto excludedDate = new ExcludedDateDto();
+        excludedDate.setDate("2026-04-02");
+        excludedDate.setMealTypes(Collections.singletonList("LUNCH"));
+        customer.setExcludedDates(Collections.singletonList(excludedDate));
+        SubPackage subPackage = buildSubPackage(1, 1, true, false);
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
+        Dish vegDish = buildDish(12, "清炒菜心", "VEGETABLE", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 2);
+        Dish soupDish = buildDish(13, "玉米排骨汤", "SOUP", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 3);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+        DishIngredientRelation vegIngredient = buildIngredient(12, "菜心");
+        DishIngredientRelation soupIngredient = buildIngredient(13, "玉米");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, vegDish, soupDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(mainIngredient, vegIngredient, soupIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getSuccessCount());
+        verify(mealPlanCustomerMapper).insert(any());
+    }
+
+    /**
+     * Test: shouldGenerateNoRecordsForExcludedDate
+     *
+     * Confirms that for an excluded date+mealType, zero meal_plan_customer and
+     * meal_plan_customer_item records are generated.
+     */
+    @Test
+    void shouldGenerateNoRecordsForExcludedDate() {
+        CustomerOrder order = buildOrder();
+        CustomerProfile customer = buildCustomer();
+        ExcludedDateDto excludedDate = new ExcludedDateDto();
+        excludedDate.setDate("2026-04-01");
+        excludedDate.setMealTypes(Collections.singletonList("LUNCH"));
+        customer.setExcludedDates(Collections.singletonList(excludedDate));
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+
+        mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        verify(mealPlanCustomerMapper, never()).insert(any());
+        verify(mealPlanCustomerItemMapper, never()).insert(any());
     }
 
     private CustomerOrder buildOrder() {
