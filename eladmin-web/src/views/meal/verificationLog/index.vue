@@ -112,9 +112,10 @@
           </template>
         </el-table-column>
         <el-table-column label="备注" prop="remark" align="center" show-overflow-tooltip />
-        <el-table-column label="操作" align="center" width="70" fixed="right">
+        <el-table-column label="操作" align="center" width="110" fixed="right">
           <template slot-scope="scope">
             <el-button type="text" icon="el-icon-view" @click="handleDetail(scope.row)">详情</el-button>
+            <el-button type="text" icon="el-icon-delete" style="color: #f56c6c;" @click="handleDelete(scope.row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -155,7 +156,7 @@
 </template>
 
 <script>
-import { queryVerificationLogs } from '@/api/mealVerification'
+import { queryVerificationLogs, deleteVerificationLog } from '@/api/mealVerification'
 import Pagination from '@/components/Pagination'
 
 export default {
@@ -224,6 +225,20 @@ export default {
     handleDetail(row) {
       this.detail = row
       this.detailVisible = true
+    },
+    handleDelete(row) {
+      this.$confirm('确定要删除该核销记录吗？删除后将退回餐数和取消核销状态。', '删除确认', {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        deleteVerificationLog(row.id, '页面删除').then(() => {
+          this.getList()
+          this.$message.success('删除成功')
+        }).catch(() => {
+          // error handled by interceptor
+        })
+      }).catch(() => {})
     },
     formatDate(val) {
       if (!val) return '—'
