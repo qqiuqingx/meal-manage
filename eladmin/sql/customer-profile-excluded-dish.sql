@@ -8,11 +8,9 @@ ALTER TABLE customer_profile
 ADD COLUMN IF NOT EXISTS excluded_dish_ids JSON NULL
 COMMENT '排除菜品ID列表(JSON数组)';
 
--- 为新字段添加索引，提高查询性能
--- 使用函数索引支持 JSON_CONTAINS 查询
-CREATE INDEX idx_customer_profile_excluded_dishes ON customer_profile (
-    (JSON_CONTAINS(excluded_dish_ids, '1'))  -- 示例索引，实际查询时使用具体的菜品ID
-);
+-- 注意: 不创建 JSON 函数索引(MySQL 不支持 JSON_CONTAINS 函数索引语法)
+-- excluded_dish_ids 字段为 per-customer 数据, 列表长度通常较小
+-- 性能可接受; 后续如需优化可使用 generated column 方式建索引
 
 -- 添加注释说明字段用途
 -- 排除菜品功能允许客户指定不想在餐单中出现的菜品
@@ -24,7 +22,3 @@ SELECT column_name, data_type, is_nullable, column_comment
 FROM information_schema.columns
 WHERE table_name = 'customer_profile'
 AND column_name = 'excluded_dish_ids';
-
--- 重置会话中的表缓存，确保新字段生效
--- 注意：这个语句在某些MySQL版本中可能需要管理员权限
--- RESET QUERY CACHE;
