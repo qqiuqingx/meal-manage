@@ -37,6 +37,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -505,7 +506,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             return;  // 字段可选，null或空列表合法
         }
 
-        Set<String> validMealTypes = Set.of("BREAKFAST", "LUNCH", "DINNER");
+        Set<String> validMealTypes = new HashSet<>(Arrays.asList("BREAKFAST", "LUNCH", "DINNER"));
 
         for (me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto dto : excludedDates) {
             // 校验日期格式
