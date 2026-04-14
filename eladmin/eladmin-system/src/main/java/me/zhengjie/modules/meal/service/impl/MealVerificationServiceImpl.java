@@ -191,7 +191,31 @@ public class MealVerificationServiceImpl implements MealVerificationService {
     @Override
     public List<MealVerificationLog> queryByOrderId(Long orderId) {
         QueryWrapper<MealVerificationLog> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("order_id", orderId).orderByDesc("operate_time", "id");
+        queryWrapper.eq("order_id", orderId).eq("deleted", 0).orderByDesc("operate_time", "id");
         return verificationLogMapper.selectList(queryWrapper);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteVerificationLog(Long id, String reason) {
+        MealVerificationLog logRecord = verificationLogMapper.selectById(id);
+        if (logRecord == null) {
+            throw new BadRequestException("核销日志不存在");
+        }
+        if (logRecord.getDeleted() != null && logRecord.getDeleted() == 1) {
+            throw new BadRequestException("该记录已删除，请刷新列表");
+        }
+
+        // 1. 回退 MealPlanCustomer.isVerified = 0
+        mealPlanCustomerMapper.revertVerified(logRecord.getMealPlanCustomerId());
+
+        // 2. 回退 CustomerOrder: verifiedCount-1, remainingCount+1, 如果已完成则回退为进行中
+        customerOrderMapper.revertVerification(logRecord.getOrderId());
+
+        // 3. 软删除核销日志
+        logRecord.setDeleted(1);
+        logRecord.setDeleteTime(new Date());
+        logRecord.setDeletedBy(SecurityUtils.getCurrentUsername());
+        verificationLogMapper.updateById(logRecord);
     }
 }

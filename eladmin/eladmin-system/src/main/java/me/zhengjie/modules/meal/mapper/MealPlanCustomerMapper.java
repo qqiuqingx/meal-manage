@@ -80,4 +80,11 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
      * 根据排餐计划ID查询客户的配送地址信息
      */
     List<MealPlanCustomerAddressVO> selectCustomerAddresses(@Param("mealPlanId") Long mealPlanId);
+
+    /**
+     * 回退核销状态（删除核销日志时调用）
+     * @param id 客户排餐ID
+     * @return 更新行数
+     */
+    int revertVerified(@Param("id") Long id);
 }
