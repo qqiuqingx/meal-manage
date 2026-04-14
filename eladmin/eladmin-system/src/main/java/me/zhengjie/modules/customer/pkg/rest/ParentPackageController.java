@@ -80,6 +80,9 @@ public class ParentPackageController {
         entity.setPackageName(dto.getPackageName());
         entity.setStatus(dto.getStatus() != null && dto.getStatus() == 1);
         entity.setRemark(dto.getRemark());
+        entity.setPoolPrefix(dto.getPoolPrefix());
+        entity.setPoolStart(dto.getPoolStart());
+        entity.setPoolEnd(dto.getPoolEnd());
         parentPackageService.create(entity, subPackageIds);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
@@ -99,6 +102,9 @@ public class ParentPackageController {
         entity.setPackageName(dto.getPackageName());
         entity.setStatus(dto.getStatus() != null && dto.getStatus() == 1);
         entity.setRemark(dto.getRemark());
+        entity.setPoolPrefix(dto.getPoolPrefix());
+        entity.setPoolStart(dto.getPoolStart());
+        entity.setPoolEnd(dto.getPoolEnd());
         parentPackageService.update(entity, subPackageIds);
         return ResponseEntity.ok().build();
     }
