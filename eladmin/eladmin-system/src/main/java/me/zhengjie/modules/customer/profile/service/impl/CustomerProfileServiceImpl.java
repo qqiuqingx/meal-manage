@@ -10,6 +10,7 @@ import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
+import me.zhengjie.modules.meal.service.DishService;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.domain.SubPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
@@ -59,6 +60,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private final CustomerProfilePackageMapper profilePackageMapper;
     private final MealVerificationLogMapper verificationLogMapper;
     private final NumberPoolService numberPoolService;
+    private final DishService dishService;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -95,6 +97,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         detail.setGestationalWeek(profile.getGestationalWeek());
         detail.setAllergyTags(profile.getAllergyTags());
         detail.setExcludedDishIds(profile.getExcludedDishIds());
+        detail.setExcludedDishNames(convertDishIdsToNames(profile.getExcludedDishIds()));
         detail.setMedicalRequirements(profile.getMedicalRequirements());
         //
         detail.setCreateTime(profile.getCreateTime() != null ? profile.getCreateTime().toLocalDate() : null);
@@ -553,5 +556,23 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         } catch (Exception e) {
             return "system";
         }
+    }
+
+    /**
+     * 将菜品ID列表转换为菜品名称列表
+     * @param dishIds 排除菜品ID列表
+     * @return 排除菜品名称列表
+     */
+    private List<String> convertDishIdsToNames(List<Integer> dishIds) {
+        if (dishIds == null || dishIds.isEmpty()) {
+            return null;
+        }
+        List<me.zhengjie.modules.meal.domain.Dish> dishes = dishService.listByIds(dishIds);
+        if (dishes == null || dishes.isEmpty()) {
+            return null;
+        }
+        return dishes.stream()
+            .map(me.zhengjie.modules.meal.domain.Dish::getName)
+            .collect(Collectors.toList());
     }
 }
