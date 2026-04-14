@@ -94,6 +94,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         detail.setPhone(profile.getPhone());
         detail.setGestationalWeek(profile.getGestationalWeek());
         detail.setAllergyTags(profile.getAllergyTags());
+        detail.setExcludedDishIds(profile.getExcludedDishIds());
         detail.setMedicalRequirements(profile.getMedicalRequirements());
         //
         detail.setCreateTime(profile.getCreateTime() != null ? profile.getCreateTime().toLocalDate() : null);
@@ -126,6 +127,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profile.setPhone(dto.getPhone());
         profile.setGestationalWeek(dto.getGestationalWeek());
         profile.setAllergyTags(dto.getAllergyTags());
+        profile.setExcludedDishIds(dto.getExcludedDishIds());
         profile.setMedicalRequirements(dto.getMedicalRequirements());
         //
         profile.setCreateBy(getCurrentUsername());
@@ -153,6 +155,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profile.setPhone(dto.getPhone());
         profile.setGestationalWeek(dto.getGestationalWeek());
         profile.setAllergyTags(dto.getAllergyTags());
+        profile.setExcludedDishIds(dto.getExcludedDishIds());
         profile.setMedicalRequirements(dto.getMedicalRequirements());
         profile.setRemark(dto.getRemark());
         profile.setUpdateBy(getCurrentUsername());
@@ -324,6 +327,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             dto.setAllergyTags(normalizedTags);
         }
 
+        // 验证排除菜品ID列表
+        validateExcludedDishes(dto.getExcludedDishIds());
+
         return validatedOrderInfo;
     }
 
@@ -480,6 +486,28 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             return "周末";
         }
         return addressType;
+    }
+
+    /**
+     * 验证排除菜品ID列表
+     */
+    private void validateExcludedDishes(List<Integer> dishIds) {
+        if (dishIds == null || dishIds.isEmpty()) {
+            return; // 空列表是允许的
+        }
+
+        // 去重检查
+        Set<Integer> uniqueIds = new HashSet<>(dishIds);
+        if (uniqueIds.size() != dishIds.size()) {
+            throw new BadRequestException("排除菜品ID列表包含重复值");
+        }
+
+        // 检查菜品ID是否有效（正数）
+        for (Integer dishId : dishIds) {
+            if (dishId == null || dishId <= 0) {
+                throw new BadRequestException("排除菜品ID必须为正整数");
+            }
+        }
     }
 
     private void fillLatestOrderInfo(CustomerProfile profile) {
