@@ -98,6 +98,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         detail.setAllergyTags(profile.getAllergyTags());
         detail.setExcludedDishIds(profile.getExcludedDishIds());
         detail.setExcludedDishNames(convertDishIdsToNames(profile.getExcludedDishIds()));
+        detail.setExcludedDates(profile.getExcludedDates());
         detail.setMedicalRequirements(profile.getMedicalRequirements());
         //
         detail.setCreateTime(profile.getCreateTime() != null ? profile.getCreateTime().toLocalDate() : null);
@@ -131,6 +132,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profile.setGestationalWeek(dto.getGestationalWeek());
         profile.setAllergyTags(dto.getAllergyTags());
         profile.setExcludedDishIds(dto.getExcludedDishIds());
+        profile.setExcludedDates(dto.getExcludedDates());
         profile.setMedicalRequirements(dto.getMedicalRequirements());
         //
         profile.setCreateBy(getCurrentUsername());
@@ -159,6 +161,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profile.setGestationalWeek(dto.getGestationalWeek());
         profile.setAllergyTags(dto.getAllergyTags());
         profile.setExcludedDishIds(dto.getExcludedDishIds());
+        profile.setExcludedDates(dto.getExcludedDates());
         profile.setMedicalRequirements(dto.getMedicalRequirements());
         profile.setRemark(dto.getRemark());
         profile.setUpdateBy(getCurrentUsername());
@@ -333,6 +336,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         // 验证排除菜品ID列表
         validateExcludedDishes(dto.getExcludedDishIds());
 
+        // 验证排除日期格式
+        validateExcludedDates(dto.getExcludedDates());
+
         return validatedOrderInfo;
     }
 
@@ -489,6 +495,38 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             return "周末";
         }
         return addressType;
+    }
+
+    /**
+     * 验证排除日期格式
+     */
+    private void validateExcludedDates(List<me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto> excludedDates) {
+        if (excludedDates == null || excludedDates.isEmpty()) {
+            return;  // 字段可选，null或空列表合法
+        }
+
+        Set<String> validMealTypes = Set.of("BREAKFAST", "LUNCH", "DINNER");
+
+        for (me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto dto : excludedDates) {
+            // 校验日期格式
+            try {
+                LocalDate.parse(dto.getDate());  // 必须为 yyyy-MM-dd
+            } catch (Exception e) {
+                throw new BadRequestException("排除日期格式错误: " + dto.getDate());
+            }
+
+            // 校验餐次列表
+            if (dto.getMealTypes() == null || dto.getMealTypes().isEmpty()) {
+                throw new BadRequestException("排除日期必须指定至少一个餐次");
+            }
+
+            // 校验餐次值
+            for (String mealType : dto.getMealTypes()) {
+                if (!validMealTypes.contains(mealType)) {
+                    throw new BadRequestException("无效的餐次类型: " + mealType);
+                }
+            }
+        }
     }
 
     /**
