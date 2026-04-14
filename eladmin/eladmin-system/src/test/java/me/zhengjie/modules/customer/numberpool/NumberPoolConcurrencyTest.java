@@ -26,7 +26,9 @@ import me.zhengjie.exception.BadRequestException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.web.socket.server.standard.ServerEndpointExporter;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -47,6 +49,9 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest
 public class NumberPoolConcurrencyTest {
 
+    @MockBean(name = "serverEndpointExporter")
+    private ServerEndpointExporter serverEndpointExporter;
+
     @Autowired
     private NumberPoolServiceImpl numberPoolService;
 
@@ -65,6 +70,7 @@ public class NumberPoolConcurrencyTest {
     public void setup() {
         // Insert a test parent_package with small pool (10 slots: 1001-1010)
         ParentPackage pkg = new ParentPackage();
+        pkg.setPackageCode("CONCURRENT-TEST-PKG");
         pkg.setPackageName("CONCURRENT-TEST-PKG");
         pkg.setPrefix("T");
         pkg.setPoolPrefix("T1");

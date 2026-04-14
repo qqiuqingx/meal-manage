@@ -61,10 +61,11 @@ public class NumberPoolServiceImpl implements NumberPoolService {
         // Step 2: 查询 [pool_start, pool_end] 范围内已被占用的编号
         // 只有 customer_order.status = 1（进行中）的订单才算"占用"
         // 已取消/已完成订单的编号视为可用，可被重新分配（per POOL-11）
+        int codeWidth = resolveCodeWidth(config.getPoolStart(), config.getPoolEnd());
         List<String> usedCodes = numberPoolMapper.findUsedCodesInRange(
             config.getPoolPrefix(),
-            config.getPoolStart(),
-            config.getPoolEnd()
+            buildCode(config.getPoolPrefix(), config.getPoolStart(), codeWidth),
+            buildCode(config.getPoolPrefix(), config.getPoolEnd(), codeWidth)
         );
 
         // Step 3: HashSet 加速 contains 判断
@@ -75,7 +76,7 @@ public class NumberPoolServiceImpl implements NumberPoolService {
         int poolStart = config.getPoolStart();
         int poolEnd = config.getPoolEnd();
         for (int i = poolStart; i <= poolEnd; i++) {
-            String candidate = config.getPoolPrefix() + String.format("%03d", i);
+            String candidate = buildCode(config.getPoolPrefix(), i, codeWidth);
             if (!usedSet.contains(candidate)) {
                 log.debug("编号池分配成功: packageId={}, code={}", config.getPackageId(), candidate);
                 return candidate;
@@ -93,5 +94,15 @@ public class NumberPoolServiceImpl implements NumberPoolService {
             total
         );
         throw new BadRequestException(message);
+    }
+
+    private int resolveCodeWidth(Integer poolStart, Integer poolEnd) {
+        int startWidth = String.valueOf(poolStart).length();
+        int endWidth = String.valueOf(poolEnd).length();
+        return Math.max(3, Math.max(startWidth, endWidth));
+    }
+
+    private String buildCode(String poolPrefix, int sequence, int codeWidth) {
+        return poolPrefix + String.format("%0" + codeWidth + "d", sequence);
     }
 }

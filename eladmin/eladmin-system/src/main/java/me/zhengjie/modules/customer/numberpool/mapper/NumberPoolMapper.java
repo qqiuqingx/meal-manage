@@ -30,7 +30,7 @@ public interface NumberPoolMapper {
      * 锁加在套餐行而非 customer_profile，避免宽间隙锁.
      * 由调用方（NumberPoolServiceImpl）控制事务边界.
      */
-    @Select("SELECT * FROM parent_package WHERE id = #{packageId}")
+    @Select("SELECT * FROM parent_package WHERE id = #{packageId} FOR UPDATE")
     ParentPackage selectForUpdate(@Param("packageId") Long packageId);
 
     /**
@@ -40,7 +40,7 @@ public interface NumberPoolMapper {
      */
     List<String> findUsedCodesInRange(
         @Param("poolPrefix") String poolPrefix,
-        @Param("poolStart") Integer poolStart,
-        @Param("poolEnd") Integer poolEnd
+        @Param("rangeStartCode") String rangeStartCode,
+        @Param("rangeEndCode") String rangeEndCode
     );
 }
