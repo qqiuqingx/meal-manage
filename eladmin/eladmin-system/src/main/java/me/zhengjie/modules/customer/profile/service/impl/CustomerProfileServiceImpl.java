@@ -3,6 +3,8 @@ package me.zhengjie.modules.customer.profile.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
@@ -21,13 +23,12 @@ import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
+import me.zhengjie.modules.customer.numberpool.domain.NumberPoolConfig;
+import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
 import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.PageUtil;
 import me.zhengjie.utils.SecurityUtils;
 import me.zhengjie.utils.StringUtils;
-import me.zhengjie.modules.customer.numberpool.domain.NumberPoolConfig;
-import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,32 +46,19 @@ import java.util.stream.Collectors;
 /**
  * 客户档案服务实现
  */
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class CustomerProfileServiceImpl implements CustomerProfileService {
 
-    @Autowired
-    private CustomerProfileMapper profileMapper;
-
-    @Autowired
-    private CustomerProfileAddressMapper addressMapper;
-
-    @Autowired
-    private ParentPackageMapper parentPackageMapper;
-
-    @Autowired
-    private SubPackageMapper subPackageMapper;
-
-    @Autowired
-    private CustomerOrderMapper customerOrderMapper;
-
-    @Autowired
-    private CustomerProfilePackageMapper profilePackageMapper;
-
-    @Autowired
-    private MealVerificationLogMapper verificationLogMapper;
-
-    @Autowired
-    private NumberPoolService numberPoolService;
+    private final CustomerProfileMapper profileMapper;
+    private final CustomerProfileAddressMapper addressMapper;
+    private final ParentPackageMapper parentPackageMapper;
+    private final SubPackageMapper subPackageMapper;
+    private final CustomerOrderMapper customerOrderMapper;
+    private final CustomerProfilePackageMapper profilePackageMapper;
+    private final MealVerificationLogMapper verificationLogMapper;
+    private final NumberPoolService numberPoolService;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -230,9 +218,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         if (!Boolean.TRUE.equals(parent.getStatus())) {
             throw new BadRequestException("父套餐已禁用");
         }
-        if (StringUtils.isBlank(parent.getPrefix())) {
-            throw new BadRequestException("父套餐未配置编号前缀");
-        }
+//        if (StringUtils.isBlank(parent.getPrefix())) {
+//            throw new BadRequestException("父套餐未配置编号前缀");
+//        }
 
         // --- Backward compatibility: pool fields NULL → fall back to sequential allocation ---
         // Phase 5 migration will populate pool fields for all packages.
@@ -354,9 +342,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         if (!Boolean.TRUE.equals(parent.getStatus())) {
             throw new BadRequestException("父套餐已禁用");
         }
-        if (StringUtils.isBlank(parent.getPrefix())) {
-            throw new BadRequestException("父套餐未配置编号前缀");
-        }
+//        if (StringUtils.isBlank(parent.getPrefix())) {
+//            throw new BadRequestException("父套餐未配置编号前缀");
+//        }
 
         if (orderInfo.getChildPackageId() == null) {
             throw new BadRequestException("首单子套餐不能为空");
