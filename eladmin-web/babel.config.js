@@ -12,7 +12,7 @@ module.exports = {
     {
       test: ['tests/**'],
       presets: [
-        ['@babel/preset-env', { modules: 'auto' }]
+        ['@babel/preset-env', { modules: 'commonjs' }]
       ]
     }
   ]
