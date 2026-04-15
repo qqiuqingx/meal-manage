@@ -210,4 +210,10 @@ public class CustomerProfile implements Serializable {
      */
     @TableField(exist = false)
     private Integer remainingLunchDinnerCount;
+
+    /**
+     * 送餐模式(查询时从最新订单填充)
+     */
+    @TableField(exist = false)
+    private String scheduleMode;
 }
