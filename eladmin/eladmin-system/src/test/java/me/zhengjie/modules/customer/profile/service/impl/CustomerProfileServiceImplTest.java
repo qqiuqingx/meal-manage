@@ -2,6 +2,8 @@ package me.zhengjie.modules.customer.profile.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import me.zhengjie.exception.BadRequestException;
+import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
@@ -36,6 +38,9 @@ class CustomerProfileServiceImplTest {
 
     @Mock
     private CustomerProfileAddressMapper addressMapper;
+
+    @Mock
+    private CustomerOrderMapper customerOrderMapper;
 
     @InjectMocks
     private CustomerProfileServiceImpl customerProfileService;
@@ -79,6 +84,12 @@ class CustomerProfileServiceImplTest {
 
     private void invokeFillDefaultAddress(CustomerProfile profile) throws Exception {
         Method method = CustomerProfileServiceImpl.class.getDeclaredMethod("fillDefaultAddress", CustomerProfile.class);
+        method.setAccessible(true);
+        method.invoke(customerProfileService, profile);
+    }
+
+    private void invokeFillLatestOrderInfo(CustomerProfile profile) throws Exception {
+        Method method = CustomerProfileServiceImpl.class.getDeclaredMethod("fillLatestOrderInfo", CustomerProfile.class);
         method.setAccessible(true);
         method.invoke(customerProfileService, profile);
     }
@@ -364,5 +375,45 @@ class CustomerProfileServiceImplTest {
         List<ExcludedDateDto> excludedDates = Arrays.asList(dto1, dto2, dto3);
 
         invokeValidateExcludedDates(excludedDates);
+    }
+
+    // ========== scheduleMode 填充测试 ==========
+
+    @Test
+    void testFillLatestOrderInfo_WithScheduleMode() throws Exception {
+        // Setup: 创建订单对象，设置 scheduleMode 为 "DAILY"
+        CustomerOrder latestOrder = new CustomerOrder();
+        latestOrder.setId(1L);
+        latestOrder.setCustomerId(1L);
+        latestOrder.setScheduleMode("DAILY");
+        latestOrder.setBreakfastCount(10);
+        latestOrder.setLunchDinnerCount(20);
+
+        List<CustomerOrder> activeOrders = Arrays.asList(latestOrder);
+
+        // Mock: 设置 mapper 返回值
+        when(customerOrderMapper.findActiveOrdersByCustomerId(1L)).thenReturn(activeOrders);
+        when(customerOrderMapper.findLatestByCustomerId(1L)).thenReturn(latestOrder);
+        when(customerOrderMapper.sumVerifiedCountByOrderId(1L)).thenReturn(Arrays.asList());
+
+        // Execute: 调用 fillLatestOrderInfo()
+        invokeFillLatestOrderInfo(profile);
+
+        // Verify: 验证 scheduleMode 填充为中文标签
+        assertNotNull(profile.getScheduleMode());
+        assertEquals("每天", profile.getScheduleMode());
+    }
+
+    @Test
+    void testFillLatestOrderInfo_NoOrder() throws Exception {
+        // Mock: 设置 mapper 返回空列表（无订单）
+        when(customerOrderMapper.findActiveOrdersByCustomerId(1L)).thenReturn(Collections.emptyList());
+
+        // Execute: 调用 fillLatestOrderInfo()
+        invokeFillLatestOrderInfo(profile);
+
+        // Verify: 验证 scheduleMode 显示 "-"
+        assertNotNull(profile.getScheduleMode());
+        assertEquals("-", profile.getScheduleMode());
     }
 }
