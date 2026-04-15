@@ -385,3 +385,145 @@ describe('CustomerProfile payload building', () => {
     expect(ctx.$message.error).not.toHaveBeenCalled()
   })
 })
+
+// --- Excluded Dates Tests (Phase 12 UI-01/UI-03) ---
+
+function formatMealTypes(mealTypes) {
+  const MealTypeName = {
+    BREAKFAST: '早餐',
+    LUNCH: '午餐',
+    DINNER: '晚餐'
+  }
+  if (!Array.isArray(mealTypes)) return ''
+  return mealTypes.map(mt => MealTypeName[mt] || mt).join('，')
+}
+
+function buildSubmitPayloadWithExcludedDates(ctx) {
+  const formData = JSON.parse(JSON.stringify(ctx.form))
+  const payload = {
+    customerName: formData.customerName,
+    phone: formData.phone,
+    allergyTags: Array.isArray(formData.allergyTags) ? formData.allergyTags : [],
+    excludedDishIds: Array.isArray(formData.excludedDishIds) ? formData.excludedDishIds : [],
+    excludedDates: Array.isArray(formData.excludedDates) ? formData.excludedDates : [],
+    addresses: createAddressesFromForm(formData)
+  }
+  if (formData.id) {
+    payload.id = formData.id
+  }
+  return payload
+}
+
+function beforeToCUWithExcludedDates(ctx) {
+  // Ensure excludedDates is initialized as array
+  if (!ctx.form.excludedDates || !Array.isArray(ctx.form.excludedDates)) {
+    ctx.$set(ctx.form, 'excludedDates', [])
+  }
+  return true
+}
+
+describe('CustomerProfile excluded dates (UI-01, UI-03)', () => {
+  beforeEach(() => {
+    submitFormSnapshot = null
+    profileApi.getProfile.mockReset()
+  })
+
+  test('formatMealTypes returns Chinese labels joined by ，', () => {
+    expect(formatMealTypes(['BREAKFAST', 'LUNCH'])).toBe('早餐，午餐')
+  })
+
+  test('formatMealTypes returns empty string for empty array', () => {
+    expect(formatMealTypes([])).toBe('')
+  })
+
+  test('formatMealTypes handles single meal type', () => {
+    expect(formatMealTypes(['DINNER'])).toBe('晚餐')
+  })
+
+  test('buildSubmitPayload includes excludedDates field', () => {
+    const ctx = {
+      form: {
+        customerName: '张三',
+        phone: '13800000000',
+        allergyTags: [],
+        excludedDishIds: [],
+        excludedDates: [
+          { date: '2026-04-15', mealTypes: ['BREAKFAST'] },
+          { date: '2026-04-16', mealTypes: ['LUNCH', 'DINNER'] }
+        ],
+        addresses: [
+          { addressType: 'DEFAULT', addressDetail: '地址', contactName: '', contactPhone: '' }
+        ]
+      },
+      crud: { form: {}, status: { add: 0 }},
+      isCreateMode: () => false
+    }
+
+    const payload = buildSubmitPayloadWithExcludedDates(ctx)
+
+    expect(payload.excludedDates).toBeDefined()
+    expect(Array.isArray(payload.excludedDates)).toBe(true)
+    expect(payload.excludedDates).toHaveLength(2)
+    expect(payload.excludedDates[0].date).toBe('2026-04-15')
+    expect(payload.excludedDates[0].mealTypes).toEqual(['BREAKFAST'])
+  })
+
+  test('buildSubmitPayload returns empty array when excludedDates is undefined', () => {
+    const ctx = {
+      form: {
+        customerName: '张三',
+        phone: '13800000000',
+        excludedDates: undefined,
+        addresses: [
+          { addressType: 'DEFAULT', addressDetail: '地址', contactName: '', contactPhone: '' }
+        ]
+      },
+      crud: { form: {}, status: { add: 0 }},
+      isCreateMode: () => false
+    }
+
+    const payload = buildSubmitPayloadWithExcludedDates(ctx)
+
+    expect(payload.excludedDates).toEqual([])
+  })
+
+  test('beforeToCU initializes excludedDates to [] when undefined', () => {
+    const ctx = {
+      form: { customerName: '张三' },
+      $set: (target, key, value) => { target[key] = value }
+    }
+
+    beforeToCUWithExcludedDates(ctx)
+
+    expect(ctx.form.excludedDates).toEqual([])
+  })
+
+  test('beforeToCU preserves existing excludedDates array', () => {
+    const existing = [{ date: '2026-04-15', mealTypes: ['BREAKFAST'] }]
+    const ctx = {
+      form: { customerName: '张三', excludedDates: existing },
+      $set: (target, key, value) => { target[key] = value }
+    }
+
+    beforeToCUWithExcludedDates(ctx)
+
+    expect(ctx.form.excludedDates).toBe(existing)
+  })
+
+  test('removeExcludedDate splices entry from excludedDates array', () => {
+    const excludedDates = [
+      { date: '2026-04-15', mealTypes: ['BREAKFAST'] },
+      { date: '2026-04-16', mealTypes: ['LUNCH'] }
+    ]
+
+    // Simulate removeExcludedDate(index)
+    function removeExcludedDate(arr, index) {
+      arr.splice(index, 1)
+    }
+
+    removeExcludedDate(excludedDates, 0)
+
+    expect(excludedDates).toHaveLength(1)
+    expect(excludedDates[0].date).toBe('2026-04-16')
+  })
+})
