@@ -26,6 +26,7 @@
 --
 -- Note:
 --   customer_profile 和 parent_package 通过 customer_code LIKE prefix 关联（非 parent_package_id）
+--   COLLATE utf8mb4_unicode_ci 用于解决 utf8mb4_general_ci 和 utf8mb4_unicode_ci 混用问题
 --
 -- Execution:
 --   1. Run BEFORE Phase 2-4 code is deployed
@@ -48,13 +49,13 @@ SELECT
   (
     SELECT COUNT(*)
     FROM customer_profile cp
-    WHERE cp.customer_code LIKE CONCAT(pp.prefix, '%')
+    WHERE cp.customer_code LIKE CONCAT(pp.prefix, '%') COLLATE utf8mb4_unicode_ci
       AND cp.customer_code IS NOT NULL
   ) AS existing_customers,
   (
     SELECT COALESCE(MAX(CAST(SUBSTRING(cp.customer_code, LENGTH(pp.prefix)+1) AS UNSIGNED)), 0)
     FROM customer_profile cp
-    WHERE cp.customer_code LIKE CONCAT(pp.prefix, '%')
+    WHERE cp.customer_code LIKE CONCAT(pp.prefix, '%') COLLATE utf8mb4_unicode_ci
       AND cp.customer_code IS NOT NULL
   ) AS max_used_number
 FROM parent_package pp
@@ -71,7 +72,7 @@ SET
   pool_start  = (
     SELECT COALESCE(MAX(CAST(SUBSTRING(cp.customer_code, LENGTH(pp.prefix)+1) AS UNSIGNED)), 1000)
     FROM customer_profile cp
-    WHERE cp.customer_code LIKE CONCAT(pp.prefix, '%')
+    WHERE cp.customer_code LIKE CONCAT(pp.prefix, '%') COLLATE utf8mb4_unicode_ci
       AND cp.customer_code IS NOT NULL
   ) + 1,
   pool_end    = 1199
@@ -89,7 +90,7 @@ SELECT
   (
     SELECT COUNT(*)
     FROM customer_profile cp
-    WHERE cp.customer_code LIKE CONCAT(pp.pool_prefix, '%')
+    WHERE cp.customer_code LIKE CONCAT(pp.pool_prefix, '%') COLLATE utf8mb4_unicode_ci
       AND cp.customer_code IS NOT NULL
   ) AS existing_customers
 FROM parent_package pp

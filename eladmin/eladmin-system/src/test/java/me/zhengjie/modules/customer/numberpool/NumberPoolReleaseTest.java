@@ -80,9 +80,9 @@ public class NumberPoolReleaseTest {
     @BeforeEach
     public void cleanup() {
         // Clean all test data
-        orderMapper.delete(null);
-        profileMapper.delete(null);
-        parentPackageMapper.delete(null);
+//        orderMapper.delete(null);
+//        profileMapper.delete(null);
+//        parentPackageMapper.delete(null);
 
         // Insert test package with small pool (10 slots: R12001-R12010)
         ParentPackage pkg = new ParentPackage();

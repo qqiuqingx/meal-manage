@@ -102,6 +102,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         detail.setExcludedDishNames(convertDishIdsToNames(profile.getExcludedDishIds()));
         detail.setExcludedDates(profile.getExcludedDates());
         detail.setMedicalRequirements(profile.getMedicalRequirements());
+        detail.setSpecialRequirements(profile.getSpecialRequirements());
+        detail.setProductionDate(profile.getProductionDate());
         //
         detail.setCreateTime(profile.getCreateTime() != null ? profile.getCreateTime().toLocalDate() : null);
         detail.setUpdateTime(profile.getUpdateTime() != null ? profile.getUpdateTime().toLocalDate() : null);
@@ -136,6 +138,10 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profile.setExcludedDishIds(dto.getExcludedDishIds());
         profile.setExcludedDates(dto.getExcludedDates());
         profile.setMedicalRequirements(dto.getMedicalRequirements());
+        profile.setSpecialRequirements(dto.getSpecialRequirements());
+        if (StringUtils.isNotBlank(dto.getProductionDate())) {
+            profile.setProductionDate(LocalDate.parse(dto.getProductionDate(), DATE_FORMATTER));
+        }
         //
         profile.setCreateBy(getCurrentUsername());
         profileMapper.insert(profile);
@@ -165,6 +171,10 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profile.setExcludedDishIds(dto.getExcludedDishIds());
         profile.setExcludedDates(dto.getExcludedDates());
         profile.setMedicalRequirements(dto.getMedicalRequirements());
+        profile.setSpecialRequirements(dto.getSpecialRequirements());
+        if (StringUtils.isNotBlank(dto.getProductionDate())) {
+            profile.setProductionDate(LocalDate.parse(dto.getProductionDate(), DATE_FORMATTER));
+        }
         profile.setRemark(dto.getRemark());
         profile.setUpdateBy(getCurrentUsername());
         profileMapper.updateById(profile);

@@ -81,8 +81,8 @@ public class NumberPoolConcurrencyTest {
         testPackageId = pkg.getId();
 
         // Clean up any previous test data for this package prefix
-        profileMapper.delete(null);
-        customerOrderMapper.delete(null);
+//        profileMapper.delete(null);
+//        customerOrderMapper.delete(null);
     }
 
     /**
