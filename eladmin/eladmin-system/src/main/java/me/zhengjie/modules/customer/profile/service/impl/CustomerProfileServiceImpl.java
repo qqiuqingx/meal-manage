@@ -69,6 +69,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
     @Override
     public PageResult<CustomerProfile> queryAll(CustomerProfileQueryCriteria criteria, Page<Object> page) {
+        page.setCountId("findAll_COUNT");
         IPage<CustomerProfile> pageResult = profileMapper.findAll(criteria, page);
 
 

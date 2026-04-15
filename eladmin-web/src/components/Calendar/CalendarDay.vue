@@ -117,7 +117,7 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 60px;
+  height: 36px;
   cursor: pointer;
   border-radius: 4px;
   transition: all 0.2s;
@@ -148,26 +148,26 @@ export default {
 }
 
 .calendar-day__date {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 .calendar-day__meal-indicators {
   display: flex;
-  gap: 2px;
-  margin-top: 4px;
+  gap: 1px;
+  margin-top: 2px;
 }
 
 .calendar-day__meal-tag {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 18px;
-  height: 16px;
-  font-size: 10px;
+  min-width: 14px;
+  height: 12px;
+  font-size: 9px;
   font-weight: 500;
   border-radius: 2px;
-  padding: 0 2px;
+  padding: 0 1px;
 }
 
 .meal-tag--breakfast {
