@@ -416,4 +416,61 @@ class CustomerProfileServiceImplTest {
         assertNotNull(profile.getScheduleMode());
         assertEquals("-", profile.getScheduleMode());
     }
+
+    @Test
+    void testFillLatestOrderInfo_MultipleOrders() throws Exception {
+        // Setup: 创建两个订单，order2 为最新订单（deal_time DESC 排序）
+        CustomerOrder order1 = new CustomerOrder();
+        order1.setId(1L);
+        order1.setCustomerId(1L);
+        order1.setScheduleMode("WEEKEND");
+        order1.setBreakfastCount(5);
+        order1.setLunchDinnerCount(10);
+
+        CustomerOrder order2 = new CustomerOrder();
+        order2.setId(2L);
+        order2.setCustomerId(1L);
+        order2.setScheduleMode("WEEKDAY");  // 最新订单的模式
+        order2.setBreakfastCount(10);
+        order2.setLunchDinnerCount(20);
+
+        List<CustomerOrder> activeOrders = Arrays.asList(order2, order1);  // order2 是最新
+
+        // Mock: findLatestByCustomerId 返回最新订单 order2
+        when(customerOrderMapper.findActiveOrdersByCustomerId(1L)).thenReturn(activeOrders);
+        when(customerOrderMapper.findLatestByCustomerId(1L)).thenReturn(order2);  // 返回最新
+        when(customerOrderMapper.sumVerifiedCountByOrderId(any())).thenReturn(Arrays.asList());
+
+        // Execute: 调用 fillLatestOrderInfo()
+        invokeFillLatestOrderInfo(profile);
+
+        // Verify: 验证 scheduleMode 取最新订单的模式
+        assertNotNull(profile.getScheduleMode());
+        assertEquals("工作日", profile.getScheduleMode());  // 取最新订单的模式（WEEKDAY → 工作日）
+    }
+
+    @Test
+    void testFillLatestOrderInfo_InvalidScheduleMode() throws Exception {
+        // Setup: 创建订单，设置 scheduleMode 为非法值 "INVALID"
+        CustomerOrder latestOrder = new CustomerOrder();
+        latestOrder.setId(1L);
+        latestOrder.setCustomerId(1L);
+        latestOrder.setScheduleMode("INVALID");  // 非法值
+        latestOrder.setBreakfastCount(10);
+        latestOrder.setLunchDinnerCount(20);
+
+        List<CustomerOrder> activeOrders = Arrays.asList(latestOrder);
+
+        // Mock: 设置 mapper 返回值
+        when(customerOrderMapper.findActiveOrdersByCustomerId(1L)).thenReturn(activeOrders);
+        when(customerOrderMapper.findLatestByCustomerId(1L)).thenReturn(latestOrder);
+        when(customerOrderMapper.sumVerifiedCountByOrderId(1L)).thenReturn(Arrays.asList());
+
+        // Execute: 调用 fillLatestOrderInfo()
+        invokeFillLatestOrderInfo(profile);
+
+        // Verify: 验证非法值显示 "-"
+        assertNotNull(profile.getScheduleMode());
+        assertEquals("-", profile.getScheduleMode());  // 非法值显示 "-"
+    }
 }
