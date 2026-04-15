@@ -22,6 +22,7 @@
         <result column="update_by" property="updateBy"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
+        <result column="excluded_dish_names_str" property="excludedDishNamesStr"/>
     </resultMap>
 
     <!-- 批量查询客户档案 -->
@@ -40,19 +41,28 @@
 
     <!-- 条件查询客户档案列表 -->
     <select id="findAll" resultMap="BaseResultMap">
-        SELECT * FROM customer_profile
+        SELECT cp.*,
+               (
+                   SELECT GROUP_CONCAT(d.name ORDER BY jt.dish_id SEPARATOR ', ')
+                   FROM JSON_TABLE(
+                       IFNULL(cp.excluded_dish_ids, '[]'),
+                       '$[*]' COLUMNS (dish_id INT PATH '$')
+                   ) AS jt
+                   JOIN dish d ON jt.dish_id = d.id
+               ) AS excluded_dish_names_str
+        FROM customer_profile cp
         <where>
             <if test="criteria.customerCode != null and criteria.customerCode != ''">
-                AND customer_code LIKE CONCAT('%', #{criteria.customerCode}, '%')
+                AND cp.customer_code LIKE CONCAT('%', #{criteria.customerCode}, '%')
             </if>
             <if test="criteria.customerName != null and criteria.customerName != ''">
-                AND customer_name LIKE CONCAT('%', #{criteria.customerName}, '%')
+                AND cp.customer_name LIKE CONCAT('%', #{criteria.customerName}, '%')
             </if>
             <if test="criteria.phone != null and criteria.phone != ''">
-                AND phone LIKE CONCAT('%', #{criteria.phone}, '%')
+                AND cp.phone LIKE CONCAT('%', #{criteria.phone}, '%')
             </if>
         </where>
-        ORDER BY id DESC
+        ORDER BY cp.id DESC
     </select>
 
     <!-- 根据客户编号查询(排除指定ID) -->

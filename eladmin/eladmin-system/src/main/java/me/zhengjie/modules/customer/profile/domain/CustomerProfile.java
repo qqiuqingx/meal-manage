@@ -216,4 +216,10 @@ public class CustomerProfile implements Serializable {
      */
     @TableField(exist = false)
     private String scheduleMode;
+
+    /**
+     * 排除菜品名称拼接字符串(查询时从dish表关联填充)
+     */
+    @TableField(exist = false)
+    private String excludedDishNamesStr;
 }

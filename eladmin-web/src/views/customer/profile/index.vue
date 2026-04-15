@@ -52,20 +52,20 @@
           {{ scope.row.specialRequirements || '-' }}
         </template>
       </el-table-column>
-      <el-table-column label="排除菜品" width="100" align="center">
+      <el-table-column label="排除菜品" width="160" align="center">
         <template slot-scope="scope">
-          <span v-if="!scope.row.excludedDishIds || scope.row.excludedDishIds.length === 0">无</span>
-          <el-tag v-else size="mini" type="info">
-            已排除{{ scope.row.excludedDishIds.length }}道
-          </el-tag>
+          <span v-if="!scope.row.excludedDishNamesStr">无</span>
+          <el-tooltip v-else :content="scope.row.excludedDishNamesStr" placement="top" :open-delay="300">
+            <span class="cell-overflow">{{ scope.row.excludedDishNamesStr }}</span>
+          </el-tooltip>
         </template>
       </el-table-column>
-      <el-table-column label="排除日期" width="100" align="center">
+      <el-table-column label="排除日期" width="160" align="center">
         <template slot-scope="scope">
           <span v-if="!scope.row.excludedDates || scope.row.excludedDates.length === 0">无</span>
-          <el-tag v-else size="mini" type="info">
-            已排除{{ scope.row.excludedDates.length }}个
-          </el-tag>
+          <el-tooltip v-else :content="formatExcludedDatesStr(scope.row.excludedDates)" placement="top" :open-delay="300">
+            <span class="cell-overflow">{{ formatExcludedDatesStr(scope.row.excludedDates) }}</span>
+          </el-tooltip>
         </template>
       </el-table-column>
       <el-table-column label="送餐模式" width="90" align="center">
@@ -181,11 +181,23 @@
         <el-row :gutter="20">
           <el-col :span="24">
             <el-form-item label="排除日期">
-              <MealScheduleCalendar
-                v-model="form.excludedDates"
-                :readonly="false"
-                :hide-summary="true"
-              />
+              <div>
+                <el-button
+                  size="mini"
+                  type="text"
+                  :icon="excludeDatesExpanded ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"
+                  @click="excludeDatesExpanded = !excludeDatesExpanded"
+                >
+                  {{ excludeDatesExpanded ? '收起日历' : (form.excludedDates && form.excludedDates.length > 0 ? `已选 ${form.excludedDates.length} 个日期，点击展开` : '点击展开选择') }}
+                </el-button>
+                <MealScheduleCalendar
+                  v-show="excludeDatesExpanded"
+                  v-model="form.excludedDates"
+                  :readonly="false"
+                  :hide-summary="true"
+                  style="margin-top: 8px;"
+                />
+              </div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -372,6 +384,7 @@ export default {
         'orderInfo.endDate': [{ required: true, message: '请选择结束日期', trigger: 'change' }]
       },
       submitLoading: false,
+      excludeDatesExpanded: false,
       allergyOptions: [],
       allergyLoading: false,
       excludedDishOptions: [],
@@ -411,6 +424,13 @@ export default {
     formatMealTypes(mealTypes) {
       if (!Array.isArray(mealTypes)) return ''
       return mealTypes.map(mt => MealTypeName[mt] || mt).join('，')
+    },
+    formatExcludedDatesStr(excludedDates) {
+      if (!Array.isArray(excludedDates) || excludedDates.length === 0) return ''
+      return excludedDates.map(item => {
+        const mealStr = this.formatMealTypes(item.mealTypes)
+        return mealStr ? `${item.date}(${mealStr})` : item.date
+      }).join(', ')
     },
     removeExcludedDate(index) {
       this.form.excludedDates.splice(index, 1)
@@ -644,6 +664,15 @@ export default {
 </script>
 
 <style scoped>
+.cell-overflow {
+  display: inline-block;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: default;
+}
 .head-container {
   padding: 10px;
   margin-bottom: 10px;
