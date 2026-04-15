@@ -9,3 +9,6 @@ application.pid
 
 ### Worktrees ###
 .worktrees/
+
+# Generated log directories
+eladmin/log.path_IS_UNDEFINED/
