@@ -65,6 +65,22 @@
         ORDER BY cp.id DESC
     </select>
 
+    <!-- 手动提供 count SQL，避免 JSQLParser 解析 JSON_TABLE 报错 -->
+    <select id="findAll_COUNT" resultType="java.lang.Long">
+        SELECT COUNT(*) FROM customer_profile cp
+        <where>
+            <if test="criteria.customerCode != null and criteria.customerCode != ''">
+                AND cp.customer_code LIKE CONCAT('%', #{criteria.customerCode}, '%')
+            </if>
+            <if test="criteria.customerName != null and criteria.customerName != ''">
+                AND cp.customer_name LIKE CONCAT('%', #{criteria.customerName}, '%')
+            </if>
+            <if test="criteria.phone != null and criteria.phone != ''">
+                AND cp.phone LIKE CONCAT('%', #{criteria.phone}, '%')
+            </if>
+        </where>
+    </select>
+
     <!-- 根据客户编号查询(排除指定ID) -->
     <select id="countByCodeExcludeId" resultType="int">
         SELECT COUNT(*) FROM customer_profile

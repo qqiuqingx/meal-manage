@@ -333,7 +333,7 @@ export default {
 .meal-schedule-calendar {
   border: 1px solid #dcdfe6;
   border-radius: 4px;
-  padding: 16px;
+  padding: 10px;
   background-color: #ffffff;
 }
 
@@ -341,11 +341,11 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .calendar-header__title {
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 500;
   color: #303133;
 }
@@ -354,13 +354,13 @@ export default {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 4px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .calendar-weekday {
   text-align: center;
-  padding: 8px;
-  font-size: 14px;
+  padding: 4px;
+  font-size: 12px;
   font-weight: 500;
   color: #606266;
 }
