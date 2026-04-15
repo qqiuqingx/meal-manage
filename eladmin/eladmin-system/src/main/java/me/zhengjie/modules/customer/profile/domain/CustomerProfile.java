@@ -114,6 +114,18 @@ public class CustomerProfile implements Serializable {
      */
     private String medicalRequirements;
 
+    /**
+     * 特殊要求
+     */
+    @TableField(value = "special_requirements")
+    private String specialRequirements;
+
+    /**
+     * 生产日期
+     */
+    @TableField(value = "production_date")
+    private LocalDate productionDate;
+
     //
     private String remark;
 
