@@ -16,11 +16,12 @@
       ref="table"
       v-loading="crud.loading"
       :data="crud.data"
+      border
       @selection-change="crud.selectionChangeHandler"
     >
       <el-table-column :selectable="checkboxT" type="selection" width="55" />
-      <el-table-column label="客户编号" prop="customerCode" width="100" />
-      <el-table-column label="姓名" prop="customerName" width="100" />
+      <el-table-column label="客户编号" prop="customerCode" width="100" fixed="left" />
+      <el-table-column label="姓名" prop="customerName" width="100" fixed="left" />
       <el-table-column label="手机号" prop="phone" width="120" />
       <el-table-column label="地址" prop="defaultAddress" min-width="150" />
       <el-table-column label="早餐数" prop="breakfastCount" width="80" align="center" />

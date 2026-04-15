@@ -19,6 +19,7 @@ import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * 排餐计划客户配送地址VO
@@ -44,4 +45,10 @@ public class MealPlanCustomerAddressVO implements Serializable {
 
     @ApiModelProperty(value = "实际使用的地址类型（DEFAULT/WORKDAY/WEEKEND）")
     private String addressType;
+
+    @ApiModelProperty(value = "过敏食物标签列表")
+    private List<String> allergyTags;
+
+    @ApiModelProperty(value = "特殊要求")
+    private String specialRequirements;
 }

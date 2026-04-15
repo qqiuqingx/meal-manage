@@ -165,6 +165,9 @@
         <result column="phone" property="phone"/>
         <result column="address_detail" property="addressDetail"/>
         <result column="address_type" property="addressType"/>
+        <result column="allergy_tags" property="allergyTags"
+                typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="special_requirements" property="specialRequirements"/>
     </resultMap>
 
     <select id="selectCustomerAddresses" resultMap="MealPlanCustomerAddressVOMap">
@@ -192,7 +195,9 @@
                                AND cpa3.address_type = 'DEFAULT')
                 THEN 'DEFAULT'
                 ELSE NULL
-            END AS address_type
+            END AS address_type,
+            cp.allergy_tags,
+            cp.special_requirements
         FROM meal_plan_customer mpc
         JOIN meal_plan mp ON mpc.meal_plan_id = mp.id
         LEFT JOIN customer_profile cp ON mpc.customer_id = cp.id
