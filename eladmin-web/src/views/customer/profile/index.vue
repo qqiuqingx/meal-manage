@@ -172,6 +172,26 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="特殊要求">
+              <el-input v-model="form.specialRequirements" type="textarea" :rows="2" placeholder="请输入特殊要求" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="生产日期">
+              <el-date-picker
+                v-model="form.productionDate"
+                type="date"
+                placeholder="选择生产日期"
+                value-format="yyyy-MM-dd"
+                style="width: 100%;"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
 
         <el-divider content-position="left">地址信息</el-divider>
 
@@ -263,6 +283,8 @@ const defaultForm = {
   excludedDishIds: [],
   excludedDates: [],
   medicalRequirements: null,
+  specialRequirements: null,
+  productionDate: null,
   remark: null,
   addresses: createDefaultAddresses(),
   orderInfo: createFirstOrderDefaultForm()
@@ -380,6 +402,8 @@ export default {
         excludedDishIds: Array.isArray(formData.excludedDishIds) ? formData.excludedDishIds : [],
         excludedDates: Array.isArray(formData.excludedDates) ? formData.excludedDates : [],
         medicalRequirements: formData.medicalRequirements,
+        specialRequirements: formData.specialRequirements,
+        productionDate: formData.productionDate,
         remark: formData.remark,
         addresses: this.createAddressesFromForm(formData)
       }
