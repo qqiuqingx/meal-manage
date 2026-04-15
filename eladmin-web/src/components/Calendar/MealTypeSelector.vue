@@ -29,10 +29,15 @@
     </el-checkbox-group>
 
     <div class="meal-type-selector__footer">
-      <span class="meal-type-selector__summary">{{ summary }}</span>
+      <div class="meal-type-selector__footer-left">
+        <span class="meal-type-selector__summary">{{ summary }}</span>
+        <span v-if="localMealTypes.length === 0" class="meal-type-selector__warning">
+          请至少选择一个餐次
+        </span>
+      </div>
       <el-button-group>
         <el-button size="small" @click="handleCancel">取消</el-button>
-        <el-button size="small" type="primary" @click="handleSave">保存</el-button>
+        <el-button size="small" type="primary" :disabled="localMealTypes.length === 0" @click="handleSave">保存</el-button>
       </el-button-group>
     </div>
   </div>
@@ -165,8 +170,19 @@ export default {
   border-radius: 0 0 4px 4px;
 }
 
+.meal-type-selector__footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .meal-type-selector__summary {
   font-size: 13px;
   color: #909399;
+}
+
+.meal-type-selector__warning {
+  font-size: 12px;
+  color: #f56c6c;
 }
 </style>
