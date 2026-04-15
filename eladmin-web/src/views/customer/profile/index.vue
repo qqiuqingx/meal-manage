@@ -23,11 +23,55 @@
       <el-table-column label="姓名" prop="customerName" width="100" />
       <el-table-column label="手机号" prop="phone" width="120" />
       <el-table-column label="地址" prop="defaultAddress" min-width="150" />
-      <el-table-column label="孕周" prop="gestationalWeek" width="60" align="center" />
       <el-table-column label="早餐数" prop="breakfastCount" width="80" align="center" />
       <el-table-column label="午晚数" prop="lunchDinnerCount" width="80" align="center" />
       <el-table-column label="剩余早餐" prop="remainingBreakfastCount" width="90" align="center" />
       <el-table-column label="剩余午晚" prop="remainingLunchDinnerCount" width="90" align="center" />
+      <el-table-column label="过敏食物" width="120" show-overflow-tooltip>
+        <template slot-scope="scope">
+          <span v-if="!scope.row.allergyTags || scope.row.allergyTags.length === 0">-</span>
+          <template v-else>
+            <el-tag
+              v-for="(tag, i) in scope.row.allergyTags.slice(0, 3)"
+              :key="i"
+              size="mini"
+              type="warning"
+              style="margin-right: 2px;"
+            >
+              {{ tag }}
+            </el-tag>
+            <span v-if="scope.row.allergyTags.length > 3" style="font-size: 11px; color: #999;">
+              +{{ scope.row.allergyTags.length - 3 }}
+            </span>
+          </template>
+        </template>
+      </el-table-column>
+      <el-table-column label="特殊要求" min-width="140" show-overflow-tooltip>
+        <template slot-scope="scope">
+          {{ scope.row.specialRequirements || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="排除菜品" width="100" align="center">
+        <template slot-scope="scope">
+          <span v-if="!scope.row.excludedDishIds || scope.row.excludedDishIds.length === 0">无</span>
+          <el-tag v-else size="mini" type="info">
+            已排除{{ scope.row.excludedDishIds.length }}道
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="排除日期" width="100" align="center">
+        <template slot-scope="scope">
+          <span v-if="!scope.row.excludedDates || scope.row.excludedDates.length === 0">无</span>
+          <el-tag v-else size="mini" type="info">
+            已排除{{ scope.row.excludedDates.length }}个
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="送餐模式" width="90" align="center">
+        <template slot-scope="scope">
+          {{ scope.row.scheduleMode || '-' }}
+        </template>
+      </el-table-column>
       <el-table-column label="创建时间" prop="createTime" width="150" />
       <el-table-column v-if="checkPer(['admin','customerProfile:edit'])" label="操作" width="180px" align="center" fixed="right">
         <template slot-scope="scope">
