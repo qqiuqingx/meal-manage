@@ -27,6 +27,17 @@ public class CustomerProfileDetailDto implements Serializable {
      */
     private java.util.List<ExcludedDateDto> excludedDates;
     private String medicalRequirements;
+
+    /**
+     * 特殊要求
+     */
+    private String specialRequirements;
+
+    /**
+     * 生产日期
+     */
+    private LocalDate productionDate;
+
     //
     private String remark;
     private LocalDate createTime;
