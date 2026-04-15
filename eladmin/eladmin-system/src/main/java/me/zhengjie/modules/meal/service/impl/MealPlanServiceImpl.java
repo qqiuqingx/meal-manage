@@ -1088,7 +1088,7 @@ public class MealPlanServiceImpl implements MealPlanService {
             allergyItem.setSeq(allergySeq++);
             allergyItem.setDeleted(false);
             allergyItem.setIsAllergyFiltered(true);
-            allergyItem.setIsReplaced(true);
+            allergyItem.setIsReplaced(false);
             allergyItem.setAllergyReasons(String.join(",", sad.getAllergyReasons()));
             allergyItem.setReplaceReason(sad.getReplaceReason());
 

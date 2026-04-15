@@ -67,12 +67,17 @@
       <el-form ref="form" :model="form" :rules="rules" size="small" label-width="100px">
         <!-- 客户基本信息 -->
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :span="8">
+            <el-form-item label="客户编号">
+              <el-input v-model="form.customerCode" placeholder="不填则自动生成" style="width: 100%;" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
             <el-form-item label="客户姓名" prop="customerName">
               <el-input v-model="form.customerName" style="width: 100%;" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="8">
             <el-form-item label="手机号" prop="phone">
               <el-input v-model="form.phone" style="width: 100%;" />
             </el-form-item>
@@ -250,6 +255,7 @@ function createDefaultAddresses() {
 
 const defaultForm = {
   id: null,
+  customerCode: null,
   customerName: null,
   phone: null,
   gestationalWeek: null,
@@ -366,6 +372,7 @@ export default {
     buildSubmitPayload() {
       const formData = this.form
       const payload = {
+        customerCode: formData.customerCode || null,
         customerName: formData.customerName,
         phone: formData.phone,
         gestationalWeek: formData.gestationalWeek,

@@ -85,6 +85,25 @@ modules/<module>/
 - QueryCriteria classes for dynamic queries
 - XML mappers in `eladmin-system/src/main/resources/mapper/`
 
+### ⚠️ 安全红线：禁止全表删除
+
+**严禁**使用无条件的 `delete(null)` / `delete(new QueryWrapper<>())` 等全表删除操作。
+
+- MyBatis-Plus 的 `mapper.delete(null)` 会生成 `DELETE FROM table` 无条件语句，等同于 `TRUNCATE`，会清空整张表
+- 测试代码连接真实数据库时更不可接受——会直接删除生产/测试数据
+- 如需按条件清理测试数据，必须使用**有主键 ID 列表**的批量删除：
+  ```java
+  // ✅ 正确：按 ID 列表精确删除
+  mapper.deleteBatchIds(Arrays.asList(1L, 2L, 3L));
+  mapper.deleteById(id);
+  mapper.delete(new QueryWrapper<MyEntity>().eq("test_key", "xxx")); // 必须有 WHERE 条件
+
+  // ❌ 错误：无条件全表删除（已多次导致数据丢失）
+  mapper.delete(null);
+  mapper.delete(new QueryWrapper<>());
+  ```
+- 测试数据清理应在 `@BeforeEach` 中按主键精确删除，**不要** `delete(null)` 清表
+
 ### API Documentation
 **IMPORTANT**: Any API change (add, update, delete) MUST be reflected in the corresponding Markdown doc in `doc/` directory immediately after the code change.
 

@@ -278,6 +278,7 @@
         UPDATE customer_order
         SET verified_count = GREATEST(COALESCE(verified_count, 0) - 1, 0),
             verified_amount = GREATEST(COALESCE(verified_amount, 0) - #{price}, 0),
+            meal_balance = COALESCE(meal_balance, 0) + #{price},
             remaining_count = remaining_count + 1,
             status = CASE WHEN status = 2 THEN 1 ELSE status END,
             update_time = NOW()

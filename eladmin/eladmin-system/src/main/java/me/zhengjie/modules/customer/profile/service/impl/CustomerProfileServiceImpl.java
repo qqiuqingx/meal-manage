@@ -125,7 +125,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     @Transactional(rollbackFor = Exception.class)
     public void create(CustomerProfileSaveDto dto) {
         CustomerProfileSaveDto.OrderInfoDto orderInfo = normalizeAndValidate(dto, true);
-        String customerCode = generateCode(orderInfo.getParentPackageId());
+        String customerCode = resolveCustomerCode(dto.getCustomerCode(), orderInfo.getParentPackageId());
 
         CustomerProfile profile = new CustomerProfile();
         profile.setCustomerCode(customerCode);
@@ -251,6 +251,79 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         config.setPoolEnd(parent.getPoolEnd());
 
         return numberPoolService.allocate(config);
+    }
+
+    /**
+     * 解析客户编号：优先使用前端传入值，否则自动生成。
+     *
+     * 前端传入时校验：
+     * 1. 必须以父套餐 poolPrefix 开头
+     * 2. 前缀后的数字必须在 [poolStart, poolEnd] 范围内
+     * 3. 零填充宽度必须与 resolveCodeWidth() 一致（自动生成时保持一致）
+     * 4. 编号必须在数据库中唯一
+     *
+     * @param manualCode 前端传入手动编号（可能为 null 或 blank）
+     * @param parentPackageId 父套餐ID
+     * @return 合规的客户编号
+     */
+    private String resolveCustomerCode(String manualCode, Long parentPackageId) {
+        if (StringUtils.isNotBlank(manualCode)) {
+            // --- 手动编号校验 ---
+            ParentPackage parent = parentPackageMapper.selectById(parentPackageId);
+            if (parent == null) {
+                throw new BadRequestException("父套餐不存在");
+            }
+            String poolPrefix = parent.getPoolPrefix();
+            if (StringUtils.isBlank(poolPrefix)) {
+                throw new BadRequestException("该套餐未配置编号池，无法使用手动编号");
+            }
+            int poolStart = parent.getPoolStart();
+            int poolEnd = parent.getPoolEnd();
+            int codeWidth = resolveCodeWidth(poolStart, poolEnd);
+
+            // 校验 1：必须以 poolPrefix 开头
+            if (!manualCode.startsWith(poolPrefix)) {
+                throw new BadRequestException("客户编号必须以「" + poolPrefix + "」开头，当前编号格式不符合");
+            }
+
+            // 校验 2：截取数字部分，校验范围
+            String numPart = manualCode.substring(poolPrefix.length());
+            if (numPart.length() != codeWidth) {
+                throw new BadRequestException("客户编号数字部分必须为" + codeWidth + "位，如「" + poolPrefix + String.format("%0" + codeWidth + "d", poolStart) + "」");
+            }
+            int seq;
+            try {
+                seq = Integer.parseInt(numPart);
+            } catch (NumberFormatException e) {
+                throw new BadRequestException("客户编号数字部分必须为纯数字，如「" + poolPrefix + String.format("%0" + codeWidth + "d", poolStart) + "」");
+            }
+            if (seq < poolStart || seq > poolEnd) {
+                throw new BadRequestException("客户编号必须在「" + poolPrefix + String.format("%0" + codeWidth + "d", poolStart) + "」～「" + poolPrefix + String.format("%0" + codeWidth + "d", poolEnd) + "」范围内");
+            }
+
+            // 校验 3：唯一性
+            Long existingCount = profileMapper.selectCount(
+                new QueryWrapper<CustomerProfile>().eq("customer_code", manualCode)
+            );
+            if (existingCount > 0) {
+                throw new BadRequestException("客户编号「" + manualCode + "」已被占用，请换一个");
+            }
+
+            return manualCode;
+        }
+
+        // --- 自动生成 ---
+        return generateCode(parentPackageId);
+    }
+
+    /**
+     * 计算编号数字部分的固定宽度，保持与 NumberPoolServiceImpl.buildCode() 一致。
+     * 宽度 = max(3, max(len(poolStart), len(poolEnd)))
+     */
+    private int resolveCodeWidth(int poolStart, int poolEnd) {
+        int startWidth = String.valueOf(poolStart).length();
+        int endWidth = String.valueOf(poolEnd).length();
+        return Math.max(3, Math.max(startWidth, endWidth));
     }
 
     /**
@@ -514,6 +587,10 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         Set<String> validMealTypes = new HashSet<>(Arrays.asList("BREAKFAST", "LUNCH", "DINNER"));
 
         for (me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto dto : excludedDates) {
+            if (dto == null) {
+                throw new BadRequestException("排除日期列表不能包含空项");
+            }
+
             // 校验日期格式
             try {
                 LocalDate.parse(dto.getDate());  // 必须为 yyyy-MM-dd
