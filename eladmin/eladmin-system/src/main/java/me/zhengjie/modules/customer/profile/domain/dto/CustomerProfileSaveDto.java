@@ -37,6 +37,16 @@ public class CustomerProfileSaveDto implements Serializable {
 
     private String medicalRequirements;
 
+    /**
+     * 特殊要求
+     */
+    private String specialRequirements;
+
+    /**
+     * 生产日期（格式：yyyy-MM-dd）
+     */
+    private String productionDate;
+
     // 备注
     private String remark;
 
