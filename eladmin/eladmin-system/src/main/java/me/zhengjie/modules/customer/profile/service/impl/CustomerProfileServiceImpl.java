@@ -140,7 +140,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profile.setMedicalRequirements(dto.getMedicalRequirements());
         profile.setSpecialRequirements(dto.getSpecialRequirements());
         if (StringUtils.isNotBlank(dto.getProductionDate())) {
-            profile.setProductionDate(LocalDate.parse(dto.getProductionDate(), DATE_FORMATTER));
+            profile.setProductionDate(LocalDate.parse(dto.getProductionDate().substring(0, 10), DATE_FORMATTER));
         }
         //
         profile.setCreateBy(getCurrentUsername());
@@ -173,7 +173,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profile.setMedicalRequirements(dto.getMedicalRequirements());
         profile.setSpecialRequirements(dto.getSpecialRequirements());
         if (StringUtils.isNotBlank(dto.getProductionDate())) {
-            profile.setProductionDate(LocalDate.parse(dto.getProductionDate(), DATE_FORMATTER));
+            profile.setProductionDate(LocalDate.parse(dto.getProductionDate().substring(0, 10), DATE_FORMATTER));
         }
         profile.setRemark(dto.getRemark());
         profile.setUpdateBy(getCurrentUsername());
