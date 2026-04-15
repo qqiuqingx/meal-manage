@@ -6,6 +6,11 @@ module.exports = {
       'jest-transform-stub',
     '^.+\\.jsx?$': 'babel-jest'
   },
+  // Force babel-jest transformation of @babel/runtime-corejs2 helpers
+  // which contain ESM import statements that must be converted to CommonJS
+  transformIgnorePatterns: [
+    '/node_modules/(?!(@babel/runtime-corejs2)/)'
+  ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '@crud/(.*)$': '<rootDir>/src/components/Crud/$1'
