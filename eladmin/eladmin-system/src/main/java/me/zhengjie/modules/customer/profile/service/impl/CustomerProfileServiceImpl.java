@@ -678,6 +678,34 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             }
             profile.setRemainingBreakfastCount(Math.max(totalBreakfast - breakfastVerified, 0));
             profile.setRemainingLunchDinnerCount(Math.max(totalLunchDinner - lunchDinnerVerified, 0));
+
+            // 填充送餐模式（从最新订单获取）
+            CustomerOrder latestOrder = customerOrderMapper.findLatestByCustomerId(profile.getId());
+            if (latestOrder != null && latestOrder.getScheduleMode() != null) {
+                profile.setScheduleMode(mapScheduleModeToChinese(latestOrder.getScheduleMode()));
+            } else {
+                profile.setScheduleMode("-");
+            }
+        } else {
+            profile.setScheduleMode("-");
+        }
+    }
+
+    /**
+     * 映射排餐模式为中文标签
+     * @param scheduleMode 排餐模式代码（SCHEDULE/DAILY/WEEKEND/WEEKDAY）
+     * @return 中文标签
+     */
+    private String mapScheduleModeToChinese(String scheduleMode) {
+        if (scheduleMode == null) {
+            return "-";
+        }
+        switch (scheduleMode) {
+            case "SCHEDULE": return "指定日期";
+            case "DAILY": return "每天";
+            case "WEEKEND": return "周末";
+            case "WEEKDAY": return "工作日";
+            default: return "-";
         }
     }
 
