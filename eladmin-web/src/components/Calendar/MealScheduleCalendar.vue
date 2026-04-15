@@ -69,7 +69,7 @@
     </el-dialog>
 
     <!-- 汇总信息 -->
-    <div class="calendar-summary">
+    <div v-if="!hideSummary" class="calendar-summary">
       <div class="calendar-summary__item">
         <span class="calendar-summary__label">已选日期：</span>
         <span class="calendar-summary__value">{{ internalSelectedDates.length }} 天</span>
@@ -131,6 +131,11 @@ export default {
     },
     // 是否只读
     readonly: {
+      type: Boolean,
+      default: false
+    },
+    // 是否隐藏汇总行（用于排除日期模式）
+    hideSummary: {
       type: Boolean,
       default: false
     }
