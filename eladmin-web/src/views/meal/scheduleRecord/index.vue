@@ -330,12 +330,26 @@
       >
         <el-table-column label="客户编号" prop="customerCode" align="center" width="120" />
         <el-table-column label="手机号" prop="phone" align="center" width="120" />
-        <el-table-column label="配送地址" prop="addressDetail" align="center" min-width="200">
+        <el-table-column label="配送地址" prop="addressDetail" align="center" min-width="160">
           <template slot-scope="scope">
             {{ scope.row.addressDetail || '暂无地址' }}
           </template>
         </el-table-column>
-        <el-table-column label="地址类型" prop="addressType" align="center" width="120">
+        <el-table-column label="过敏信息" align="center" width="140">
+          <template slot-scope="scope">
+            <span v-if="scope.row.allergyTags && scope.row.allergyTags.length > 0">
+              <el-tag v-for="tag in scope.row.allergyTags" :key="tag" type="danger" size="mini" style="margin-right: 3px;">{{ tag }}</el-tag>
+            </span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="特殊要求" align="center" min-width="140">
+          <template slot-scope="scope">
+            <span v-if="scope.row.specialRequirements" class="ellipsis">{{ scope.row.specialRequirements }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="地址类型" prop="addressType" align="center" width="100">
           <template slot-scope="scope">
             <el-tag v-if="scope.row.addressType" :type="scope.row.addressType === 'WEEKEND' ? 'warning' : (scope.row.addressType === 'WORKDAY' ? 'success' : 'info')" size="mini">
               {{ addressTypeMap[scope.row.addressType] || scope.row.addressType }}
@@ -1063,6 +1077,14 @@ export default {
   .dish-table tr:hover td { background: initial; }
   .dish-table tr:nth-child(even) td { background: rgba(0,0,0,0.02); }
   body { font-size: 12px; }
+  .ellipsis {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
 }
 </style>
 
