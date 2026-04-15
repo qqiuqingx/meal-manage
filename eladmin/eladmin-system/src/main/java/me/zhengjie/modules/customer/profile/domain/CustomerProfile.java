@@ -13,12 +13,13 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
+import me.zhengjie.modules.customer.profile.handler.ExcludedDateListTypeHandler;
 
 /**
  * 客户档案主档实体
  */
 @Data
-@TableName("customer_profile")
+@TableName(value = "customer_profile", autoResultMap = true)
 public class CustomerProfile implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -61,7 +62,7 @@ public class CustomerProfile implements Serializable {
     /**
      * 排除日期列表(JSON数组)
      */
-    @TableField(value = "excluded_dates", typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    @TableField(value = "excluded_dates", typeHandler = ExcludedDateListTypeHandler.class)
     private List<ExcludedDateDto> excludedDates;
 
     /**
@@ -75,14 +76,37 @@ public class CustomerProfile implements Serializable {
             return false;
         }
         String targetDateStr = date.toString();  // ISO-8601: "yyyy-MM-dd"
-        for (ExcludedDateDto excluded : excludedDates) {
-            if (targetDateStr.equals(excluded.getDate())
+        for (Object item : excludedDates) {
+            ExcludedDateDto excluded = toExcludedDateDto(item);
+            if (excluded != null
+                    && targetDateStr.equals(excluded.getDate())
                     && excluded.getMealTypes() != null
                     && excluded.getMealTypes().contains(mealType)) {
                 return true;
             }
         }
         return false;
+    }
+
+    @SuppressWarnings("unchecked")
+    private ExcludedDateDto toExcludedDateDto(Object item) {
+        if (item instanceof ExcludedDateDto) {
+            return (ExcludedDateDto) item;
+        }
+        if (item instanceof java.util.Map) {
+            java.util.Map<String, Object> map = (java.util.Map<String, Object>) item;
+            ExcludedDateDto dto = new ExcludedDateDto();
+            Object date = map.get("date");
+            if (date instanceof String) {
+                dto.setDate((String) date);
+            }
+            Object mealTypes = map.get("mealTypes");
+            if (mealTypes instanceof List) {
+                dto.setMealTypes((List<String>) mealTypes);
+            }
+            return dto;
+        }
+        return null;
     }
 
     /**
