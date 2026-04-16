@@ -19,7 +19,7 @@ COPY eladmin/eladmin-generator/pom.xml /build/eladmin/eladmin-generator/pom.xml
 
 WORKDIR /build/eladmin
 RUN --mount=type=cache,target=/root/.m2/repository \
-    mvn -s /root/.m2/settings.xml -pl eladmin-system -am dependency:go-offline -DskipTests
+    mvn -s /root/.m2/settings.xml -pl eladmin-system -am dependency:go-offline -Dmaven.test.skip=true
 
 # Copy source code after dependencies are cached
 WORKDIR /build
@@ -27,7 +27,7 @@ COPY eladmin /build/eladmin
 
 WORKDIR /build/eladmin
 RUN --mount=type=cache,target=/root/.m2/repository \
-    mvn -s /root/.m2/settings.xml -pl eladmin-system -am clean package -DskipTests
+    mvn -s /root/.m2/settings.xml -pl eladmin-system -am clean package -Dmaven.test.skip=true
 
 # =============================================================================
 # Stage 2: Runtime image
