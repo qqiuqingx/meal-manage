@@ -28,7 +28,7 @@
       <el-table-column label="午晚数" prop="lunchDinnerCount" width="80" align="center" />
       <el-table-column label="剩余早餐" prop="remainingBreakfastCount" width="90" align="center" />
       <el-table-column label="剩余午晚" prop="remainingLunchDinnerCount" width="90" align="center" />
-      <el-table-column label="过敏食物" width="120" show-overflow-tooltip>
+      <el-table-column label="过敏食物" prop="allergyTags" width="120" show-overflow-tooltip>
         <template slot-scope="scope">
           <span v-if="!scope.row.allergyTags || scope.row.allergyTags.length === 0">-</span>
           <template v-else>
@@ -47,12 +47,12 @@
           </template>
         </template>
       </el-table-column>
-      <el-table-column label="特殊要求" min-width="140" show-overflow-tooltip>
+      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip>
         <template slot-scope="scope">
           {{ scope.row.specialRequirements || '-' }}
         </template>
       </el-table-column>
-      <el-table-column label="排除菜品" width="160" align="center">
+      <el-table-column label="排除菜品" prop="excludedDishNamesStr" width="160" align="center">
         <template slot-scope="scope">
           <span v-if="!scope.row.excludedDishNamesStr">无</span>
           <el-tooltip v-else :content="scope.row.excludedDishNamesStr" placement="top" :open-delay="300">
@@ -60,7 +60,7 @@
           </el-tooltip>
         </template>
       </el-table-column>
-      <el-table-column label="排除日期" width="160" align="center">
+      <el-table-column label="排除日期" prop="excludedDates" width="160" align="center">
         <template slot-scope="scope">
           <span v-if="!scope.row.excludedDates || scope.row.excludedDates.length === 0">无</span>
           <el-tooltip v-else :content="formatExcludedDatesStr(scope.row.excludedDates)" placement="top" :open-delay="300">
@@ -68,7 +68,7 @@
           </el-tooltip>
         </template>
       </el-table-column>
-      <el-table-column label="送餐模式" width="90" align="center">
+      <el-table-column label="送餐模式" prop="scheduleMode" width="90" align="center">
         <template slot-scope="scope">
           {{ scope.row.scheduleMode || '-' }}
         </template>
