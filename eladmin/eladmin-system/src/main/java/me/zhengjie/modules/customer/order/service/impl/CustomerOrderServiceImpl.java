@@ -72,6 +72,9 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         }
 
         CustomerProfile profile = profileMapper.selectById(order.getCustomerId());
+        if (profile == null) {
+            throw new BadRequestException("客户不存在");
+        }
         CustomerOrderDetailDto dto = buildDetailDto(order, profile);
         return dto;
     }
@@ -99,7 +102,16 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
                 orderMapper.insert(order);
                 return;
             } catch (DuplicateKeyException ex) {
-                // Concurrent inserts can race on the daily order code; retry with a fresh code.
+                if (attempt >= 2) {
+                    throw new BadRequestException("订单编号生成失败，请重试或联系管理员");
+                }
+                // Brief delay before retry to reduce contention
+                try {
+                    Thread.sleep(50L);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new BadRequestException("订单编号生成被中断");
+                }
             }
         }
         throw new BadRequestException("订单编号生成失败，请重试");
@@ -268,6 +280,11 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
                 : dto.getDeliveryDates());
         order.setRemark(dto.getRemark());
         order.setCustomerSource(dto.getCustomerSource());
+        order.setMainDishCount(dto.getMainDishCount());
+        order.setSideDishCount(dto.getSideDishCount());
+        order.setVegCount(dto.getVegCount());
+        order.setRiceCount(dto.getRiceCount());
+        order.setSoupCount(dto.getSoupCount());
     }
 
     /**
