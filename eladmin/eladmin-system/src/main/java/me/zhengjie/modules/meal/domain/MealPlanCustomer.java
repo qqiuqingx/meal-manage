@@ -90,6 +90,36 @@ public class MealPlanCustomer extends BaseEntity {
     @ApiModelProperty(value = "是否含米饭")
     private Integer includeRice;
 
+    /**
+     * 每餐主菜数量
+     */
+    @ApiModelProperty(value = "每餐主菜数量")
+    private Integer mainDishCount;
+
+    /**
+     * 每餐副菜数量
+     */
+    @ApiModelProperty(value = "每餐副菜数量")
+    private Integer sideDishCount;
+
+    /**
+     * 每餐素菜数量
+     */
+    @ApiModelProperty(value = "每餐素菜数量")
+    private Integer vegCount;
+
+    /**
+     * 每餐米饭数量
+     */
+    @ApiModelProperty(value = "每餐米饭数量")
+    private Integer riceCount;
+
+    /**
+     * 每餐汤数量
+     */
+    @ApiModelProperty(value = "每餐汤数量")
+    private Integer soupCount;
+
     @ApiModelProperty(value = "是否删除")
     private Boolean deleted;
 }
