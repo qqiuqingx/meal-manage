@@ -162,4 +162,44 @@ public class CustomerOrderSaveDto implements Serializable {
      * 销售渠道
      */
     private String customerSource;
+
+    /**
+     * 每餐主菜/荤菜数量
+     */
+    @NotNull(message = "主菜数量不能为空")
+    @Min(value = 0, message = "主菜数量不能为负数")
+    @Max(value = 10, message = "主菜数量不能超过10份")
+    private Integer mainDishCount;
+
+    /**
+     * 每餐副菜数量
+     */
+    @NotNull(message = "副菜数量不能为空")
+    @Min(value = 0, message = "副菜数量不能为负数")
+    @Max(value = 10, message = "副菜数量不能超过10份")
+    private Integer sideDishCount;
+
+    /**
+     * 每餐素菜数量
+     */
+    @NotNull(message = "素菜数量不能为空")
+    @Min(value = 0, message = "素菜数量不能为负数")
+    @Max(value = 10, message = "素菜数量不能超过10份")
+    private Integer vegCount;
+
+    /**
+     * 每餐米饭数量
+     */
+    @NotNull(message = "米饭数量不能为空")
+    @Min(value = 0, message = "米饭数量不能为负数")
+    @Max(value = 10, message = "米饭数量不能超过10份")
+    private Integer riceCount;
+
+    /**
+     * 每餐汤数量
+     */
+    @NotNull(message = "汤数量不能为空")
+    @Min(value = 0, message = "汤数量不能为负数")
+    @Max(value = 10, message = "汤数量不能超过10份")
+    private Integer soupCount;
 }

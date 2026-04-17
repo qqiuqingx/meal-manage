@@ -416,6 +416,11 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
                 if (newTotalCount < existingVerified) {
                     throw new BadRequestException("订单餐数不能小于已核销餐数（当前已核销：" + existingVerified + "）");
                 }
+                // Add atomic check to prevent concurrent modifications
+                int currentVerifiedCount = orderMapper.selectById(excludeId).getVerifiedCount();
+                if (currentVerifiedCount != existingVerified) {
+                    throw new BadRequestException("订单数据已被其他操作修改，请刷新后重试");
+                }
             }
         }
     }
