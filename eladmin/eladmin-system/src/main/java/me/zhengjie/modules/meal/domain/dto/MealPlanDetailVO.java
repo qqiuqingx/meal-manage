@@ -117,6 +117,21 @@ public class MealPlanDetailVO {
         @ApiModelProperty(value = "核销操作人")
         private String verificationOperator;
 
+        @ApiModelProperty(value = "每餐主菜数量")
+        private Integer mainDishCount;
+
+        @ApiModelProperty(value = "每餐副菜数量")
+        private Integer sideDishCount;
+
+        @ApiModelProperty(value = "每餐素菜数量")
+        private Integer vegCount;
+
+        @ApiModelProperty(value = "每餐米饭数量")
+        private Integer riceCount;
+
+        @ApiModelProperty(value = "每餐汤数量")
+        private Integer soupCount;
+
         @ApiModelProperty(value = "菜品明细列表")
         private List<MealPlanCustomerItemVO> items;
     }
