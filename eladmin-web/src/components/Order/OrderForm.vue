@@ -111,6 +111,73 @@
         </el-col>
       </el-row>
 
+      <!-- ===== 每餐菜品配置 ===== -->
+      <el-divider content-position="left">每餐菜品配置</el-divider>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="主菜数(份)">
+            <el-input-number
+              v-model="form.mainDishCount"
+              :min="0"
+              :max="99"
+              :disabled="readonly"
+              controls-position="right"
+              style="width: 100%;"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="副菜数(份)">
+            <el-input-number
+              v-model="form.sideDishCount"
+              :min="0"
+              :max="99"
+              :disabled="readonly"
+              controls-position="right"
+              style="width: 100%;"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="素菜数(份)">
+            <el-input-number
+              v-model="form.vegCount"
+              :min="0"
+              :max="99"
+              :disabled="readonly"
+              controls-position="right"
+              style="width: 100%;"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="米饭数(份)">
+            <el-input-number
+              v-model="form.riceCount"
+              :min="0"
+              :max="99"
+              :disabled="readonly"
+              controls-position="right"
+              style="width: 100%;"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="汤数(份)">
+            <el-input-number
+              v-model="form.soupCount"
+              :min="0"
+              :max="99"
+              :disabled="readonly"
+              controls-position="right"
+              style="width: 100%;"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
       <!-- ===== 金额信息 ===== -->
       <el-divider content-position="left">金额信息</el-divider>
       <el-row :gutter="20">
@@ -401,7 +468,12 @@ export function createOrderDefaultForm() {
     scheduleMode: 'SCHEDULE',
     deliveryDates: [],
     remark: null,
-    customerSource: null
+    customerSource: null,
+    mainDishCount: 0,
+    sideDishCount: 0,
+    vegCount: 0,
+    riceCount: 0,
+    soupCount: 0
   }
 }
 
@@ -423,7 +495,12 @@ export function createFirstOrderDefaultForm() {
     startDate: null,
     endDate: null,
     mealType: 'ALL',
-    customerSource: null
+    customerSource: null,
+    mainDishCount: 0,
+    sideDishCount: 0,
+    vegCount: 0,
+    riceCount: 0,
+    soupCount: 0
   }
 }
 
