@@ -6,23 +6,27 @@ import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -472,5 +476,46 @@ class CustomerProfileServiceImplTest {
         // Verify: 验证非法值显示 "-"
         assertNotNull(profile.getScheduleMode());
         assertEquals("-", profile.getScheduleMode());  // 非法值显示 "-"
+    }
+
+    @Test
+    void testSaveFirstOrder_PersistsDishCounts() throws Exception {
+        Method method = CustomerProfileServiceImpl.class.getDeclaredMethod(
+            "saveFirstOrder", CustomerProfile.class, CustomerProfileSaveDto.OrderInfoDto.class);
+        method.setAccessible(true);
+
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = new CustomerProfileSaveDto.OrderInfoDto();
+        orderInfo.setParentPackageId(10L);
+        orderInfo.setBreakfastCount(5);
+        orderInfo.setLunchDinnerCount(10);
+        orderInfo.setTotalCount(15);
+        orderInfo.setBreakfastPrice(new BigDecimal("12"));
+        orderInfo.setLunchDinnerPrice(new BigDecimal("28"));
+        orderInfo.setTotalAmount(new BigDecimal("340"));
+        orderInfo.setDepositAmount(new BigDecimal("50"));
+        orderInfo.setFinalAmount(new BigDecimal("290"));
+        orderInfo.setScheduleMode("SCHEDULE");
+        orderInfo.setStartDate("2026-04-18");
+        orderInfo.setEndDate("2026-04-28");
+        orderInfo.setMealType("ALL");
+        orderInfo.setCustomerSource("ONLINE");
+        orderInfo.setDeliveryDates("[\"2026-04-18\"]");
+        orderInfo.setMainDishCount(2);
+        orderInfo.setSideDishCount(1);
+        orderInfo.setVegCount(3);
+        orderInfo.setRiceCount(1);
+        orderInfo.setSoupCount(2);
+
+        method.invoke(customerProfileService, profile, orderInfo);
+
+        ArgumentCaptor<CustomerOrder> captor = ArgumentCaptor.forClass(CustomerOrder.class);
+        verify(customerOrderMapper).insert(captor.capture());
+        CustomerOrder order = captor.getValue();
+        assertEquals(Integer.valueOf(2), order.getMainDishCount());
+        assertEquals(Integer.valueOf(1), order.getSideDishCount());
+        assertEquals(Integer.valueOf(3), order.getVegCount());
+        assertEquals(Integer.valueOf(1), order.getRiceCount());
+        assertEquals(Integer.valueOf(2), order.getSoupCount());
+        assertEquals(Long.valueOf(10L), order.getParentPackageId());
     }
 }

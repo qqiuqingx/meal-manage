@@ -90,36 +90,36 @@ public class MealPlanCustomer extends BaseEntity {
     @ApiModelProperty(value = "是否含米饭")
     private Integer includeRice;
 
-    /**
-     * 每餐主菜数量
-     */
-    @ApiModelProperty(value = "每餐主菜数量")
-    private Integer mainDishCount;
-
-    /**
-     * 每餐副菜数量
-     */
-    @ApiModelProperty(value = "每餐副菜数量")
-    private Integer sideDishCount;
-
-    /**
-     * 每餐素菜数量
-     */
-    @ApiModelProperty(value = "每餐素菜数量")
-    private Integer vegCount;
-
-    /**
-     * 每餐米饭数量
-     */
-    @ApiModelProperty(value = "每餐米饭数量")
-    private Integer riceCount;
-
-    /**
-     * 每餐汤数量
-     */
-    @ApiModelProperty(value = "每餐汤数量")
-    private Integer soupCount;
-
     @ApiModelProperty(value = "是否删除")
     private Boolean deleted;
+
+    /**
+     * 补主菜数量 = max(0, 主菜需求数 - 每日菜单固定提供1个)
+     */
+    @ApiModelProperty(value = "补主菜数量")
+    private Integer supplementaryMainCount;
+
+    /**
+     * 补副菜数量 = max(0, 副菜需求数 - 每日菜单固定提供1个)
+     */
+    @ApiModelProperty(value = "补副菜数量")
+    private Integer supplementarySideCount;
+
+    /**
+     * 补素菜数量 = max(0, 素菜需求数 - 每日菜单固定提供1个)
+     */
+    @ApiModelProperty(value = "补素菜数量")
+    private Integer supplementaryVegCount;
+
+    /**
+     * 补米饭数量 = max(0, 米饭需求数 - 每日菜单固定提供1个)
+     */
+    @ApiModelProperty(value = "补米饭数量")
+    private Integer supplementaryRiceCount;
+
+    /**
+     * 补汤数量 = max(0, 汤需求数 - 每日菜单固定提供1个)
+     */
+    @ApiModelProperty(value = "补汤数量")
+    private Integer supplementarySoupCount;
 }

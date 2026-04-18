@@ -447,12 +447,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 //            throw new BadRequestException("父套餐未配置编号前缀");
 //        }
 
-        if (orderInfo.getChildPackageId() == null) {
-            throw new BadRequestException("首单子套餐不能为空");
-        }
-        SubPackage child = subPackageMapper.selectById(orderInfo.getChildPackageId());
-        if (child == null) {
-            throw new BadRequestException("子套餐不存在");
+        if (orderInfo.getChildPackageId() != null) {
+            SubPackage child = subPackageMapper.selectById(orderInfo.getChildPackageId());
+            if (child == null) {
+                throw new BadRequestException("子套餐不存在");
+            }
         }
 
         if (orderInfo.getBreakfastCount() == null && orderInfo.getLunchDinnerCount() == null) {
@@ -461,6 +460,12 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         if (StringUtils.isBlank(orderInfo.getStartDate()) ) {
             throw new BadRequestException("首单开始日期不能为空");
         }
+
+        normalizeDishCount(orderInfo.getMainDishCount(), "主菜");
+        normalizeDishCount(orderInfo.getSideDishCount(), "副菜");
+        normalizeDishCount(orderInfo.getVegCount(), "素菜");
+        normalizeDishCount(orderInfo.getRiceCount(), "米饭");
+        normalizeDishCount(orderInfo.getSoupCount(), "汤");
 
 
 
@@ -473,8 +478,25 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         if (totalCount <= 0) {
             throw new BadRequestException("首单份数必须大于0");
         }
+        orderInfo.setMainDishCount(orderInfo.getMainDishCount() != null ? orderInfo.getMainDishCount() : 0);
+        orderInfo.setSideDishCount(orderInfo.getSideDishCount() != null ? orderInfo.getSideDishCount() : 0);
+        orderInfo.setVegCount(orderInfo.getVegCount() != null ? orderInfo.getVegCount() : 0);
+        orderInfo.setRiceCount(orderInfo.getRiceCount() != null ? orderInfo.getRiceCount() : 0);
+        orderInfo.setSoupCount(orderInfo.getSoupCount() != null ? orderInfo.getSoupCount() : 0);
         orderInfo.setTotalCount(totalCount);
         return orderInfo;
+    }
+
+    private void normalizeDishCount(Integer count, String label) {
+        if (count == null) {
+            return;
+        }
+        if (count < 0) {
+            throw new BadRequestException(label + "数量不能为负数");
+        }
+        if (count > 10) {
+            throw new BadRequestException(label + "数量不能超过10份");
+        }
     }
 
     private void saveAddresses(Long customerId, List<CustomerProfileSaveDto.AddressDto> addresses) {
@@ -532,6 +554,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         order.setMealType(orderInfo.getMealType() != null ? orderInfo.getMealType() : "ALL");
         order.setCustomerSource(orderInfo.getCustomerSource());
         order.setDeliveryDates(orderInfo.getDeliveryDates());
+        order.setMainDishCount(orderInfo.getMainDishCount() != null ? orderInfo.getMainDishCount() : 0);
+        order.setSideDishCount(orderInfo.getSideDishCount() != null ? orderInfo.getSideDishCount() : 0);
+        order.setVegCount(orderInfo.getVegCount() != null ? orderInfo.getVegCount() : 0);
+        order.setRiceCount(orderInfo.getRiceCount() != null ? orderInfo.getRiceCount() : 0);
+        order.setSoupCount(orderInfo.getSoupCount() != null ? orderInfo.getSoupCount() : 0);
         order.setRemark(profile.getRemark());
         order.setCreateBy(getCurrentUsername());
         customerOrderMapper.insert(order);
