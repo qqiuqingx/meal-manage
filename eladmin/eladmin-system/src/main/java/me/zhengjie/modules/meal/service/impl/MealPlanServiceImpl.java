@@ -1605,6 +1605,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         detail.setIsVerified(customer.getIsVerified());
         detail.setVerificationTime(customer.getVerificationTime() != null ? customer.getVerificationTime().toString() : null);
         detail.setVerificationOperator(customer.getVerificationOperator());
+        detail.setSpecialRequirements(customer.getSpecialRequirements());
 
         List<MealPlanCustomerItem> items = itemsByCustomerPlanId.getOrDefault(customer.getId(), Collections.emptyList());
         List<MealPlanCustomerItemVO> itemVOs = items.stream()

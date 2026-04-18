@@ -122,4 +122,11 @@ public class MealPlanCustomer extends BaseEntity {
      */
     @ApiModelProperty(value = "补汤数量")
     private Integer supplementarySoupCount;
+
+    /**
+     * 特殊要求（关联查询填充）
+     */
+    @TableField(exist = false)
+    @ApiModelProperty(value = "特殊要求")
+    private String specialRequirements;
 }
