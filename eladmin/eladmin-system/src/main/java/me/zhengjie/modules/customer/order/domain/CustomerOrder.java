@@ -211,4 +211,29 @@ public class CustomerOrder implements Serializable {
      */
     @TableField(exist = false)
     private List<String> allergyTags;
+
+    /**
+     * 每餐主菜/荤菜数量
+     */
+    private Integer mainDishCount;
+
+    /**
+     * 每餐副菜数量
+     */
+    private Integer sideDishCount;
+
+    /**
+     * 每餐素菜数量
+     */
+    private Integer vegCount;
+
+    /**
+     * 每餐米饭数量
+     */
+    private Integer riceCount;
+
+    /**
+     * 每餐汤数量
+     */
+    private Integer soupCount;
 }

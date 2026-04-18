@@ -105,7 +105,7 @@
             <el-input-number
               v-model="form.mainDishCount"
               :min="0"
-              :max="99"
+              :max="10"
               :disabled="readonly"
               controls-position="right"
               style="width: 100%;"
@@ -117,7 +117,7 @@
             <el-input-number
               v-model="form.sideDishCount"
               :min="0"
-              :max="99"
+              :max="10"
               :disabled="readonly"
               controls-position="right"
               style="width: 100%;"
@@ -129,7 +129,7 @@
             <el-input-number
               v-model="form.vegCount"
               :min="0"
-              :max="99"
+              :max="10"
               :disabled="readonly"
               controls-position="right"
               style="width: 100%;"
@@ -143,7 +143,7 @@
             <el-input-number
               v-model="form.riceCount"
               :min="0"
-              :max="99"
+              :max="10"
               :disabled="readonly"
               controls-position="right"
               style="width: 100%;"
@@ -155,7 +155,7 @@
             <el-input-number
               v-model="form.soupCount"
               :min="0"
-              :max="99"
+              :max="10"
               :disabled="readonly"
               controls-position="right"
               style="width: 100%;"

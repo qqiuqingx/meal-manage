@@ -89,5 +89,10 @@ public class CustomerProfileSaveDto implements Serializable {
         private String mealType;
         private String customerSource;
         private String deliveryDates;
+        private Integer mainDishCount;
+        private Integer sideDishCount;
+        private Integer vegCount;
+        private Integer riceCount;
+        private Integer soupCount;
     }
 }

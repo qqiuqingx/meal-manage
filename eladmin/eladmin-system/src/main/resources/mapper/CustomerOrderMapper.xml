@@ -29,6 +29,11 @@
         <result column="schedule_mode" property="scheduleMode"/>
         <result column="delivery_dates" property="deliveryDates"/>
         <result column="remark" property="remark"/>
+        <result column="main_dish_count" property="mainDishCount"/>
+        <result column="side_dish_count" property="sideDishCount"/>
+        <result column="veg_count" property="vegCount"/>
+        <result column="rice_count" property="riceCount"/>
+        <result column="soup_count" property="soupCount"/>
         <result column="customer_source" property="customerSource"/>
         <result column="create_by" property="createBy"/>
         <result column="update_by" property="updateBy"/>
