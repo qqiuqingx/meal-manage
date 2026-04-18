@@ -134,5 +134,8 @@ public class MealPlanDetailVO {
 
         @ApiModelProperty(value = "补汤数量")
         private Integer supplementarySoupCount;
+
+        @ApiModelProperty(value = "特殊要求")
+        private String specialRequirements;
     }
 }
