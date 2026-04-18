@@ -79,38 +79,6 @@
         </el-col>
       </el-row>
 
-      <!-- ===== 公共字段：父/子套餐选择（仅订单管理模式，首单模式不需要套餐选择） ===== -->
-      <el-row v-if="mode === 'order'" :gutter="20">
-        <el-col :span="8">
-          <el-form-item label="父套餐">
-            <el-select
-              v-model="form.parentPackageId"
-              :disabled="readonly"
-              clearable
-              placeholder="选择父套餐"
-              style="width: 100%;"
-              @change="onParentPackageChange"
-            >
-              <el-option v-for="item in parentPackages" :key="item.id" :label="item.packageName" :value="item.id" />
-            </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="子套餐">
-            <el-select
-              v-model="form.childPackageId"
-              :disabled="readonly || !form.parentPackageId"
-              clearable
-              placeholder="选择子套餐"
-              style="width: 100%;"
-              @change="onChildPackageChange"
-            >
-              <el-option v-for="item in childPackages" :key="item.id" :label="item.subPackageName" :value="item.id" />
-            </el-select>
-          </el-form-item>
-        </el-col>
-      </el-row>
-
       <!-- ===== 每餐菜品配置 ===== -->
       <el-divider content-position="left">每餐菜品配置</el-divider>
       <el-row :gutter="20">
@@ -597,10 +565,6 @@ export default {
   created() {
     this.loadCustomerSourceDict()
     this.initAvailableDates()
-    // 两种模式均需加载父套餐
-    if (this.mode === 'order') {
-      this.loadParentPackages()
-    }
     // 编辑时：如果传入了当前客户数据，填充下拉列表
     if (this.mode === 'order' && this.currentCustomer && this.currentCustomer.id) {
       this.customers = [{

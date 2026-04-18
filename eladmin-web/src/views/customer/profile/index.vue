@@ -378,7 +378,6 @@ export default {
           { required: true, message: '请输入手机号', trigger: 'blur' },
           { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确', trigger: 'blur' }
         ],
-        'orderInfo.parentPackageId': [{ required: true, message: '请选择父套餐', trigger: 'change' }],
         'orderInfo.startDate': [{ required: true, message: '请选择开始日期', trigger: 'change' }],
         'orderInfo.endDate': [{ required: true, message: '请选择结束日期', trigger: 'change' }]
       },
@@ -480,10 +479,7 @@ export default {
         const orderInfo = formData.orderInfo || createFirstOrderDefaultForm()
         const breakfastCount = orderInfo.breakfastCount || 0
         const lunchDinnerCount = orderInfo.lunchDinnerCount || 0
-        const normalizedChildPackageId = orderInfo.childPackageId === '' ? null : orderInfo.childPackageId
         payload.orderInfo = {
-          parentPackageId: orderInfo.parentPackageId,
-          childPackageId: normalizedChildPackageId,
           breakfastCount,
           lunchDinnerCount,
           totalCount: breakfastCount + lunchDinnerCount,
