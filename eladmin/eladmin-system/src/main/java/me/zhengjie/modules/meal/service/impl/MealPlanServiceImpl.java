@@ -180,13 +180,12 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         for (int i = 0; i < orders.size(); i++) {
             CustomerOrder order = orders.get(i);
-            log.info("处理订单 {}/{} - 订单ID: {}, 客户ID: {}, 父套餐ID: {}, 子套餐ID: {}",
+            log.info("处理订单 {}/{} - 订单ID: {}, 客户: {}-{}, 父套餐ID: {},餐数:{}",
                     i + 1, orders.size(),
                     order.getId(),
                     customerMap.get(order.getCustomerId()).getCustomerCode(),
                     customerMap.get(order.getCustomerId()).getCustomerName(),
-                    order.getParentPackageId(),
-                    order.getChildPackageId());
+                    order.getParentPackageId(),order.getMainDishCount()+","+order.getSideDishCount()+","+order.getVegCount()+","+order.getRiceCount()+","+order.getSoupCount());
 
             CustomerProfile customer = customerMap.get(order.getCustomerId());
             if (customer == null) {
@@ -596,13 +595,13 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         // 使用 DishQuantityConfig 获取菜品数量
         pickRequiredDishes(config.getMainDishCount(), config.getSideDishCount(), selectedDishes, selectedDishIds, dishTypeMap, allergyTags,
-                dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons);
+                dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons, customer);
         pickVegetables(config.getVegCount(), selectedDishes, selectedDishIds, dishTypeMap, allergyTags,
-                dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons);
+                dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons, customer);
         pickOptionalDish(config.getRiceCount(), DISH_TYPE_RICE, selectedDishes, selectedDishIds,
-                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons);
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons, customer);
         pickOptionalDish(config.getSoupCount(), DISH_TYPE_SOUP, selectedDishes, selectedDishIds,
-                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons);
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons, customer);
 
         // 处理客户需要显示排除的菜品
         List<SkippedAllergyDish> skippedAllergyDishes = customerMealPlan.getSkippedAllergyDishes();
@@ -665,13 +664,13 @@ public class MealPlanServiceImpl implements MealPlanService {
     private void pickRequiredDishes(Integer mainCount, Integer sideCount, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                     Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
                                     LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap,
-                                    CustomerMealPlan customerMealPlan, List<String> failureReasons) {
+                                    CustomerMealPlan customerMealPlan, List<String> failureReasons, CustomerProfile customerProfile) {
         pickSingleDishIfRequired(mainCount, DISH_TYPE_MAIN, "主菜不足", selectedDishes, selectedDishIds,
                 dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
-                customerMealPlan, failureReasons);
+                customerMealPlan, failureReasons, customerProfile);
         pickSingleDishIfRequired(sideCount, DISH_TYPE_SIDE, "副菜不足", selectedDishes, selectedDishIds,
                 dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
-                customerMealPlan, failureReasons);
+                customerMealPlan, failureReasons, customerProfile);
     }
 
     /**
@@ -680,10 +679,10 @@ public class MealPlanServiceImpl implements MealPlanService {
     private void pickVegetables(Integer vegCount, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                 Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
                                 LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap,
-                                CustomerMealPlan customerMealPlan, List<String> failureReasons) {
+                                CustomerMealPlan customerMealPlan, List<String> failureReasons, CustomerProfile customerProfile) {
         pickSingleDishIfRequired(vegCount, DISH_TYPE_VEGETABLE, "素菜不足", selectedDishes, selectedDishIds,
                 dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
-                customerMealPlan, failureReasons);
+                customerMealPlan, failureReasons, customerProfile);
     }
 
     /**
@@ -692,10 +691,10 @@ public class MealPlanServiceImpl implements MealPlanService {
     private void pickOptionalDish(Integer count, String dishType, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                   Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
                                   LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap,
-                                  CustomerMealPlan customerMealPlan, List<String> failureReasons) {
+                                  CustomerMealPlan customerMealPlan, List<String> failureReasons, CustomerProfile customerProfile) {
         pickSingleDishIfRequired(count, dishType, dishType + "类型菜品不足", selectedDishes, selectedDishIds,
                 dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
-                customerMealPlan, failureReasons);
+                customerMealPlan, failureReasons, customerProfile);
     }
 
     /**
@@ -708,8 +707,11 @@ public class MealPlanServiceImpl implements MealPlanService {
                                           Map<Integer, Set<String>> dishIngredientMap,
                                           LocalDate targetDate, String mealType, Long parentPackageId,
                                           Map<Long, ParentPackage> parentPackageMap,
-                                          CustomerMealPlan customerMealPlan, List<String> failureReasons) {
+                                          CustomerMealPlan customerMealPlan, List<String> failureReasons,
+                                          CustomerProfile customerProfile) {
         if (requiredCount == null || requiredCount <= 0) {
+            log.debug("客户{}(编号{}) 不需要 {} 类型菜品（需求数量：{}），跳过选菜",
+                    customerProfile.getCustomerName(), customerProfile.getCustomerCode(), dishType, requiredCount);
             return;
         }
         DishSelectResult result = selectDishWithFallback(dishType, null, selectedDishIds, allergyTags,
