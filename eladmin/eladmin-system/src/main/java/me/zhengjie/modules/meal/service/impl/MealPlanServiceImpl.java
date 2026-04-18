@@ -23,9 +23,7 @@ import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
-import me.zhengjie.modules.customer.pkg.domain.SubPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
-import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.meal.domain.Dish;
@@ -100,7 +98,6 @@ public class MealPlanServiceImpl implements MealPlanService {
     private final CustomerOrderMapper customerOrderMapper;
     private final CustomerProfileMapper customerProfileMapper;
     private final ParentPackageMapper parentPackageMapper;
-    private final SubPackageMapper subPackageMapper;
     private final DishMapper dishMapper;
     private final DishIngredientMapper dishIngredientMapper;
     private final MealSchedulePlanMapper mealSchedulePlanMapper;
@@ -155,9 +152,6 @@ public class MealPlanServiceImpl implements MealPlanService {
         Map<Long, CustomerProfile> customerMap = loadCustomers(orders);
         log.debug("加载客户档案完成 - 客户数量: {}", customerMap.size());
 
-        Map<Long, SubPackage> subPackageMap = loadSubPackages(orders);
-        log.debug("加载子套餐完成 - 套餐数量: {}", subPackageMap.size());
-
         Map<Long, ParentPackage> parentPackageMap = loadParentPackages(orders);
         log.debug("加载父套餐完成 - 套餐数量: {}", parentPackageMap.size());
 
@@ -186,43 +180,42 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         for (int i = 0; i < orders.size(); i++) {
             CustomerOrder order = orders.get(i);
-            log.info("处理订单 {}/{} - 订单ID: {}, 客户ID: {},客户code{}, 父套餐ID: {}, 子套餐ID: {}",
+            log.info("处理订单 {}/{} - 订单ID: {}, 客户ID: {}, 父套餐ID: {}, 子套餐ID: {}",
                     i + 1, orders.size(),
                     order.getId(),
                     customerMap.get(order.getCustomerId()).getCustomerCode(),
                     customerMap.get(order.getCustomerId()).getCustomerName(),
-                    order.getParentPackageName(),
-                    subPackageMap.get(order.getChildPackageId()).getSubPackageName());
+                    order.getParentPackageId(),
+                    order.getChildPackageId());
 
             CustomerProfile customer = customerMap.get(order.getCustomerId());
-            SubPackage subPackage = subPackageMap.get(order.getChildPackageId());
             if (customer == null) {
                 log.warn("订单处理失败：客户档案不存在 - 订单ID: {}, 客户ID: {}",
                         order.getId(), order.getCustomerId());
-                failCount += saveFailPlan(mealPlan.getId(), order, null, null, "客户档案不存在", failDetails);
+                failCount += saveFailPlan(mealPlan.getId(), order, null, "客户档案不存在", failDetails);
                 continue;
             }
             if (!parentPackageMap.containsKey(order.getParentPackageId())) {
                 log.warn("订单处理失败：父套餐不存在 - 订单ID: {}, 父套餐ID: {}",
                         order.getId(), order.getParentPackageId());
-                failCount += saveFailPlan(mealPlan.getId(), order, customer, subPackage, "父套餐不存在", failDetails);
+                failCount += saveFailPlan(mealPlan.getId(), order, customer, "父套餐不存在", failDetails);
                 continue;
             }
 
             try {
-                CustomerMealPlan customerPlan = buildCustomerPlan(order, customer, subPackage, candidateDishMap, dishIngredientMap,
+                CustomerMealPlan customerPlan = buildCustomerPlan(order, customer, candidateDishMap, dishIngredientMap,
                         targetDate, mealType, parentPackageMap);
-                saveSuccessPlan(mealPlan.getId(), order, customer, subPackage, customerPlan);
+                saveSuccessPlan(mealPlan.getId(), order, customer, customerPlan);
                 successCount++;
                 log.debug("订单处理成功 - 订单ID: {}", order.getId());
             } catch (MealPlanBuildException e) {
                 log.warn("订单处理失败 - 订单ID: {}, 客户ID: {}, 失败原因: {}",
                         order.getId(), order.getCustomerId(), e.getMessage());
-                failCount += saveFailPlan(mealPlan.getId(), order, customer, subPackage, e.getMessage(), failDetails, e.getCustomerPlan());
+                failCount += saveFailPlan(mealPlan.getId(), order, customer, e.getMessage(), failDetails, e.getCustomerPlan());
             } catch (BadRequestException e) {
                 log.warn("订单处理失败 - 订单ID: {}, 客户ID: {}, 失败原因: {}",
                         order.getId(), order.getCustomerId(), e.getMessage());
-                failCount += saveFailPlan(mealPlan.getId(), order, customer, subPackage, e.getMessage(), failDetails);
+                failCount += saveFailPlan(mealPlan.getId(), order, customer, e.getMessage(), failDetails);
             }
         }
 
@@ -461,27 +454,6 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 按订单子套餐ID批量加载套餐数据。
      */
-    private Map<Long, SubPackage> loadSubPackages(List<CustomerOrder> orders) {
-        Set<Long> ids = orders.stream().map(CustomerOrder::getChildPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
-        if (ids.isEmpty()) {
-            log.debug("订单中没有有效的子套餐ID，无需加载子套餐数据");
-            return Collections.emptyMap();
-        }
-
-        long startTime = System.currentTimeMillis();
-        Map<Long, SubPackage> packageMap = new HashMap<>();
-        for (SubPackage subPackage : subPackageMapper.selectBatchIds(ids)) {
-            packageMap.put(subPackage.getId(), subPackage);
-        }
-
-        log.debug("子套餐加载完成 - 套餐ID数量: {}, 加载数: {}, 耗时: {}ms",
-                ids.size(), packageMap.size(), System.currentTimeMillis() - startTime);
-        return packageMap;
-    }
-
-    /**
-     * 按订单父套餐ID批量加载套餐数据。
-     */
     private Map<Long, ParentPackage> loadParentPackages(List<CustomerOrder> orders) {
         Set<Long> ids = orders.stream().map(CustomerOrder::getParentPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
         if (ids.isEmpty()) {
@@ -605,12 +577,11 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 为单个订单生成具体菜品组合。
      */
-    private CustomerMealPlan buildCustomerPlan(CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
+    private CustomerMealPlan buildCustomerPlan(CustomerOrder order, CustomerProfile customer,
                                                Map<Long, Map<String, List<Dish>>> candidateDishMap,
                                                Map<Integer, Set<String>> dishIngredientMap,
                                                LocalDate targetDate, String mealType,
                                                Map<Long, ParentPackage> parentPackageMap) {
-        // 从订单直接读取菜品数量配置（废弃 SubPackage 字段）
         DishQuantityConfig config = new DishQuantityConfig(order);
 
         Map<String, List<Dish>> dishTypeMap = candidateDishMap.get(order.getParentPackageId());
@@ -689,177 +660,72 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
-     * 选择荤菜，支持单荤和主副菜组合两种配置，带过敏回退逻辑。
+     * 固定日菜单规则：主菜/副菜每天每类最多提供 1 份，超出部分通过补菜数量记录。
      */
     private void pickRequiredDishes(Integer mainCount, Integer sideCount, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                     Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
                                     LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap,
                                     CustomerMealPlan customerMealPlan, List<String> failureReasons) {
-        int requiredMainCount = mainCount == null ? 0 : mainCount;
-        int requiredSideCount = sideCount == null ? 0 : sideCount;
-
-        if (requiredMainCount == 1) {
-            DishSelectResult result = selectDishWithFallback(DISH_TYPE_MAIN, null, selectedDishIds, allergyTags,
-                    dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
-            // 收集过敏菜品
-            for (SkippedAllergyDish sad : result.getSkippedAllergyDishes()) {
-                customerMealPlan.addSkippedAllergyDish(sad);
-            }
-            if (result.getDish() == null) {
-                if (!isAllergyFilteredOut(result)) {
-                    failureReasons.add("主菜不足");
-                }
-                return;
-            }
-            selectedDishes.add(new SelectedDish(result.getDish().getDishType(), result.getDish(),
-                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
-            selectedDishIds.add(result.getDish().getId());
-            return;
-        }
-        if (requiredMainCount == 2) {
-            // 二荤一素: 需要同时有MAIN和SIDE
-            DishSelectResult mainResult = selectDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, allergyTags, dishIngredientMap);
-            DishSelectResult sideResult = selectDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, dishIngredientMap);
-            Dish mainDish = mainResult.getDish();
-            Dish sideDish = sideResult.getDish();
-
-            // 记录原本想选的菜品
-            Dish originalMainDish = mainDish;
-            Dish originalSideDish = sideDish;
-            String mainReplaceReason = null;
-            String sideReplaceReason = null;
-            Set<String> mainAllergyReasons = mainResult.getMatchedAllergyTags();
-            Set<String> sideAllergyReasons = sideResult.getMatchedAllergyTags();
-
-            // 回退1: MAIN过敏，用SIDE作为MAIN（暂不启用）
-            // if (mainDish == null && sideDish != null) {
-            //     log.info("主菜全部过敏，改用副菜作为主菜");
-            //     originalMainDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
-            //     mainReplaceReason = "ALLERGY";
-            //     mainDish = sideDish;
-            //     sideDish = null;
-            // }
-
-            if (mainDish == null && sideDish != null) {
-                Dish originalMainDishTmp = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
-                log.info("【暂跳过替换菜品】二荤一素主菜全部过敏，原本想选的菜品: {}", originalMainDishTmp != null ? originalMainDishTmp.getName() : "无");
-            }
-
-            // 回退2: 重新选择SIDE
-            if (sideDish == null) {
-                sideResult = selectDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, dishIngredientMap);
-                sideDish = sideResult.getDish();
-                sideAllergyReasons = sideResult.getMatchedAllergyTags();
-            }
-
-            // 收集所有过敏菜品
-            for (SkippedAllergyDish sad : mainResult.getSkippedAllergyDishes()) {
-                customerMealPlan.addSkippedAllergyDish(sad);
-            }
-            for (SkippedAllergyDish sad : sideResult.getSkippedAllergyDishes()) {
-                customerMealPlan.addSkippedAllergyDish(sad);
-            }
-
-            // 回退3: 当日不足，尝试次日菜品（暂不启用）
-            // ... (注释代码保持不变)
-
-            if (mainDish == null || sideDish == null) {
-                log.warn("【暂跳过替换菜品】当日荤菜不足（mainDish={}, sideDish={}），未尝试次日菜品",
-                        mainDish != null ? mainDish.getName() : "无",
-                        sideDish != null ? sideDish.getName() : "无");
-            }
-
-            if (mainDish == null || sideDish == null) {
-                boolean mainMissedByAllergy = mainDish == null && isAllergyFilteredOut(mainResult);
-                boolean sideMissedByAllergy = sideDish == null && isAllergyFilteredOut(sideResult);
-                if (!mainMissedByAllergy && !sideMissedByAllergy) {
-                    failureReasons.add("主菜不足，必须同时选出主菜和副菜");
-                }
-                return;
-            }
-            selectedDishes.add(new SelectedDish(DISH_TYPE_MAIN, mainDish,
-                    mainReplaceReason != null, originalMainDish, mainReplaceReason, mainAllergyReasons));
-            selectedDishes.add(new SelectedDish(DISH_TYPE_SIDE, sideDish,
-                    sideReplaceReason != null, originalSideDish, sideReplaceReason, sideAllergyReasons));
-            selectedDishIds.add(mainDish.getId());
-            selectedDishIds.add(sideDish.getId());
-        }
-
-        // 独立选择副菜
-        for (int i = 0; i < requiredSideCount; i++) {
-            DishSelectResult result = selectDishWithFallback(DISH_TYPE_SIDE, null, selectedDishIds, allergyTags,
-                    dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
-            // 收集过敏菜品
-            for (SkippedAllergyDish sad : result.getSkippedAllergyDishes()) {
-                customerMealPlan.addSkippedAllergyDish(sad);
-            }
-            if (result.getDish() == null) {
-                if (!isAllergyFilteredOut(result)) {
-                    failureReasons.add("副菜不足");
-                }
-                return;
-            }
-            selectedDishes.add(new SelectedDish(DISH_TYPE_SIDE, result.getDish(),
-                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
-            selectedDishIds.add(result.getDish().getId());
-        }
+        pickSingleDishIfRequired(mainCount, DISH_TYPE_MAIN, "主菜不足", selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
+                customerMealPlan, failureReasons);
+        pickSingleDishIfRequired(sideCount, DISH_TYPE_SIDE, "副菜不足", selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
+                customerMealPlan, failureReasons);
     }
 
     /**
-     * 选择素菜，带过敏回退逻辑。
+     * 固定日菜单规则：素菜每天最多提供 1 份，超出部分通过补菜数量记录。
      */
     private void pickVegetables(Integer vegCount, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                 Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
                                 LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap,
                                 CustomerMealPlan customerMealPlan, List<String> failureReasons) {
-        int requiredCount = vegCount == null ? 0 : vegCount;
-        for (int i = 0; i < requiredCount; i++) {
-            DishSelectResult result = selectDishWithFallback(DISH_TYPE_VEGETABLE, null, selectedDishIds, allergyTags,
-                    dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
-            // 收集过敏菜品
-            for (SkippedAllergyDish sad : result.getSkippedAllergyDishes()) {
-                customerMealPlan.addSkippedAllergyDish(sad);
-            }
-            if (result.getDish() == null) {
-                if (!isAllergyFilteredOut(result)) {
-                    failureReasons.add("素菜不足");
-                }
-                continue;
-            }
-            selectedDishes.add(new SelectedDish(DISH_TYPE_VEGETABLE, result.getDish(),
-                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
-            selectedDishIds.add(result.getDish().getId());
-        }
+        pickSingleDishIfRequired(vegCount, DISH_TYPE_VEGETABLE, "素菜不足", selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
+                customerMealPlan, failureReasons);
     }
 
     /**
-     * 在套餐配置要求时补选汤或米饭等可选菜品，带过敏回退逻辑。
+     * 固定日菜单规则：汤或米饭每天每类最多提供 1 份，超出部分通过补菜数量记录。
      */
     private void pickOptionalDish(Integer count, String dishType, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                   Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
                                   LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap,
                                   CustomerMealPlan customerMealPlan, List<String> failureReasons) {
-        int requiredCount = count == null ? 0 : count;
-        if (requiredCount <= 0) {
+        pickSingleDishIfRequired(count, dishType, dishType + "类型菜品不足", selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
+                customerMealPlan, failureReasons);
+    }
+
+    /**
+     * 固定日菜单规则：某一类型只要客户需求大于 0，就从当日菜单中选 1 份。
+     * 超出的份数通过补菜数量字段记录，不在排餐明细里重复选第二道同类型菜。
+     */
+    private void pickSingleDishIfRequired(Integer requiredCount, String dishType, String failReason,
+                                          List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
+                                          Map<String, List<Dish>> dishTypeMap, List<String> allergyTags,
+                                          Map<Integer, Set<String>> dishIngredientMap,
+                                          LocalDate targetDate, String mealType, Long parentPackageId,
+                                          Map<Long, ParentPackage> parentPackageMap,
+                                          CustomerMealPlan customerMealPlan, List<String> failureReasons) {
+        if (requiredCount == null || requiredCount <= 0) {
             return;
         }
-        for (int i = 0; i < requiredCount; i++) {
-            DishSelectResult result = selectDishWithFallback(dishType, null, selectedDishIds, allergyTags,
-                    dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
-            // 收集过敏菜品
-            for (SkippedAllergyDish sad : result.getSkippedAllergyDishes()) {
-                customerMealPlan.addSkippedAllergyDish(sad);
-            }
-            if (result.getDish() == null) {
-                if (!isAllergyFilteredOut(result)) {
-                    failureReasons.add(dishType + "类型菜品不足");
-                }
-                return;
-            }
-            selectedDishes.add(new SelectedDish(dishType, result.getDish(),
-                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
-            selectedDishIds.add(result.getDish().getId());
+        DishSelectResult result = selectDishWithFallback(dishType, null, selectedDishIds, allergyTags,
+                dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
+        for (SkippedAllergyDish sad : result.getSkippedAllergyDishes()) {
+            customerMealPlan.addSkippedAllergyDish(sad);
         }
+        if (result.getDish() == null) {
+            if (!isAllergyFilteredOut(result)) {
+                failureReasons.add(failReason);
+            }
+            return;
+        }
+        selectedDishes.add(new SelectedDish(dishType, result.getDish(),
+                result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
+        selectedDishIds.add(result.getDish().getId());
     }
 
     /**
@@ -1010,12 +876,12 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 将成功生成的客户排餐结果落库到主表和明细表。
      */
-    private void saveSuccessPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
+    private void saveSuccessPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
                                  CustomerMealPlan customerPlan) {
         log.debug("保存成功排餐计划 - 计划ID: {}, 订单ID: {}, 客户ID: {}",
                 mealPlanId, order.getId(), order.getCustomerId());
 
-        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, subPackage, 1, "");
+        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, 1, "");
         mealPlanCustomerMapper.insert(entity);
 
         saveSelectedItems(entity.getId(), entity.getCustomerName(), customerPlan);
@@ -1028,12 +894,12 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 记录单个订单的失败结果，并追加失败原因到返回结果。
      */
-    private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
+    private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
                              String failReason, List<MealPlanGenerateResult.FailDetail> failDetails) {
-        return saveFailPlan(mealPlanId, order, customer, subPackage, failReason, failDetails, null);
+        return saveFailPlan(mealPlanId, order, customer, failReason, failDetails, null);
     }
 
-    private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
+    private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
                              String failReason, List<MealPlanGenerateResult.FailDetail> failDetails,
                              CustomerMealPlan customerPlan) {
         log.debug("保存失败排餐计划 - 计划ID: {}, 订单ID: {}, 客户ID: {}, 失败原因: {}",
@@ -1041,7 +907,7 @@ public class MealPlanServiceImpl implements MealPlanService {
                 customer != null ? customer.getId() : order.getCustomerId(),
                 failReason);
 
-        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, subPackage, 0, failReason);
+        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, 0, failReason);
         mealPlanCustomerMapper.insert(entity);
         saveSelectedItems(entity.getId(), entity.getCustomerName(), customerPlan);
         saveAllergyFilteredItems(entity.getId(), entity.getCustomerName(), customerPlan);
@@ -1128,7 +994,7 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 组装客户排餐记录实体，统一填充订单、客户和套餐快照字段。
      */
     private MealPlanCustomer buildCustomerEntity(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
-                                                 SubPackage subPackage, int status, String failReason) {
+                                                 int status, String failReason) {
         MealPlanCustomer entity = new MealPlanCustomer();
         entity.setMealPlanId(mealPlanId);
         entity.setCustomerId(customer != null ? customer.getId() : order.getCustomerId());
@@ -1143,11 +1009,13 @@ public class MealPlanServiceImpl implements MealPlanService {
         entity.setVegRequiredCount(order.getVegCount() != null ? order.getVegCount() : 0);
         entity.setIncludeSoup(order.getSoupCount() != null && order.getSoupCount() > 0 ? 1 : 0);
         entity.setIncludeRice(order.getRiceCount() != null && order.getRiceCount() > 0 ? 1 : 0);
-        entity.setMainDishCount(order.getMainDishCount() != null ? order.getMainDishCount() : 0);
-        entity.setSideDishCount(order.getSideDishCount() != null ? order.getSideDishCount() : 0);
-        entity.setVegCount(order.getVegCount() != null ? order.getVegCount() : 0);
-        entity.setRiceCount(order.getRiceCount() != null ? order.getRiceCount() : 0);
-        entity.setSoupCount(order.getSoupCount() != null ? order.getSoupCount() : 0);
+        // 补菜数量 = max(0, 需求数 - 每日固定提供1个)，基础数量从 customer_order 关联获取，无需冗余存储
+        DishQuantityConfig cfg = new DishQuantityConfig(order);
+        entity.setSupplementaryMainCount(cfg.getSupplementaryMainCount());
+        entity.setSupplementarySideCount(cfg.getSupplementarySideCount());
+        entity.setSupplementaryVegCount(cfg.getSupplementaryVegCount());
+        entity.setSupplementaryRiceCount(cfg.getSupplementaryRiceCount());
+        entity.setSupplementarySoupCount(cfg.getSupplementarySoupCount());
         entity.setDeleted(false);
         return entity;
     }
@@ -1420,6 +1288,16 @@ public class MealPlanServiceImpl implements MealPlanService {
         public int getVegCount() { return vegCount; }
         public int getRiceCount() { return riceCount; }
         public int getSoupCount() { return soupCount; }
+        /** 补主菜数量 = max(0, 主菜需求数 - 每日固定1个) */
+        public int getSupplementaryMainCount() { return Math.max(0, mainDishCount - 1); }
+        /** 补副菜数量 = max(0, 副菜需求数 - 每日固定1个) */
+        public int getSupplementarySideCount() { return Math.max(0, sideDishCount - 1); }
+        /** 补素菜数量 = max(0, 素菜需求数 - 每日固定1个) */
+        public int getSupplementaryVegCount() { return Math.max(0, vegCount - 1); }
+        /** 补米饭数量 = max(0, 米饭需求数 - 每日固定1个) */
+        public int getSupplementaryRiceCount() { return Math.max(0, riceCount - 1); }
+        /** 补汤数量 = max(0, 汤需求数 - 每日固定1个) */
+        public int getSupplementarySoupCount() { return Math.max(0, soupCount - 1); }
     }
 
     private static class CustomerMealPlan {
@@ -1717,6 +1595,11 @@ public class MealPlanServiceImpl implements MealPlanService {
         detail.setVegRequiredCount(customer.getVegRequiredCount());
         detail.setIncludeSoup(customer.getIncludeSoup());
         detail.setIncludeRice(customer.getIncludeRice());
+        detail.setSupplementaryMainCount(customer.getSupplementaryMainCount());
+        detail.setSupplementarySideCount(customer.getSupplementarySideCount());
+        detail.setSupplementaryVegCount(customer.getSupplementaryVegCount());
+        detail.setSupplementaryRiceCount(customer.getSupplementaryRiceCount());
+        detail.setSupplementarySoupCount(customer.getSupplementarySoupCount());
         detail.setIsVerified(customer.getIsVerified());
         detail.setVerificationTime(customer.getVerificationTime() != null ? customer.getVerificationTime().toString() : null);
         detail.setVerificationOperator(customer.getVerificationOperator());

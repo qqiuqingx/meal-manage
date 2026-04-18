@@ -59,6 +59,7 @@ mvn test -DskipTests=false
 ## Key Patterns
 
 ### JSON Serialization
+
 Uses **fastjson2**, NOT Jackson. Custom serializers in `eladmin-common` config.
 
 ### Business Module Structure
@@ -81,6 +82,7 @@ modules/<module>/
 ```
 
 ### Database Access
+
 - MyBatis-Plus for ORM
 - QueryCriteria classes for dynamic queries
 - XML mappers in `eladmin-system/src/main/resources/mapper/`
@@ -90,37 +92,43 @@ modules/<module>/
 **严禁**使用无条件的 `delete(null)` / `delete(new QueryWrapper<>())` 等全表删除操作。
 
 - MyBatis-Plus 的 `mapper.delete(null)` 会生成 `DELETE FROM table` 无条件语句，等同于 `TRUNCATE`，会清空整张表
+
 - 测试代码连接真实数据库时更不可接受——会直接删除生产/测试数据
+
 - 如需按条件清理测试数据，必须使用**有主键 ID 列表**的批量删除：
+  
   ```java
   // ✅ 正确：按 ID 列表精确删除
   mapper.deleteBatchIds(Arrays.asList(1L, 2L, 3L));
   mapper.deleteById(id);
   mapper.delete(new QueryWrapper<MyEntity>().eq("test_key", "xxx")); // 必须有 WHERE 条件
-
+  
   // ❌ 错误：无条件全表删除（已多次导致数据丢失）
   mapper.delete(null);
   mapper.delete(new QueryWrapper<>());
   ```
+
 - 测试数据清理应在 `@BeforeEach` 中按主键精确删除，**不要** `delete(null)` 清表
 
 ### API Documentation
+
 **IMPORTANT**: Any API change (add, update, delete) MUST be reflected in the corresponding Markdown doc in `doc/` directory immediately after the code change.
 
 ### Security
+
 - JWT + Spring Security
 - Custom annotations: `@Anonymous` for public endpoints
 - Rate limiting: `@Limit` annotation
 
 ## Common Utilities
 
-| Utility | Purpose |
-|---------|---------|
-| `SecurityUtils` | Get current user ID/name |
-| `RedisUtils` | Cache operations |
-| `EncryptUtils` | AES encryption |
-| `RequestHolder` | Access HTTP request/response |
-| `PageUtil` / `PageResult` | Pagination |
+| Utility                   | Purpose                      |
+| ------------------------- | ---------------------------- |
+| `SecurityUtils`           | Get current user ID/name     |
+| `RedisUtils`              | Cache operations             |
+| `EncryptUtils`            | AES encryption               |
+| `RequestHolder`           | Access HTTP request/response |
+| `PageUtil` / `PageResult` | Pagination                   |
 
 ## Configuration
 
@@ -159,23 +167,25 @@ conn.close()
 
 ### 核心业务表
 
-| 表名 | 说明 |
-|------|------|
-| `dish` | 菜品表（name, dish_type, meal_types, meal_packages, schedule 等 JSON 字段） |
-| `dish_ingredient` | 菜品-食材关联表 |
-| `dish_ingredient_relation` | 关联关系表 |
-| `dish_schedule_record` | 排餐记录（record_date, meal_type, week_num, day_of_week） |
-| `customer_dietary_restrictions` | 客户饮食限制（姓名、套餐、忌口、有效期、剩余餐数） |
-| `customer_keywords` | 客户关键词 |
-| `customer_menu_record` | 客户菜单记录（每餐选了哪些菜、是否被替换） |
+| 表名                              | 说明                                                                  |
+| ------------------------------- | ------------------------------------------------------------------- |
+| `dish`                          | 菜品表（name, dish_type, meal_types, meal_packages, schedule 等 JSON 字段） |
+| `dish_ingredient`               | 菜品-食材关联表                                                            |
+| `dish_ingredient_relation`      | 关联关系表                                                               |
+| `dish_schedule_record`          | 排餐记录（record_date, meal_type, week_num, day_of_week）                 |
+| `customer_dietary_restrictions` | 客户饮食限制（姓名、套餐、忌口、有效期、剩余餐数）                                           |
+| `customer_keywords`             | 客户关键词                                                               |
+| `customer_menu_record`          | 客户菜单记录（每餐选了哪些菜、是否被替换）                                               |
 
 ### JSON 字段说明
 
 `dish.schedule` 格式为 `["W-D", ...]`，W=周序号(1-4)，D=星期几(1-7)：
+
 - `["1-1", "2-1", "3-1", "4-1"]` 表示每周一出现
 - `["3-5"]` 表示第 3 周周四出现
 
 `dish.meal_packages` / `customer.meal_package` 套餐代码：
+
 - `yuezi` 月子餐 / `yunqi` 孕期餐 / `xiaoyuezi` 小月子 / `yingyang` 营养餐 / `fenmian` 分娩餐
 
 ## Code Style
@@ -183,6 +193,7 @@ conn.close()
 ### Java
 
 **文件头注释（License）：**
+
 ```java
 /*
  *  Copyright 2019-2025 Zheng Jie
@@ -193,6 +204,7 @@ conn.close()
 ```
 
 **类注释格式（业务类）：**
+
 ```java
 /**
  * 描述
@@ -203,6 +215,7 @@ conn.close()
 ```
 
 **Entity 类：**
+
 - 使用 Lombok `@Getter @Setter`（不用 `@Data`，避免 toString/equals/hashCode 冲突）
 - 继承 `BaseEntity`
 - 主键用 `@TableId(type = IdType.AUTO)`
@@ -230,6 +243,7 @@ public class Dish extends BaseEntity implements Serializable {
 ```
 
 **校验分组（BaseEntity 内）：**
+
 ```java
 public @interface Create {}
 public @interface Update {}
@@ -237,6 +251,7 @@ public @interface Update {}
 ```
 
 **Controller 注解顺序：**
+
 ```java
 @Api(tags = "菜品管理")
 @RestController
@@ -246,6 +261,7 @@ public class DishController { ... }
 ```
 
 **Controller 方法注解顺序：**
+
 ```java
 @Log("新增菜品")        // 先 @Log（若适用）
 @ApiOperation("新增菜品")
@@ -265,6 +281,7 @@ public ResponseEntity<Object> createDish(...) { ... }
 | 导出 | `exportDish` | GET `/download` | `void` + `HttpServletResponse` |
 
 **分页（Controller → Service）：**
+
 ```java
 // Controller：前端 0 基，MyBatis-Plus 1 基，需 +1 转换
 Page<Object> page = new Page<>(criteria.getPage(), criteria.getSize());
@@ -272,6 +289,7 @@ return new ResponseEntity<>(dishService.queryAll(criteria, page), HttpStatus.OK)
 ```
 
 **Service 注解：**
+
 ```java
 @Service
 @RequiredArgsConstructor   // 构造器注入，不要 @Autowired 字段
@@ -280,15 +298,18 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 ```
 
 **事务注解：**
+
 ```java
 @Transactional(rollbackFor = Exception.class)
 ```
 
 **异常处理：**
+
 - 业务异常：`throw new BadRequestException("提示信息")`
 - 重复数据：`throw new EntityExistException(Entity.class, "field", value)`
 
 **枚举类：**
+
 ```java
 @Getter
 @AllArgsConstructor
@@ -312,6 +333,7 @@ public enum DishTypeEnum {
 ```
 
 **常量定义（ServiceImpl 内部）：**
+
 ```java
 private static final String[] DISH_TYPES = {"MAIN", "SIDE", "SOUP"};
 private static final Map<String, String> MEAL_TYPE_CN = new LinkedHashMap<>();
@@ -321,6 +343,7 @@ static {
 ```
 
 **日志：**
+
 - 使用 `@Slf4j` 生成 `log`，不在类中手动创建 Logger
 - 通过 `@Log` 注解记录操作日志，不在方法内手动写 `log.info`
 
@@ -333,6 +356,7 @@ static {
 **SQL 关键字：** 小写
 
 **条件判断：**
+
 ```xml
 <where>
     <if test="criteria.name != null">
@@ -346,6 +370,7 @@ order by sort asc, id desc
 ```
 
 **字段映射（JSON List）：**
+
 ```xml
 <result column="meal_types" property="mealTypes" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
 ```
@@ -355,6 +380,7 @@ order by sort asc, id desc
 ### Vue
 
 **目录结构：**
+
 ```
 src/
 ├── api/
@@ -373,6 +399,7 @@ src/
 ```
 
 **API 文件（`src/api/*.js`）：**
+
 ```javascript
 import request from '@/utils/request'
 
@@ -404,6 +431,7 @@ export default { queryDishes, addDish, editDish, delDish }
 ```
 
 **Vue 组件（`<script>` 部分）：**
+
 ```javascript
 export default {
   name: 'Dish',
@@ -453,11 +481,13 @@ export default {
 ```
 
 **el-switch 布尔值绑定：**
+
 ```html
 <el-switch v-model="scope.row.enabled" :active-value="true" :inactive-value="false" />
 ```
 
 **el-form 校验规则：**
+
 ```javascript
 rules: {
   name: [{ required: true, message: '菜品名称不能为空', trigger: 'blur' }],
@@ -466,6 +496,7 @@ rules: {
 ```
 
 **确认删除写法：**
+
 ```javascript
 this.$confirm('提示信息', '标题', { type: 'warning' })
   .then(() => apiCall())
@@ -474,6 +505,7 @@ this.$confirm('提示信息', '标题', { type: 'warning' })
 ```
 
 **状态切换后回滚（失败时）：**
+
 ```javascript
 handleStatusChange(row) {
   editDish(row).then(() => {
@@ -497,6 +529,7 @@ handleStatusChange(row) {
 ### 通用
 
 **前后端约定：**
+
 - 分页：前端 0 基，后端 0 基；前端传 `page`（0开始）、`size`，后端 `Page<>(page + 1, size)`
 - 删除：批量传 `List<Integer> ids`，HTTP DELETE BODY
 - 新增成功：`HttpStatus.CREATED`，前端无需特殊处理
@@ -510,3 +543,9 @@ handleStatusChange(row) {
 - **quartz**: Scheduled jobs
 - **maint**: System maintenance (online users, SQL监控)
 - **meal**: Custom dietary restrictions and dishes module
+
+
+## Git Commit
+  - **提交描述使用中文**，描述本次改动的内容和原因
+  - type 使用英文：`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
+  - 示例：`feat: 新增套餐编号池功能
