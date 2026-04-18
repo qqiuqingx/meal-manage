@@ -379,7 +379,6 @@ export default {
           { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确', trigger: 'blur' }
         ],
         'orderInfo.parentPackageId': [{ required: true, message: '请选择父套餐', trigger: 'change' }],
-        'orderInfo.childPackageId': [{ required: true, message: '请选择子套餐', trigger: 'change' }],
         'orderInfo.startDate': [{ required: true, message: '请选择开始日期', trigger: 'change' }],
         'orderInfo.endDate': [{ required: true, message: '请选择结束日期', trigger: 'change' }]
       },
@@ -481,9 +480,10 @@ export default {
         const orderInfo = formData.orderInfo || createFirstOrderDefaultForm()
         const breakfastCount = orderInfo.breakfastCount || 0
         const lunchDinnerCount = orderInfo.lunchDinnerCount || 0
+        const normalizedChildPackageId = orderInfo.childPackageId === '' ? null : orderInfo.childPackageId
         payload.orderInfo = {
           parentPackageId: orderInfo.parentPackageId,
-          childPackageId: orderInfo.childPackageId,
+          childPackageId: normalizedChildPackageId,
           breakfastCount,
           lunchDinnerCount,
           totalCount: breakfastCount + lunchDinnerCount,
@@ -497,7 +497,12 @@ export default {
           endDate: orderInfo.endDate,
           mealType: orderInfo.mealType || 'ALL',
           customerSource: orderInfo.customerSource || null,
-          deliveryDates: this.serializeDeliveryDates(orderInfo.deliveryDates)
+          deliveryDates: this.serializeDeliveryDates(orderInfo.deliveryDates),
+          mainDishCount: orderInfo.mainDishCount || 0,
+          sideDishCount: orderInfo.sideDishCount || 0,
+          vegCount: orderInfo.vegCount || 0,
+          riceCount: orderInfo.riceCount || 0,
+          soupCount: orderInfo.soupCount || 0
         }
       }
 
