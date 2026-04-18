@@ -79,6 +79,24 @@
         </el-col>
       </el-row>
 
+      <!-- ===== 父套餐（用于编号池归属，两种模式均显示） ===== -->
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="父套餐">
+            <el-select
+              v-model="form.parentPackageId"
+              :disabled="readonly"
+              clearable
+              placeholder="选择父套餐"
+              style="width: 100%;"
+              @change="onParentPackageChange"
+            >
+              <el-option v-for="item in parentPackages" :key="item.id" :label="item.packageName" :value="item.id" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
+
       <!-- ===== 每餐菜品配置 ===== -->
       <el-divider content-position="left">每餐菜品配置</el-divider>
       <el-row :gutter="20">
@@ -564,6 +582,7 @@ export default {
   },
   created() {
     this.loadCustomerSourceDict()
+    this.loadParentPackages()
     this.initAvailableDates()
     // 编辑时：如果传入了当前客户数据，填充下拉列表
     if (this.mode === 'order' && this.currentCustomer && this.currentCustomer.id) {
