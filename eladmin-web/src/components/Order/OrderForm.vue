@@ -79,10 +79,10 @@
         </el-col>
       </el-row>
 
-      <!-- ===== 公共字段：父/子套餐选择（两种模式均显示） ===== -->
-      <el-row :gutter="20">
+      <!-- ===== 公共字段：父/子套餐选择（仅订单管理模式，首单模式不需要套餐选择） ===== -->
+      <el-row v-if="mode === 'order'" :gutter="20">
         <el-col :span="8">
-          <el-form-item label="父套餐" :prop="mode === 'firstOrder' ? 'parentPackageId' : ''">
+          <el-form-item label="父套餐">
             <el-select
               v-model="form.parentPackageId"
               :disabled="readonly"
@@ -96,7 +96,7 @@
           </el-form-item>
         </el-col>
         <el-col :span="8">
-          <el-form-item label="子套餐" :prop="mode === 'firstOrder' ? 'childPackageId' : ''">
+          <el-form-item label="子套餐">
             <el-select
               v-model="form.childPackageId"
               :disabled="readonly || !form.parentPackageId"
@@ -598,7 +598,9 @@ export default {
     this.loadCustomerSourceDict()
     this.initAvailableDates()
     // 两种模式均需加载父套餐
-    this.loadParentPackages()
+    if (this.mode === 'order') {
+      this.loadParentPackages()
+    }
     // 编辑时：如果传入了当前客户数据，填充下拉列表
     if (this.mode === 'order' && this.currentCustomer && this.currentCustomer.id) {
       this.customers = [{
