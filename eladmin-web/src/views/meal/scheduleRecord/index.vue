@@ -102,6 +102,15 @@
               :class="{ 'code-cell--replaced': customer.hasReplaced }"
             >
               <span class="code-text">{{ customer.customerCode || customer.customerName }}</span>
+              <span v-if="customer.specialRequirements" class="code-remark">{{ customer.specialRequirements }}</span>
+              <div v-if="customer.supplementaryTags && customer.supplementaryTags.length > 0" class="supplementary-tags">
+                <span
+                  v-for="(tag, idx) in customer.supplementaryTags"
+                  :key="idx"
+                  class="supplementary-tag"
+                  :class="{ 'supplementary-tag--missing': tag.startsWith('无') }"
+                >{{ tag }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -448,7 +457,8 @@ export default {
       if (!this.planData) return []
       return (this.planData.customers || []).map(c => ({
         ...c,
-        hasReplaced: (c.items || []).some(i => i.isReplaced)
+        hasReplaced: (c.items || []).some(i => i.isReplaced),
+        supplementaryTags: this.getSupplementaryTags(c)
       }))
     },
     regularDishes() {
@@ -778,6 +788,48 @@ export default {
     },
 
     // ─── 工具方法 ─────────────────────────────────
+    getSupplementaryTags(customer) {
+      const missingTags = []
+      const addTags = []
+
+      // 加菜标签
+      if (customer.supplementaryMainCount > 0) {
+        addTags.push(`加主菜×${customer.supplementaryMainCount}`)
+      }
+      if (customer.supplementaryRiceCount > 0) {
+        addTags.push(`加米饭×${customer.supplementaryRiceCount}`)
+      }
+      if (customer.supplementarySideCount > 0) {
+        addTags.push(`加副菜×${customer.supplementarySideCount}`)
+      }
+      if (customer.supplementarySoupCount > 0) {
+        addTags.push(`加汤×${customer.supplementarySoupCount}`)
+      }
+      if (customer.supplementaryVegCount > 0) {
+        addTags.push(`加素菜×${customer.supplementaryVegCount}`)
+      }
+
+      // 无菜品标签
+      const dishTypes = (customer.items || []).map(item => item.dishType)
+      if (!dishTypes.includes('MAIN')) {
+        missingTags.push('无主菜')
+      }
+      if (!dishTypes.includes('SIDE')) {
+        missingTags.push('无副菜')
+      }
+      if (!dishTypes.includes('VEGETABLE')) {
+        missingTags.push('无素菜')
+      }
+      if (!dishTypes.includes('SOUP') && customer.includeSoup !== 1) {
+        missingTags.push('无汤')
+      }
+      if (!dishTypes.includes('RICE') && customer.includeRice !== 1) {
+        missingTags.push('无米饭')
+      }
+
+      // 将"无菜"标签放在前面，"加菜"标签放在后面
+      return [...missingTags, ...addTags]
+    },
     buildCodeSnippet(codes, maxShow = 6) {
       if (!codes || codes.length === 0) return '-'
       if (codes.length <= maxShow) return codes.join(', ')
@@ -963,6 +1015,16 @@ export default {
   font-size: 13px;
   font-weight: 700;
   color: #475569;
+  display: block;
+}
+.code-remark {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  display: block;
+  margin-top: 6px;
+  word-break: break-word;
+  line-height: 1.4;
 }
 .code-cell--replaced .code-text {
   display: inline-block;
@@ -971,6 +1033,30 @@ export default {
   color: #ba1a1a;
   padding: 2px 6px;
   border-radius: 4px;
+}
+
+/* 加菜标签 */
+.supplementary-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.supplementary-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 3px;
+  border: 1px solid #fcd34d;
+  letter-spacing: 0.02em;
+}
+.supplementary-tag--missing {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
 }
 
 /* 右栏 */
