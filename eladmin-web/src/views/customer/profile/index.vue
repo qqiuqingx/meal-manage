@@ -480,6 +480,7 @@ export default {
         const breakfastCount = orderInfo.breakfastCount || 0
         const lunchDinnerCount = orderInfo.lunchDinnerCount || 0
         payload.orderInfo = {
+          parentPackageId: orderInfo.parentPackageId,
           breakfastCount,
           lunchDinnerCount,
           totalCount: breakfastCount + lunchDinnerCount,
