@@ -2,13 +2,17 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="me.zhengjie.modules.sales.mapper.SalesDashboardMapper">
 
-    <!-- 5.1 销售金额四卡片 -->
+    <!-- 5.1 销售金额四卡片 + 核销金额四卡片 -->
     <select id="getOverview" resultType="me.zhengjie.modules.sales.domain.dto.SalesOverviewVO">
         SELECT
           COALESCE(SUM(CASE WHEN DATE(deal_time) = CURDATE() THEN final_amount ELSE 0 END), 0) AS todayAmount,
           COALESCE(SUM(CASE WHEN YEARWEEK(deal_time, 1) = YEARWEEK(CURDATE(), 1) THEN final_amount ELSE 0 END), 0) AS weekAmount,
           COALESCE(SUM(CASE WHEN DATE_FORMAT(deal_time, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m') THEN final_amount ELSE 0 END), 0) AS monthAmount,
-          COALESCE(SUM(final_amount), 0) AS totalAmount
+          COALESCE(SUM(final_amount), 0) AS totalAmount,
+          COALESCE((SELECT SUM(CASE WHEN DATE(vl.operate_time) = CURDATE() THEN (vl.verification_count * COALESCE(CASE WHEN vl.meal_type IN ('LUNCH', 'DINNER') THEN o.lunch_dinner_price ELSE o.breakfast_price END, 0)) ELSE 0 END) FROM meal_verification_log vl LEFT JOIN customer_order o ON vl.order_id = o.id WHERE vl.deleted = 0), 0) AS todayVerificationAmount,
+          COALESCE((SELECT SUM(CASE WHEN YEARWEEK(vl.operate_time, 1) = YEARWEEK(CURDATE(), 1) THEN (vl.verification_count * COALESCE(CASE WHEN vl.meal_type IN ('LUNCH', 'DINNER') THEN o.lunch_dinner_price ELSE o.breakfast_price END, 0)) ELSE 0 END) FROM meal_verification_log vl LEFT JOIN customer_order o ON vl.order_id = o.id WHERE vl.deleted = 0), 0) AS weekVerificationAmount,
+          COALESCE((SELECT SUM(CASE WHEN DATE_FORMAT(vl.operate_time, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m') THEN (vl.verification_count * COALESCE(CASE WHEN vl.meal_type IN ('LUNCH', 'DINNER') THEN o.lunch_dinner_price ELSE o.breakfast_price END, 0)) ELSE 0 END) FROM meal_verification_log vl LEFT JOIN customer_order o ON vl.order_id = o.id WHERE vl.deleted = 0), 0) AS monthVerificationAmount,
+          COALESCE((SELECT SUM(vl.verification_count * COALESCE(CASE WHEN vl.meal_type IN ('LUNCH', 'DINNER') THEN o.lunch_dinner_price ELSE o.breakfast_price END, 0)) FROM meal_verification_log vl LEFT JOIN customer_order o ON vl.order_id = o.id WHERE vl.deleted = 0), 0) AS totalVerificationAmount
         FROM customer_order
         WHERE status != 0
           AND deal_time IS NOT NULL

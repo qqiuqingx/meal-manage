@@ -22,7 +22,7 @@
       </div>
     </div>
 
-    <!-- KPI 卡片 -->
+    <!-- KPI 卡片：销售额 -->
     <el-row :gutter="20" class="kpi-row">
       <el-col :xs="24" :sm="12" :lg="6">
         <div class="kpi-card kpi-today">
@@ -65,6 +65,54 @@
           <div class="kpi-body">
             <p class="kpi-label" style="color: rgba(255,255,255,0.85)">累计总销售额</p>
             <p class="kpi-value" style="color: #fff">¥{{ formatMoney(overview.totalAmount) }}</p>
+          </div>
+        </div>
+      </el-col>
+    </el-row>
+
+    <!-- KPI 卡片：核销额 -->
+    <el-row :gutter="20" class="kpi-row" style="margin-top: 0;">
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="kpi-card kpi-today">
+          <div class="kpi-icon-wrap kpi-icon-purple">
+            <i class="el-icon-shopping-cart-2" />
+          </div>
+          <div class="kpi-body">
+            <p class="kpi-label">今日核销额</p>
+            <p class="kpi-value">¥{{ formatMoney(overview.todayVerificationAmount) }}</p>
+          </div>
+        </div>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="kpi-card kpi-week">
+          <div class="kpi-icon-wrap kpi-icon-indigo">
+            <i class="el-icon-calendar" />
+          </div>
+          <div class="kpi-body">
+            <p class="kpi-label">本周核销额</p>
+            <p class="kpi-value">¥{{ formatMoney(overview.weekVerificationAmount) }}</p>
+          </div>
+        </div>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="kpi-card kpi-month">
+          <div class="kpi-icon-wrap kpi-icon-pink">
+            <i class="el-icon-pie-chart" />
+          </div>
+          <div class="kpi-body">
+            <p class="kpi-label">本月核销额</p>
+            <p class="kpi-value">¥{{ formatMoney(overview.monthVerificationAmount) }}</p>
+          </div>
+        </div>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <div class="kpi-card kpi-total-verification">
+          <div class="kpi-icon-wrap kpi-icon-white">
+            <i class="el-icon-coin" />
+          </div>
+          <div class="kpi-body">
+            <p class="kpi-label" style="color: rgba(255,255,255,0.85)">累计核销额</p>
+            <p class="kpi-value" style="color: #fff">¥{{ formatMoney(overview.totalVerificationAmount) }}</p>
           </div>
         </div>
       </el-col>
@@ -399,7 +447,11 @@ export default {
         todayAmount: 0,
         weekAmount: 0,
         monthAmount: 0,
-        totalAmount: 0
+        totalAmount: 0,
+        todayVerificationAmount: 0,
+        weekVerificationAmount: 0,
+        monthVerificationAmount: 0,
+        totalVerificationAmount: 0
       },
       // 产品/渠道/人员
       top: {
@@ -747,6 +799,14 @@ export default {
 .kpi-icon-teal  { background: #e0f7f4; color: #00897b; }
 .kpi-icon-orange { background: #fff3e0; color: #f5a623; }
 .kpi-icon-primary { background: rgba(255,255,255,0.25); color: #fff; }
+.kpi-icon-purple { background: #f3e5f5; color: #8e24aa; }
+.kpi-icon-indigo  { background: #e8eaf6; color: #3949ab; }
+.kpi-icon-pink    { background: #fce4ec; color: #c62828; }
+.kpi-icon-white   { background: rgba(255,255,255,0.25); color: #fff; }
+
+.kpi-total-verification {
+  background: linear-gradient(135deg, #8e24aa 0%, #ab47bc 100%);
+}
 .kpi-body { flex: 1; }
 .kpi-label {
   font-size: 12px;
