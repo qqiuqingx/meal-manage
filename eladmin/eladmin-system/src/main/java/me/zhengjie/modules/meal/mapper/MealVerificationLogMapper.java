@@ -48,4 +48,11 @@ public interface MealVerificationLogMapper extends BaseMapper<MealVerificationLo
     int softDeleteIfActive(@Param("id") Long id,
                            @Param("deletedBy") String deletedBy,
                            @Param("deleteTime") Date deleteTime);
+
+    /**
+     * 标记核销记录为已退餐
+     * @param orderId 订单ID
+     * @return 更新行数
+     */
+    int markAsRefunded(@Param("orderId") Long orderId);
 }

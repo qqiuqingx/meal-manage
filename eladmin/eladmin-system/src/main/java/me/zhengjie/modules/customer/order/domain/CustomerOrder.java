@@ -125,7 +125,7 @@ public class CustomerOrder implements Serializable {
     private LocalDate endDate;
 
     /**
-     * 订单状态(0=已取消,1=进行中,2=已完成)
+     * 订单状态(0=已取消,1=进行中,2=已完成,3=已退餐)
      */
     private Integer status;
 

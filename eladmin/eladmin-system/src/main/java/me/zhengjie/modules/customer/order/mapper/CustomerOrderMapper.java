@@ -123,4 +123,11 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      */
     int revertVerification(@Param("orderId") Long orderId, @Param("price") java.math.BigDecimal price);
 
+    /**
+     * 退餐：更新订单状态为已退餐
+     * @param orderId 订单ID
+     * @return 更新行数
+     */
+    int updateStatusToRefunded(@Param("orderId") Long orderId);
+
 }
