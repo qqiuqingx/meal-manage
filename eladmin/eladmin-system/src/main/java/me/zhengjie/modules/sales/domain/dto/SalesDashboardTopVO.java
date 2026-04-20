@@ -21,21 +21,21 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * 销售看板 TOP3 汇总
+ * 销售看板产品/渠道/人员业绩汇总
  * @author qqx
  **/
 @Data
 public class SalesDashboardTopVO {
 
-    @ApiModelProperty(value = "产品销售数量 TOP3")
-    private List<SalesTopItemVO> productQuantityTop3;
+    @ApiModelProperty(value = "产品销售数量列表")
+    private List<SalesTopItemVO> productQuantityList;
 
-    @ApiModelProperty(value = "产品销售金额 TOP3")
-    private List<SalesTopItemVO> productAmountTop3;
+    @ApiModelProperty(value = "产品销售金额列表")
+    private List<SalesTopItemVO> productAmountList;
 
-    @ApiModelProperty(value = "销售员业绩 TOP3")
-    private List<SalesTopItemVO> salespersonTop3;
+    @ApiModelProperty(value = "销售员业绩列表")
+    private List<SalesTopItemVO> salespersonList;
 
-    @ApiModelProperty(value = "销售渠道 TOP3")
-    private List<SalesTopItemVO> channelTop3;
+    @ApiModelProperty(value = "销售渠道列表")
+    private List<SalesTopItemVO> channelList;
 }

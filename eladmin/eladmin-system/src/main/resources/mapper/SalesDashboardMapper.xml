@@ -37,7 +37,7 @@
         ORDER BY month
     </select>
 
-    <!-- 5.3 产品销售数量 TOP3 -->
+    <!-- 5.3 产品销售数量 -->
     <select id="getProductQuantityTop3" resultType="me.zhengjie.modules.sales.domain.dto.SalesTopItemVO">
         SELECT
           COALESCE(pp.package_name, '') AS name,
@@ -54,10 +54,9 @@
           </if>
         GROUP BY o.parent_package_id, pp.package_name
         ORDER BY value DESC
-        LIMIT 3
     </select>
 
-    <!-- 5.4 产品销售金额 TOP3 -->
+    <!-- 5.4 产品销售金额 -->
     <select id="getProductAmountTop3" resultType="me.zhengjie.modules.sales.domain.dto.SalesTopItemVO">
         SELECT
           COALESCE(pp.package_name, '') AS name,
@@ -74,10 +73,9 @@
           </if>
         GROUP BY o.parent_package_id, pp.package_name
         ORDER BY value DESC
-        LIMIT 3
     </select>
 
-    <!-- 5.5 销售员业绩 TOP3 -->
+    <!-- 5.5 销售员业绩 -->
     <select id="getSalespersonTop3" resultType="me.zhengjie.modules.sales.domain.dto.SalesTopItemVO">
         SELECT
           COALESCE(pp.package_name, '') AS name,
@@ -94,10 +92,9 @@
           </if>
         GROUP BY o.parent_package_id, pp.package_name
         ORDER BY value DESC
-        LIMIT 3
     </select>
 
-    <!-- 5.6 销售渠道 TOP3 -->
+    <!-- 5.6 销售渠道 -->
     <select id="getChannelTop3" resultType="me.zhengjie.modules.sales.domain.dto.SalesTopItemVO">
         SELECT
           COALESCE(dd.label, o.customer_source) AS name,
@@ -117,7 +114,6 @@
           </if>
         GROUP BY o.customer_source, dd.label
         ORDER BY value DESC
-        LIMIT 3
     </select>
 
     <!-- 5.7 销售明细表查询 -->

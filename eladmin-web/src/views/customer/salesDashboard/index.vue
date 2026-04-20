@@ -79,24 +79,23 @@
           <el-col :span="24" style="margin-bottom: 16px;">
             <div class="panel">
               <div class="panel-header">
-                <span class="panel-title">产品销量 TOP3</span>
+                <span class="panel-title">产品销量</span>
                 <el-tag size="mini" type="success" effect="plain">数量</el-tag>
               </div>
               <div class="panel-body">
-                <div v-if="!top.productQuantityTop3 || !top.productQuantityTop3.length" class="no-data">暂无数据</div>
+                <div v-if="!top.productQuantityList || !top.productQuantityList.length" class="no-data">暂无数据</div>
                 <template v-else>
                   <div
-                    v-for="(item, idx) in top.productQuantityTop3"
-                    :key="'pq'+idx"
+                    v-for="item in top.productQuantityList"
+                    :key="'pq'+item.name"
                     class="rank-item"
                   >
                     <div class="rank-meta">
-                      <span :class="['rank-badge', idx === 0 ? 'rank-gold' : idx === 1 ? 'rank-silver' : 'rank-bronze']">{{ idx + 1 }}</span>
                       <span class="rank-name">{{ item.name }}</span>
                       <span class="rank-val rank-val-green">{{ item.value }} 份</span>
                     </div>
                     <el-progress
-                      :percentage="calcPercent(item.value, top.productQuantityTop3)"
+                      :percentage="calcPercent(item.value, top.productQuantityList)"
                       :stroke-width="6"
                       :show-text="false"
                       color="#00bfa5"
@@ -106,28 +105,27 @@
               </div>
             </div>
           </el-col>
-          <!-- 产品金额 TOP3 -->
+          <!-- 产品金额 -->
           <el-col :span="24" style="margin-bottom: 16px;">
             <div class="panel">
               <div class="panel-header">
-                <span class="panel-title">产品销售额 TOP3</span>
+                <span class="panel-title">产品销售额</span>
                 <el-tag size="mini" type="warning" effect="plain">金额</el-tag>
               </div>
               <div class="panel-body">
-                <div v-if="!top.productAmountTop3 || !top.productAmountTop3.length" class="no-data">暂无数据</div>
+                <div v-if="!top.productAmountList || !top.productAmountList.length" class="no-data">暂无数据</div>
                 <template v-else>
                   <div
-                    v-for="(item, idx) in top.productAmountTop3"
-                    :key="'pa'+idx"
+                    v-for="item in top.productAmountList"
+                    :key="'pa'+item.name"
                     class="rank-item"
                   >
                     <div class="rank-meta">
-                      <span :class="['rank-badge', idx === 0 ? 'rank-gold' : idx === 1 ? 'rank-silver' : 'rank-bronze']">{{ idx + 1 }}</span>
                       <span class="rank-name">{{ item.name }}</span>
                       <span class="rank-val rank-val-orange">¥{{ formatMoney(item.value) }}</span>
                     </div>
                     <el-progress
-                      :percentage="calcPercent(item.value, top.productAmountTop3)"
+                      :percentage="calcPercent(item.value, top.productAmountList)"
                       :stroke-width="6"
                       :show-text="false"
                       color="#f5a623"
@@ -137,28 +135,27 @@
               </div>
             </div>
           </el-col>
-          <!-- 销售员 TOP3 -->
+          <!-- 销售员 -->
           <el-col :span="24" style="margin-bottom: 16px;">
             <div class="panel">
               <div class="panel-header">
-                <span class="panel-title">销售员业绩 TOP3</span>
+                <span class="panel-title">销售员业绩</span>
                 <el-tag size="mini" type="danger" effect="plain">业绩</el-tag>
               </div>
               <div class="panel-body">
-                <div v-if="!top.salespersonTop3 || !top.salespersonTop3.length" class="no-data">暂无数据</div>
+                <div v-if="!top.salespersonList || !top.salespersonList.length" class="no-data">暂无数据</div>
                 <template v-else>
                   <div
-                    v-for="(item, idx) in top.salespersonTop3"
-                    :key="'sp'+idx"
+                    v-for="item in top.salespersonList"
+                    :key="'sp'+item.name"
                     class="rank-item"
                   >
                     <div class="rank-meta">
-                      <span :class="['rank-badge', idx === 0 ? 'rank-gold' : idx === 1 ? 'rank-silver' : 'rank-bronze']">{{ idx + 1 }}</span>
                       <span class="rank-name">{{ item.name }}</span>
                       <span class="rank-val rank-val-primary">¥{{ formatMoney(item.value) }}</span>
                     </div>
                     <el-progress
-                      :percentage="calcPercent(item.value, top.salespersonTop3)"
+                      :percentage="calcPercent(item.value, top.salespersonList)"
                       :stroke-width="6"
                       :show-text="false"
                       color="#006b5c"
@@ -168,28 +165,27 @@
               </div>
             </div>
           </el-col>
-          <!-- 渠道 TOP3 -->
+          <!-- 渠道 -->
           <el-col :span="24">
             <div class="panel">
               <div class="panel-header">
-                <span class="panel-title">销售渠道 TOP3</span>
+                <span class="panel-title">销售渠道</span>
                 <el-tag size="mini" effect="plain">渠道</el-tag>
               </div>
               <div class="panel-body">
-                <div v-if="!top.channelTop3 || !top.channelTop3.length" class="no-data">暂无数据</div>
+                <div v-if="!top.channelList || !top.channelList.length" class="no-data">暂无数据</div>
                 <template v-else>
                   <div
-                    v-for="(item, idx) in top.channelTop3"
-                    :key="'ch'+idx"
+                    v-for="item in top.channelList"
+                    :key="'ch'+item.name"
                     class="rank-item"
                   >
                     <div class="rank-meta">
-                      <span :class="['rank-badge', idx === 0 ? 'rank-gold' : idx === 1 ? 'rank-silver' : 'rank-bronze']">{{ idx + 1 }}</span>
                       <span class="rank-name">{{ item.name }}</span>
                       <span class="rank-val rank-val-blue">¥{{ formatMoney(item.value) }}</span>
                     </div>
                     <el-progress
-                      :percentage="calcPercent(item.value, top.channelTop3)"
+                      :percentage="calcPercent(item.value, top.channelList)"
                       :stroke-width="6"
                       :show-text="false"
                       color="#5470c6"
@@ -405,12 +401,12 @@ export default {
         monthAmount: 0,
         totalAmount: 0
       },
-      // TOP3 数据
+      // 产品/渠道/人员
       top: {
-        productQuantityTop3: [],
-        productAmountTop3: [],
-        salespersonTop3: [],
-        channelTop3: []
+        productQuantityList: [],
+        productAmountList: [],
+        salespersonList: [],
+        channelList: []
       },
       // 月度趋势
       selectedYear: currentYear,
