@@ -38,4 +38,18 @@ public class SalesOverviewVO {
 
     @ApiModelProperty(value = "累计销售金额")
     private BigDecimal totalAmount;
+
+    // ── 核销金额 ──────────────────────────────────────────
+
+    @ApiModelProperty(value = "今日核销金额")
+    private BigDecimal todayVerificationAmount;
+
+    @ApiModelProperty(value = "本周核销金额")
+    private BigDecimal weekVerificationAmount;
+
+    @ApiModelProperty(value = "本月核销金额")
+    private BigDecimal monthVerificationAmount;
+
+    @ApiModelProperty(value = "累计核销金额")
+    private BigDecimal totalVerificationAmount;
 }
