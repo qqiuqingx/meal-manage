@@ -218,21 +218,53 @@
 
     <!-- 查询指定日期和餐次的有效订单候选（去除结束日期限制） -->
     <select id="findMealPlanOrders" resultMap="BaseResultMap">
-        SELECT *
-        FROM customer_order
-        WHERE status = 1
-          AND remaining_count &gt; 0
-          AND start_date &lt;= #{targetDate}
-          AND meal_type IN (#{mealType}, 'ALL')
+        SELECT o.*
+        FROM customer_order o
+        WHERE o.status = 1
+          AND o.start_date &lt;= #{targetDate}
+          AND COALESCE(o.remaining_count, 0) &gt; 0
+        <choose>
+            <when test="mealType == 'BREAKFAST'">
+                AND o.meal_type = 'ALL'
+                AND COALESCE(o.breakfast_count, 0) &gt; 0
+            </when>
+            <when test="mealType == 'LUNCH'">
+                AND o.meal_type IN ('ALL', 'LUNCH')
+                AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
+            </when>
+            <when test="mealType == 'DINNER'">
+                AND o.meal_type IN ('ALL', 'DINNER')
+                AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
+            </when>
+            <otherwise>
+                AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
+            </otherwise>
+        </choose>
     </select>
 
     <!-- 查询指定日期范围内的所有订单（用于日志对比，去除结束日期限制） -->
     <select id="findByDateRangeAndMealType" resultMap="BaseResultMap">
-        SELECT *
-        FROM customer_order
-        WHERE start_date &lt;= #{targetDate}
-          AND meal_type IN (#{mealType}, 'ALL')
-        ORDER BY id
+        SELECT o.*
+        FROM customer_order o
+        WHERE o.start_date &lt;= #{targetDate}
+        <choose>
+            <when test="mealType == 'BREAKFAST'">
+                AND o.meal_type = 'ALL'
+                AND COALESCE(o.breakfast_count, 0) &gt; 0
+            </when>
+            <when test="mealType == 'LUNCH'">
+                AND o.meal_type IN ('ALL', 'LUNCH')
+                AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
+            </when>
+            <when test="mealType == 'DINNER'">
+                AND o.meal_type IN ('ALL', 'DINNER')
+                AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
+            </when>
+            <otherwise>
+                AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
+            </otherwise>
+        </choose>
+        ORDER BY o.id
     </select>
 
     <!-- 原子性增加核销餐数（verified_count+1，remaining_count-1） -->
