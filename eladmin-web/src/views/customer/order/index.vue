@@ -10,6 +10,7 @@
           <el-option label="进行中" :value="1" />
           <el-option label="已完成" :value="2" />
           <el-option label="已取消" :value="0" />
+          <el-option label="已退餐" :value="3" />
         </el-select>
         <el-select v-model="query.customerSource" clearable size="small" placeholder="销售渠道" class="filter-item" style="width: 120px" @change="crud.toQuery">
           <el-option v-for="item in customerSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -32,7 +33,7 @@
       <el-table-column label="客户姓名" prop="customerName" width="100" />
       <el-table-column label="套餐" width="130">
         <template slot-scope="scope">
-          {{ [scope.row.parentPackageName, scope.row.childPackageName].filter(Boolean).join(' / ') || '-' }}
+          {{ packageText(scope.row) }}
         </template>
       </el-table-column>
       <el-table-column label="过敏" width="150">
@@ -92,9 +93,10 @@
         </template>
       </el-table-column>
       <el-table-column label="成交时间" prop="dealTime" width="150" />
-      <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="130px" align="center">
+      <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="180px" align="center">
         <template slot-scope="scope">
           <el-button size="mini" type="primary" icon="edit" @click="crud.toEdit(scope.row)">编辑</el-button>
+          <el-button v-if="scope.row.status === 1" size="mini" type="danger" icon="refresh" @click="openRefundDialog(scope.row)">退餐</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -147,12 +149,35 @@
         <el-button :loading="submitLoading" type="primary" @click="submitForm">确认</el-button>
       </div>
     </el-dialog>
+
+    <!--退餐对话框-->
+    <el-dialog title="退餐" :visible.sync="refundDialogVisible" width="500px" append-to-body :close-on-click-modal="false">
+      <el-form ref="refundFormRef" :model="refundForm" :rules="refundRules" size="small" label-width="90px">
+        <el-form-item label="订单编号">
+          <span>{{ refundForm.orderCode }}</span>
+        </el-form-item>
+        <el-form-item label="客户姓名">
+          <span>{{ refundForm.customerName }}</span>
+        </el-form-item>
+        <el-form-item label="退餐金额">
+          <span>¥{{ formatMoney(refundForm.refundAmount) }}</span>
+        </el-form-item>
+        <el-form-item label="退餐原因" prop="refundReason">
+          <el-input v-model="refundForm.refundReason" type="textarea" :rows="3" placeholder="请输入退餐原因" />
+        </el-form-item>
+      </el-form>
+      <div slot="footer" class="dialog-footer">
+        <el-button @click="refundDialogVisible = false">取消</el-button>
+        <el-button :loading="refundLoading" type="primary" @click="confirmRefund">确认退餐</el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script>
 import * as orderApi from '@/api/customer/order'
 import * as dictDetailApi from '@/api/system/dictDetail'
+import { refundMeal } from '@/api/mealRefund'
 import { createOrderDefaultForm } from '@/components/Order/OrderForm.vue'
 import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
@@ -175,6 +200,18 @@ export default {
         del: ['admin', 'customerOrder:del']
       },
       submitLoading: false,
+      refundLoading: false,
+      refundDialogVisible: false,
+      refundForm: {
+        orderId: null,
+        orderCode: '',
+        customerName: '',
+        refundAmount: 0,
+        refundReason: ''
+      },
+      refundRules: {
+        refundReason: [{ required: true, message: '请输入退餐原因', trigger: 'blur' }]
+      },
       customerSourceOptions: [],
       rules: {
         customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
@@ -286,15 +323,17 @@ export default {
       this.form.remainingCount = Math.max(0, total - verified)
     },
     statusText(status) {
+      if (status === 0) return '已取消'
       if (status === 1) return '进行中'
       if (status === 2) return '已完成'
-      if (status === 0) return '已取消'
+      if (status === 3) return '已退餐'
       return '未知'
     },
     statusTagType(status) {
+      if (status === 0) return 'danger'
       if (status === 1) return 'success'
       if (status === 2) return 'info'
-      if (status === 0) return 'danger'
+      if (status === 3) return 'warning'
       return 'info'
     },
     mealTypeText(mealType) {
@@ -311,9 +350,49 @@ export default {
       }
       return amount.toFixed(2)
     },
+    packageText(row) {
+      if (!row.parentPackageName) return '-'
+      const meat = (row.mainDishCount || 0) + (row.sideDishCount || 0)
+      const veg = row.vegCount || 0
+      const soup = row.soupCount || 0
+      const spec = soup > 0 ? `${meat}荤${veg}素-${soup}汤` : `${meat}荤${veg}素`
+      return `${row.parentPackageName} / ${spec}`
+    },
     formatDate(val) {
       if (!val) return '-'
       return parseTime(val, '{y}-{m}-{d}')
+    },
+    openRefundDialog(row) {
+      this.refundForm = {
+        orderId: row.id,
+        orderCode: row.orderCode,
+        customerName: row.customerName,
+        refundAmount: row.mealBalance || 0,
+        refundReason: ''
+      }
+      this.refundDialogVisible = true
+      this.$nextTick(() => {
+        this.$refs.refundFormRef && this.$refs.refundFormRef.clearValidate()
+      })
+    },
+    confirmRefund() {
+      this.$refs.refundFormRef.validate(async valid => {
+        if (!valid) return
+        this.refundLoading = true
+        try {
+          await refundMeal({
+            orderId: this.refundForm.orderId,
+            refundReason: this.refundForm.refundReason
+          })
+          this.$message.success('退餐成功')
+          this.refundDialogVisible = false
+          this.crud.refresh()
+        } catch (e) {
+          this.$message.error(e.message || '退餐失败')
+        } finally {
+          this.refundLoading = false
+        }
+      })
     }
   }
 }
