@@ -518,7 +518,7 @@ export default {
           return {
             ...g,
             count: g.eatCodes.length,
-            codeSnippet: excludedCodes.length > 0 ? this.buildCodeSnippet(excludedCodes) : '-'
+            codeSnippet: excludedCodes.length > 0 ? this.buildFullCodeText(excludedCodes) : '-'
           }
         })
     },
@@ -540,7 +540,7 @@ export default {
       return Object.values(groups).map(g => ({
         ...g,
         count: g.codes.length,
-        codeSnippet: this.buildCodeSnippet(g.codes)
+        codeSnippet: this.buildFullCodeText(g.codes)
       }))
     }
   },
@@ -848,10 +848,9 @@ export default {
       // 将"无菜"标签放在前面，"加菜"标签放在后面
       return [...missingTags, ...addTags]
     },
-    buildCodeSnippet(codes, maxShow = 6) {
+    buildFullCodeText(codes) {
       if (!codes || codes.length === 0) return '-'
-      if (codes.length <= maxShow) return codes.join(', ')
-      return codes.slice(0, maxShow).join(', ') + ` ...+${codes.length - maxShow}`
+      return codes.join(', ')
     },
     formatDate(dateStr) {
       if (!dateStr) return '-'
@@ -1020,8 +1019,8 @@ export default {
   flex: 1;
 }
 .code-cell {
-  padding: 20px 16px 16px;
-  min-height: 80px;
+  padding: 14px 12px 12px;
+  min-height: 68px;
   border-bottom: 1px solid #f1f5f9;
   border-right: 1px solid #f1f5f9;
   position: relative;
@@ -1040,7 +1039,7 @@ export default {
   font-weight: 500;
   color: #64748b;
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   word-break: break-word;
   line-height: 1.4;
 }
@@ -1058,7 +1057,7 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 .supplementary-tag {
   display: inline-block;
@@ -1122,9 +1121,16 @@ export default {
 }
 .dish-table tr:nth-child(even) td { background: rgba(248, 250, 252, 0.4); }
 .dish-table tr:hover td { background: #f0fdf9; }
-.col-name { font-weight: 600; color: #1e293b; width: 28%; }
+.col-name { font-weight: 600; color: #1e293b; width: 20%; }
 .col-count { font-weight: 700; color: #006b5c; font-size: 15px; }
-.col-codes { font-size: 11px; color: #94a3b8; font-style: italic; word-break: break-word; }
+.col-codes {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.6;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .empty-row { text-align: center; color: #c0c4cc; font-style: italic; padding: 20px 0; }
 
 /* 菜品类型标签 */
