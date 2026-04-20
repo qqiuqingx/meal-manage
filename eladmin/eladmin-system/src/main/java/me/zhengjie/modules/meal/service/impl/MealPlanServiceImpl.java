@@ -675,7 +675,7 @@ public class MealPlanServiceImpl implements MealPlanService {
                     ? selectedDish.getReplaceReason()
                     : REPLACE_REASON_EXCLUDED;
             Set<String> strings = new LinkedHashSet<>(selectedDish.getMatchedAllergyTags());
-            strings.add(dish.getName());
+            strings.add("排除菜品");
             log.info("客户{} 编号{}被排除的菜品：{}，id:{}。原因：{}",
                     customerProfile.getCustomerName(), customerProfile.getCustomerCode(),
                     dish.getName(),dish.getId(), replaceReason);
