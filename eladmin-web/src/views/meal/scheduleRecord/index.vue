@@ -21,9 +21,10 @@
           v-model="queryMealType"
           placeholder="选择餐次"
           size="small"
-          style="width: 120px; margin-right: 10px;"
+          style="width: 130px; margin-right: 10px;"
           @change="handleQuery"
         >
+          <el-option label="早餐" value="BREAKFAST" />
           <el-option label="午餐" value="LUNCH" />
           <el-option label="晚餐" value="DINNER" />
         </el-select>
@@ -103,7 +104,7 @@
             >
               <span class="code-text">{{ customer.customerCode || customer.customerName }}</span>
               <span v-if="customer.specialRequirements" class="code-remark">{{ customer.specialRequirements }}</span>
-              <div v-if="customer.supplementaryTags && customer.supplementaryTags.length > 0" class="supplementary-tags">
+              <div v-if="showSupplementaryTags && customer.supplementaryTags && customer.supplementaryTags.length > 0" class="supplementary-tags">
                 <span
                   v-for="(tag, idx) in customer.supplementaryTags"
                   :key="idx"
@@ -225,6 +226,7 @@
         </el-form-item>
         <el-form-item label="餐次" prop="mealType">
           <el-select v-model="generateForm.mealType" placeholder="请选择餐次" style="width: 100%;">
+            <el-option label="早餐" value="BREAKFAST" />
             <el-option label="午餐" value="LUNCH" />
             <el-option label="晚餐" value="DINNER" />
           </el-select>
@@ -375,6 +377,7 @@
 import { getMealPlanList, getMealPlanFullDetail, generateMealPlan, delMealPlan, delMealPlanCustomers, getMealPlanCustomerAddresses } from '@/api/mealPlan'
 import { getProfiles } from '@/api/customer/profile'
 import { verifyMeal } from '@/api/mealVerification'
+import { MealTypeName } from '@/utils/calendar'
 
 export default {
   name: 'ScheduleRecord',
@@ -384,6 +387,7 @@ export default {
       planData: null,
       // 当前查询的 mealPlan 原始记录（用于删除）
       currentRecord: null,
+      latestLoadRequestId: 0,
 
       queryDate: (() => {
         const d = new Date()
@@ -451,7 +455,13 @@ export default {
   },
   computed: {
     mealTypeText() {
-      return this.queryMealType === 'LUNCH' ? '午餐' : '晚餐'
+      // 优先用已加载数据中的 mealType，其次用搜索框值
+      const type = (this.planData && this.planData.mealPlan && this.planData.mealPlan.mealType) || this.queryMealType
+      return MealTypeName[type] || type
+    },
+    showSupplementaryTags() {
+      const type = (this.planData && this.planData.mealPlan && this.planData.mealPlan.mealType) || this.queryMealType
+      return type !== 'BREAKFAST'
     },
     allCustomers() {
       if (!this.planData) return []
@@ -552,8 +562,10 @@ export default {
       this.loadByDateAndMeal()
     },
     loadById(id) {
+      const requestId = ++this.latestLoadRequestId
       this.loading = true
       getMealPlanFullDetail(id).then(res => {
+        if (requestId !== this.latestLoadRequestId) return
         this.planData = res
         this.currentRecord = res.mealPlan || null
         if (res.mealPlan) {
@@ -561,8 +573,10 @@ export default {
           this.queryMealType = res.mealPlan.mealType
         }
       }).catch(() => {
+        if (requestId !== this.latestLoadRequestId) return
         this.$message.error('加载排餐数据失败')
       }).finally(() => {
+        if (requestId !== this.latestLoadRequestId) return
         this.loading = false
       })
     },
@@ -571,23 +585,27 @@ export default {
         this.$message.warning('请选择日期和餐次')
         return
       }
+      const requestId = ++this.latestLoadRequestId
       this.loading = true
       this.planData = null
       this.currentRecord = null
       getMealPlanList({ recordDate: this.queryDate, mealType: this.queryMealType, page: 0, size: 1 }).then(res => {
+        if (requestId !== this.latestLoadRequestId) return null
         const list = res.content || []
         if (list.length === 0) {
           this.$message.warning('未找到该日期和餐次的排餐计划')
-          this.loading = false
-          return
+          return null
         }
         this.currentRecord = list[0]
         return getMealPlanFullDetail(list[0].id)
       }).then(res => {
-        if (res) this.planData = res
+        if (requestId !== this.latestLoadRequestId || !res) return
+        this.planData = res
       }).catch(() => {
+        if (requestId !== this.latestLoadRequestId) return
         this.$message.error('加载排餐数据失败')
       }).finally(() => {
+        if (requestId !== this.latestLoadRequestId) return
         this.loading = false
       })
     },
@@ -638,7 +656,7 @@ export default {
       if (!this.planData || !this.planData.mealPlan) return
       console.log('删除排餐记录')
       const mp = this.planData.mealPlan
-      const mealLabel = mp.mealType === 'LUNCH' ? '午餐' : '晚餐'
+      const mealLabel = MealTypeName[mp.mealType] || mp.mealType
       // 校验：存在已核销的客户记录时禁止删除整条计划
       const verifiedCustomers = (this.planData.customers || []).filter(c => c.isVerified === 1)
       if (verifiedCustomers.length > 0) {

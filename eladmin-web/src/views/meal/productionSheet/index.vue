@@ -22,6 +22,7 @@
           style="width: 120px; margin-right: 10px;"
           @change="onMealTypeChange"
         >
+          <el-option label="早餐" value="BREAKFAST" />
           <el-option label="午餐" value="LUNCH" />
           <el-option label="晚餐" value="DINNER" />
         </el-select>
@@ -167,6 +168,7 @@
 
 <script>
 import { getMealPlanList, getMealPlanFullDetail } from '@/api/mealPlan'
+import { MealTypeName } from '@/utils/calendar'
 
 export default {
   name: 'ProductionSheet',
@@ -174,6 +176,7 @@ export default {
     return {
       loading: false,
       planData: null,
+      latestLoadRequestId: 0,
       queryDate: null,
       queryMealType: 'LUNCH',
       dishTypeMap: {
@@ -198,7 +201,8 @@ export default {
   },
   computed: {
     mealTypeText() {
-      return this.queryMealType === 'LUNCH' ? '午餐' : '晚餐'
+      const type = (this.planData && this.planData.mealPlan && this.planData.mealPlan.mealType) || this.queryMealType
+      return MealTypeName[type] || type
     },
     // 所有客户列表（含是否有换菜标记）
     allCustomers() {
@@ -303,8 +307,10 @@ export default {
   },
   methods: {
     loadById(id) {
+      const requestId = ++this.latestLoadRequestId
       this.loading = true
       getMealPlanFullDetail(id).then(res => {
+        if (requestId !== this.latestLoadRequestId) return
         this.planData = res
         // 同步日期/餐次到筛选器
         if (res.mealPlan) {
@@ -312,8 +318,10 @@ export default {
           this.queryMealType = res.mealPlan.mealType
         }
       }).catch(() => {
+        if (requestId !== this.latestLoadRequestId) return
         this.$message.error('加载排餐数据失败')
       }).finally(() => {
+        if (requestId !== this.latestLoadRequestId) return
         this.loading = false
       })
     },
@@ -322,21 +330,26 @@ export default {
         this.$message.warning('请选择日期和餐次')
         return
       }
+      const requestId = ++this.latestLoadRequestId
       this.loading = true
+      this.planData = null
       getMealPlanList({ recordDate: this.queryDate, mealType: this.queryMealType, page: 0, size: 1 }).then(res => {
+        if (requestId !== this.latestLoadRequestId) return null
         const list = res.content || []
         if (list.length === 0) {
           this.$message.warning('未找到该日期和餐次的排餐计划')
           this.planData = null
-          this.loading = false
-          return
+          return null
         }
         return getMealPlanFullDetail(list[0].id)
       }).then(res => {
-        if (res) this.planData = res
+        if (requestId !== this.latestLoadRequestId || !res) return
+        this.planData = res
       }).catch(() => {
+        if (requestId !== this.latestLoadRequestId) return
         this.$message.error('加载排餐数据失败')
       }).finally(() => {
+        if (requestId !== this.latestLoadRequestId) return
         this.loading = false
       })
     },

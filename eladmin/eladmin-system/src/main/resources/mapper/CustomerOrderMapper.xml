@@ -247,6 +247,7 @@
         SELECT o.*
         FROM customer_order o
         WHERE o.start_date &lt;= #{targetDate}
+        and o.status =1
         <choose>
             <when test="mealType == 'BREAKFAST'">
                 AND o.meal_type = 'ALL'
