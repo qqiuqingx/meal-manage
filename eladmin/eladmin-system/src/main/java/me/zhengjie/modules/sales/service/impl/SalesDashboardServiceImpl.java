@@ -77,10 +77,10 @@ public class SalesDashboardServiceImpl implements SalesDashboardService {
     @Override
     public SalesDashboardTopVO getTop(String startDate, String endDate) {
         SalesDashboardTopVO vo = new SalesDashboardTopVO();
-        vo.setProductQuantityTop3(safeList(mapper.getProductQuantityTop3(startDate, endDate)));
-        vo.setProductAmountTop3(safeList(mapper.getProductAmountTop3(startDate, endDate)));
-        vo.setSalespersonTop3(safeList(mapper.getSalespersonTop3(startDate, endDate)));
-        vo.setChannelTop3(safeList(mapper.getChannelTop3(startDate, endDate)));
+        vo.setProductQuantityList(safeList(mapper.getProductQuantityTop3(startDate, endDate)));
+        vo.setProductAmountList(safeList(mapper.getProductAmountTop3(startDate, endDate)));
+        vo.setSalespersonList(safeList(mapper.getSalespersonTop3(startDate, endDate)));
+        vo.setChannelList(safeList(mapper.getChannelTop3(startDate, endDate)));
         return vo;
     }
 
