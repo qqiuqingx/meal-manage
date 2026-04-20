@@ -57,7 +57,7 @@ public class SalesDashboardController {
         return ResponseEntity.ok(salesDashboardService.getMonthlyTrend(year));
     }
 
-    @ApiOperation("获取销售看板 TOP3 数据")
+    @ApiOperation("获取销售看板产品/渠道/人员业绩数据")
     @GetMapping("/top")
     @PreAuthorize("@el.check('salesDashboard:list')")
     public ResponseEntity<SalesDashboardTopVO> getTop(
