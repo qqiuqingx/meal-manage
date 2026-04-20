@@ -1401,9 +1401,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             if (order == null) continue;
 
             me.zhengjie.modules.customer.pkg.domain.ParentPackage pkg = packageMap.get(order.getParentPackageId());
-            String mealPackage = (pkg != null) ? pkg.getPackageCode() : null;
-            String mealPackageDesc = (pkg != null) ? pkg.getPackageName() : null;
-            if (mealPackage == null) continue;
+            String mealPackage = (pkg != null) ? pkg.getPackageName() : order.getParentPackageName();
+            if (mealPackage == null || mealPackage.isEmpty()) continue;
 
             String key = mealType + "|" + mealPackage;
             groupCustomerIds.computeIfAbsent(key, k -> new HashSet<>()).add(pc.getCustomerId());
@@ -1435,9 +1434,9 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             DailyCustomerStats.MealPackageGroup group = new DailyCustomerStats.MealPackageGroup();
             group.setMealType(mealType);
             group.setMealPackage(mealPackage);
-            // 从 packageMap 获取套餐名称
+            // 从 packageMap 获取套餐名称（mealPackage 现在就是 packageName）
             String pkgDesc = packageMap.values().stream()
-                    .filter(p -> p.getPackageCode().equals(mealPackage))
+                    .filter(p -> Objects.equals(p.getPackageName(), mealPackage))
                     .findFirst()
                     .map(me.zhengjie.modules.customer.pkg.domain.ParentPackage::getPackageName)
                     .orElse(mealPackage);
