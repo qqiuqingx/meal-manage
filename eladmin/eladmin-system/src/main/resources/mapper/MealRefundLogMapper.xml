@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="me.zhengjie.modules.meal.mapper.MealRefundLogMapper">
+
+    <resultMap id="RefundLogVOResultMap" type="me.zhengjie.modules.meal.domain.dto.MealRefundLogVO">
+        <id column="id" property="id"/>
+        <result column="order_id" property="orderId"/>
+        <result column="customer_id" property="customerId"/>
+        <result column="refund_amount" property="refundAmount"/>
+        <result column="refund_breakfast_count" property="refundBreakfastCount"/>
+        <result column="refund_lunch_dinner_count" property="refundLunchDinnerCount"/>
+        <result column="verified_breakfast_count" property="verifiedBreakfastCount"/>
+        <result column="verified_lunch_dinner_count" property="verifiedLunchDinnerCount"/>
+        <result column="refund_reason" property="refundReason"/>
+        <result column="operator" property="operator"/>
+        <result column="operate_time" property="operateTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="customer_name" property="customerName"/>
+        <result column="customer_code" property="customerCode"/>
+        <result column="order_code" property="orderCode"/>
+    </resultMap>
+
+    <select id="selectPageByCriteria" resultMap="RefundLogVOResultMap">
+        SELECT
+            r.id,
+            r.order_id,
+            r.customer_id,
+            r.refund_amount,
+            r.refund_breakfast_count,
+            r.refund_lunch_dinner_count,
+            r.verified_breakfast_count,
+            r.verified_lunch_dinner_count,
+            r.refund_reason,
+            r.operator,
+            r.operate_time,
+            r.create_time,
+            cp.customer_name,
+            cp.customer_code,
+            co.order_code
+        FROM meal_refund_log r
+        LEFT JOIN customer_profile cp ON r.customer_id = cp.id
+        LEFT JOIN customer_order co ON r.order_id = co.id
+        <where>
+            <if test="criteria.customerName != null and criteria.customerName != ''">
+                AND cp.customer_name LIKE CONCAT('%', #{criteria.customerName}, '%')
+            </if>
+            <if test="criteria.orderId != null">
+                AND r.order_id = #{criteria.orderId}
+            </if>
+            <if test="criteria.operateTimeStart != null and criteria.operateTimeStart != ''">
+                AND DATE(r.operate_time) >= #{criteria.operateTimeStart}
+            </if>
+            <if test="criteria.operateTimeEnd != null and criteria.operateTimeEnd != ''">
+                AND DATE(r.operate_time) &lt;= #{criteria.operateTimeEnd}
+            </if>
+            <if test="criteria.operator != null and criteria.operator != ''">
+                AND r.operator = #{criteria.operator}
+            </if>
+        </where>
+        ORDER BY r.operate_time DESC, r.id DESC
+    </select>
+
+</mapper>

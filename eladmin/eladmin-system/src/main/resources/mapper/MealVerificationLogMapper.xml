@@ -90,4 +90,10 @@
           and (deleted = 0 or deleted is null)
     </update>
 
+    <update id="markAsRefunded">
+        update meal_verification_log
+        set is_refunded = 1, refund_time = NOW()
+        where order_id = #{orderId}
+    </update>
+
 </mapper>

@@ -92,4 +92,10 @@ public class MealVerificationLog implements Serializable {
 
     @ApiModelProperty(value = "删除操作人")
     private String deletedBy;
+
+    @ApiModelProperty(value = "是否已退餐（0=否，1=是）")
+    private Integer isRefunded;
+
+    @ApiModelProperty(value = "退餐时间")
+    private Date refundTime;
 }
