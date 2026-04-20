@@ -77,6 +77,7 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     private static final String MEAL_TYPE_LUNCH = "LUNCH";
     private static final String MEAL_TYPE_DINNER = "DINNER";
+    private static final String MEAL_TYPE_BREAKFAST = "BREAKFAST";
     private static final String SCHEDULE_MODE_DAILY = "DAILY";
     private static final String SCHEDULE_MODE_WEEKDAY = "WEEKDAY";
     private static final String SCHEDULE_MODE_WEEKEND = "WEEKEND";
@@ -191,30 +192,30 @@ public class MealPlanServiceImpl implements MealPlanService {
             if (customer == null) {
                 log.warn("订单处理失败：客户档案不存在 - 订单ID: {}, 客户ID: {}",
                         order.getId(), order.getCustomerId());
-                failCount += saveFailPlan(mealPlan.getId(), order, null, "客户档案不存在", failDetails);
+                failCount += saveFailPlan(mealPlan.getId(), order, null, "客户档案不存在", failDetails, mealType);
                 continue;
             }
             if (!parentPackageMap.containsKey(order.getParentPackageId())) {
                 log.warn("订单处理失败：父套餐不存在 - 订单ID: {}, 父套餐ID: {}",
                         order.getId(), order.getParentPackageId());
-                failCount += saveFailPlan(mealPlan.getId(), order, customer, "父套餐不存在", failDetails);
+                failCount += saveFailPlan(mealPlan.getId(), order, customer, "父套餐不存在", failDetails, mealType);
                 continue;
             }
 
             try {
                 CustomerMealPlan customerPlan = buildCustomerPlan(order, customer, candidateDishMap, dishIngredientMap,
                         targetDate, mealType, parentPackageMap);
-                saveSuccessPlan(mealPlan.getId(), order, customer, customerPlan);
+                saveSuccessPlan(mealPlan.getId(), order, customer, customerPlan, mealType);
                 successCount++;
                 log.debug("订单处理成功 - 订单ID: {}", order.getId());
             } catch (MealPlanBuildException e) {
                 log.warn("订单处理失败 - 订单ID: {}, 客户ID: {}, 失败原因: {}",
                         order.getId(), order.getCustomerId(), e.getMessage());
-                failCount += saveFailPlan(mealPlan.getId(), order, customer, e.getMessage(), failDetails, e.getCustomerPlan());
+                failCount += saveFailPlan(mealPlan.getId(), order, customer, e.getMessage(), failDetails, e.getCustomerPlan(), mealType);
             } catch (BadRequestException e) {
                 log.warn("订单处理失败 - 订单ID: {}, 客户ID: {}, 失败原因: {}",
                         order.getId(), order.getCustomerId(), e.getMessage());
-                failCount += saveFailPlan(mealPlan.getId(), order, customer, e.getMessage(), failDetails);
+                failCount += saveFailPlan(mealPlan.getId(), order, customer, e.getMessage(), failDetails, mealType);
             }
         }
 
@@ -233,8 +234,8 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 校验餐次参数，只允许午餐和晚餐。
      */
     private String validateParams(String mealType) {
-        if (!MEAL_TYPE_LUNCH.equals(mealType) && !MEAL_TYPE_DINNER.equals(mealType)) {
-            throw new BadRequestException("餐次仅支持LUNCH或DINNER");
+        if (!MEAL_TYPE_LUNCH.equals(mealType) && !MEAL_TYPE_DINNER.equals(mealType) && !MEAL_TYPE_BREAKFAST.equals(mealType)) {
+            throw new BadRequestException("餐次仅支持LUNCH、DINNER或BREAKFAST");
         }
         return mealType;
     }
@@ -324,9 +325,6 @@ public class MealPlanServiceImpl implements MealPlanService {
             } else if (order.getRemainingCount() == null || order.getRemainingCount() <= 0) {
                 log.info("订单被过滤 - 订单ID: {}, 客户ID: {}, 剩余餐数: {} (餐数用完)",
                         order.getId(), order.getCustomerId(), order.getRemainingCount());
-            } else if (!"LUNCH".equals(mealType) && !"ALL".equals(order.getMealType())) {
-                log.info("订单被过滤 - 订单ID: {}, 客户ID: {}, 订单餐次: {}, 目标餐次: {} (餐次不匹配)",
-                        order.getId(), order.getCustomerId(), order.getMealType(), mealType);
             }
         }
 
@@ -581,6 +579,11 @@ public class MealPlanServiceImpl implements MealPlanService {
                                                Map<Integer, Set<String>> dishIngredientMap,
                                                LocalDate targetDate, String mealType,
                                                Map<Long, ParentPackage> parentPackageMap) {
+        // BREAKFAST 餐次不生成菜品明细，只创建客户排餐记录
+        if (MEAL_TYPE_BREAKFAST.equals(mealType)) {
+            return new CustomerMealPlan();
+        }
+
         DishQuantityConfig config = new DishQuantityConfig(order);
 
         Map<String, List<Dish>> dishTypeMap = candidateDishMap.get(order.getParentPackageId());
@@ -879,11 +882,11 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 将成功生成的客户排餐结果落库到主表和明细表。
      */
     private void saveSuccessPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
-                                 CustomerMealPlan customerPlan) {
+                                 CustomerMealPlan customerPlan, String mealType) {
         log.debug("保存成功排餐计划 - 计划ID: {}, 订单ID: {}, 客户ID: {}",
                 mealPlanId, order.getId(), order.getCustomerId());
 
-        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, 1, "");
+        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, 1, "", mealType);
         mealPlanCustomerMapper.insert(entity);
 
         saveSelectedItems(entity.getId(), entity.getCustomerName(), customerPlan);
@@ -897,19 +900,19 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 记录单个订单的失败结果，并追加失败原因到返回结果。
      */
     private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
-                             String failReason, List<MealPlanGenerateResult.FailDetail> failDetails) {
-        return saveFailPlan(mealPlanId, order, customer, failReason, failDetails, null);
+                             String failReason, List<MealPlanGenerateResult.FailDetail> failDetails, String mealType) {
+        return saveFailPlan(mealPlanId, order, customer, failReason, failDetails, null, mealType);
     }
 
     private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
                              String failReason, List<MealPlanGenerateResult.FailDetail> failDetails,
-                             CustomerMealPlan customerPlan) {
+                             CustomerMealPlan customerPlan, String mealType) {
         log.debug("保存失败排餐计划 - 计划ID: {}, 订单ID: {}, 客户ID: {}, 失败原因: {}",
                 mealPlanId, order.getId(),
                 customer != null ? customer.getId() : order.getCustomerId(),
                 failReason);
 
-        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, 0, failReason);
+        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, 0, failReason, mealType);
         mealPlanCustomerMapper.insert(entity);
         saveSelectedItems(entity.getId(), entity.getCustomerName(), customerPlan);
         saveAllergyFilteredItems(entity.getId(), entity.getCustomerName(), customerPlan);
@@ -996,7 +999,7 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 组装客户排餐记录实体，统一填充订单、客户和套餐快照字段。
      */
     private MealPlanCustomer buildCustomerEntity(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
-                                                 int status, String failReason) {
+                                                 int status, String failReason, String mealType) {
         MealPlanCustomer entity = new MealPlanCustomer();
         entity.setMealPlanId(mealPlanId);
         entity.setCustomerId(customer != null ? customer.getId() : order.getCustomerId());
@@ -1007,17 +1010,21 @@ public class MealPlanServiceImpl implements MealPlanService {
         entity.setChildPackageId(order.getChildPackageId());
         entity.setStatus(status);
         entity.setFailReason(failReason);
-        entity.setMeatRequiredCount(order.getMainDishCount() != null ? order.getMainDishCount() : 0);
-        entity.setVegRequiredCount(order.getVegCount() != null ? order.getVegCount() : 0);
-        entity.setIncludeSoup(order.getSoupCount() != null && order.getSoupCount() > 0 ? 1 : 0);
-        entity.setIncludeRice(order.getRiceCount() != null && order.getRiceCount() > 0 ? 1 : 0);
-        // 补菜数量 = max(0, 需求数 - 每日固定提供1个)，基础数量从 customer_order 关联获取，无需冗余存储
-        DishQuantityConfig cfg = new DishQuantityConfig(order);
-        entity.setSupplementaryMainCount(cfg.getSupplementaryMainCount());
-        entity.setSupplementarySideCount(cfg.getSupplementarySideCount());
-        entity.setSupplementaryVegCount(cfg.getSupplementaryVegCount());
-        entity.setSupplementaryRiceCount(cfg.getSupplementaryRiceCount());
-        entity.setSupplementarySoupCount(cfg.getSupplementarySoupCount());
+        if (MEAL_TYPE_BREAKFAST.equals(mealType)) {
+            entity.setBreakfastCount(order.getBreakfastCount() != null ? order.getBreakfastCount() : 0);
+        } else {
+            entity.setMeatRequiredCount(order.getMainDishCount() != null ? order.getMainDishCount() : 0);
+            entity.setVegRequiredCount(order.getVegCount() != null ? order.getVegCount() : 0);
+            entity.setIncludeSoup(order.getSoupCount() != null && order.getSoupCount() > 0 ? 1 : 0);
+            entity.setIncludeRice(order.getRiceCount() != null && order.getRiceCount() > 0 ? 1 : 0);
+            // 补菜数量 = max(0, 需求数 - 每日固定提供1个)，基础数量从 customer_order 关联获取，无需冗余存储
+            DishQuantityConfig cfg = new DishQuantityConfig(order);
+            entity.setSupplementaryMainCount(cfg.getSupplementaryMainCount());
+            entity.setSupplementarySideCount(cfg.getSupplementarySideCount());
+            entity.setSupplementaryVegCount(cfg.getSupplementaryVegCount());
+            entity.setSupplementaryRiceCount(cfg.getSupplementaryRiceCount());
+            entity.setSupplementarySoupCount(cfg.getSupplementarySoupCount());
+        }
         entity.setDeleted(false);
         return entity;
     }

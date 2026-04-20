@@ -117,11 +117,17 @@ public class MealPlanCustomer extends BaseEntity {
     @ApiModelProperty(value = "补米饭数量")
     private Integer supplementaryRiceCount;
 
-    /**
+        /**
      * 补汤数量 = max(0, 汤需求数 - 每日菜单固定提供1个)
      */
     @ApiModelProperty(value = "补汤数量")
     private Integer supplementarySoupCount;
+
+    /**
+     * 早餐配送数量（BREAKFAST 餐次专用）
+     */
+    @ApiModelProperty(value = "早餐配送数量")
+    private Integer breakfastCount;
 
     /**
      * 特殊要求（关联查询填充）
