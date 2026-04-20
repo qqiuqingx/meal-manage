@@ -87,4 +87,12 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
      * @return 更新行数
      */
     int revertVerified(@Param("id") Long id);
+
+    /**
+     * 批量查询各订单指定餐次的已排餐数量
+     * @param orderIds 订单ID列表
+     * @param mealType 餐次类型（BREAKFAST/LUNCH/DINNER）
+     * @return 订单ID -> 已排数量 的映射
+     */
+    List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countScheduledByOrderIds(@Param("orderIds") List<Long> orderIds, @Param("mealType") String mealType);
 }

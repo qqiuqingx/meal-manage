@@ -36,6 +36,7 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
+import me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
 import me.zhengjie.modules.meal.domain.dto.MealPlanListDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
@@ -331,6 +332,18 @@ public class MealPlanServiceImpl implements MealPlanService {
         List<CustomerOrder> candidateOrders = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
         log.info("基础条件过滤后的候选订单 - 数量: {}", candidateOrders.size());
 
+        // 批量查询各订单的已排餐数量
+        Map<Long, Integer> scheduledCountMap = new HashMap<>();
+        if (!candidateOrders.isEmpty()) {
+            List<Long> orderIds = candidateOrders.stream().map(CustomerOrder::getId).collect(Collectors.toList());
+            List<OrderScheduledCountDto> scheduledCounts =
+                    mealPlanCustomerMapper.countScheduledByOrderIds(orderIds, mealType);
+            for (OrderScheduledCountDto dto : scheduledCounts) {
+                scheduledCountMap.put(dto.getOrderId(), dto.getScheduledCount());
+            }
+            log.debug("已排餐数量查询完成 - 订单数: {}, 有已排记录的订单数: {}", orderIds.size(), scheduledCountMap.size());
+        }
+
         // 批量加载客户档案（用于排除日期检查）
         Map<Long, CustomerProfile> customerMap = new HashMap<>();
         if (!candidateOrders.isEmpty()) {
@@ -359,6 +372,21 @@ public class MealPlanServiceImpl implements MealPlanService {
             if (customer != null && customer.isExcluded(targetDate, mealType)) {
                 log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 日期: {}, 餐次: {}, 原因: 排除日期",
                         order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(), targetDate, mealType);
+                continue;
+            }
+            // 检查已排餐数量是否已达到订单对应餐次的餐数上限
+            Integer scheduledCount = scheduledCountMap.get(order.getId());
+            int currentScheduled = scheduledCount != null ? scheduledCount : 0;
+            int maxCount;
+            if (MEAL_TYPE_BREAKFAST.equals(mealType)) {
+                maxCount = order.getBreakfastCount() != null ? order.getBreakfastCount() : 0;
+            } else {
+                maxCount = order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0;
+            }
+            if (currentScheduled >= maxCount) {
+                log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 餐次: {}, 餐数上限: {}, 已排未核销: {}, 原因: 已排餐数量已达上限",
+                        order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(),
+                        mealType, maxCount, currentScheduled);
                 continue;
             }
             validOrders.add(order);
