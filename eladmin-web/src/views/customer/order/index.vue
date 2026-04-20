@@ -95,7 +95,7 @@
       <el-table-column label="成交时间" prop="dealTime" width="150" />
       <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="180px" align="center">
         <template slot-scope="scope">
-          <el-button size="mini" type="primary" icon="edit" @click="crud.toEdit(scope.row)">编辑</el-button>
+          <el-button size="mini" type="primary" icon="edit" :disabled="scope.row.status !== 1" @click="crud.toEdit(scope.row)">编辑</el-button>
           <el-button v-if="scope.row.status === 1" size="mini" type="danger" icon="refresh" @click="openRefundDialog(scope.row)">退餐</el-button>
         </template>
       </el-table-column>
