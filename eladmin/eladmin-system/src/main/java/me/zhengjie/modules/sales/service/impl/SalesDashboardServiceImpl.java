@@ -47,11 +47,19 @@ public class SalesDashboardServiceImpl implements SalesDashboardService {
             vo.setWeekAmount(BigDecimal.ZERO);
             vo.setMonthAmount(BigDecimal.ZERO);
             vo.setTotalAmount(BigDecimal.ZERO);
+            vo.setTodayVerificationAmount(BigDecimal.ZERO);
+            vo.setWeekVerificationAmount(BigDecimal.ZERO);
+            vo.setMonthVerificationAmount(BigDecimal.ZERO);
+            vo.setTotalVerificationAmount(BigDecimal.ZERO);
         } else {
             if (vo.getTodayAmount() == null) { vo.setTodayAmount(BigDecimal.ZERO); }
             if (vo.getWeekAmount() == null) { vo.setWeekAmount(BigDecimal.ZERO); }
             if (vo.getMonthAmount() == null) { vo.setMonthAmount(BigDecimal.ZERO); }
             if (vo.getTotalAmount() == null) { vo.setTotalAmount(BigDecimal.ZERO); }
+            if (vo.getTodayVerificationAmount() == null) { vo.setTodayVerificationAmount(BigDecimal.ZERO); }
+            if (vo.getWeekVerificationAmount() == null) { vo.setWeekVerificationAmount(BigDecimal.ZERO); }
+            if (vo.getMonthVerificationAmount() == null) { vo.setMonthVerificationAmount(BigDecimal.ZERO); }
+            if (vo.getTotalVerificationAmount() == null) { vo.setTotalVerificationAmount(BigDecimal.ZERO); }
         }
         return vo;
     }
