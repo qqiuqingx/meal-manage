@@ -241,4 +241,19 @@
         group by mpc.order_id
     </select>
 
+    <!-- 根据排餐计划ID查询所有未核销的客户排餐记录 -->
+    <select id="selectUnverifiedByMealPlanId" resultMap="BaseResultMap">
+        select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
+               status, is_verified, verification_time, verification_operator, fail_reason,
+               meat_required_count, veg_required_count, include_soup, include_rice,
+               supplementary_main_count, supplementary_side_count, supplementary_veg_count,
+               supplementary_rice_count, supplementary_soup_count,
+               create_by, update_by, deleted, create_time, update_time
+        from meal_plan_customer
+        where meal_plan_id = #{mealPlanId}
+          and deleted = 0
+          and (is_verified = 0 or is_verified is null)
+        order by id asc
+    </select>
+
 </mapper>

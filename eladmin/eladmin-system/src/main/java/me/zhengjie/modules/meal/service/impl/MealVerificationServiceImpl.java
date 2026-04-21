@@ -41,6 +41,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
 
@@ -69,13 +71,20 @@ public class MealVerificationServiceImpl implements MealVerificationService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MealVerificationResultDto verify(MealVerificationDto dto) {
+        return verify(dto, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MealVerificationResultDto verify(MealVerificationDto dto, String operator) {
         MealVerificationResultDto result = new MealVerificationResultDto();
 
         for (Long customerPlanId : dto.getCustomerPlanIds()) {
             try {
-                verifySingle(customerPlanId, dto.getRemark());
+                verifySingle(customerPlanId, dto.getRemark(), operator);
                 result.setSuccessCount(result.getSuccessCount() + 1);
             } catch (Exception e) {
+                log.error("核销异常",e);
                 log.error("核销失败，客户计划ID: {}, 错误: {}", customerPlanId, e.getMessage());
                 result.setFailCount(result.getFailCount() + 1);
                 result.getFailReasons().add("客户ID " + customerPlanId + ": " + e.getMessage());
@@ -87,8 +96,9 @@ public class MealVerificationServiceImpl implements MealVerificationService {
 
     /**
      * 单个核销
+     * @param operator 操作人，如果为空则尝试从 SecurityContext 获取
      */
-    private void verifySingle(Long customerPlanId, String remark) {
+    private void verifySingle(Long customerPlanId, String remark, String operator) {
         // 1. 获取客户排餐信息
         MealPlanCustomer customerPlan = mealPlanCustomerMapper.selectById(customerPlanId);
         if (customerPlan == null) {
@@ -138,9 +148,13 @@ public class MealVerificationServiceImpl implements MealVerificationService {
             throw new BadRequestException("订单单价配置异常，无法核销");
         }
 
-        // 8. 原子更新客户排餐核销状态，避免并发重复核销
+        // 8. 获取操作人（支持定时任务场景）
+        if (operator == null) {
+            operator = SecurityUtils.getCurrentUsername();
+        }
+
+        // 9. 原子更新客户排餐核销状态，避免并发重复核销
         Date verificationTime = new Date();
-        String operator = SecurityUtils.getCurrentUsername();
         int planUpdated = mealPlanCustomerMapper.markVerifiedIfPending(customerPlanId, verificationTime, operator);
         if (planUpdated == 0) {
             throw new BadRequestException("该客户已完成核销，请勿重复操作");
@@ -269,4 +283,5 @@ public class MealVerificationServiceImpl implements MealVerificationService {
                 return "未知";
         }
     }
+
 }
