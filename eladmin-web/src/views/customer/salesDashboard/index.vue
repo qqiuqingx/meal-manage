@@ -129,12 +129,21 @@
               <div class="panel-header">
                 <span class="panel-title">产品销量</span>
                 <el-tag size="mini" type="success" effect="plain">数量</el-tag>
+                <el-button
+                  v-if="top.productQuantityList && top.productQuantityList.length > 3"
+                  type="text"
+                  size="mini"
+                  style="margin-left: auto;"
+                  @click="topExpand.productQuantity = !topExpand.productQuantity"
+                >
+                  {{ topExpand.productQuantity ? '收起' : '查看全部' }}
+                </el-button>
               </div>
               <div class="panel-body">
                 <div v-if="!top.productQuantityList || !top.productQuantityList.length" class="no-data">暂无数据</div>
                 <template v-else>
                   <div
-                    v-for="item in top.productQuantityList"
+                    v-for="item in (topExpand.productQuantity ? top.productQuantityList : top.productQuantityList.slice(0, 3))"
                     :key="'pq'+item.name"
                     class="rank-item"
                   >
@@ -159,12 +168,21 @@
               <div class="panel-header">
                 <span class="panel-title">产品销售额</span>
                 <el-tag size="mini" type="warning" effect="plain">金额</el-tag>
+                <el-button
+                  v-if="top.productAmountList && top.productAmountList.length > 3"
+                  type="text"
+                  size="mini"
+                  style="margin-left: auto;"
+                  @click="topExpand.productAmount = !topExpand.productAmount"
+                >
+                  {{ topExpand.productAmount ? '收起' : '查看全部' }}
+                </el-button>
               </div>
               <div class="panel-body">
                 <div v-if="!top.productAmountList || !top.productAmountList.length" class="no-data">暂无数据</div>
                 <template v-else>
                   <div
-                    v-for="item in top.productAmountList"
+                    v-for="item in (topExpand.productAmount ? top.productAmountList : top.productAmountList.slice(0, 3))"
                     :key="'pa'+item.name"
                     class="rank-item"
                   >
@@ -189,12 +207,21 @@
               <div class="panel-header">
                 <span class="panel-title">销售员业绩</span>
                 <el-tag size="mini" type="danger" effect="plain">业绩</el-tag>
+                <el-button
+                  v-if="top.salespersonList && top.salespersonList.length > 3"
+                  type="text"
+                  size="mini"
+                  style="margin-left: auto;"
+                  @click="topExpand.salesperson = !topExpand.salesperson"
+                >
+                  {{ topExpand.salesperson ? '收起' : '查看全部' }}
+                </el-button>
               </div>
               <div class="panel-body">
                 <div v-if="!top.salespersonList || !top.salespersonList.length" class="no-data">暂无数据</div>
                 <template v-else>
                   <div
-                    v-for="item in top.salespersonList"
+                    v-for="item in (topExpand.salesperson ? top.salespersonList : top.salespersonList.slice(0, 3))"
                     :key="'sp'+item.name"
                     class="rank-item"
                   >
@@ -219,12 +246,21 @@
               <div class="panel-header">
                 <span class="panel-title">销售渠道</span>
                 <el-tag size="mini" effect="plain">渠道</el-tag>
+                <el-button
+                  v-if="top.channelList && top.channelList.length > 3"
+                  type="text"
+                  size="mini"
+                  style="margin-left: auto;"
+                  @click="topExpand.channel = !topExpand.channel"
+                >
+                  {{ topExpand.channel ? '收起' : '查看全部' }}
+                </el-button>
               </div>
               <div class="panel-body">
                 <div v-if="!top.channelList || !top.channelList.length" class="no-data">暂无数据</div>
                 <template v-else>
                   <div
-                    v-for="item in top.channelList"
+                    v-for="item in (topExpand.channel ? top.channelList : top.channelList.slice(0, 3))"
                     :key="'ch'+item.name"
                     class="rank-item"
                   >
@@ -465,6 +501,13 @@ export default {
         productAmountList: [],
         salespersonList: [],
         channelList: []
+      },
+      // TOP3 展开状态
+      topExpand: {
+        productQuantity: false,
+        productAmount: false,
+        salesperson: false,
+        channel: false
       },
       // 月度趋势
       selectedYear: currentYear,
