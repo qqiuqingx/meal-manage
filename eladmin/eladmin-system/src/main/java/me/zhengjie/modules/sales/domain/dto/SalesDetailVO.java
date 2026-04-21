@@ -50,4 +50,19 @@ public class SalesDetailVO {
 
     @ApiModelProperty(value = "销售员")
     private String salespersonName;
+
+    @ApiModelProperty(value = "主菜/荤菜数量")
+    private Integer mainDishCount;
+
+    @ApiModelProperty(value = "副菜数量")
+    private Integer sideDishCount;
+
+    @ApiModelProperty(value = "素菜数量")
+    private Integer vegCount;
+
+    @ApiModelProperty(value = "米饭数量")
+    private Integer riceCount;
+
+    @ApiModelProperty(value = "汤数量")
+    private Integer soupCount;
 }
