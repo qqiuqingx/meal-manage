@@ -398,7 +398,13 @@
         >
           <el-table-column label="序号" type="index" width="60" align="center" />
           <el-table-column label="销售日期" prop="saleDate" width="150" />
-          <el-table-column label="产品" prop="productName" min-width="120" show-overflow-tooltip />
+          <el-table-column label="产品" min-width="120" show-overflow-tooltip>
+            <template slot-scope="scope">
+              <span>
+                {{ formatDishCount(scope.row) }}
+              </span>
+            </template>
+          </el-table-column>
           <el-table-column label="餐数" prop="mealCount" width="70" align="center" />
           <el-table-column label="客户备注" prop="customerRemark" width="100" />
           <el-table-column label="销售金额" prop="saleAmount" width="110" align="right">
@@ -722,6 +728,22 @@ export default {
       const max = Math.max(...list.map(i => Number(i.value) || 0))
       if (!max) return 0
       return Math.round((Number(val) / max) * 100)
+    },
+
+    formatDishCount(row) {
+      const main = Number(row.mainDishCount) || 0
+      const side = Number(row.sideDishCount) || 0
+      const veg = Number(row.vegCount) || 0
+      const soup = Number(row.soupCount) || 0
+
+      const meatCount = main + side
+      if (meatCount === 0) return '-'
+
+      const parts = []
+      if (meatCount > 0) parts.push(`${meatCount}荤`)
+      if (veg > 0) parts.push(`${veg}素`)
+      if (soup > 0) parts.push(`${soup}汤`)
+      return parts.join('')
     }
   }
 }
