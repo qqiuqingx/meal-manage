@@ -95,4 +95,11 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
      * @return 订单ID -> 已排数量 的映射
      */
     List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countScheduledByOrderIds(@Param("orderIds") List<Long> orderIds, @Param("mealType") String mealType);
+
+    /**
+     * 根据排餐计划ID查询所有未核销的客户排餐记录
+     * @param mealPlanId 排餐计划ID
+     * @return 未核销的客户排餐记录列表
+     */
+    List<MealPlanCustomer> selectUnverifiedByMealPlanId(@Param("mealPlanId") Long mealPlanId);
 }

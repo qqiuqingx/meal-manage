@@ -39,6 +39,14 @@ public interface MealVerificationService {
     MealVerificationResultDto verify(MealVerificationDto dto);
 
     /**
+     * 执行核销（支持指定操作人）
+     * @param dto 核销请求DTO
+     * @param operator 操作人，如果为空则从 SecurityContext 获取
+     * @return 核销结果
+     */
+    MealVerificationResultDto verify(MealVerificationDto dto, String operator);
+
+    /**
      * 分页查询核销记录
      * @param criteria 查询条件
      * @return 分页结果
