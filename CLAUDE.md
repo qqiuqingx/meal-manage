@@ -57,6 +57,13 @@ mvn test -DskipTests=false
 
 **Important**: Tests are skipped by default in `pom.xml` (`maven-surefire-plugin` with `<skip>true</skip>`).
 
+### 单元测试数据清理
+
+单元测试执行过程中产生的测试数据，必须在测试结束后清理：
+- 测试结束时删除由该测试新增的数据
+- 只能删除**当前测试新增**的数据，不能删除其他测试或业务数据
+- 建议在 `@After` / `@AfterEach` 或 `@Before` 中清理准备的数据
+
 ### Frontend (Node.js)
 
 ```bash
