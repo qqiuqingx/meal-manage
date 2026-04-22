@@ -28,12 +28,17 @@
       @selection-change="crud.selectionChangeHandler"
     >
       <el-table-column :selectable="checkboxT" type="selection" width="55" />
-      <el-table-column label="订单编号" prop="orderCode" width="140" />
-      <el-table-column label="客户编号" prop="customerCode" width="120" />
-      <el-table-column label="客户姓名" prop="customerName" width="100" />
-      <el-table-column label="套餐" width="130">
+      <el-table-column label="客户编号" prop="customerCode" width="120" fixed="left" />
+      <el-table-column label="客户姓名" prop="customerName" width="100" fixed="left" />
+      <el-table-column label="手机号" prop="phone" width="120" fixed="left" />
+      <el-table-column label="套餐" width="120">
         <template slot-scope="scope">
-          {{ packageText(scope.row) }}
+          {{ scope.row.parentPackageName || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="规格" width="110">
+        <template slot-scope="scope">
+          {{ packageSpecText(scope.row) }}
         </template>
       </el-table-column>
       <el-table-column label="过敏" width="150">
@@ -44,7 +49,6 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="手机号" prop="phone" width="120" />
       <el-table-column label="定金" prop="depositAmount" width="90" align="right">
         <template slot-scope="scope">
           {{ formatMoney(scope.row.depositAmount) }}
@@ -93,6 +97,7 @@
         </template>
       </el-table-column>
       <el-table-column label="成交时间" prop="dealTime" width="150" />
+      <el-table-column label="订单编号" prop="orderCode" width="140" />
       <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="180px" align="center">
         <template slot-scope="scope">
           <el-button size="mini" type="primary" icon="edit" :disabled="scope.row.status !== 1" @click="crud.toEdit(scope.row)">编辑</el-button>
@@ -350,13 +355,11 @@ export default {
       }
       return amount.toFixed(2)
     },
-    packageText(row) {
-      if (!row.parentPackageName) return '-'
+    packageSpecText(row) {
       const meat = (row.mainDishCount || 0) + (row.sideDishCount || 0)
       const veg = row.vegCount || 0
       const soup = row.soupCount || 0
-      const spec = soup > 0 ? `${meat}荤${veg}素-${soup}汤` : `${meat}荤${veg}素`
-      return `${row.parentPackageName} / ${spec}`
+      return soup > 0 ? `${meat}荤${veg}素-${soup}汤` : `${meat}荤${veg}素`
     },
     formatDate(val) {
       if (!val) return '-'
