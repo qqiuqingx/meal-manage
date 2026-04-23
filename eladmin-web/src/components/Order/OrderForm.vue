@@ -56,7 +56,8 @@
         <el-col :span="8">
           <el-form-item label="餐次类型">
             <el-select v-model="form.mealType" :disabled="readonly" placeholder="请选择餐次类型" style="width: 100%;">
-              <el-option label="全餐次（默认）" value="ALL" />
+              <el-option label="早+午餐+晚餐（默认）" value="ALL" />
+              <el-option label="午餐+晚餐" value="LUNCH_DINNER" />
               <el-option label="午餐订单" value="LUNCH" />
               <el-option label="晚餐订单" value="DINNER" />
             </el-select>
@@ -73,6 +74,7 @@
               :start-date="form.startDate"
               :end-date="form.endDate"
               :readonly="readonly"
+              :order-meal-type="form.mealType"
               @selection-change="onCalendarSelectionChange"
             />
           </el-form-item>

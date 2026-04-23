@@ -6,21 +6,21 @@
     </div>
 
     <el-checkbox-group v-model="localMealTypes" class="meal-type-selector__options">
-      <el-checkbox :label="MealType.BREAKFAST">
+      <el-checkbox v-if="isAllowed(MealType.BREAKFAST)" :label="MealType.BREAKFAST">
         <span class="meal-type-label">
           <span class="meal-type-dot" :style="{ backgroundColor: MealTypeColor[MealType.BREAKFAST] }" />
           {{ MealTypeName[MealType.BREAKFAST] }}
         </span>
       </el-checkbox>
 
-      <el-checkbox :label="MealType.LUNCH">
+      <el-checkbox v-if="isAllowed(MealType.LUNCH)" :label="MealType.LUNCH">
         <span class="meal-type-label">
           <span class="meal-type-dot" :style="{ backgroundColor: MealTypeColor[MealType.LUNCH] }" />
           {{ MealTypeName[MealType.LUNCH] }}
         </span>
       </el-checkbox>
 
-      <el-checkbox :label="MealType.DINNER">
+      <el-checkbox v-if="isAllowed(MealType.DINNER)" :label="MealType.DINNER">
         <span class="meal-type-label">
           <span class="meal-type-dot" :style="{ backgroundColor: MealTypeColor[MealType.DINNER] }" />
           {{ MealTypeName[MealType.DINNER] }}
@@ -63,6 +63,11 @@ export default {
     disabled: {
       type: Boolean,
       default: false
+    },
+    // 允许选择的餐次列表，传入则只显示列表中的餐次
+    allowedMealTypes: {
+      type: Array,
+      default: null
     }
   },
   data() {
@@ -95,6 +100,10 @@ export default {
     }
   },
   methods: {
+    isAllowed(mealType) {
+      if (!this.allowedMealTypes) return true
+      return this.allowedMealTypes.includes(mealType)
+    },
     handleSave() {
       this.$emit('input', [...this.localMealTypes])
       this.$emit('save', this.localMealTypes)

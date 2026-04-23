@@ -229,11 +229,11 @@
                 AND COALESCE(o.breakfast_count, 0) &gt; 0
             </when>
             <when test="mealType == 'LUNCH'">
-                AND o.meal_type IN ('ALL', 'LUNCH')
+                AND o.meal_type IN ('ALL', 'LUNCH', 'LUNCH_DINNER')
                 AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
             </when>
             <when test="mealType == 'DINNER'">
-                AND o.meal_type IN ('ALL', 'DINNER')
+                AND o.meal_type IN ('ALL', 'DINNER', 'LUNCH_DINNER')
                 AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
             </when>
             <otherwise>
@@ -254,11 +254,11 @@
                 AND COALESCE(o.breakfast_count, 0) &gt; 0
             </when>
             <when test="mealType == 'LUNCH'">
-                AND o.meal_type IN ('ALL', 'LUNCH')
+                AND o.meal_type IN ('ALL', 'LUNCH', 'LUNCH_DINNER')
                 AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
             </when>
             <when test="mealType == 'DINNER'">
-                AND o.meal_type IN ('ALL', 'DINNER')
+                AND o.meal_type IN ('ALL', 'DINNER', 'LUNCH_DINNER')
                 AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
             </when>
             <otherwise>
