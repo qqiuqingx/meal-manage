@@ -428,6 +428,14 @@ function serializeDeliveryDates(value) {
   return normalized.length > 0 ? JSON.stringify(normalized) : null
 }
 
+function normalizeNumericValue(value) {
+  if (value === '' || value === null || value === undefined) {
+    return null
+  }
+  const normalized = Number(value)
+  return Number.isNaN(normalized) ? value : normalized
+}
+
 // 订单模式默认数据
 export function createOrderDefaultForm() {
   return {
@@ -539,7 +547,9 @@ export default {
       parentPackages: [],
       childPackages: [],
       customerSourceOptions: [],
-      availableDates: []
+      availableDates: [],
+      hydratingForm: false,
+      hydrationTimer: null
     }
   },
   computed: {
@@ -570,6 +580,8 @@ export default {
     value: {
       handler(val) {
         console.log('[OrderForm] watch.value triggered, deliveryDates:', val && val.deliveryDates)
+        this.beginFormHydration()
+        this.normalizeFormNumbers()
         // 当外部 value 变化时（如编辑时加载数据），同步子套餐列表和日历数据
         if (val.parentPackageId) {
           this.loadChildPackages(val.parentPackageId)
@@ -599,7 +611,51 @@ export default {
       }]
     }
   },
+  beforeDestroy() {
+    if (this.hydrationTimer) {
+      clearTimeout(this.hydrationTimer)
+      this.hydrationTimer = null
+    }
+  },
   methods: {
+    beginFormHydration() {
+      this.hydratingForm = true
+      if (this.hydrationTimer) {
+        clearTimeout(this.hydrationTimer)
+      }
+      this.hydrationTimer = setTimeout(() => {
+        this.hydratingForm = false
+        this.hydrationTimer = null
+      }, 0)
+    },
+    normalizeFormNumbers() {
+      const numericFields = [
+        'depositAmount',
+        'totalAmount',
+        'finalAmount',
+        'breakfastCount',
+        'lunchDinnerCount',
+        'breakfastPrice',
+        'lunchDinnerPrice',
+        'verifiedCount',
+        'verifiedAmount',
+        'mealBalance',
+        'remainingCount',
+        'mainDishCount',
+        'sideDishCount',
+        'vegCount',
+        'riceCount',
+        'soupCount'
+      ]
+      numericFields.forEach(field => {
+        if (Object.prototype.hasOwnProperty.call(this.form, field)) {
+          const normalized = normalizeNumericValue(this.form[field])
+          if (this.form[field] !== normalized) {
+            this.$set(this.form, field, normalized)
+          }
+        }
+      })
+    },
     syncCalendarSelectionFromDeliveryDates(value) {
       const normalized = normalizeDeliveryDates(value)
       const current = normalizeDeliveryDates(this.form.deliveryDatesWithMealTypes)
@@ -694,6 +750,9 @@ export default {
     },
     // 计算总价（两种模式均支持自动计算）
     calcTotalAmount() {
+      if (this.mode === 'order' && this.hydratingForm) {
+        return
+      }
       // 计算基础总价
       const breakfastCount = this.form.breakfastCount || 0
       const lunchDinnerCount = this.form.lunchDinnerCount || 0
