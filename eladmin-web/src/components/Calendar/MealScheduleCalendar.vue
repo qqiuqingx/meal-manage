@@ -62,6 +62,7 @@
         v-if="selectedDate"
         :date="selectedDate"
         :value="selectedDateMealTypes"
+        :allowed-meal-types="allowedMealTypesForSelector"
         @input="handleMealTypesChange"
         @save="handleMealTypesSave"
         @cancel="closeMealSelector"
@@ -104,7 +105,8 @@ import {
   addMonths,
   calculateMealCounts,
   normalizeDeliveryDates,
-  getDateRange
+  getDateRange,
+  MealType
 } from '@/utils/calendar'
 
 export default {
@@ -138,6 +140,11 @@ export default {
     hideSummary: {
       type: Boolean,
       default: false
+    },
+    // 订单餐次类型，用于决定默认餐次和可选餐次
+    orderMealType: {
+      type: String,
+      default: 'ALL'
     }
   },
   data() {
@@ -161,6 +168,34 @@ export default {
     },
     mealCounts() {
       return calculateMealCounts(this.internalSelectedDates)
+    },
+    // 根据订单餐次类型决定日历新增日期的默认餐次
+    defaultMealTypes() {
+      switch (this.orderMealType) {
+        case 'LUNCH_DINNER':
+          return [MealType.LUNCH, MealType.DINNER]
+        case 'LUNCH':
+          return [MealType.LUNCH]
+        case 'DINNER':
+          return [MealType.DINNER]
+        case 'ALL':
+        default:
+          return [MealType.BREAKFAST, MealType.LUNCH, MealType.DINNER]
+      }
+    },
+    // 餐次选择器允许选择的餐次
+    allowedMealTypesForSelector() {
+      switch (this.orderMealType) {
+        case 'LUNCH_DINNER':
+          return [MealType.LUNCH, MealType.DINNER]
+        case 'LUNCH':
+          return [MealType.LUNCH]
+        case 'DINNER':
+          return [MealType.DINNER]
+        case 'ALL':
+        default:
+          return [MealType.BREAKFAST, MealType.LUNCH, MealType.DINNER]
+      }
     }
   },
   watch: {
@@ -236,11 +271,11 @@ export default {
       const formattedDate = formatDate(date)
       const newSelected = [
         ...this.internalSelectedDates,
-        { date: formattedDate, mealTypes: ['BREAKFAST', 'LUNCH', 'DINNER'] }
+        { date: formattedDate, mealTypes: [...this.defaultMealTypes] }
       ]
       this.emitChange(newSelected)
       // 自动打开餐次配置
-      this.openMealSelector(date, ['BREAKFAST', 'LUNCH', 'DINNER'])
+      this.openMealSelector(date, [...this.defaultMealTypes])
     },
     removeDate(date) {
       const formattedDate = formatDate(date)
@@ -300,7 +335,7 @@ export default {
       const dateRange = getDateRange(this.startDate, this.endDate)
       const newSelected = dateRange.map(date => ({
         date,
-        mealTypes: ['BREAKFAST', 'LUNCH', 'DINNER']
+        mealTypes: [...this.defaultMealTypes]
       }))
       this.emitChange(newSelected)
     },

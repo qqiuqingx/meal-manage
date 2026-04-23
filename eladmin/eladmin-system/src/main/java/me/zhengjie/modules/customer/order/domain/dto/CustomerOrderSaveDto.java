@@ -134,7 +134,7 @@ public class CustomerOrderSaveDto implements Serializable {
     private Integer status;
 
     /**
-     * 餐次类型(LUNCH=午餐订单,DINNER=晚餐订单,ALL=全餐次订单)
+     * 餐次类型(ALL=早+午餐+晚餐,LUNCH=午餐,DINNER=晚餐,LUNCH_DINNER=午餐+晚餐)
      */
     private String mealType;
 

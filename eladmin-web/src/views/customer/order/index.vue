@@ -348,7 +348,8 @@ export default {
     },
     mealTypeText(mealType) {
       if (!mealType || mealType === 'ALL') return '-'
-      return mealType === 'LUNCH' ? '午餐' : '晚餐'
+      const map = { LUNCH: '午餐', DINNER: '晚餐', LUNCH_DINNER: '午+晚' }
+      return map[mealType] || mealType
     },
     scheduleModeText(scheduleMode) {
       const map = {
