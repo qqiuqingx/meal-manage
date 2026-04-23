@@ -294,6 +294,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         CustomerOrderDetailDto dto = new CustomerOrderDetailDto();
         dto.setId(order.getId());
         dto.setCustomerId(order.getCustomerId());
+        dto.setParentPackageId(order.getParentPackageId());
+        dto.setChildPackageId(order.getChildPackageId());
         if (profile != null) {
             dto.setCustomerName(profile.getCustomerName());
             dto.setPhone(profile.getPhone());
@@ -338,6 +340,11 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setDeliveryDates(order.getDeliveryDates());
         dto.setRemark(order.getRemark());
         dto.setCustomerSource(order.getCustomerSource());
+        dto.setMainDishCount(order.getMainDishCount());
+        dto.setSideDishCount(order.getSideDishCount());
+        dto.setVegCount(order.getVegCount());
+        dto.setRiceCount(order.getRiceCount());
+        dto.setSoupCount(order.getSoupCount());
         dto.setCreateTime(order.getCreateTime());
         dto.setUpdateTime(order.getUpdateTime());
         return dto;
