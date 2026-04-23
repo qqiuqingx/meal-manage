@@ -314,7 +314,7 @@
 import * as profileApi from '@/api/customer/profile'
 import { queryIngredients } from '@/api/dishIngredient'
 import { queryDishes } from '@/api/dish'
-import { MealTypeName } from '@/utils/calendar'
+import { MealTypeName, normalizeDeliveryDates } from '@/utils/calendar'
 import MealScheduleCalendar from '@/components/Calendar/MealScheduleCalendar.vue'
 import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
@@ -409,15 +409,12 @@ export default {
   },
   methods: {
     serializeDeliveryDates(value) {
-      if (Array.isArray(value)) {
-        const dates = value.map(item => String(item || '').trim()).filter(Boolean)
-        return dates.length ? JSON.stringify(dates) : null
-      }
       if (typeof value === 'string') {
         const trimmed = value.trim()
         return trimmed || null
       }
-      return null
+      const normalized = normalizeDeliveryDates(value)
+      return normalized.length > 0 ? JSON.stringify(normalized) : null
     },
     formatMealTypes(mealTypes) {
       if (!Array.isArray(mealTypes)) return ''
@@ -479,6 +476,9 @@ export default {
         const orderInfo = formData.orderInfo || createFirstOrderDefaultForm()
         const breakfastCount = orderInfo.breakfastCount || 0
         const lunchDinnerCount = orderInfo.lunchDinnerCount || 0
+        const deliveryDatesSource = Array.isArray(orderInfo.deliveryDatesWithMealTypes) && orderInfo.deliveryDatesWithMealTypes.length > 0
+          ? orderInfo.deliveryDatesWithMealTypes
+          : orderInfo.deliveryDates
         payload.orderInfo = {
           parentPackageId: orderInfo.parentPackageId,
           breakfastCount,
@@ -494,7 +494,7 @@ export default {
           endDate: orderInfo.endDate,
           mealType: orderInfo.mealType || 'ALL',
           customerSource: orderInfo.customerSource || null,
-          deliveryDates: this.serializeDeliveryDates(orderInfo.deliveryDates),
+          deliveryDates: this.serializeDeliveryDates(deliveryDatesSource),
           mainDishCount: orderInfo.mainDishCount || 0,
           sideDishCount: orderInfo.sideDishCount || 0,
           vegCount: orderInfo.vegCount || 0,
