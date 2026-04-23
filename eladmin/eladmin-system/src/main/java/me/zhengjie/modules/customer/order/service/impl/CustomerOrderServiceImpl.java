@@ -364,11 +364,12 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     }
 
     private String getMealTypeDesc(String mealType) {
-        if (mealType == null) return "全餐次";
+        if (mealType == null) return "早+午餐+晚餐";
         switch (mealType) {
             case "LUNCH": return "午餐";
             case "DINNER": return "晚餐";
-            case "ALL": return "全餐次";
+            case "LUNCH_DINNER": return "午餐+晚餐";
+            case "ALL": return "早+午餐+晚餐";
             default: return "未知";
         }
     }
@@ -382,25 +383,61 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
         LocalDate startDate = dto.getStartDate();
 
-        // 校验规则（去除结束日期限制）：
-        // 1. 如果是全餐次订单，同一开始日期只能有1个订单
+        // 校验规则：
+        // 1. 全餐次订单：冲突范围内不能已有任何覆盖午/晚的订单
         if ("ALL".equals(dto.getMealType())) {
             int count = orderMapper.countAllMealTypeOrders(dto.getCustomerId(), startDate, excludeId);
             if (count > 0) {
                 throw new BadRequestException("同一开始日期已存在全餐次订单，不能重复创建");
             }
+            int lunchDinnerCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, "LUNCH_DINNER", excludeId);
+            if (lunchDinnerCount > 0) {
+                throw new BadRequestException("同一开始日期已存在午餐+晚餐订单，不能创建全餐次订单");
+            }
+            int lunchCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, "LUNCH", excludeId);
+            if (lunchCount > 0) {
+                throw new BadRequestException("同一开始日期已存在午餐订单，不能创建全餐次订单");
+            }
+            int dinnerCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, "DINNER", excludeId);
+            if (dinnerCount > 0) {
+                throw new BadRequestException("同一开始日期已存在晚餐订单，不能创建全餐次订单");
+            }
             return;
         }
 
-        // 2. 如果是午餐或晚餐订单，同一开始日期最多2个不同餐次的订单
+        // 2. 午餐+晚餐订单：与 ALL / LUNCH / DINNER / LUNCH_DINNER 均互斥
+        if ("LUNCH_DINNER".equals(dto.getMealType())) {
+            int allCount = orderMapper.countAllMealTypeOrders(dto.getCustomerId(), startDate, excludeId);
+            if (allCount > 0) {
+                throw new BadRequestException("同一开始日期已存在全餐次订单，不能创建午餐+晚餐订单");
+            }
+            int sameTypeCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, "LUNCH_DINNER", excludeId);
+            if (sameTypeCount > 0) {
+                throw new BadRequestException("同一开始日期已存在午餐+晚餐订单，不能重复创建");
+            }
+            int lunchCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, "LUNCH", excludeId);
+            if (lunchCount > 0) {
+                throw new BadRequestException("同一开始日期已存在午餐订单，不能创建午餐+晚餐订单");
+            }
+            int dinnerCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, "DINNER", excludeId);
+            if (dinnerCount > 0) {
+                throw new BadRequestException("同一开始日期已存在晚餐订单，不能创建午餐+晚餐订单");
+            }
+            return;
+        }
+
+        // 3. 午餐或晚餐订单：原有逻辑 + 增加 LUNCH_DINNER 互斥检查
         if ("LUNCH".equals(dto.getMealType()) || "DINNER".equals(dto.getMealType())) {
-            // 先检查同一开始日期的总订单数
+            int lunchDinnerCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, "LUNCH_DINNER", excludeId);
+            if (lunchDinnerCount > 0) {
+                throw new BadRequestException("同一开始日期已存在午餐+晚餐订单，不能创建单独餐次订单");
+            }
+
             int totalCount = orderMapper.countOverlappingOrders(dto.getCustomerId(), startDate, excludeId);
             if (totalCount >= 2) {
                 throw new BadRequestException("同一开始日期最多只能有两个不同餐次的订单");
             }
 
-            // 检查是否已存在相同餐次的订单
             int sameTypeCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, dto.getMealType(), excludeId);
             if (sameTypeCount > 0) {
                 throw new BadRequestException("同一开始日期已存在相同餐次的订单");
