@@ -1,14 +1,15 @@
 package me.zhengjie.modules.meal.service.impl;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import me.zhengjie.modules.meal.domain.DishIngredient;
 import me.zhengjie.modules.meal.domain.dto.DishIngredientQueryCriteria;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.meal.service.DishIngredientService;
 import me.zhengjie.utils.FileUtil;
 import lombok.RequiredArgsConstructor;
+
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import me.zhengjie.utils.PageUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
@@ -33,12 +34,14 @@ public class DishIngredientServiceImpl extends ServiceImpl<DishIngredientMapper,
 
     @Override
     public PageResult<DishIngredient> queryAll(DishIngredientQueryCriteria criteria, Page<Object> page){
-        return PageUtil.toPage(dishIngredientMapper.findAll(criteria, page));
+        Page<DishIngredient> queryPage = new Page<>(page.getCurrent(), page.getSize());
+        IPage<DishIngredient> result = dishIngredientMapper.selectPageByCriteria(criteria, queryPage);
+        return new PageResult<>(result.getRecords(), result.getTotal());
     }
 
     @Override
     public List<DishIngredient> queryAll(DishIngredientQueryCriteria criteria){
-        return dishIngredientMapper.findAll(criteria, null);
+        return dishIngredientMapper.selectPageByCriteria(criteria);
     }
 
     @Override
