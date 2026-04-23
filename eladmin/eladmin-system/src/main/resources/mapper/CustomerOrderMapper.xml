@@ -33,6 +33,7 @@
         <result column="side_dish_count" property="sideDishCount"/>
         <result column="veg_count" property="vegCount"/>
         <result column="rice_count" property="riceCount"/>
+        <result column="rice_type" property="riceType"/>
         <result column="soup_count" property="soupCount"/>
         <result column="customer_source" property="customerSource"/>
         <result column="create_by" property="createBy"/>

@@ -13,6 +13,7 @@ import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
+import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.SecurityUtils;
 import me.zhengjie.utils.StringUtils;
@@ -40,6 +41,9 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
     @Autowired
     private CustomerProfileMapper profileMapper;
+
+    @Autowired
+    private CustomerProfileService customerProfileService;
 
     @Autowired
     private ParentPackageMapper parentPackageMapper;
@@ -128,12 +132,16 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         if (order == null) {
             throw new BadRequestException("订单不存在");
         }
+        Long originalParentPackageId = order.getParentPackageId();
 
         // 先校验订单冲突
         validateOrderConflict(dto, dto.getId());
         validateAndNormalize(dto, dto.getId());
 
         buildOrderEntity(order, dto);
+        if (parentPackageChanged(originalParentPackageId, dto.getParentPackageId())) {
+            refreshCustomerCodeForParentPackageChange(order, dto.getParentPackageId());
+        }
         order.setUpdateBy(getCurrentUsername());
 
         orderMapper.updateById(order);
@@ -176,6 +184,28 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         }
 
         return datePrefix + String.format("%03d", nextNum);
+    }
+
+    private boolean parentPackageChanged(Long originalParentPackageId, Long newParentPackageId) {
+        if (originalParentPackageId == null) {
+            return newParentPackageId != null;
+        }
+        return !originalParentPackageId.equals(newParentPackageId);
+    }
+
+    private void refreshCustomerCodeForParentPackageChange(CustomerOrder order, Long newParentPackageId) {
+        if (newParentPackageId == null) {
+            throw new BadRequestException("父套餐不能为空");
+        }
+        CustomerProfile profile = profileMapper.selectById(order.getCustomerId());
+        if (profile == null) {
+            throw new BadRequestException("客户不存在");
+        }
+        String newCustomerCode = customerProfileService.generateCode(newParentPackageId);
+        profile.setCustomerCode(newCustomerCode);
+        profile.setUpdateBy(getCurrentUsername());
+        profileMapper.updateById(profile);
+        order.setCustomerCode(newCustomerCode);
     }
 
     /**
@@ -283,7 +313,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         order.setMainDishCount(dto.getMainDishCount());
         order.setSideDishCount(dto.getSideDishCount());
         order.setVegCount(dto.getVegCount());
-        order.setRiceCount(dto.getRiceCount());
+        order.setRiceCount(dto.getRiceCount() != null ? dto.getRiceCount() : 1);
+        order.setRiceType(dto.getRiceType() != null ? dto.getRiceType() : "白米饭");
         order.setSoupCount(dto.getSoupCount());
     }
 
@@ -344,6 +375,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setSideDishCount(order.getSideDishCount());
         dto.setVegCount(order.getVegCount());
         dto.setRiceCount(order.getRiceCount());
+        dto.setRiceType(order.getRiceType());
         dto.setSoupCount(order.getSoupCount());
         dto.setCreateTime(order.getCreateTime());
         dto.setUpdateTime(order.getUpdateTime());

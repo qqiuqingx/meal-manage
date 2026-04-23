@@ -89,6 +89,8 @@ public class CustomerOrderDetailDto implements Serializable {
 
     private Integer riceCount;
 
+    private String riceType;
+
     private Integer soupCount;
 
     private LocalDateTime createTime;

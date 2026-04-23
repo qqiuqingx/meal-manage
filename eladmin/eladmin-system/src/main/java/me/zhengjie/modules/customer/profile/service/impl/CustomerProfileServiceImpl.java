@@ -481,7 +481,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         orderInfo.setMainDishCount(orderInfo.getMainDishCount() != null ? orderInfo.getMainDishCount() : 0);
         orderInfo.setSideDishCount(orderInfo.getSideDishCount() != null ? orderInfo.getSideDishCount() : 0);
         orderInfo.setVegCount(orderInfo.getVegCount() != null ? orderInfo.getVegCount() : 0);
-        orderInfo.setRiceCount(orderInfo.getRiceCount() != null ? orderInfo.getRiceCount() : 0);
+        orderInfo.setRiceCount(orderInfo.getRiceCount() != null ? orderInfo.getRiceCount() : 1);
         orderInfo.setSoupCount(orderInfo.getSoupCount() != null ? orderInfo.getSoupCount() : 0);
         orderInfo.setTotalCount(totalCount);
         return orderInfo;
@@ -557,7 +557,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         order.setMainDishCount(orderInfo.getMainDishCount() != null ? orderInfo.getMainDishCount() : 0);
         order.setSideDishCount(orderInfo.getSideDishCount() != null ? orderInfo.getSideDishCount() : 0);
         order.setVegCount(orderInfo.getVegCount() != null ? orderInfo.getVegCount() : 0);
-        order.setRiceCount(orderInfo.getRiceCount() != null ? orderInfo.getRiceCount() : 0);
+        order.setRiceCount(orderInfo.getRiceCount() != null ? orderInfo.getRiceCount() : 1);
+        order.setRiceType(orderInfo.getRiceType() != null ? orderInfo.getRiceType() : "白米饭");
         order.setSoupCount(orderInfo.getSoupCount() != null ? orderInfo.getSoupCount() : 0);
         order.setRemark(profile.getRemark());
         order.setCreateBy(getCurrentUsername());
