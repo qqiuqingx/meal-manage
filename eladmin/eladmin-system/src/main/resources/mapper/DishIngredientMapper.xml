@@ -50,9 +50,6 @@
             </if>
         </where>
         order by id desc
-        <if test="criteria.page != null and criteria.size != null">
-            LIMIT #{criteria.size} OFFSET ${(criteria.page) * criteria.size}
-        </if>
     </select>
 
     <select id="findById" resultMap="BaseResultMap">
