@@ -31,6 +31,8 @@ import me.zhengjie.modules.meal.domain.DishIngredientRelation;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.MealPlanCustomerItem;
+import me.zhengjie.modules.meal.domain.dto.DishQueryCriteria;
+import me.zhengjie.modules.meal.domain.enums.DishTypeEnum;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
@@ -160,10 +162,14 @@ public class MealPlanServiceImpl implements MealPlanService {
         List<Dish> scheduledDishes = loadScheduledDishes(targetDate, mealType);
         log.debug("加载排期菜品完成 - 菜品数量: {}", scheduledDishes.size());
 
-        Map<Integer, Set<String>> dishIngredientMap = loadDishIngredients(scheduledDishes);
+        List<Dish> riceDishes = loadRiceDishes();
+        log.debug("加载固定米饭菜品完成 - 菜品数量: {}", riceDishes.size());
+
+        List<Dish> candidateDishes = mergeCandidateDishes(scheduledDishes, riceDishes);
+        Map<Integer, Set<String>> dishIngredientMap = loadDishIngredients(candidateDishes);
         log.debug("加载菜品食材完成 - 菜品-食材关联数量: {}", dishIngredientMap.size());
 
-        Map<Long, Map<String, List<Dish>>> candidateDishMap = buildCandidateDishPool(scheduledDishes, orders, parentPackageMap);
+        Map<Long, Map<String, List<Dish>>> candidateDishMap = buildCandidateDishPool(candidateDishes, orders, parentPackageMap);
         log.debug("构建候选菜池完成 - 父套餐数量: {}", candidateDishMap.size());
 
         log.debug("数据加载总耗时: {}ms", System.currentTimeMillis() - dataLoadStart);
@@ -500,19 +506,19 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 按父套餐归类候选菜池，供后续客户排餐复用。
      */
-    private Map<Long, Map<String, List<Dish>>> buildCandidateDishPool(List<Dish> scheduledDishes, List<CustomerOrder> orders,
+    private Map<Long, Map<String, List<Dish>>> buildCandidateDishPool(List<Dish> candidateDishes, List<CustomerOrder> orders,
                                                                      Map<Long, ParentPackage> parentPackageMap) {
         Set<Long> parentPackageIds = orders.stream().map(CustomerOrder::getParentPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
-        if (parentPackageIds.isEmpty() || scheduledDishes.isEmpty()) {
-            log.debug("父套餐ID为空或排期菜品为空，跳过构建候选菜池");
+        if (parentPackageIds.isEmpty() || candidateDishes.isEmpty()) {
+            log.debug("父套餐ID为空或候选菜品为空，跳过构建候选菜池");
             return Collections.emptyMap();
         }
 
         long startTime = System.currentTimeMillis();
         Map<Long, Map<String, List<Dish>>> candidateDishMap = new HashMap<>();
 
-        log.debug("开始构建候选菜池 - 父套餐ID数量: {}, 排期菜品数量: {}",
-                parentPackageIds.size(), scheduledDishes.size());
+        log.debug("开始构建候选菜池 - 父套餐ID数量: {}, 候选菜品数量: {}",
+                parentPackageIds.size(), candidateDishes.size());
 
         for (Long parentPackageId : parentPackageIds) {
             ParentPackage parentPackage = parentPackageMap.get(parentPackageId);
@@ -520,11 +526,11 @@ public class MealPlanServiceImpl implements MealPlanService {
             Map<String, List<Dish>> dishTypeMap = new HashMap<>();
 
             int matchedDishes = 0;
-            for (Dish dish : scheduledDishes) {
+            for (Dish dish : candidateDishes) {
                 if (!matchesParentPackage(dish.getMealPackages(), parentPackageId, packageCode)) {
                     continue;
                 }
-                dishTypeMap.computeIfAbsent(dish.getDishType(), key -> new ArrayList<>()).add(dish);
+                dishTypeMap.computeIfAbsent(normalizeCandidateDishType(dish.getDishType()), key -> new ArrayList<>()).add(dish);
                 matchedDishes++;
             }
 
@@ -554,10 +560,60 @@ public class MealPlanServiceImpl implements MealPlanService {
                 ScheduleKeyUtil.calcWeek(targetDate),
                 ScheduleKeyUtil.calcDay(targetDate),
                 mealType);
+        if (scheduledDishes == null || scheduledDishes.isEmpty()) {
+            return Collections.emptyList();
+        }
 
         log.debug("排期菜品查询完成 - 数量: {}, 耗时: {}ms",
                 scheduledDishes.size(), System.currentTimeMillis() - startTime);
         return scheduledDishes;
+    }
+
+    /**
+     * 查询固定米饭菜品。RICE 不依赖 meal_schedule_plan，而是直接从 dish 主档读取。
+     */
+    private List<Dish> loadRiceDishes() {
+        DishQueryCriteria criteria = new DishQueryCriteria();
+        criteria.setDishType(DishTypeEnum.RICE_TYPE.getCode());
+
+        criteria.setEnabled(true);
+        List<Dish> riceDishes = dishMapper.findAll(criteria);
+        if (riceDishes == null || riceDishes.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return riceDishes;
+    }
+
+    /**
+     * 特殊米饭类型只用于主档和订单选择，进入排餐后统一按 RICE 处理。
+     */
+    private String normalizeCandidateDishType(String dishType) {
+        if (DishTypeEnum.RICE_TYPE.getCode().equals(dishType)) {
+            return DISH_TYPE_RICE;
+        }
+        return dishType;
+    }
+
+    /**
+     * 合并排期菜品与固定米饭菜品，按菜品ID去重，供后续统一构建候选池和加载食材。
+     */
+    private List<Dish> mergeCandidateDishes(List<Dish> scheduledDishes, List<Dish> riceDishes) {
+        Map<Integer, Dish> merged = new LinkedHashMap<>();
+        if (scheduledDishes != null) {
+            for (Dish dish : scheduledDishes) {
+                if (dish != null && dish.getId() != null) {
+                    merged.put(dish.getId(), dish);
+                }
+            }
+        }
+        if (riceDishes != null) {
+            for (Dish dish : riceDishes) {
+                if (dish != null && dish.getId() != null) {
+                    merged.putIfAbsent(dish.getId(), dish);
+                }
+            }
+        }
+        return new ArrayList<>(merged.values());
     }
 
     /**
@@ -629,8 +685,8 @@ public class MealPlanServiceImpl implements MealPlanService {
                 dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons, customer);
         pickVegetables(config.getVegCount(), selectedDishes, selectedDishIds, dishTypeMap, allergyTags,
                 dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons, customer);
-        pickOptionalDish(config.getRiceCount(), DISH_TYPE_RICE, selectedDishes, selectedDishIds,
-                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons, customer);
+        pickRiceDish(config.getRiceCount(), config.getRiceType(), selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap,  customerMealPlan, failureReasons, customer);
         pickOptionalDish(config.getSoupCount(), DISH_TYPE_SOUP, selectedDishes, selectedDishIds,
                 dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons, customer);
 
@@ -726,6 +782,55 @@ public class MealPlanServiceImpl implements MealPlanService {
         pickSingleDishIfRequired(count, dishType, dishType + "类型菜品不足", selectedDishes, selectedDishIds,
                 dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
                 customerMealPlan, failureReasons, customerProfile);
+    }
+
+    /**
+     * 米饭选择：优先匹配订单指定的米饭类型（riceType），匹配不到则回退到任意米饭。
+     */
+    private void pickRiceDish(Integer riceCount, String riceType, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
+                             Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
+                             CustomerMealPlan customerMealPlan, List<String> failureReasons, CustomerProfile customerProfile) {
+        if (riceCount == null || riceCount <= 0) {
+            return;
+        }
+        List<Dish> riceDishes = new ArrayList<>(dishTypeMap.getOrDefault(DISH_TYPE_RICE, Collections.emptyList()));
+        List<Dish> riceTypeDishes = dishTypeMap.get(DishTypeEnum.RICE_TYPE.getCode());
+        if (riceTypeDishes != null) {
+            riceDishes.addAll(riceTypeDishes);
+        }
+        if (riceDishes.isEmpty()) {
+            failureReasons.add("米饭类型菜品不足");
+            return;
+        }
+        // 如果指定了米饭类型，优先从名称匹配的米饭中选择
+        DishSelectResult result = null;
+        if (riceType != null && !riceType.isEmpty()) {
+            List<Dish> matched = new ArrayList<>();
+            for (Dish d : riceDishes) {
+                if (riceType.equals(d.getName())) {
+                    matched.add(d);
+                }
+            }
+            if (!matched.isEmpty()) {
+                result = selectDish(matched, selectedDishIds, allergyTags, dishIngredientMap);
+            }
+        }
+        // 未指定类型或匹配不到，回退到全部米饭
+        if (result == null || result.getDish() == null) {
+            result = selectDish(riceDishes, selectedDishIds, allergyTags, dishIngredientMap);
+        }
+        for (SkippedAllergyDish sad : result.getSkippedAllergyDishes()) {
+            customerMealPlan.addSkippedAllergyDish(sad);
+        }
+        if (result.getDish() == null) {
+            if (!isAllergyFilteredOut(result)) {
+                failureReasons.add("米饭类型菜品不足");
+            }
+            return;
+        }
+        selectedDishes.add(new SelectedDish(DISH_TYPE_RICE, result.getDish(),
+                result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
+        selectedDishIds.add(result.getDish().getId());
     }
 
     /**
@@ -849,7 +954,7 @@ public class MealPlanServiceImpl implements MealPlanService {
             if (!matchesParentPackage(dish.getMealPackages(), parentPackageId, packageCode)) {
                 continue;
             }
-            dishTypeMap.computeIfAbsent(dish.getDishType(), k -> new ArrayList<>()).add(dish);
+            dishTypeMap.computeIfAbsent(normalizeCandidateDishType(dish.getDishType()), k -> new ArrayList<>()).add(dish);
         }
         sortDishTypeMap(dishTypeMap);
 
@@ -1310,6 +1415,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         private final int sideDishCount;
         private final int vegCount;
         private final int riceCount;
+        private final String riceType;
         private final int soupCount;
 
         public DishQuantityConfig(CustomerOrder order) {
@@ -1317,6 +1423,7 @@ public class MealPlanServiceImpl implements MealPlanService {
             this.sideDishCount = order.getSideDishCount() != null ? order.getSideDishCount() : 0;
             this.vegCount = order.getVegCount() != null ? order.getVegCount() : 0;
             this.riceCount = order.getRiceCount() != null ? order.getRiceCount() : 0;
+            this.riceType = order.getRiceType();
             this.soupCount = order.getSoupCount() != null ? order.getSoupCount() : 0;
         }
 
@@ -1324,6 +1431,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         public int getSideDishCount() { return sideDishCount; }
         public int getVegCount() { return vegCount; }
         public int getRiceCount() { return riceCount; }
+        public String getRiceType() { return riceType; }
         public int getSoupCount() { return soupCount; }
         /** 补主菜数量 = max(0, 主菜需求数 - 每日固定1个) */
         public int getSupplementaryMainCount() { return Math.max(0, mainDishCount - 1); }

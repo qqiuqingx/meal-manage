@@ -145,10 +145,12 @@
               placeholder="请选择米饭类型"
               style="width: 100%;"
             >
-              <el-option label="普通杂粮米饭" value="普通杂粮米饭" />
-              <el-option label="杂粮1:1米饭" value="杂粮1:1米饭" />
-              <el-option label="三色糙米" value="三色糙米" />
-              <el-option label="白米饭" value="白米饭" />
+              <el-option
+                v-for="item in riceTypeOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
             </el-select>
           </el-form-item>
         </el-col>
@@ -424,6 +426,7 @@
 import * as profileApi from '@/api/customer/profile'
 import * as packageApi from '@/api/customer/package'
 import * as dictDetailApi from '@/api/system/dictDetail'
+import * as dishApi from '@/api/dish'
 import MealScheduleCalendar from '@/components/Calendar/MealScheduleCalendar.vue'
 import { normalizeDeliveryDates } from '@/utils/calendar'
 
@@ -553,6 +556,7 @@ export default {
       parentPackages: [],
       childPackages: [],
       customerSourceOptions: [],
+      riceTypeOptions: [],
       availableDates: [],
       hydratingForm: false,
       hydrationTimer: null
@@ -588,6 +592,7 @@ export default {
         console.log('[OrderForm] watch.value triggered, deliveryDates:', val && val.deliveryDates)
         this.beginFormHydration()
         this.normalizeFormNumbers()
+        this.ensureRiceTypeOption(val && val.riceType)
         // 当外部 value 变化时（如编辑时加载数据），同步子套餐列表和日历数据
         if (val.parentPackageId) {
           this.loadChildPackages(val.parentPackageId)
@@ -606,6 +611,7 @@ export default {
   },
   created() {
     this.loadCustomerSourceDict()
+    this.loadRiceTypeOptions()
     this.loadParentPackages()
     this.initAvailableDates()
     // 编辑时：如果传入了当前客户数据，填充下拉列表
@@ -686,6 +692,29 @@ export default {
         }))
       } catch (e) {
         console.error('loadCustomerSourceDict error', e)
+      }
+    },
+    ensureRiceTypeOption(riceType) {
+      if (!riceType) {
+        return
+      }
+      const exists = this.riceTypeOptions.some(item => item.value === riceType)
+      if (!exists) {
+        this.riceTypeOptions = this.riceTypeOptions.concat([{ label: riceType, value: riceType }])
+      }
+    },
+    async loadRiceTypeOptions() {
+      try {
+        const res = await dishApi.queryDishes({ dishType: 'RICE_TYPE', enabled: true, page: 0, size: 200 })
+        const dishes = res.content || []
+        this.riceTypeOptions = dishes.map(item => ({
+          label: item.name,
+          value: item.name
+        }))
+      } catch (e) {
+        console.error('loadRiceTypeOptions error', e)
+      } finally {
+        this.ensureRiceTypeOption(this.form.riceType)
       }
     },
     // 日历选择变更处理
