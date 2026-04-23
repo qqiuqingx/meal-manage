@@ -49,21 +49,6 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="定金" prop="depositAmount" width="90" align="right">
-        <template slot-scope="scope">
-          {{ formatMoney(scope.row.depositAmount) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="总金额" prop="totalAmount" width="100" align="right">
-        <template slot-scope="scope">
-          {{ formatMoney(scope.row.totalAmount) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="成交金额" prop="finalAmount" width="100" align="right">
-        <template slot-scope="scope">
-          {{ formatMoney(scope.row.finalAmount) }}
-        </template>
-      </el-table-column>
       <el-table-column label="早餐" prop="breakfastCount" width="60" align="center" />
       <el-table-column label="午晚" prop="lunchDinnerCount" width="60" align="center" />
       <el-table-column label="合计" prop="totalCount" width="60" align="center" />
@@ -97,6 +82,21 @@
         </template>
       </el-table-column>
       <el-table-column label="成交时间" prop="dealTime" width="150" />
+      <el-table-column label="定金" prop="depositAmount" width="90" align="right">
+        <template slot-scope="scope">
+          {{ formatMoney(scope.row.depositAmount) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="总金额" prop="totalAmount" width="100" align="right">
+        <template slot-scope="scope">
+          {{ formatMoney(scope.row.totalAmount) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="成交金额" prop="finalAmount" width="100" align="right">
+        <template slot-scope="scope">
+          {{ formatMoney(scope.row.finalAmount) }}
+        </template>
+      </el-table-column>
       <el-table-column label="订单编号" prop="orderCode" width="140" />
       <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="180px" align="center">
         <template slot-scope="scope">
