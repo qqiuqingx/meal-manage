@@ -105,7 +105,7 @@
       <el-table-column label="订单编号" prop="orderCode" width="140" />
       <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="180px" align="center">
         <template slot-scope="scope">
-          <el-button size="mini" type="primary" icon="edit" :disabled="scope.row.status !== 1" @click="crud.toEdit(scope.row)">编辑</el-button>
+          <el-button size="mini" type="primary" icon="edit" :disabled="scope.row.status !== 1" @click="handleEdit(scope.row)">编辑</el-button>
           <el-button v-if="scope.row.status === 1" size="mini" type="danger" icon="refresh" @click="openRefundDialog(scope.row)">退餐</el-button>
         </template>
       </el-table-column>
@@ -223,6 +223,7 @@ export default {
         refundReason: [{ required: true, message: '请输入退餐原因', trigger: 'blur' }]
       },
       customerSourceOptions: [],
+      editRequestId: 0,
       rules: {
         customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
         totalAmount: [{ required: true, message: '请输入总金额', trigger: 'blur' }],
@@ -264,6 +265,8 @@ export default {
       return item ? item.label : value
     },
     [CRUD.HOOK.beforeToCU]() {
+      const currentForm = { ...this.form }
+      Object.assign(this.form, createOrderDefaultForm(), currentForm)
       return true
     },
     [CRUD.HOOK.beforeToAdd]() {
@@ -282,6 +285,23 @@ export default {
     },
     cancelDialog() {
       this.crud.cancelCU()
+    },
+    async handleEdit(row) {
+      const requestId = this.editRequestId + 1
+      this.editRequestId = requestId
+      try {
+        const res = await orderApi.getOrder(row.id)
+        if (requestId !== this.editRequestId) {
+          return
+        }
+        const detail = res.data || res
+        this.crud.toEdit(detail)
+      } catch (e) {
+        if (requestId !== this.editRequestId) {
+          return
+        }
+        this.$message.error('获取订单详情失败: ' + (e.message || '未知错误'))
+      }
     },
     async submitForm() {
       const valid = await this.$refs.orderFormRef.validate().catch(() => false)
