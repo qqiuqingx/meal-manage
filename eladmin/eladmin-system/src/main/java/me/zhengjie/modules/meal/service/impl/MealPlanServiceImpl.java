@@ -527,6 +527,12 @@ public class MealPlanServiceImpl implements MealPlanService {
 
             int matchedDishes = 0;
             for (Dish dish : candidateDishes) {
+                // RICE_TYPE 米饭不绑定任何套餐，是全局通用菜品，每个父套餐都应包含
+                if (DishTypeEnum.RICE_TYPE.getCode().equals(dish.getDishType())) {
+                    dishTypeMap.computeIfAbsent(normalizeCandidateDishType(dish.getDishType()), key -> new ArrayList<>()).add(dish);
+                    matchedDishes++;
+                    continue;
+                }
                 if (!matchesParentPackage(dish.getMealPackages(), parentPackageId, packageCode)) {
                     continue;
                 }
@@ -814,8 +820,20 @@ public class MealPlanServiceImpl implements MealPlanService {
             if (!matched.isEmpty()) {
                 result = selectDish(matched, selectedDishIds, allergyTags, dishIngredientMap);
             }
+            // 匹配不到指定米饭类型，回退到白米饭默认
+            if (result == null || result.getDish() == null) {
+                List<Dish> defaultRice = new ArrayList<>();
+                for (Dish d : riceDishes) {
+                    if ("白米饭".equals(d.getName())) {
+                        defaultRice.add(d);
+                    }
+                }
+                if (!defaultRice.isEmpty()) {
+                    result = selectDish(defaultRice, selectedDishIds, allergyTags, dishIngredientMap);
+                }
+            }
         }
-        // 未指定类型或匹配不到，回退到全部米饭
+        // 未指定类型，回退到全部米饭
         if (result == null || result.getDish() == null) {
             result = selectDish(riceDishes, selectedDishIds, allergyTags, dishIngredientMap);
         }
