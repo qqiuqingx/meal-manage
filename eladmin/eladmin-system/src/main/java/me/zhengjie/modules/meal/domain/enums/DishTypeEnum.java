@@ -17,7 +17,8 @@ public enum DishTypeEnum {
     SIDE("SIDE", "副菜"),
     SOUP("SOUP", "汤"),
     VEGETABLE("VEGETABLE", "素菜"),
-    RICE("RICE", "米饭");
+    RICE("RICE", "米饭"),
+    RICE_TYPE("RICE_TYPE", "米饭类型");
 
     private final String code;
     private final String desc;
