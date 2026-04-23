@@ -186,11 +186,14 @@ public class CustomerOrderSaveDto implements Serializable {
     private Integer vegCount;
 
     /**
-     * 每餐米饭数量
+     * 每餐米饭数量（默认1，页面不展示）
      */
-    @NotNull(message = "米饭数量不能为空")
-    @Min(value = 0, message = "米饭数量不能为负数")
     private Integer riceCount;
+
+    /**
+     * 米饭类型（普通杂粮米饭、杂粮1:1米饭、三色糙米、白米饭）
+     */
+    private String riceType;
 
     /**
      * 每餐汤数量

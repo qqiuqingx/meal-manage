@@ -93,6 +93,7 @@ public class CustomerProfileSaveDto implements Serializable {
         private Integer sideDishCount;
         private Integer vegCount;
         private Integer riceCount;
+        private String riceType;
         private Integer soupCount;
     }
 }
