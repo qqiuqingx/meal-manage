@@ -41,10 +41,15 @@
           {{ packageSpecText(scope.row) }}
         </template>
       </el-table-column>
+      <el-table-column label="排餐模式" width="100">
+        <template slot-scope="scope">
+          {{ scheduleModeText(scope.row.scheduleMode) }}
+        </template>
+      </el-table-column>
       <el-table-column label="过敏" width="150">
         <template slot-scope="scope">
           <span v-if="!scope.row.allergyTags || scope.row.allergyTags.length === 0">-</span>
-          <el-tag v-for="tag in scope.row.allergyTags" v-else :key="tag" size="mini" type="warning" style="margin-right: 4px;">
+          <el-tag v-for="tag in scope.row.allergyTags" :key="tag" size="mini" type="warning" style="margin-right: 4px;">
             {{ tag }}
           </el-tag>
         </template>
@@ -344,6 +349,15 @@ export default {
     mealTypeText(mealType) {
       if (!mealType || mealType === 'ALL') return '-'
       return mealType === 'LUNCH' ? '午餐' : '晚餐'
+    },
+    scheduleModeText(scheduleMode) {
+      const map = {
+        SCHEDULE: '指定日期',
+        DAILY: '每天送',
+        WEEKEND: '周末送',
+        WEEKDAY: '工作日'
+      }
+      return map[scheduleMode] || '-'
     },
     checkboxT() {
       return true
