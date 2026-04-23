@@ -78,9 +78,9 @@
       <pagination
         v-show="total > 0"
         :total="total"
-        :page.sync="queryParams.page"
+        :page="queryParams.page + 1"
         :limit.sync="queryParams.size"
-        @pagination="getList"
+        @pagination="handlePagination"
       />
     </el-card>
 
@@ -91,11 +91,13 @@
 
 <script>
 import { queryIngredients, editIngredient, delIngredients, downloadIngredients } from '@/api/dishIngredient'
+import Pagination from '@/components/Pagination'
 import IngredientForm from './form'
 
 export default {
   name: 'DishIngredient',
   components: {
+    Pagination,
     IngredientForm
   },
   data() {
@@ -130,8 +132,12 @@ export default {
     getList() {
       this.loading = true
       queryIngredients(this.queryParams).then(response => {
-        this.ingredientList = response.content
-        this.total = response.totalElements
+        this.ingredientList = response.content || []
+        this.total = response.totalElements || 0
+      }).catch(() => {
+        this.ingredientList = []
+        this.total = 0
+      }).finally(() => {
         this.loading = false
       })
     },
@@ -142,6 +148,11 @@ export default {
     resetQuery() {
       this.resetForm('queryForm')
       this.handleQuery()
+    },
+    handlePagination({ page, limit }) {
+      this.queryParams.page = page - 1
+      this.queryParams.size = limit
+      this.getList()
     },
     handleSelectionChange(selection) {
       this.ids = selection.map(item => item.id)
