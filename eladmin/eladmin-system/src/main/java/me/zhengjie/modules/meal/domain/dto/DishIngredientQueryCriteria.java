@@ -16,7 +16,7 @@ public class DishIngredientQueryCriteria {
 
     private Boolean enabled;
 
-    private Integer page;
+    private Integer page = 0;
 
-    private Integer size;
+    private Integer size = 10;
 }
