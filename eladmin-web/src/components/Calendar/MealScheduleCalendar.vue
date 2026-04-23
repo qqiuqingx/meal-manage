@@ -307,8 +307,10 @@ export default {
       this.selectedDateMealTypes = [...mealTypes]
     },
     emitChange(value) {
-      this.$emit('input', value)
-      this.$emit('selection-change', this.mealCounts)
+      const normalized = normalizeDeliveryDates(value)
+      this.internalSelectedDates = normalized
+      this.$emit('input', normalized)
+      this.$emit('selection-change', calculateMealCounts(normalized))
     },
     prevMonth() {
       const newDate = addMonths(new Date(this.currentYear, this.currentMonth, 1), -1)

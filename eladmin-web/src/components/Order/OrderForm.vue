@@ -423,6 +423,11 @@ import * as dictDetailApi from '@/api/system/dictDetail'
 import MealScheduleCalendar from '@/components/Calendar/MealScheduleCalendar.vue'
 import { normalizeDeliveryDates } from '@/utils/calendar'
 
+function serializeDeliveryDates(value) {
+  const normalized = normalizeDeliveryDates(value)
+  return normalized.length > 0 ? JSON.stringify(normalized) : null
+}
+
 // 订单模式默认数据
 export function createOrderDefaultForm() {
   return {
@@ -449,6 +454,7 @@ export function createOrderDefaultForm() {
     status: 1,
     mealType: 'ALL',
     scheduleMode: 'SCHEDULE',
+    deliveryDatesWithMealTypes: [],
     deliveryDates: [],
     remark: null,
     customerSource: null,
@@ -474,6 +480,7 @@ export function createFirstOrderDefaultForm() {
     totalAmount: 0,
     finalAmount: 0,
     scheduleMode: 'SCHEDULE',
+    deliveryDatesWithMealTypes: [],
     deliveryDates: [],
     startDate: null,
     endDate: null,
@@ -567,13 +574,15 @@ export default {
         if (val.parentPackageId) {
           this.loadChildPackages(val.parentPackageId)
         }
-        // 直接计算 deliveryDatesWithMealTypes 并存入 form（供 Calendar 使用）
-        const normalized = normalizeDeliveryDates(val && val.deliveryDates)
-        console.log('[OrderForm] normalized deliveryDatesWithMealTypes:', JSON.stringify(normalized))
-        this.$set(this.form, 'deliveryDatesWithMealTypes', normalized)
-        // 同步 deliveryDates（供后端保存）
-        this.$set(this.form, 'deliveryDates', normalized && normalized.length > 0 ? JSON.stringify(normalized) : null)
+        this.syncCalendarSelectionFromDeliveryDates(val && val.deliveryDates)
       },
+      immediate: true
+    },
+    'form.deliveryDatesWithMealTypes': {
+      handler(val) {
+        this.syncSerializedDeliveryDates(val)
+      },
+      deep: true,
       immediate: true
     }
   },
@@ -591,6 +600,20 @@ export default {
     }
   },
   methods: {
+    syncCalendarSelectionFromDeliveryDates(value) {
+      const normalized = normalizeDeliveryDates(value)
+      const current = normalizeDeliveryDates(this.form.deliveryDatesWithMealTypes)
+      console.log('[OrderForm] normalized deliveryDatesWithMealTypes:', JSON.stringify(normalized))
+      if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+        this.$set(this.form, 'deliveryDatesWithMealTypes', normalized)
+      }
+    },
+    syncSerializedDeliveryDates(value) {
+      const serialized = serializeDeliveryDates(value)
+      if (this.form.deliveryDates !== serialized) {
+        this.$set(this.form, 'deliveryDates', serialized)
+      }
+    },
     // 加载销售渠道字典
     async loadCustomerSourceDict() {
       try {
