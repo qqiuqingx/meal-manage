@@ -23,6 +23,10 @@ public class CustomerOrderDetailDto implements Serializable {
 
     private String phone;
 
+    private Long parentPackageId;
+
+    private Long childPackageId;
+
     private String parentPackageName;
 
     private String childPackageName;
@@ -76,6 +80,16 @@ public class CustomerOrderDetailDto implements Serializable {
     private String remark;
 
     private String customerSource;
+
+    private Integer mainDishCount;
+
+    private Integer sideDishCount;
+
+    private Integer vegCount;
+
+    private Integer riceCount;
+
+    private Integer soupCount;
 
     private LocalDateTime createTime;
 

@@ -74,6 +74,13 @@ describe('CustomerOrder edit flow', () => {
     const detail = {
       id: 12,
       customerId: 3,
+      parentPackageId: 51,
+      childPackageId: 7,
+      mainDishCount: 2,
+      sideDishCount: 1,
+      vegCount: 1,
+      riceCount: 1,
+      soupCount: 1,
       deliveryDates: '[{\"date\":\"2026-04-24\",\"mealTypes\":[\"LUNCH\",\"DINNER\"]}]'
     }
     orderApi.getOrder.mockResolvedValue({ data: detail })
@@ -88,6 +95,13 @@ describe('CustomerOrder edit flow', () => {
 
     expect(orderApi.getOrder).toHaveBeenCalledWith(12)
     expect(toEdit).toHaveBeenCalledWith(detail)
+    expect(toEdit.mock.calls[0][0].parentPackageId).toBe(51)
+    expect(toEdit.mock.calls[0][0].childPackageId).toBe(7)
+    expect(toEdit.mock.calls[0][0].mainDishCount).toBe(2)
+    expect(toEdit.mock.calls[0][0].sideDishCount).toBe(1)
+    expect(toEdit.mock.calls[0][0].vegCount).toBe(1)
+    expect(toEdit.mock.calls[0][0].riceCount).toBe(1)
+    expect(toEdit.mock.calls[0][0].soupCount).toBe(1)
     expect(ctx.$message.error).not.toHaveBeenCalled()
   })
 
