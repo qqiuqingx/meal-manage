@@ -4,11 +4,19 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
+import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
+import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
+import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
+import me.zhengjie.modules.meal.service.DishService;
+import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +53,27 @@ class CustomerProfileServiceImplTest {
 
     @Mock
     private CustomerOrderMapper customerOrderMapper;
+
+    @Mock
+    private CustomerProfileMapper profileMapper;
+
+    @Mock
+    private ParentPackageMapper parentPackageMapper;
+
+    @Mock
+    private SubPackageMapper subPackageMapper;
+
+    @Mock
+    private CustomerProfilePackageMapper profilePackageMapper;
+
+    @Mock
+    private MealVerificationLogMapper verificationLogMapper;
+
+    @Mock
+    private NumberPoolService numberPoolService;
+
+    @Mock
+    private DishService dishService;
 
     @InjectMocks
     private CustomerProfileServiceImpl customerProfileService;
@@ -517,5 +546,42 @@ class CustomerProfileServiceImplTest {
         assertEquals(Integer.valueOf(1), order.getRiceCount());
         assertEquals(Integer.valueOf(2), order.getSoupCount());
         assertEquals(Long.valueOf(10L), order.getParentPackageId());
+    }
+
+    @Test
+    void testNormalizeAndValidate_DefaultsRiceCountToOneForFirstOrder() throws Exception {
+        Method method = CustomerProfileServiceImpl.class.getDeclaredMethod(
+            "normalizeAndValidate", CustomerProfileSaveDto.class, boolean.class);
+        method.setAccessible(true);
+
+        ParentPackage parentPackage = new ParentPackage();
+        parentPackage.setId(10L);
+        parentPackage.setStatus(true);
+        when(parentPackageMapper.selectById(10L)).thenReturn(parentPackage);
+
+        CustomerProfileSaveDto dto = new CustomerProfileSaveDto();
+        dto.setCustomerName("张三");
+        dto.setPhone("13800138000");
+
+        CustomerProfileSaveDto.AddressDto address = new CustomerProfileSaveDto.AddressDto();
+        address.setAddressType("DEFAULT");
+        address.setAddressDetail("北京市朝阳区测试地址");
+        dto.setAddresses(Collections.singletonList(address));
+
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = new CustomerProfileSaveDto.OrderInfoDto();
+        orderInfo.setParentPackageId(10L);
+        orderInfo.setBreakfastCount(5);
+        orderInfo.setStartDate("2026-04-18");
+        orderInfo.setMainDishCount(1);
+        orderInfo.setSideDishCount(1);
+        orderInfo.setVegCount(1);
+        orderInfo.setSoupCount(1);
+        dto.setOrderInfo(orderInfo);
+
+        CustomerProfileSaveDto.OrderInfoDto normalizedOrderInfo =
+            (CustomerProfileSaveDto.OrderInfoDto) method.invoke(customerProfileService, dto, true);
+
+        assertNotNull(normalizedOrderInfo);
+        assertEquals(Integer.valueOf(1), normalizedOrderInfo.getRiceCount());
     }
 }

@@ -138,14 +138,18 @@
       </el-row>
       <el-row :gutter="20">
         <el-col :span="12">
-          <el-form-item label="米饭数(份)">
-            <el-input-number
-              v-model="form.riceCount"
-              :min="0"
+          <el-form-item label="米饭类型">
+            <el-select
+              v-model="form.riceType"
               :disabled="readonly"
-              controls-position="right"
+              placeholder="请选择米饭类型"
               style="width: 100%;"
-            />
+            >
+              <el-option label="普通杂粮米饭" value="普通杂粮米饭" />
+              <el-option label="杂粮1:1米饭" value="杂粮1:1米饭" />
+              <el-option label="三色糙米" value="三色糙米" />
+              <el-option label="白米饭" value="白米饭" />
+            </el-select>
           </el-form-item>
         </el-col>
         <el-col :span="12">
@@ -469,7 +473,8 @@ export function createOrderDefaultForm() {
     mainDishCount: 0,
     sideDishCount: 0,
     vegCount: 0,
-    riceCount: 0,
+    riceCount: 1,
+    riceType: '白米饭',
     soupCount: 0
   }
 }
@@ -497,7 +502,8 @@ export function createFirstOrderDefaultForm() {
     mainDishCount: 0,
     sideDishCount: 0,
     vegCount: 0,
-    riceCount: 0,
+    riceCount: 1,
+    riceType: '白米饭',
     soupCount: 0
   }
 }

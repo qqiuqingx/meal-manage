@@ -498,7 +498,8 @@ export default {
           mainDishCount: orderInfo.mainDishCount || 0,
           sideDishCount: orderInfo.sideDishCount || 0,
           vegCount: orderInfo.vegCount || 0,
-          riceCount: orderInfo.riceCount || 0,
+          riceCount: orderInfo.riceCount == null ? 1 : orderInfo.riceCount,
+          riceType: orderInfo.riceType || '白米饭',
           soupCount: orderInfo.soupCount || 0
         }
       }
