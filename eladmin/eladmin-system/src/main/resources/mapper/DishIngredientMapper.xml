@@ -4,6 +4,7 @@
     <resultMap id="BaseResultMap" type="me.zhengjie.modules.meal.domain.DishIngredient">
         <id column="id" property="id"/>
         <result column="name" property="name"/>
+        <result column="category_id" property="categoryId"/>
         <result column="category" property="category"/>
         <result column="unit" property="unit"/>
         <result column="calories" property="calories"/>
@@ -11,6 +12,10 @@
         <result column="enabled" property="enabled"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
+        <result column="category_name" property="categoryName"/>
+        <result column="parent_category_id" property="parentCategoryId"/>
+        <result column="parent_category_name" property="parentCategoryName"/>
+        <result column="category_path_name" property="categoryPathName"/>
     </resultMap>
 
     <resultMap id="RelationResultMap" type="me.zhengjie.modules.meal.domain.DishIngredientRelation">
@@ -31,32 +36,47 @@
     </sql>
 
     <sql id="Base_Column_List">
-        id, name, category, unit, calories, remark, enabled, create_time, update_time
+        di.id, di.name, di.category_id, di.category, di.unit, di.calories, di.remark,
+        di.enabled, di.create_time, di.update_time,
+        c2.name as category_name,
+        c1.id as parent_category_id,
+        c1.name as parent_category_name,
+        CONCAT(IFNULL(c1.name, ''), '/', IFNULL(c2.name, '')) as category_path_name
     </sql>
 
     <select id="selectPageByCriteria" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List"/>
-        from dish_ingredient
+        from dish_ingredient di
+        left join dish_ingredient_category c2 on di.category_id = c2.id
+        left join dish_ingredient_category c1 on c2.parent_id = c1.id
         <where>
             <if test="criteria.name != null">
-                and name like concat('%',#{criteria.name},'%')
+                and di.name like concat('%',#{criteria.name},'%')
             </if>
             <if test="criteria.category != null">
-                and category = #{criteria.category}
+                and di.category = #{criteria.category}
+            </if>
+            <if test="criteria.categoryId != null">
+                and di.category_id = #{criteria.categoryId}
+            </if>
+            <if test="criteria.parentCategoryId != null">
+                and c2.parent_id = #{criteria.parentCategoryId}
             </if>
             <if test="criteria.enabled != null">
-                and enabled = #{criteria.enabled}
+                and di.enabled = #{criteria.enabled}
             </if>
         </where>
-        order by id desc
+        order by di.id desc
     </select>
 
     <select id="findById" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List"/>
-        from dish_ingredient
-        where id = #{id}
+        from dish_ingredient di
+        left join dish_ingredient_category c2 on di.category_id = c2.id
+        left join dish_ingredient_category c1 on c2.parent_id = c1.id
+        where di.id = #{id}
     </select>
 
     <select id="findByDishId" resultMap="BaseResultMap">

@@ -11,14 +11,34 @@
             @keyup.enter.native="handleQuery"
           />
         </el-form-item>
-        <el-form-item label="分类" prop="category">
-          <el-select v-model="queryParams.category" placeholder="请选择分类" clearable>
-            <el-option label="肉类" value="MEAT" />
-            <el-option label="蔬菜" value="VEGETABLE" />
-            <el-option label="海鲜" value="SEAFOOD" />
-            <el-option label="豆制品" value="TOFU" />
-            <el-option label="调料" value="SPICE" />
-            <el-option label="其他" value="OTHER" />
+        <el-form-item label="一级分类" prop="parentCategoryId">
+          <el-select
+            v-model="queryParams.parentCategoryId"
+            placeholder="请选择一级分类"
+            clearable
+            @change="handleParentCategoryChange"
+          >
+            <el-option
+              v-for="item in level1Categories"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="二级分类" prop="categoryId">
+          <el-select
+            v-model="queryParams.categoryId"
+            placeholder="请选择二级分类"
+            clearable
+            :disabled="!queryParams.parentCategoryId"
+          >
+            <el-option
+              v-for="item in level2Categories"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="状态" prop="enabled">
@@ -46,9 +66,14 @@
       <el-table v-loading="loading" :data="ingredientList" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" align="center" />
         <el-table-column label="配料名称" prop="name" align="center" />
-        <el-table-column label="分类" prop="category" align="center">
+        <el-table-column label="分类" align="center" width="200">
           <template slot-scope="scope">
-            <el-tag :type="getCategoryTagType(scope.row.category)">
+            <span v-if="scope.row.categoryPathName">{{ scope.row.categoryPathName }}</span>
+            <el-tag
+              v-else
+              :type="getCategoryTagType(scope.row.category)"
+              size="small"
+            >
               {{ getCategoryLabel(scope.row.category) }}
             </el-tag>
           </template>
@@ -91,6 +116,7 @@
 
 <script>
 import { queryIngredients, editIngredient, delIngredients, downloadIngredients } from '@/api/dishIngredient'
+import { queryCategoryTree } from '@/api/dishIngredientCategory'
 import Pagination from '@/components/Pagination'
 import IngredientForm from './form'
 
@@ -112,9 +138,12 @@ export default {
         page: 0,
         size: 10,
         name: null,
-        category: null,
+        parentCategoryId: null,
+        categoryId: null,
         enabled: null
       },
+      level1Categories: [],
+      level2Categories: [],
       categoryMap: {
         MEAT: { label: '肉类', type: 'danger' },
         VEGETABLE: { label: '蔬菜', type: 'success' },
@@ -126,9 +155,28 @@ export default {
     }
   },
   created() {
+    this.initCategories()
     this.getList()
   },
   methods: {
+    async initCategories() {
+      try {
+        const tree = await queryCategoryTree()
+        this.level1Categories = tree || []
+      } catch (error) {
+        console.error('加载分类失败', error)
+      }
+    },
+    handleParentCategoryChange(parentId) {
+      this.level2Categories = []
+      this.queryParams.categoryId = null
+      if (parentId) {
+        const parent = this.level1Categories.find(c => c.id === parentId)
+        if (parent && parent.children) {
+          this.level2Categories = parent.children
+        }
+      }
+    },
     getList() {
       this.loading = true
       queryIngredients(this.queryParams).then(response => {
@@ -146,6 +194,7 @@ export default {
       this.getList()
     },
     resetQuery() {
+      this.level2Categories = []
       this.resetForm('queryForm')
       this.handleQuery()
     },
@@ -188,7 +237,8 @@ export default {
     handleDownload() {
       const params = {
         name: this.queryParams.name,
-        category: this.queryParams.category,
+        parentCategoryId: this.queryParams.parentCategoryId,
+        categoryId: this.queryParams.categoryId,
         enabled: this.queryParams.enabled
       }
       downloadIngredients(params).then(response => {
