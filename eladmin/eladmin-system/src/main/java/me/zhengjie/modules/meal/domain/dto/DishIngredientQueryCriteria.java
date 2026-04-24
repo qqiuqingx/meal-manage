@@ -12,7 +12,14 @@ public class DishIngredientQueryCriteria {
 
     private String name;
 
+    /** 旧分类字段（兼容） */
     private String category;
+
+    /** 一级分类ID */
+    private Integer parentCategoryId;
+
+    /** 二级分类ID */
+    private Integer categoryId;
 
     private Boolean enabled;
 
