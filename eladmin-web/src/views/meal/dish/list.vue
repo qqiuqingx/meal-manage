@@ -22,6 +22,16 @@
             <el-option v-for="pkg in packageOptions" :key="pkg.id" :label="pkg.packageName" :value="pkg.id" />
           </el-select>
         </el-form-item>
+        <el-form-item label="排期日期" prop="scheduleDate">
+          <el-date-picker
+            v-model="queryParams.scheduleDate"
+            type="date"
+            value-format="yyyy-MM-dd"
+            placeholder="请选择日期"
+            clearable
+            style="width: 150px;"
+          />
+        </el-form-item>
         <el-form-item label="状态" prop="enabled">
           <el-select v-model="queryParams.enabled" placeholder="全部" clearable style="width: 90px;">
             <el-option label="启用" :value="true" />
@@ -145,6 +155,7 @@ export default {
         name: null,
         dishType: null,
         mealPackage: null,
+        scheduleDate: null,
         enabled: null
       },
       pagination: {
@@ -183,6 +194,7 @@ export default {
         name: this.queryParams.name || null,
         dishType: this.queryParams.dishType || null,
         mealPackage: this.queryParams.mealPackage || null,
+        scheduleDate: this.queryParams.scheduleDate || null,
         enabled: this.queryParams.enabled
       }
       // 移除 enabled=null 的情况（后端可能不支持）
@@ -206,6 +218,7 @@ export default {
         name: null,
         dishType: null,
         mealPackage: null,
+        scheduleDate: null,
         enabled: null
       }
       this.pagination.page = 1
