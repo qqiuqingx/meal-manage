@@ -16,11 +16,6 @@
         <h1 class="editorial-title tracking-tight text-4xl">每周菜单</h1>
       </div>
       <div class="header-actions">
-        <div class="tab-switcher shadow-inner">
-          <button class="tab-btn active">当前周</button>
-          <button class="tab-btn inactive" @click="handlePrint">下一周</button>
-        </div>
-        <!-- 行显示控制 -->
         <el-popover placement="bottom-end" trigger="click" width="260" popper-class="row-filter-popover">
           <div class="row-filter-panel">
             <p class="row-filter-title">控制显示行</p>
@@ -45,6 +40,9 @@
             <span v-if="dishTypes.some(t => t.hidden)" class="row-filter-badge">{{ dishTypes.filter(t => t.hidden).length }}</span>
           </button>
         </el-popover>
+        <button class="btn-outlined flex items-center gap-2" @click="goToList">
+          <i class="el-icon-document" /> 主档列表
+        </button>
         <button class="btn-outlined flex items-center gap-2" @click="handlePrint">
           <i class="el-icon-printer" /> 打印视图
         </button>
@@ -476,6 +474,9 @@ export default {
       if (this.$refs.dishForm) {
         this.$refs.dishForm.handleAdd()
       }
+    },
+    goToList() {
+      this.$router.push('/meal/dish-list')
     },
     handlePrint() {
       window.print()
