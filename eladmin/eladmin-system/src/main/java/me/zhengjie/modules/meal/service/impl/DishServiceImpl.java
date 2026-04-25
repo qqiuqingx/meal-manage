@@ -14,6 +14,7 @@ import me.zhengjie.modules.meal.domain.dto.DishIngredientDto;
 import me.zhengjie.modules.meal.domain.DishIngredientRelation;
 import me.zhengjie.modules.meal.domain.enums.MealPackageEnum;
 import me.zhengjie.modules.meal.domain.enums.DishTypeEnum;
+import me.zhengjie.modules.meal.util.ScheduleKeyUtil;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.meal.mapper.CustomerDietaryRestrictionsMapper;
 import me.zhengjie.modules.meal.mapper.CustomerMenuRecordMapper;
@@ -30,6 +31,7 @@ import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
+import me.zhengjie.modules.meal.mapper.MealSchedulePlanMapper;
 import me.zhengjie.modules.system.domain.DictDetail;
 import me.zhengjie.utils.FileUtil;
 import lombok.RequiredArgsConstructor;
@@ -76,6 +78,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     private final CustomerProfileMapper customerProfileMapper;
     private final MealPlanMapper mealPlanMapper;
     private final MealPlanCustomerMapper mealPlanCustomerMapper;
+    private final MealSchedulePlanMapper mealSchedulePlanMapper;
 
     private static final String[] DISH_TYPES = {"MAIN", "SIDE", "SOUP", "VEGETABLE", "RICE"};
     private static final String[] MEAL_TYPES = {"LUNCH", "DINNER"};
@@ -249,6 +252,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
     @Override
     public PageResult<Dish> queryAll(DishQueryCriteria criteria, Page<Object> page){
+        applyScheduleDateFilter(criteria);
         PageResult<Dish> result = PageUtil.toPage(dishMapper.findAll(criteria, page));
         fillIngredientsBatch(result.getContent());
         fillMealPackageDetailsBatch(result.getContent());
@@ -257,10 +261,36 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
     @Override
     public List<Dish> queryAll(DishQueryCriteria criteria){
+        applyScheduleDateFilter(criteria);
         List<Dish> list = dishMapper.findAll(criteria);
         fillIngredientsBatch(list);
         fillMealPackageDetailsBatch(list);
         return list;
+    }
+
+    private void applyScheduleDateFilter(DishQueryCriteria criteria) {
+        if (criteria == null) {
+            return;
+        }
+        String scheduleDate = criteria.getScheduleDate();
+        if (scheduleDate == null || scheduleDate.trim().isEmpty()) {
+            criteria.setScheduledDishIds(null);
+            return;
+        }
+        LocalDate targetDate = ScheduleKeyUtil.parseDate(scheduleDate.trim());
+        int weekNum = ScheduleKeyUtil.calcWeek(targetDate);
+        int dayOfWeek = ScheduleKeyUtil.calcDay(targetDate);
+
+        QueryWrapper<me.zhengjie.modules.meal.domain.MealSchedulePlan> qw = new QueryWrapper<>();
+        qw.select("DISTINCT dish_id")
+          .eq("week_num", weekNum)
+          .eq("day_of_week", dayOfWeek)
+          .eq("enabled", true);
+        List<Object> dishIdObjs = mealSchedulePlanMapper.selectObjs(qw);
+        List<Integer> dishIds = dishIdObjs.stream()
+                .map(obj -> ((Number) obj).intValue())
+                .collect(Collectors.toList());
+        criteria.setScheduledDishIds(dishIds);
     }
 
     @Override
@@ -414,12 +444,9 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
      * 计算周数和星期（月中周：1-4周）
      */
     private int[] calculateWeekAndDay(String dateStr) {
-        LocalDate targetDate = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        // 星期：1=周一，7=周日（从LocalDate直接获取）
-        int dayOfWeek = targetDate.getDayOfWeek().getValue();
-        // 月中周：1-7日=第1周，8-14日=第2周，15-21日=第3周，22-28日=第4周，29-31日=第5周
-        int weekNum = (targetDate.getDayOfMonth() - 1) / 7 + 1;
-
+        LocalDate targetDate = ScheduleKeyUtil.parseDate(dateStr);
+        int dayOfWeek = ScheduleKeyUtil.calcDay(targetDate);
+        int weekNum = ScheduleKeyUtil.calcWeek(targetDate);
         return new int[]{weekNum, dayOfWeek};
     }
 

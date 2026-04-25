@@ -38,6 +38,12 @@
             <if test="criteria.mealPackage != null">
                 and JSON_CONTAINS(meal_packages, CONCAT('"', #{criteria.mealPackage}, '"')) = 1
             </if>
+            <if test="criteria.scheduledDishIds != null and criteria.scheduledDishIds.size() > 0">
+                and id in
+                <foreach collection="criteria.scheduledDishIds" item="dishId" open="(" separator="," close=")">
+                    #{dishId}
+                </foreach>
+            </if>
             <if test="criteria.enabled != null">
                 and enabled = #{criteria.enabled}
             </if>
