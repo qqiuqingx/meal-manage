@@ -70,6 +70,22 @@
         <el-table-column type="selection" width="40" align="center" />
         <el-table-column label="菜品名称" prop="name" min-width="140" show-overflow-tooltip />
         <el-table-column label="制作流程" prop="cookingMethod" min-width="200" show-overflow-tooltip />
+        <el-table-column label="配料" prop="ingredientList" min-width="300">
+          <template slot-scope="scope">
+            <template v-if="scope.row.ingredientList && scope.row.ingredientList.length > 0">
+              <el-tag
+                v-for="(ingredient, index) in scope.row.ingredientList"
+                :key="index"
+                size="small"
+                type="info"
+                style="margin: 2px;"
+              >
+                {{ formatIngredient(ingredient) }}
+              </el-tag>
+            </template>
+            <span v-else class="text-gray-400 text-xs">—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="菜品类型" prop="dishType" width="100" align="center">
           <template slot-scope="scope">
             <span class="type-badge" :class="'type-' + scope.row.dishType">
@@ -98,7 +114,6 @@
             </template>
           </template>
         </el-table-column>
-        <el-table-column label="排序" prop="sort" width="70" align="center" />
         <el-table-column label="状态" width="90" align="center">
           <template slot-scope="scope">
             <el-switch
@@ -175,6 +190,7 @@ export default {
   },
   created() {
     this.loadPackages()
+    this.queryParams.scheduleDate = this.getTodayDate()
     this.getList()
   },
   methods: {
@@ -283,6 +299,24 @@ export default {
     },
     translatePackage(id) {
       return this.packageMap[id] || id || '—'
+    },
+    formatIngredient(ingredient) {
+      if (!ingredient) return ''
+      let text = ingredient.ingredientName || ''
+      if (ingredient.quantity != null) {
+        text += ` ${ingredient.quantity}`
+      }
+      if (ingredient.unit) {
+        text += `${ingredient.unit}`
+      }
+      return text
+    },
+    getTodayDate() {
+      const today = new Date()
+      const year = today.getFullYear()
+      const month = String(today.getMonth() + 1).padStart(2, '0')
+      const day = String(today.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
     }
   }
 }
