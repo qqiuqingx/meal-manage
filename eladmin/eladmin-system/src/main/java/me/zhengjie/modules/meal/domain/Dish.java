@@ -44,6 +44,10 @@ public class Dish implements Serializable {
     @TableField("ingredients")
     private String ingredients;
 
+    @ApiModelProperty(value = "切配信息")
+    @TableField("cutting_info")
+    private String cuttingInfo;
+
     @ApiModelProperty(value = "配料列表（新增/编辑时使用）")
     @TableField(exist = false)
     private List<DishIngredientDto> ingredientList;
@@ -69,6 +73,10 @@ public class Dish implements Serializable {
     @ApiModelProperty(value = "所属套餐详情列表（查询时显示用，非数据库字段）")
     @TableField(exist = false)
     private List<PackageInfo> mealPackageDetails;
+
+    @ApiModelProperty(value = "餐次信息（查询时显示用，非数据库字段）")
+    @TableField(exist = false)
+    private java.util.Set<String> mealTimeInfo;
 
     @ApiModelProperty(value = "排期：格式如1-1表示第1周周一")
     @TableField(value = "schedule", typeHandler = JacksonTypeHandler.class)

@@ -86,6 +86,12 @@
             <span v-else class="text-gray-400 text-xs">—</span>
           </template>
         </el-table-column>
+        <el-table-column label="切配信息" prop="cuttingInfo" min-width="200" show-overflow-tooltip>
+          <template slot-scope="scope">
+            <span v-if="scope.row.cuttingInfo" class="text-sm">{{ scope.row.cuttingInfo }}</span>
+            <span v-else class="text-gray-400 text-xs">—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="菜品类型" prop="dishType" width="100" align="center">
           <template slot-scope="scope">
             <span class="type-badge" :class="'type-' + scope.row.dishType">
@@ -219,6 +225,7 @@ export default {
       }
       queryDishes(params).then(response => {
         this.dishList = response.content || []
+        this.sortDishList()
         this.pagination.total = response.totalElements || response.total || 0
         this.loading = false
       }).catch(() => {
@@ -226,6 +233,10 @@ export default {
       })
     },
     handleQuery() {
+      if (!this.queryParams.scheduleDate) {
+        this.$message.warning('请选择排期日期')
+        return
+      }
       this.pagination.page = 1
       this.getList()
     },
@@ -234,7 +245,7 @@ export default {
         name: null,
         dishType: null,
         mealPackage: null,
-        scheduleDate: null,
+        scheduleDate: this.getTodayDate(),
         enabled: null
       }
       this.pagination.page = 1
@@ -310,6 +321,54 @@ export default {
         text += `${ingredient.unit}`
       }
       return text
+    },
+    sortDishList() {
+      if (!this.dishList || this.dishList.length === 0) {
+        return
+      }
+      // 菜品类型优先级：汤 > 主菜 > 副菜 > 素菜 > 米饭
+      const dishTypePriority = {
+        'SOUP': 1,
+        'MAIN': 2,
+        'SIDE': 3,
+        'VEGETABLE': 4,
+        'RICE': 5
+      }
+
+      this.dishList.sort((a, b) => {
+        // 优先级1：餐次（LUNCH > DINNER）
+        const getMealPriority = (mealTimeInfo) => {
+          if (!mealTimeInfo) return 3
+          const mealTypes = Array.isArray(mealTimeInfo) ? mealTimeInfo : Array.from(mealTimeInfo)
+          if (mealTypes.length === 0) return 3
+          if (mealTypes.includes('LUNCH')) return 1
+          if (mealTypes.includes('DINNER')) return 2
+          return 3
+        }
+
+        const mealPriorityA = getMealPriority(a.mealTimeInfo)
+        const mealPriorityB = getMealPriority(b.mealTimeInfo)
+
+        if (mealPriorityA !== mealPriorityB) {
+          return mealPriorityA - mealPriorityB
+        }
+
+        // 优先级2：菜品类型
+        const typePriorityA = dishTypePriority[a.dishType] || 99
+        const typePriorityB = dishTypePriority[b.dishType] || 99
+
+        if (typePriorityA !== typePriorityB) {
+          return typePriorityA - typePriorityB
+        }
+
+        // 优先级3：sort 字段
+        if (a.sort !== b.sort) {
+          return (a.sort || 0) - (b.sort || 0)
+        }
+
+        // 优先级4：id 字段
+        return (a.id || 0) - (b.id || 0)
+      })
     },
     getTodayDate() {
       const today = new Date()
