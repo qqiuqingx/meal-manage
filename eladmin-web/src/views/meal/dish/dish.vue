@@ -45,6 +45,10 @@
               <el-input v-model="form.cookingMethod" type="textarea" :rows="4" placeholder="输入菜品的具体制作流程..." class="editorial-textarea" />
             </el-form-item>
 
+            <el-form-item label="切配信息" prop="cuttingInfo">
+              <el-input v-model="form.cuttingInfo" type="textarea" :rows="3" placeholder="输入菜品的切配、预处理信息..." class="editorial-textarea" />
+            </el-form-item>
+
             <div class="flex gap-6 mt-4">
               <el-form-item label="排序" prop="sort" class="flex-1">
                 <el-input-number v-model="form.sort" :min="0" class="editorial-input-line w-full text-left" :controls="false" placeholder="数字越小越靠前" />
@@ -157,6 +161,7 @@ export default {
         id: null,
         name: '',
         cookingMethod: '',
+        cuttingInfo: '',
         imageUrl: '',
         dishType: 'MAIN',
         mealTypes: ['LUNCH'],
@@ -239,6 +244,7 @@ export default {
         id: null,
         name: '',
         cookingMethod: '',
+        cuttingInfo: '',
         imageUrl: '',
         dishType: 'MAIN',
         mealTypes: ['LUNCH'],
