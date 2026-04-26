@@ -250,12 +250,28 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         }
     }
 
+    /**
+     * 批量填充菜品餐次信息
+     */
+    private void fillMealTimeInfoBatch(List<Dish> dishes, Map<Integer, Set<String>> dishMealTypeMap) {
+        if (dishes == null || dishes.isEmpty() || dishMealTypeMap == null) {
+            return;
+        }
+        for (Dish dish : dishes) {
+            Set<String> mealTypes = dishMealTypeMap.get(dish.getId());
+            if (mealTypes != null && !mealTypes.isEmpty()) {
+                dish.setMealTimeInfo(mealTypes);
+            }
+        }
+    }
+
     @Override
     public PageResult<Dish> queryAll(DishQueryCriteria criteria, Page<Object> page){
         applyScheduleDateFilter(criteria);
         PageResult<Dish> result = PageUtil.toPage(dishMapper.findAll(criteria, page));
         fillIngredientsBatch(result.getContent());
         fillMealPackageDetailsBatch(result.getContent());
+        fillMealTimeInfoBatch(result.getContent(), criteria.getDishMealTypeMap());
         return result;
     }
 
@@ -275,6 +291,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         String scheduleDate = criteria.getScheduleDate();
         if (scheduleDate == null || scheduleDate.trim().isEmpty()) {
             criteria.setScheduledDishIds(null);
+            criteria.setDishMealTypeMap(null);
             return;
         }
         LocalDate targetDate = ScheduleKeyUtil.parseDate(scheduleDate.trim());
@@ -282,15 +299,25 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         int dayOfWeek = ScheduleKeyUtil.calcDay(targetDate);
 
         QueryWrapper<me.zhengjie.modules.meal.domain.MealSchedulePlan> qw = new QueryWrapper<>();
-        qw.select("DISTINCT dish_id")
+        qw.select("dish_id", "meal_time")
           .eq("week_num", weekNum)
           .eq("day_of_week", dayOfWeek)
           .eq("enabled", true);
-        List<Object> dishIdObjs = mealSchedulePlanMapper.selectObjs(qw);
-        List<Integer> dishIds = dishIdObjs.stream()
-                .map(obj -> ((Number) obj).intValue())
+        List<me.zhengjie.modules.meal.domain.MealSchedulePlan> plans = mealSchedulePlanMapper.selectList(qw);
+
+        List<Integer> dishIds = plans.stream()
+                .map(me.zhengjie.modules.meal.domain.MealSchedulePlan::getDishId)
+                .distinct()
                 .collect(Collectors.toList());
+
+        Map<Integer, Set<String>> dishMealTypeMap = new HashMap<>();
+        for (me.zhengjie.modules.meal.domain.MealSchedulePlan plan : plans) {
+            dishMealTypeMap.computeIfAbsent(plan.getDishId(), k -> new HashSet<>())
+                          .add(plan.getMealTime());
+        }
+
         criteria.setScheduledDishIds(dishIds);
+        criteria.setDishMealTypeMap(dishMealTypeMap);
     }
 
     @Override
