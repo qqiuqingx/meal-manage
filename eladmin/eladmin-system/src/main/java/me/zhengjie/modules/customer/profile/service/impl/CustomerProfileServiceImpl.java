@@ -461,11 +461,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             throw new BadRequestException("首单开始日期不能为空");
         }
 
-        normalizeDishCount(orderInfo.getMainDishCount(), "主菜");
-        normalizeDishCount(orderInfo.getSideDishCount(), "副菜");
-        normalizeDishCount(orderInfo.getVegCount(), "素菜");
-        normalizeDishCount(orderInfo.getRiceCount(), "米饭");
-        normalizeDishCount(orderInfo.getSoupCount(), "汤");
+        normalizeDishCount(orderInfo.getMainDishCount(), "主菜", false);
+        normalizeDishCount(orderInfo.getSideDishCount(), "副菜", false);
+        normalizeDishCount(orderInfo.getVegCount(), "素菜", false);
+        normalizeDishCount(orderInfo.getRiceCount(), "米饭", true);
+        normalizeDishCount(orderInfo.getSoupCount(), "汤", false);
 
 
 
@@ -487,14 +487,14 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         return orderInfo;
     }
 
-    private void normalizeDishCount(Integer count, String label) {
+    private void normalizeDishCount(Integer count, String label, boolean enforceMaxTen) {
         if (count == null) {
             return;
         }
         if (count < 0) {
             throw new BadRequestException(label + "数量不能为负数");
         }
-        if (count > 10) {
+        if (enforceMaxTen && count > 10) {
             throw new BadRequestException(label + "数量不能超过10份");
         }
     }
