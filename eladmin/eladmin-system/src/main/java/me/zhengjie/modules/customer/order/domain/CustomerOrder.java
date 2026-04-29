@@ -213,6 +213,12 @@ public class CustomerOrder implements Serializable {
     private List<String> allergyTags;
 
     /**
+     * 客户特殊要求(查询时填充，来自 customer_profile.special_requirements)
+     */
+    @TableField(exist = false)
+    private String specialRequirements;
+
+    /**
      * 每餐主菜/荤菜数量
      */
     private Integer mainDishCount;

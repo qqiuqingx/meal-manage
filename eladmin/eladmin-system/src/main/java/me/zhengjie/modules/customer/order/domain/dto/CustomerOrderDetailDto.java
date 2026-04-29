@@ -79,6 +79,8 @@ public class CustomerOrderDetailDto implements Serializable {
 
     private String remark;
 
+    private String specialRequirements;
+
     private String customerSource;
 
     private Integer mainDishCount;
