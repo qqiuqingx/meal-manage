@@ -28,4 +28,11 @@ export function getCategoriesByParentId(parentId) {
   })
 }
 
-export default { queryCategoryTree, queryCategories, getCategory, getCategoriesByParentId }
+export function delCategory(id) {
+  return request({
+    url: `api/dish-ingredient-categories/${id}`,
+    method: 'delete'
+  })
+}
+
+export default { queryCategoryTree, queryCategories, getCategory, getCategoriesByParentId, delCategory }

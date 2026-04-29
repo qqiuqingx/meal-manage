@@ -70,20 +70,25 @@
 
 <script>
 import { addIngredient, editIngredient, getIngredient } from '@/api/dishIngredient'
-import { queryCategoryTree } from '@/api/dishIngredientCategory'
 
 export default {
   name: 'IngredientForm',
+  props: {
+    categoryTree: {
+      type: Array,
+      default: () => []
+    }
+  },
   data() {
     return {
       dialogVisible: false,
       title: '',
-      categoryTree: [],
       level1Categories: [],
       currentLevel2Categories: [],
       form: {
         id: null,
         name: '',
+        parentCategoryId: null,
         parentCategoryName: null,
         categoryName: null,
         categoryId: null,
@@ -99,27 +104,25 @@ export default {
       }
     }
   },
-  created() {
-    this.loadCategories()
+  watch: {
+    categoryTree: {
+      immediate: true,
+      handler(tree) {
+        this.level1Categories = Array.isArray(tree) ? tree : []
+        this.syncCategoryOptions()
+      }
+    }
   },
   methods: {
-    async loadCategories() {
-      try {
-        const tree = await queryCategoryTree()
-        this.categoryTree = tree || []
-        this.level1Categories = this.categoryTree
-      } catch (error) {
-        console.error('加载分类失败', error)
-      }
-    },
     handleParentCategoryChange(value) {
+      const existing = this.level1Categories.find(c => c.name === value)
+      this.form.parentCategoryId = existing ? existing.id : null
       this.form.categoryName = null
       this.form.categoryId = null
       this.currentLevel2Categories = []
 
       if (!value) return
 
-      const existing = this.level1Categories.find(c => c.name === value)
       if (existing && existing.children) {
         this.currentLevel2Categories = existing.children
       }
@@ -135,6 +138,7 @@ export default {
         this.form = {
           id: response.id,
           name: response.name,
+          parentCategoryId: response.parentCategoryId || null,
           parentCategoryName: response.parentCategoryName || null,
           categoryName: response.categoryName || null,
           categoryId: response.categoryId || null,
@@ -143,15 +147,67 @@ export default {
           remark: response.remark || '',
           enabled: response.enabled !== false
         }
-        // 设置二级分类选项
-        if (this.form.parentCategoryName) {
-          const parent = this.level1Categories.find(c => c.name === this.form.parentCategoryName)
-          if (parent && parent.children) {
-            this.currentLevel2Categories = parent.children
-          }
-        }
+        this.syncCategoryOptions()
         this.dialogVisible = true
       })
+    },
+    syncCategoryOptions() {
+      if (this.form.parentCategoryId) {
+        const parentById = this.level1Categories.find(c => c.id === this.form.parentCategoryId)
+        if (!parentById) {
+          this.form.parentCategoryId = null
+          this.form.parentCategoryName = null
+          this.form.categoryId = null
+          this.form.categoryName = null
+          this.currentLevel2Categories = []
+          return
+        }
+        this.form.parentCategoryName = parentById.name
+        this.currentLevel2Categories = parentById.children || []
+        if (this.form.categoryId) {
+          const categoryById = this.currentLevel2Categories.find(c => c.id === this.form.categoryId)
+          if (!categoryById) {
+            this.form.categoryId = null
+            this.form.categoryName = null
+          } else {
+            this.form.categoryName = categoryById.name
+          }
+        }
+        return
+      }
+
+      if (!this.form.parentCategoryName) {
+        this.currentLevel2Categories = []
+        this.form.categoryId = null
+        this.form.categoryName = null
+        return
+      }
+
+      const parentByName = this.level1Categories.find(c => c.name === this.form.parentCategoryName)
+      if (!parentByName) {
+        this.currentLevel2Categories = []
+        return
+      }
+
+      this.form.parentCategoryId = parentByName.id
+      this.currentLevel2Categories = parentByName.children || []
+      if (this.form.categoryId) {
+        const categoryById = this.currentLevel2Categories.find(c => c.id === this.form.categoryId)
+        if (!categoryById) {
+          this.form.categoryId = null
+          this.form.categoryName = null
+        } else {
+          this.form.categoryName = categoryById.name
+        }
+        return
+      }
+
+      if (this.form.categoryName) {
+        const categoryByName = this.currentLevel2Categories.find(c => c.name === this.form.categoryName)
+        if (categoryByName) {
+          this.form.categoryId = categoryByName.id
+        }
+      }
     },
     submitForm() {
       this.$refs.form.validate(valid => {
@@ -175,6 +231,7 @@ export default {
       this.form = {
         id: null,
         name: '',
+        parentCategoryId: null,
         parentCategoryName: null,
         categoryName: null,
         categoryId: null,

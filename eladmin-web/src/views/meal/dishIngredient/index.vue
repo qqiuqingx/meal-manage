@@ -58,6 +58,7 @@
     <el-card class="table-card" shadow="never">
       <div slot="header" class="clearfix">
         <el-button type="primary" icon="el-icon-plus" @click="handleAdd">新增</el-button>
+        <el-button icon="el-icon-collection-tag" @click="handleCategoryManage">分类管理</el-button>
         <el-button type="danger" icon="el-icon-delete" :disabled="multiple" @click="handleDelete">删除</el-button>
         <el-button type="warning" icon="el-icon-download" @click="handleDownload">导出</el-button>
       </div>
@@ -110,7 +111,13 @@
     </el-card>
 
     <!-- 新增/编辑弹窗 -->
-    <ingredient-form ref="ingredientForm" @refresh="getList" />
+    <ingredient-form ref="ingredientForm" :category-tree="categoryTree" @refresh="getList" />
+
+    <category-manager
+      :visible.sync="categoryManagerVisible"
+      :category-tree="categoryTree"
+      @refresh-categories="refreshCategories"
+    />
   </div>
 </template>
 
@@ -119,12 +126,14 @@ import { queryIngredients, editIngredient, delIngredients, downloadIngredients }
 import { queryCategoryTree } from '@/api/dishIngredientCategory'
 import Pagination from '@/components/Pagination'
 import IngredientForm from './form'
+import CategoryManager from './categoryManager'
 
 export default {
   name: 'DishIngredient',
   components: {
     Pagination,
-    IngredientForm
+    IngredientForm,
+    CategoryManager
   },
   data() {
     return {
@@ -142,8 +151,10 @@ export default {
         categoryId: null,
         enabled: null
       },
+      categoryTree: [],
       level1Categories: [],
       level2Categories: [],
+      categoryManagerVisible: false,
       categoryMap: {
         MEAT: { label: '肉类', type: 'danger' },
         VEGETABLE: { label: '蔬菜', type: 'success' },
@@ -155,27 +166,66 @@ export default {
     }
   },
   created() {
-    this.initCategories()
+    this.refreshCategories()
     this.getList()
   },
   methods: {
-    async initCategories() {
+    async refreshCategories() {
       try {
         const tree = await queryCategoryTree()
-        this.level1Categories = tree || []
+        this.categoryTree = tree || []
+        this.level1Categories = this.categoryTree
+        const changed = this.syncQueryCategoryState(this.categoryTree)
+        if (changed) {
+          this.getList()
+        }
       } catch (error) {
         console.error('加载分类失败', error)
       }
     },
-    handleParentCategoryChange(parentId) {
-      this.level2Categories = []
-      this.queryParams.categoryId = null
-      if (parentId) {
-        const parent = this.level1Categories.find(c => c.id === parentId)
-        if (parent && parent.children) {
-          this.level2Categories = parent.children
+    getLevel2CategoriesByParentId(parentId) {
+      if (!parentId) {
+        return []
+      }
+      const parent = this.level1Categories.find(c => c.id === parentId)
+      return parent && parent.children ? parent.children : []
+    },
+    syncQueryCategoryState(tree) {
+      const categoryTree = Array.isArray(tree) ? tree : []
+      let changed = false
+      if (!this.queryParams.parentCategoryId) {
+        this.level2Categories = []
+        if (this.queryParams.categoryId !== null) {
+          this.queryParams.categoryId = null
+          changed = true
+        }
+        return changed
+      }
+
+      const parent = categoryTree.find(c => c.id === this.queryParams.parentCategoryId)
+      if (!parent) {
+        this.queryParams.parentCategoryId = null
+        if (this.queryParams.categoryId !== null) {
+          this.queryParams.categoryId = null
+        }
+        this.level2Categories = []
+        changed = true
+        return changed
+      }
+
+      this.level2Categories = parent.children || []
+      const exists = this.level2Categories.some(c => c.id === this.queryParams.categoryId)
+      if (!exists) {
+        if (this.queryParams.categoryId !== null) {
+          this.queryParams.categoryId = null
+          changed = true
         }
       }
+      return changed
+    },
+    handleParentCategoryChange(parentId) {
+      this.queryParams.categoryId = null
+      this.level2Categories = this.getLevel2CategoriesByParentId(parentId)
     },
     getList() {
       this.loading = true
@@ -210,6 +260,9 @@ export default {
     },
     handleAdd() {
       this.$refs.ingredientForm.handleAdd()
+    },
+    handleCategoryManage() {
+      this.categoryManagerVisible = true
     },
     handleUpdate(row) {
       this.$refs.ingredientForm.handleUpdate(row.id)

@@ -1,5 +1,6 @@
 package me.zhengjie.modules.meal.rest;
 
+import me.zhengjie.annotation.Log;
 import me.zhengjie.modules.meal.domain.DishIngredientCategory;
 import me.zhengjie.modules.meal.service.DishIngredientCategoryService;
 import lombok.RequiredArgsConstructor;
@@ -49,5 +50,14 @@ public class DishIngredientCategoryController {
     @PreAuthorize("@el.check('dishIngredient:list')")
     public ResponseEntity<List<DishIngredientCategory>> listByParentId(@PathVariable Integer parentId) {
         return new ResponseEntity<>(categoryService.listByParentId(parentId), HttpStatus.OK);
+    }
+
+    @DeleteMapping("/{id}")
+    @Log("删除配料分类")
+    @ApiOperation("删除配料分类")
+    @PreAuthorize("@el.check('dishIngredient:del')")
+    public ResponseEntity<Object> delete(@PathVariable Integer id) {
+        categoryService.delete(id);
+        return new ResponseEntity<>(HttpStatus.OK);
     }
 }
