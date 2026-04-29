@@ -41,6 +41,11 @@
           {{ packageSpecText(scope.row) }}
         </template>
       </el-table-column>
+      <el-table-column label="含汤" width="70" align="center">
+        <template slot-scope="scope">
+          {{ scope.row.soupCount >= 1 ? '含汤' : '-' }}
+        </template>
+      </el-table-column>
       <el-table-column label="排餐模式" width="100">
         <template slot-scope="scope">
           {{ scheduleModeText(scope.row.scheduleMode) }}
