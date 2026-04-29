@@ -330,6 +330,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         if (profile != null) {
             dto.setCustomerName(profile.getCustomerName());
             dto.setPhone(profile.getPhone());
+            dto.setSpecialRequirements(profile.getSpecialRequirements());
         }
 
         // 填充套餐名称
