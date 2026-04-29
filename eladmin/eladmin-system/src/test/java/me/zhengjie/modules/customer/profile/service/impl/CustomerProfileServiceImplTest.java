@@ -584,4 +584,46 @@ class CustomerProfileServiceImplTest {
         assertNotNull(normalizedOrderInfo);
         assertEquals(Integer.valueOf(1), normalizedOrderInfo.getRiceCount());
     }
+
+    @Test
+    void testNormalizeAndValidate_AllowsLargeDishCountsForFirstOrder() throws Exception {
+        Method method = CustomerProfileServiceImpl.class.getDeclaredMethod(
+            "normalizeAndValidate", CustomerProfileSaveDto.class, boolean.class);
+        method.setAccessible(true);
+
+        ParentPackage parentPackage = new ParentPackage();
+        parentPackage.setId(10L);
+        parentPackage.setStatus(true);
+        when(parentPackageMapper.selectById(10L)).thenReturn(parentPackage);
+
+        CustomerProfileSaveDto dto = new CustomerProfileSaveDto();
+        dto.setCustomerName("张三");
+        dto.setPhone("13800138000");
+
+        CustomerProfileSaveDto.AddressDto address = new CustomerProfileSaveDto.AddressDto();
+        address.setAddressType("DEFAULT");
+        address.setAddressDetail("北京市朝阳区测试地址");
+        dto.setAddresses(Collections.singletonList(address));
+
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = new CustomerProfileSaveDto.OrderInfoDto();
+        orderInfo.setParentPackageId(10L);
+        orderInfo.setBreakfastCount(5);
+        orderInfo.setStartDate("2026-04-18");
+        orderInfo.setMainDishCount(12);
+        orderInfo.setSideDishCount(15);
+        orderInfo.setVegCount(18);
+        orderInfo.setRiceCount(1);
+        orderInfo.setSoupCount(25);
+        dto.setOrderInfo(orderInfo);
+
+        CustomerProfileSaveDto.OrderInfoDto normalizedOrderInfo =
+            (CustomerProfileSaveDto.OrderInfoDto) method.invoke(customerProfileService, dto, true);
+
+        assertNotNull(normalizedOrderInfo);
+        assertEquals(Integer.valueOf(12), normalizedOrderInfo.getMainDishCount());
+        assertEquals(Integer.valueOf(15), normalizedOrderInfo.getSideDishCount());
+        assertEquals(Integer.valueOf(18), normalizedOrderInfo.getVegCount());
+        assertEquals(Integer.valueOf(1), normalizedOrderInfo.getRiceCount());
+        assertEquals(Integer.valueOf(25), normalizedOrderInfo.getSoupCount());
+    }
 }
