@@ -46,6 +46,11 @@
           {{ scheduleModeText(scope.row.scheduleMode) }}
         </template>
       </el-table-column>
+      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip>
+        <template slot-scope="scope">
+          {{ scope.row.specialRequirements || '-' }}
+        </template>
+      </el-table-column>
       <el-table-column label="过敏" width="150">
         <template slot-scope="scope">
           <span v-if="!scope.row.allergyTags || scope.row.allergyTags.length === 0">-</span>

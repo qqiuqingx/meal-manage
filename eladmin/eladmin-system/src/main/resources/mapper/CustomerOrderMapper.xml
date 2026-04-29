@@ -48,11 +48,12 @@
         <result column="parent_package_name" property="parentPackageName"/>
         <result column="child_package_name" property="childPackageName"/>
         <result column="allergy_tags" property="allergyTags" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="special_requirements" property="specialRequirements"/>
     </resultMap>
 
     <!-- 条件查询订单列表(关联客户姓名、手机号、套餐名称和过敏标签) -->
     <select id="findAll" resultMap="JoinResultMap">
-        SELECT o.*, cp.customer_name, cp.phone, cp.allergy_tags,
+        SELECT o.*, cp.customer_name, cp.phone, cp.allergy_tags, cp.special_requirements,
                pp.package_name as parent_package_name,
                sp.sub_package_name as child_package_name
         FROM customer_order o
