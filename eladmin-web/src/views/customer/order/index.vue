@@ -15,6 +15,17 @@
         <el-select v-model="query.customerSource" clearable size="small" placeholder="销售渠道" class="filter-item" style="width: 120px" @change="crud.toQuery">
           <el-option v-for="item in customerSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
+        <el-date-picker
+          v-model="query.scheduleDate"
+          type="date"
+          size="small"
+          placeholder="排餐日期"
+          class="filter-item"
+          style="width: 150px"
+          value-format="yyyy-MM-dd"
+          clearable
+          @change="crud.toQuery"
+        />
         <rrOperation />
       </div>
       <crudOperation :permission="permission" />
@@ -210,7 +221,7 @@ export default {
   components: { crudOperation, rrOperation, OrderForm },
   mixins: [presenter(), header(), form(createOrderDefaultForm()), crud()],
   cruds() {
-    return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }, query: { orderCode: '', customerCode: '', customerName: '', status: null, customerSource: null }})
+    return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }, query: { orderCode: '', customerCode: '', customerName: '', status: null, customerSource: null, scheduleDate: null }})
   },
   data() {
     return {

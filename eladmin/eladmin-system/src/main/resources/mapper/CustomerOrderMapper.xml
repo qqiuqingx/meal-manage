@@ -91,6 +91,12 @@
                 AND o.end_date &gt;= #{criteria.endDate[0]}
                 AND o.end_date &lt;= #{criteria.endDate[1]}
             </if>
+            <if test="criteria.eligibleOrderIds != null and criteria.eligibleOrderIds.size() > 0">
+                AND o.id IN
+                <foreach collection="criteria.eligibleOrderIds" item="id" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
+            </if>
         </where>
         ORDER BY o.id DESC
     </select>
@@ -132,6 +138,12 @@
             <if test="criteria.endDate != null and criteria.endDate.length == 2">
                 AND o.end_date &gt;= #{criteria.endDate[0]}
                 AND o.end_date &lt;= #{criteria.endDate[1]}
+            </if>
+            <if test="criteria.eligibleOrderIds != null and criteria.eligibleOrderIds.size() > 0">
+                AND o.id IN
+                <foreach collection="criteria.eligibleOrderIds" item="id" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
             </if>
         </where>
     </select>
