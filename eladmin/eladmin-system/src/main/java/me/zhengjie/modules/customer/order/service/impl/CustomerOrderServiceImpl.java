@@ -23,10 +23,18 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
+import me.zhengjie.modules.meal.util.ScheduleKeyUtil;
+import cn.hutool.json.JSONUtil;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -55,6 +63,13 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
     @Override
     public PageResult<?> query(CustomerOrderQueryCriteria criteria, Integer current, Integer size) {
+        // 排餐日期筛选：先计算符合条件的订单ID，写入criteria供SQL IN条件使用
+        if (criteria.getScheduleDate() != null) {
+            criteria.setEligibleOrderIds(Collections.emptyList());
+            List<Long> ids = computeEligibleOrderIds(criteria.getScheduleDate());
+            criteria.setEligibleOrderIds(ids.isEmpty() ? Arrays.asList(-1L) : ids);
+        }
+
         Page<CustomerOrder> page = new Page<>(current, size);
         List<CustomerOrder> list = orderMapper.findAll(criteria, page);
 
@@ -507,6 +522,111 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             return SecurityUtils.getCurrentUsername();
         } catch (Exception e) {
             return "system";
+        }
+    }
+
+    /**
+     * 计算指定排餐日期符合排餐资格的订单ID列表
+     * 5层判断：状态=1、startDate<=日期、剩余餐数>0、排餐模式匹配、客户排除日期不命中
+     */
+    private List<Long> computeEligibleOrderIds(LocalDate scheduleDate) {
+        // 1+2+3: 查询 status=1 且 startDate<=scheduleDate 且 remainingCount>0 的订单
+        CustomerOrderQueryCriteria baseCriteria = new CustomerOrderQueryCriteria();
+        baseCriteria.setStatus(1);
+        baseCriteria.setStartDate(new LocalDate[]{LocalDate.of(2000, 1, 1), scheduleDate});
+        Page<CustomerOrder> allPage = new Page<>(1, Integer.MAX_VALUE);
+        List<CustomerOrder> candidates = orderMapper.findAll(baseCriteria, allPage);
+        if (candidates.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 批量加载客户档案（用于排除日期检查）
+        Set<Long> customerIds = new HashSet<>();
+        for (CustomerOrder order : candidates) {
+            if (order.getCustomerId() != null) {
+                customerIds.add(order.getCustomerId());
+            }
+        }
+        java.util.Map<Long, CustomerProfile> profileMap = new java.util.HashMap<>();
+        if (!customerIds.isEmpty()) {
+            List<CustomerProfile> profiles = profileMapper.selectBatchIds(customerIds);
+            for (CustomerProfile p : profiles) {
+                profileMap.put(p.getId(), p);
+            }
+        }
+
+        List<Long> eligibleIds = new ArrayList<>();
+        for (CustomerOrder order : candidates) {
+            // 3: 剩余餐数 > 0（二次校验，SQL 已有 COALESCE 过滤，此处兜底）
+            if (Math.max(0, order.getRemainingCount() != null ? order.getRemainingCount() : 0) <= 0) {
+                continue;
+            }
+            // 4: 排餐模式是否匹配日期
+            if (!scheduleDateMatches(order, scheduleDate)) {
+                continue;
+            }
+            // 5: 客户排除日期检查
+            CustomerProfile profile = profileMap.get(order.getCustomerId());
+            if (profile != null && profile.isExcluded(scheduleDate, order.getMealType())) {
+                continue;
+            }
+            eligibleIds.add(order.getId());
+        }
+        return eligibleIds;
+    }
+
+    /**
+     * 判断订单排餐模式是否匹配目标日期（忽略餐次，任意餐次匹配即通过）
+     */
+    private boolean scheduleDateMatches(CustomerOrder order, LocalDate targetDate) {
+        String scheduleMode = order.getScheduleMode();
+        // DAILY 或 null：始终匹配
+        if (scheduleMode == null || "DAILY".equals(scheduleMode)) {
+            return true;
+        }
+        // SCHEDULE：deliveryDates JSON 中包含该日期
+        if ("SCHEDULE".equals(scheduleMode)) {
+            List<String> dates = parseDeliveryDatesDates(order.getDeliveryDates());
+            return dates.contains(targetDate.toString());
+        }
+        // WEEKDAY：周一至周五
+        if ("WEEKDAY".equals(scheduleMode)) {
+            return ScheduleKeyUtil.isWeekday(targetDate);
+        }
+        // WEEKEND：周六至周日
+        if ("WEEKEND".equals(scheduleMode)) {
+            return ScheduleKeyUtil.isWeekend(targetDate);
+        }
+        return false;
+    }
+
+    /**
+     * 从 deliveryDates JSON 中解析日期列表（不区分餐次）
+     * 支持新格式 [{"date":"...","mealTypes":[...]}] 和旧格式 ["..."]
+     */
+    private List<String> parseDeliveryDatesDates(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            String trimmed = json.trim();
+            if (trimmed.startsWith("[{")) {
+                List<Object> items = JSONUtil.parseArray(json);
+                List<String> dates = new ArrayList<>();
+                for (Object item : items) {
+                    if (item instanceof cn.hutool.json.JSONObject) {
+                        String date = ((cn.hutool.json.JSONObject) item).getStr("date");
+                        if (date != null) {
+                            dates.add(date);
+                        }
+                    }
+                }
+                return dates;
+            } else {
+                return JSONUtil.toList(json, String.class);
+            }
+        } catch (Exception e) {
+            return Collections.emptyList();
         }
     }
 }
