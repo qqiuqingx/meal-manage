@@ -219,6 +219,18 @@ public class CustomerOrder implements Serializable {
     private String specialRequirements;
 
     /**
+     * 客户地址列表(查询时填充，来自 customer_profile_address)
+     */
+    @TableField(exist = false)
+    private List<AddressInfo> addresses;
+
+    @Data
+    public static class AddressInfo implements Serializable {
+        private String type;
+        private String detail;
+    }
+
+    /**
      * 每餐主菜/荤菜数量
      */
     private Integer mainDishCount;
