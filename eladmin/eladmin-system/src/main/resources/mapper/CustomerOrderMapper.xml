@@ -49,13 +49,16 @@
         <result column="child_package_name" property="childPackageName"/>
         <result column="allergy_tags" property="allergyTags" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
         <result column="special_requirements" property="specialRequirements"/>
+        <result column="addresses" property="addresses" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
     </resultMap>
 
     <!-- 条件查询订单列表(关联客户姓名、手机号、套餐名称和过敏标签) -->
     <select id="findAll" resultMap="JoinResultMap">
         SELECT o.*, cp.customer_name, cp.phone, cp.allergy_tags, cp.special_requirements,
                pp.package_name as parent_package_name,
-               sp.sub_package_name as child_package_name
+               sp.sub_package_name as child_package_name,
+               (SELECT JSON_ARRAYAGG(JSON_OBJECT('type', CASE cpa.address_type WHEN 'DEFAULT' THEN '默认' WHEN 'WORKDAY' THEN '工作日' WHEN 'WEEKEND' THEN '周末' END, 'detail', cpa.address_detail))
+                FROM customer_profile_address cpa WHERE cpa.customer_id = o.customer_id) as addresses
         FROM customer_order o
         LEFT JOIN customer_profile cp ON o.customer_id = cp.id
         LEFT JOIN parent_package pp ON o.parent_package_id = pp.id

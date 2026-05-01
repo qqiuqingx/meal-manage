@@ -42,9 +42,12 @@
       <el-table-column label="客户编号" prop="customerCode" width="120" fixed="left" />
       <el-table-column label="客户姓名" prop="customerName" width="100" fixed="left" />
       <el-table-column label="手机号" prop="phone" width="120" fixed="left" />
-      <el-table-column label="套餐" width="120">
+      <el-table-column label="地址" min-width="200">
         <template slot-scope="scope">
-          {{ scope.row.parentPackageName || '-' }}
+          <div v-if="!scope.row.addresses || scope.row.addresses.length === 0">-</div>
+          <el-tag v-for="addr in scope.row.addresses" :key="addr.type" size="mini" style="margin-bottom: 2px; display: block;">
+            {{ addr.type }}: {{ addr.detail }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="规格" width="110">
