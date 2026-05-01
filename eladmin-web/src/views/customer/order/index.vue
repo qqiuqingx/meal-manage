@@ -45,7 +45,7 @@
       <el-table-column label="地址" min-width="200">
         <template slot-scope="scope">
           <div v-if="!scope.row.addresses || scope.row.addresses.length === 0">-</div>
-          <el-tag v-for="addr in scope.row.addresses" :key="addr.type" size="mini" style="margin-bottom: 2px; display: block;">
+          <el-tag v-for="addr in scope.row.addresses" :key="addr.type" size="mini" style="margin-bottom: 2px; display: block; white-space: normal; height: auto;">
             {{ addr.type }}: {{ addr.detail }}
           </el-tag>
         </template>
