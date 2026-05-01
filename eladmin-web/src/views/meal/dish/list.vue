@@ -69,7 +69,12 @@
       >
         <el-table-column type="selection" width="40" align="center" />
         <el-table-column label="菜品名称" prop="name" min-width="140" show-overflow-tooltip />
-        <el-table-column label="制作流程" prop="cookingMethod" min-width="200" show-overflow-tooltip />
+        <el-table-column label="制作流程" prop="cookingMethod" min-width="200">
+          <template slot-scope="scope">
+            <span v-if="scope.row.cookingMethod" class="cell-full-text">{{ scope.row.cookingMethod }}</span>
+            <span v-else class="text-gray-400 text-xs">—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="配料" prop="ingredientList" min-width="300">
           <template slot-scope="scope">
             <template v-if="scope.row.ingredientList && scope.row.ingredientList.length > 0">
@@ -86,9 +91,9 @@
             <span v-else class="text-gray-400 text-xs">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="切配信息" prop="cuttingInfo" min-width="200" show-overflow-tooltip>
+        <el-table-column label="切配信息" prop="cuttingInfo" min-width="200">
           <template slot-scope="scope">
-            <span v-if="scope.row.cuttingInfo" class="text-sm">{{ scope.row.cuttingInfo }}</span>
+            <span v-if="scope.row.cuttingInfo" class="cell-full-text">{{ scope.row.cuttingInfo }}</span>
             <span v-else class="text-gray-400 text-xs">—</span>
           </template>
         </el-table-column>
@@ -426,5 +431,9 @@ export default {
 .package-tag-plain {
   background: #f1f5f9;
   color: #64748b;
+}
+.cell-full-text {
+  white-space: pre-line;
+  word-break: break-word;
 }
 </style>
