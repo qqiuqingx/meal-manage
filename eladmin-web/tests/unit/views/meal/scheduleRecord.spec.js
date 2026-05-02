@@ -187,6 +187,50 @@ describe('scheduleRecord special requirements display', () => {
     })
   })
 
+  test('customers with soup are not circled when they only have replacement items', () => {
+    const wrapper = buildWrapper()
+
+    wrapper.setData({
+      planData: {
+        mealPlan: {
+          id: 1,
+          mealType: 'LUNCH',
+          recordDate: '2026-05-02',
+          generateTime: '2026-05-02 12:00:00',
+          status: 'SUCCESS'
+        },
+        totalCustomers: 1,
+        successCount: 1,
+        failCount: 0,
+        customers: [{
+          id: 101,
+          customerCode: 'A003',
+          customerName: '张三',
+          includeSoup: 1,
+          items: [{
+            dishType: 'SOUP',
+            dishName: '白萝卜猪腱子汤',
+            isReplaced: false,
+            isAllergyFiltered: false
+          }, {
+            dishType: 'SIDE',
+            dishName: '秋葵虾滑',
+            isReplaced: true,
+            isAllergyFiltered: false
+          }]
+        }]
+      }
+    })
+
+    return wrapper.vm.$nextTick().then(() => {
+      const cell = wrapper.find('.code-cell')
+      expect(cell.classes()).not.toContain('code-cell--replaced')
+      expect(wrapper.find('.code-text').classes()).not.toContain('code-text--soup-missing')
+
+      wrapper.destroy()
+    })
+  })
+
   test('replaced rice items are not shown in the replacement section', () => {
     const wrapper = buildWrapper()
 

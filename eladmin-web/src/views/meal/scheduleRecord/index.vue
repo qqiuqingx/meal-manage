@@ -100,7 +100,6 @@
               v-for="customer in allCustomers"
               :key="customer.id"
               class="code-cell"
-              :class="{ 'code-cell--replaced': customer.hasReplaced }"
             >
               <el-tooltip
                 v-if="customer.specialRequirements"
@@ -481,7 +480,6 @@ export default {
       if (!this.planData) return []
       return (this.planData.customers || []).map(c => ({
         ...c,
-        hasReplaced: (c.items || []).some(i => i.isReplaced),
         isSoupMissing: this.isSoupMissing(c),
         supplementaryTags: this.getSupplementaryTags(c)
       }))
@@ -1097,15 +1095,6 @@ export default {
   background: rgba(254, 226, 226, 0.45);
   color: #b91c1c;
 }
-.code-cell--replaced .code-text {
-  display: inline-block;
-  border: 2px solid rgba(186, 26, 26, 0.35);
-  background: rgba(186, 26, 26, 0.05);
-  color: #ba1a1a;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
 /* 加菜标签 */
 .supplementary-tags {
   display: flex;
