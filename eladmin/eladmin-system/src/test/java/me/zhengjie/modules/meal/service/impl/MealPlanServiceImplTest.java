@@ -18,9 +18,11 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.modules.meal.mapper.MealSchedulePlanMapper;
+import me.zhengjie.modules.meal.service.DishIngredientCategoryService;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerItemMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -70,9 +72,16 @@ class MealPlanServiceImplTest {
     private DishIngredientMapper dishIngredientMapper;
     @Mock
     private MealSchedulePlanMapper mealSchedulePlanMapper;
+    @Mock
+    private DishIngredientCategoryService dishIngredientCategoryService;
 
     @InjectMocks
     private MealPlanServiceImpl mealPlanService;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(dishIngredientCategoryService.getCategoryIngredientMapping()).thenReturn(Collections.emptyMap());
+    }
 
     @Test
     void shouldRejectInvalidMealType() {
@@ -697,6 +706,100 @@ class MealPlanServiceImplTest {
         verify(mealPlanCustomerItemMapper).insert(captor.capture());
         assertEquals("三色糙米", captor.getValue().getDishName());
         assertEquals("RICE", captor.getValue().getDishType());
+        assertEquals(true, captor.getValue().getIsReplaced());
+        assertEquals(Integer.valueOf(15), captor.getValue().getOriginalDishId());
+        assertEquals("三色糙米", captor.getValue().getOriginalDishName());
+        assertEquals("客户选择替换", captor.getValue().getReplaceReason());
+    }
+
+    @Test
+    void shouldTreatDefaultRiceTypeAsUnspecifiedWhenGeneratingMealPlan() {
+        CustomerOrder order = buildOrderWithDishCounts(0, 0, 0, 1, 0);
+        order.setRiceType("默认");
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish riceDish = buildDish(15, "三色糙米", "RICE_TYPE", Arrays.asList("LUNCH"), Arrays.asList("1"), Collections.emptyList(), 1);
+        Dish backupRiceDish = buildDish(16, "白米饭", "RICE_TYPE", Arrays.asList("LUNCH"), Arrays.asList("1"), Collections.emptyList(), 2);
+        DishIngredientRelation riceIngredient = buildIngredient(15, "糙米");
+        DishIngredientRelation backupRiceIngredient = buildIngredient(16, "大米");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
+        when(dishMapper.findAll(any())).thenReturn(Arrays.asList(riceDish, backupRiceDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(riceIngredient, backupRiceIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getSuccessCount());
+        ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomerItem> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomerItem.class);
+        verify(mealPlanCustomerItemMapper).insert(captor.capture());
+        assertEquals("三色糙米", captor.getValue().getDishName());
+        assertEquals("RICE", captor.getValue().getDishType());
+        assertEquals(null, captor.getValue().getIsReplaced());
+    }
+
+    @Test
+    void shouldMarkRiceAsCustomerReplacementWhenSpecifiedRiceFallsBack() {
+        CustomerOrder order = buildOrderWithDishCounts(0, 0, 0, 1, 0);
+        order.setRiceType("杂粮1:1米饭");
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish riceDish = buildDish(15, "三色糙米", "RICE_TYPE", Arrays.asList("LUNCH"), Arrays.asList("1"), Collections.emptyList(), 1);
+        Dish backupRiceDish = buildDish(16, "白米饭", "RICE_TYPE", Arrays.asList("LUNCH"), Arrays.asList("1"), Collections.emptyList(), 2);
+        DishIngredientRelation riceIngredient = buildIngredient(15, "糙米");
+        DishIngredientRelation backupRiceIngredient = buildIngredient(16, "大米");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
+        when(dishMapper.findAll(any())).thenReturn(Arrays.asList(riceDish, backupRiceDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(riceIngredient, backupRiceIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getSuccessCount());
+        ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomerItem> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomerItem.class);
+        verify(mealPlanCustomerItemMapper).insert(captor.capture());
+        assertEquals("白米饭", captor.getValue().getDishName());
+        assertEquals(true, captor.getValue().getIsReplaced());
+        assertEquals(Integer.valueOf(15), captor.getValue().getOriginalDishId());
+        assertEquals("三色糙米", captor.getValue().getOriginalDishName());
+        assertEquals("客户选择替换", captor.getValue().getReplaceReason());
     }
 
     @Test
