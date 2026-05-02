@@ -491,12 +491,25 @@ export default {
 
       const allergyFilteredCodesByDishName = {}
       const customersWithoutSoup = new Set()
+      const riceChangedDetailsByOriginalDishName = {}
       ;(this.planData.customers || []).forEach(customer => {
         const code = customer.customerCode || customer.customerName || ''
         if (this.isSoupMissing(customer) && code) {
           customersWithoutSoup.add(code)
         }
         (customer.items || []).forEach(item => {
+          if (item.isReplaced && item.dishType === 'RICE' && item.originalDishName && code) {
+            if (!riceChangedDetailsByOriginalDishName[item.originalDishName]) {
+              riceChangedDetailsByOriginalDishName[item.originalDishName] = []
+            }
+            const detailGroups = riceChangedDetailsByOriginalDishName[item.originalDishName]
+            let detailGroup = detailGroups.find(group => group.dishName === item.dishName)
+            if (!detailGroup) {
+              detailGroup = { dishName: item.dishName, codes: [] }
+              detailGroups.push(detailGroup)
+            }
+            detailGroup.codes.push(code)
+          }
           if (item.isAllergyFiltered) {
             const filterDishName = (item.isReplaced && item.originalDishName) ? item.originalDishName : item.dishName
             if (filterDishName) {
@@ -534,9 +547,13 @@ export default {
         .map(g => {
           const excludedSet = allergyFilteredCodesByDishName[g.dishName]
           const excludedCodes = excludedSet ? Array.from(excludedSet) : []
+          const riceChangedDetails = riceChangedDetailsByOriginalDishName[g.dishName] || []
+          const riceChangedText = this.buildRiceChangedCodeText(riceChangedDetails)
           const detailCodes = g.dishType === 'SOUP'
             ? Array.from(new Set([...excludedCodes, ...customersWithoutSoup]))
-            : excludedCodes
+            : g.dishType === 'RICE'
+              ? [...excludedCodes, ...(riceChangedText ? [riceChangedText] : [])]
+              : excludedCodes
           return {
             ...g,
             count: g.eatCodes.length,
@@ -549,7 +566,7 @@ export default {
       const groups = {}
       ;(this.planData.customers || []).forEach(customer => {
         const code = customer.customerCode || customer.customerName || ''
-        ;(customer.items || []).filter(item => item.isReplaced).forEach(item => {
+        ;(customer.items || []).filter(item => item.isReplaced && item.dishType !== 'RICE').forEach(item => {
           const key = item.dishName
           if (!groups[key]) {
             groups[key] = { dishName: item.dishName, originalDishName: item.originalDishName, replaceReason: item.replaceReason, codes: [] }
@@ -874,6 +891,18 @@ export default {
     buildFullCodeText(codes) {
       if (!codes || codes.length === 0) return '-'
       return codes.join(', ')
+    },
+    buildRiceChangedCodeText(detailGroups) {
+      if (!detailGroups || detailGroups.length === 0) return ''
+      return detailGroups.map(group => {
+        if (!group.codes || group.codes.length === 0) return ''
+        if (group.codes.length === 1) {
+          return `${group.codes[0]}(${group.dishName})`
+        }
+        const leadingCodes = group.codes.slice(0, -1)
+        const lastCode = group.codes[group.codes.length - 1]
+        return `${this.buildFullCodeText(leadingCodes)}, ${lastCode}(${group.dishName})`
+      }).filter(Boolean).join(', ')
     },
     formatDate(dateStr) {
       if (!dateStr) return '-'
