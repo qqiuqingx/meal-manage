@@ -430,9 +430,15 @@ import * as dishApi from '@/api/dish'
 import MealScheduleCalendar from '@/components/Calendar/MealScheduleCalendar.vue'
 import { normalizeDeliveryDates } from '@/utils/calendar'
 
+export const DEFAULT_RICE_TYPE_OPTION_VALUE = '__DEFAULT_RICE_TYPE__'
+
 function serializeDeliveryDates(value) {
   const normalized = normalizeDeliveryDates(value)
   return normalized.length > 0 ? JSON.stringify(normalized) : null
+}
+
+export function normalizeRiceTypeForSubmit(value) {
+  return value === DEFAULT_RICE_TYPE_OPTION_VALUE ? null : value
 }
 
 function normalizeNumericValue(value) {
@@ -477,7 +483,7 @@ export function createOrderDefaultForm() {
     sideDishCount: 0,
     vegCount: 0,
     riceCount: 1,
-    riceType: '白米饭',
+    riceType: DEFAULT_RICE_TYPE_OPTION_VALUE,
     soupCount: 0
   }
 }
@@ -506,7 +512,7 @@ export function createFirstOrderDefaultForm() {
     sideDishCount: 0,
     vegCount: 0,
     riceCount: 1,
-    riceType: '白米饭',
+    riceType: DEFAULT_RICE_TYPE_OPTION_VALUE,
     soupCount: 0
   }
 }
@@ -592,6 +598,7 @@ export default {
         console.log('[OrderForm] watch.value triggered, deliveryDates:', val && val.deliveryDates)
         this.beginFormHydration()
         this.normalizeFormNumbers()
+        this.ensureRiceTypeValue(val)
         this.ensureRiceTypeOption(val && val.riceType)
         // 当外部 value 变化时（如编辑时加载数据），同步子套餐列表和日历数据
         if (val.parentPackageId) {
@@ -695,7 +702,7 @@ export default {
       }
     },
     ensureRiceTypeOption(riceType) {
-      if (!riceType) {
+      if (!riceType || riceType === DEFAULT_RICE_TYPE_OPTION_VALUE) {
         return
       }
       const exists = this.riceTypeOptions.some(item => item.value === riceType)
@@ -703,14 +710,23 @@ export default {
         this.riceTypeOptions = this.riceTypeOptions.concat([{ label: riceType, value: riceType }])
       }
     },
+    ensureRiceTypeValue(formValue) {
+      if (!formValue || formValue.riceType) {
+        return
+      }
+      this.$set(this.form, 'riceType', DEFAULT_RICE_TYPE_OPTION_VALUE)
+    },
     async loadRiceTypeOptions() {
       try {
         const res = await dishApi.queryDishes({ dishType: 'RICE_TYPE', enabled: true, page: 0, size: 200 })
         const dishes = res.content || []
-        this.riceTypeOptions = dishes.map(item => ({
+        this.riceTypeOptions = [{
+          label: '默认',
+          value: DEFAULT_RICE_TYPE_OPTION_VALUE
+        }].concat(dishes.map(item => ({
           label: item.name,
           value: item.name
-        }))
+        })))
       } catch (e) {
         console.error('loadRiceTypeOptions error', e)
       } finally {
