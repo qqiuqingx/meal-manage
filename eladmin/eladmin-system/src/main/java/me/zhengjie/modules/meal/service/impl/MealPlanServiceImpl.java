@@ -95,6 +95,8 @@ public class MealPlanServiceImpl implements MealPlanService {
     private static final String DISH_TYPE_VEGETABLE = "VEGETABLE";
     private static final String DISH_TYPE_SOUP = "SOUP";
     private static final String DISH_TYPE_RICE = "RICE";
+    private static final String DEFAULT_RICE_TYPE = "默认";
+    private static final String REPLACE_REASON_CUSTOMER_SELECTED = "客户选择替换";
     private static final Map<String, ReentrantLock> GENERATE_LOCKS = new ConcurrentHashMap<>();
 
     private final MealPlanMapper mealPlanMapper;
@@ -827,7 +829,8 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
         // 如果指定了米饭类型，优先从名称匹配的米饭中选择
         DishSelectResult result = null;
-        if (riceType != null && !riceType.isEmpty()) {
+        Dish originalRiceDish = isSpecifiedRiceType(riceType) ? riceDishes.get(0) : null;
+        if (isSpecifiedRiceType(riceType)) {
             List<Dish> matched = new ArrayList<>();
             for (Dish d : riceDishes) {
                 if (riceType.equals(d.getName())) {
@@ -863,9 +866,18 @@ public class MealPlanServiceImpl implements MealPlanService {
             }
             return;
         }
-        selectedDishes.add(new SelectedDish(DISH_TYPE_RICE, result.getDish(),
-                result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
+        if (isSpecifiedRiceType(riceType)) {
+            selectedDishes.add(new SelectedDish(DISH_TYPE_RICE, result.getDish(),
+                    true, originalRiceDish, REPLACE_REASON_CUSTOMER_SELECTED, result.getMatchedAllergyTags()));
+        } else {
+            selectedDishes.add(new SelectedDish(DISH_TYPE_RICE, result.getDish(),
+                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
+        }
         selectedDishIds.add(result.getDish().getId());
+    }
+
+    private boolean isSpecifiedRiceType(String riceType) {
+        return StringUtils.isNotBlank(riceType) && !DEFAULT_RICE_TYPE.equals(riceType);
     }
 
     /**
