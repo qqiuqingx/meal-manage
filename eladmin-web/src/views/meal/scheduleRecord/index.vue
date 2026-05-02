@@ -102,8 +102,15 @@
               class="code-cell"
               :class="{ 'code-cell--replaced': customer.hasReplaced }"
             >
-              <span class="code-text">{{ customer.customerCode || customer.customerName }}</span>
-              <span v-if="customer.specialRequirements" class="code-remark">{{ customer.specialRequirements }}</span>
+              <el-tooltip
+                v-if="customer.specialRequirements"
+                effect="dark"
+                placement="top"
+                :content="customer.specialRequirements"
+              >
+                <span class="code-text code-text--tooltip">{{ customer.customerCode || customer.customerName }}</span>
+              </el-tooltip>
+              <span v-else class="code-text">{{ customer.customerCode || customer.customerName }}</span>
               <div v-if="showSupplementaryTags && customer.supplementaryTags && customer.supplementaryTags.length > 0" class="supplementary-tags">
                 <span
                   v-for="(tag, idx) in customer.supplementaryTags"
@@ -475,9 +482,13 @@ export default {
       if (!this.planData) return []
 
       const allergyFilteredCodesByDishName = {}
+      const customersWithoutSoup = new Set()
       ;(this.planData.customers || []).forEach(customer => {
         const code = customer.customerCode || customer.customerName || ''
-        ;(customer.items || []).forEach(item => {
+        if (this.isSoupMissing(customer) && code) {
+          customersWithoutSoup.add(code)
+        }
+        (customer.items || []).forEach(item => {
           if (item.isAllergyFiltered) {
             const filterDishName = (item.isReplaced && item.originalDishName) ? item.originalDishName : item.dishName
             if (filterDishName) {
@@ -515,10 +526,13 @@ export default {
         .map(g => {
           const excludedSet = allergyFilteredCodesByDishName[g.dishName]
           const excludedCodes = excludedSet ? Array.from(excludedSet) : []
+          const detailCodes = g.dishType === 'SOUP'
+            ? Array.from(new Set([...excludedCodes, ...customersWithoutSoup]))
+            : excludedCodes
           return {
             ...g,
             count: g.eatCodes.length,
-            codeSnippet: excludedCodes.length > 0 ? this.buildFullCodeText(excludedCodes) : '-'
+            codeSnippet: detailCodes.length > 0 ? this.buildFullCodeText(detailCodes) : '-'
           }
         })
     },
@@ -806,6 +820,10 @@ export default {
     },
 
     // ─── 工具方法 ─────────────────────────────────
+    isSoupMissing(customer) {
+      const dishTypes = (customer.items || []).map(item => item.dishType)
+      return !dishTypes.includes('SOUP') && customer.includeSoup !== 1
+    },
     getSupplementaryTags(customer) {
       const missingTags = []
       const addTags = []
@@ -838,7 +856,7 @@ export default {
       if (!dishTypes.includes('VEGETABLE')) {
         missingTags.push('无素菜')
       }
-      if (!dishTypes.includes('SOUP') && customer.includeSoup !== 1) {
+      if (this.isSoupMissing(customer)) {
         missingTags.push('无汤')
       }
       if (!dishTypes.includes('RICE') && customer.includeRice !== 1) {
@@ -1034,14 +1052,8 @@ export default {
   color: #475569;
   display: block;
 }
-.code-remark {
-  font-size: 11px;
-  font-weight: 500;
-  color: #64748b;
-  display: block;
-  margin-top: 4px;
-  word-break: break-word;
-  line-height: 1.4;
+.code-text--tooltip {
+  cursor: pointer;
 }
 .code-cell--replaced .code-text {
   display: inline-block;
