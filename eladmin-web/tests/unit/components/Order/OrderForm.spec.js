@@ -10,8 +10,7 @@ jest.mock('@/api/dish', () => ({
 import * as dishApi from '@/api/dish'
 import OrderForm, {
   createFirstOrderDefaultForm,
-  DEFAULT_RICE_TYPE_OPTION_VALUE,
-  normalizeRiceTypeForSubmit
+  DEFAULT_RICE_TYPE_OPTION_VALUE
 } from '@/components/Order/OrderForm.vue'
 
 const originalLog = console.log
@@ -111,8 +110,7 @@ describe('OrderForm delivery date sync', () => {
 
   test('uses the default rice option in a new order form', () => {
     expect(createFirstOrderDefaultForm().riceType).toBe(DEFAULT_RICE_TYPE_OPTION_VALUE)
-    expect(normalizeRiceTypeForSubmit(DEFAULT_RICE_TYPE_OPTION_VALUE)).toBeNull()
-    expect(normalizeRiceTypeForSubmit('三色糙米')).toBe('三色糙米')
+    expect(DEFAULT_RICE_TYPE_OPTION_VALUE).toBe('默认')
   })
 
   test('prepends a visible default rice option before fetched rice types', async() => {

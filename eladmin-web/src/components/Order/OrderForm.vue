@@ -430,15 +430,11 @@ import * as dishApi from '@/api/dish'
 import MealScheduleCalendar from '@/components/Calendar/MealScheduleCalendar.vue'
 import { normalizeDeliveryDates } from '@/utils/calendar'
 
-export const DEFAULT_RICE_TYPE_OPTION_VALUE = '__DEFAULT_RICE_TYPE__'
+export const DEFAULT_RICE_TYPE_OPTION_VALUE = '默认'
 
 function serializeDeliveryDates(value) {
   const normalized = normalizeDeliveryDates(value)
   return normalized.length > 0 ? JSON.stringify(normalized) : null
-}
-
-export function normalizeRiceTypeForSubmit(value) {
-  return value === DEFAULT_RICE_TYPE_OPTION_VALUE ? null : value
 }
 
 function normalizeNumericValue(value) {
