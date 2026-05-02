@@ -186,4 +186,124 @@ describe('scheduleRecord special requirements display', () => {
       wrapper.destroy()
     })
   })
+
+  test('replaced rice items are not shown in the replacement section', () => {
+    const wrapper = buildWrapper()
+
+    wrapper.setData({
+      planData: {
+        mealPlan: {
+          id: 1,
+          mealType: 'LUNCH',
+          recordDate: '2026-05-02',
+          generateTime: '2026-05-02 12:00:00',
+          status: 'SUCCESS'
+        },
+        totalCustomers: 2,
+        successCount: 2,
+        failCount: 0,
+        customers: [{
+          id: 101,
+          customerCode: 'A170',
+          customerName: '张三',
+          items: [{
+            dishType: 'RICE',
+            dishName: '白米饭',
+            originalDishName: '普通杂粮米饭',
+            isReplaced: true,
+            isAllergyFiltered: false
+          }]
+        }, {
+          id: 102,
+          customerCode: 'B5600',
+          customerName: '李四',
+          items: [{
+            dishType: 'SIDE',
+            dishName: '秋葵虾滑',
+            originalDishName: '青椒炒蛋',
+            isReplaced: true,
+            isAllergyFiltered: false
+          }]
+        }]
+      }
+    })
+
+    return wrapper.vm.$nextTick().then(() => {
+      expect(wrapper.vm.replacedDishes).toHaveLength(1)
+      expect(wrapper.vm.replacedDishes[0].dishName).toBe('秋葵虾滑')
+
+      wrapper.destroy()
+    })
+  })
+
+  test('rice row code details group customers by replaced rice name', () => {
+    const wrapper = buildWrapper()
+
+    wrapper.setData({
+      planData: {
+        mealPlan: {
+          id: 1,
+          mealType: 'LUNCH',
+          recordDate: '2026-05-02',
+          generateTime: '2026-05-02 12:00:00',
+          status: 'SUCCESS'
+        },
+        totalCustomers: 4,
+        successCount: 4,
+        failCount: 0,
+        customers: [{
+          id: 101,
+          customerCode: 'A170',
+          customerName: '张三',
+          items: [{
+            dishType: 'RICE',
+            dishName: '白米饭',
+            originalDishName: '普通杂粮米饭',
+            isReplaced: true,
+            isAllergyFiltered: false
+          }]
+        }, {
+          id: 102,
+          customerCode: 'A003',
+          customerName: '李四',
+          items: [{
+            dishType: 'RICE',
+            dishName: '白米饭',
+            originalDishName: '普通杂粮米饭',
+            isReplaced: true,
+            isAllergyFiltered: false
+          }]
+        }, {
+          id: 103,
+          customerCode: 'B5600',
+          customerName: '王五',
+          items: [{
+            dishType: 'RICE',
+            dishName: '三色糙米',
+            originalDishName: '普通杂粮米饭',
+            isReplaced: true,
+            isAllergyFiltered: false
+          }]
+        }, {
+          id: 104,
+          customerCode: 'A001',
+          customerName: '赵六',
+          items: [{
+            dishType: 'RICE',
+            dishName: '普通杂粮米饭',
+            isReplaced: false,
+            isAllergyFiltered: false
+          }]
+        }]
+      }
+    })
+
+    return wrapper.vm.$nextTick().then(() => {
+      const riceDish = wrapper.vm.regularDishes.find(dish => dish.dishName === '普通杂粮米饭')
+      expect(riceDish.count).toBe(1)
+      expect(riceDish.codeSnippet).toBe('A170, A003(白米饭), B5600(三色糙米)')
+
+      wrapper.destroy()
+    })
+  })
 })
