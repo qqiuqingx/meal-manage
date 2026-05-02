@@ -3,8 +3,16 @@
 jest.mock('@/api/customer/profile', () => ({}))
 jest.mock('@/api/customer/package', () => ({}))
 jest.mock('@/api/system/dictDetail', () => ({}))
+jest.mock('@/api/dish', () => ({
+  queryDishes: jest.fn()
+}))
 
-import OrderForm, { createFirstOrderDefaultForm } from '@/components/Order/OrderForm.vue'
+import * as dishApi from '@/api/dish'
+import OrderForm, {
+  createFirstOrderDefaultForm,
+  DEFAULT_RICE_TYPE_OPTION_VALUE,
+  normalizeRiceTypeForSubmit
+} from '@/components/Order/OrderForm.vue'
 
 const originalLog = console.log
 
@@ -26,6 +34,7 @@ function createContext(overrides = {}) {
     mode: 'firstOrder',
     hydratingForm: false,
     hydrationTimer: null,
+    riceTypeOptions: [],
     $set(target, key, value) {
       target[key] = value
     },
@@ -36,11 +45,17 @@ function createContext(overrides = {}) {
   ctx.normalizeFormNumbers = OrderForm.methods.normalizeFormNumbers.bind(ctx)
   ctx.syncCalendarSelectionFromDeliveryDates = OrderForm.methods.syncCalendarSelectionFromDeliveryDates.bind(ctx)
   ctx.syncSerializedDeliveryDates = OrderForm.methods.syncSerializedDeliveryDates.bind(ctx)
+  ctx.ensureRiceTypeOption = OrderForm.methods.ensureRiceTypeOption.bind(ctx)
+  ctx.ensureRiceTypeValue = OrderForm.methods.ensureRiceTypeValue.bind(ctx)
 
   return ctx
 }
 
 describe('OrderForm delivery date sync', () => {
+  beforeEach(() => {
+    dishApi.queryDishes.mockReset()
+  })
+
   test('normalizes incoming deliveryDates for calendar data', () => {
     const selected = [{ date: '2026-04-24', mealTypes: ['BREAKFAST', 'DINNER'] }]
     const ctx = createContext({
@@ -92,5 +107,29 @@ describe('OrderForm delivery date sync', () => {
     expect(ctx.form.finalAmount).toBe(10)
     expect(ctx.form.breakfastPrice).toBe(1)
     expect(ctx.form.lunchDinnerPrice).toBe(1)
+  })
+
+  test('uses the default rice option in a new order form', () => {
+    expect(createFirstOrderDefaultForm().riceType).toBe(DEFAULT_RICE_TYPE_OPTION_VALUE)
+    expect(normalizeRiceTypeForSubmit(DEFAULT_RICE_TYPE_OPTION_VALUE)).toBeNull()
+    expect(normalizeRiceTypeForSubmit('三色糙米')).toBe('三色糙米')
+  })
+
+  test('prepends a visible default rice option before fetched rice types', async() => {
+    dishApi.queryDishes.mockResolvedValue({
+      content: [
+        { name: '白米饭' },
+        { name: '三色糙米' }
+      ]
+    })
+    const ctx = createContext()
+
+    await OrderForm.methods.loadRiceTypeOptions.call(ctx)
+
+    expect(ctx.riceTypeOptions).toEqual([
+      { label: '默认', value: DEFAULT_RICE_TYPE_OPTION_VALUE },
+      { label: '白米饭', value: '白米饭' },
+      { label: '三色糙米', value: '三色糙米' }
+    ])
   })
 })
