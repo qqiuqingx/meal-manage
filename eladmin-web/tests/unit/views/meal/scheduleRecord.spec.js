@@ -148,4 +148,42 @@ describe('scheduleRecord special requirements display', () => {
       wrapper.destroy()
     })
   })
+
+  test('customers without soup are highlighted instead of showing a 无汤 tag', () => {
+    const wrapper = buildWrapper()
+
+    wrapper.setData({
+      planData: {
+        mealPlan: {
+          id: 1,
+          mealType: 'LUNCH',
+          recordDate: '2026-05-02',
+          generateTime: '2026-05-02 12:00:00',
+          status: 'SUCCESS'
+        },
+        totalCustomers: 1,
+        successCount: 1,
+        failCount: 0,
+        customers: [{
+          id: 101,
+          customerCode: 'A170',
+          customerName: '张三',
+          includeSoup: 0,
+          items: [{
+            dishType: 'MAIN',
+            dishName: '凤梨牛肉粒',
+            isReplaced: false,
+            isAllergyFiltered: false
+          }]
+        }]
+      }
+    })
+
+    return wrapper.vm.$nextTick().then(() => {
+      expect(wrapper.text()).not.toContain('无汤')
+      expect(wrapper.find('.code-text').classes()).toContain('code-text--soup-missing')
+
+      wrapper.destroy()
+    })
+  })
 })
