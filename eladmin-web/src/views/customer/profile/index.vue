@@ -319,7 +319,7 @@ import MealScheduleCalendar from '@/components/Calendar/MealScheduleCalendar.vue
 import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
-import OrderForm, { createFirstOrderDefaultForm, normalizeRiceTypeForSubmit } from '@/components/Order/OrderForm.vue'
+import OrderForm, { createFirstOrderDefaultForm } from '@/components/Order/OrderForm.vue'
 import CustomerDetailDialog from './CustomerDetailDialog.vue'
 
 function createDefaultAddresses() {
@@ -499,7 +499,7 @@ export default {
           sideDishCount: orderInfo.sideDishCount || 0,
           vegCount: orderInfo.vegCount || 0,
           riceCount: orderInfo.riceCount == null ? 1 : orderInfo.riceCount,
-          riceType: normalizeRiceTypeForSubmit(orderInfo.riceType),
+          riceType: orderInfo.riceType || '白米饭',
           soupCount: orderInfo.soupCount || 0
         }
       }
