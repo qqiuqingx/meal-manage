@@ -212,7 +212,7 @@
 import * as orderApi from '@/api/customer/order'
 import * as dictDetailApi from '@/api/system/dictDetail'
 import { refundMeal } from '@/api/mealRefund'
-import { createOrderDefaultForm, normalizeRiceTypeForSubmit } from '@/components/Order/OrderForm.vue'
+import { createOrderDefaultForm } from '@/components/Order/OrderForm.vue'
 import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
@@ -334,7 +334,6 @@ export default {
         ...this.form
         // deliveryDates 已在 OrderForm 中处理好，不需要再次序列化
       }
-      payload.riceType = normalizeRiceTypeForSubmit(payload.riceType)
 
       // 先校验订单冲突（提交前校验）
       try {
