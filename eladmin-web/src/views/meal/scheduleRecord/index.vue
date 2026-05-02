@@ -108,9 +108,16 @@
                 placement="top"
                 :content="customer.specialRequirements"
               >
-                <span class="code-text code-text--tooltip">{{ customer.customerCode || customer.customerName }}</span>
+                <span
+                  class="code-text code-text--tooltip"
+                  :class="{ 'code-text--soup-missing': customer.isSoupMissing }"
+                >{{ customer.customerCode || customer.customerName }}</span>
               </el-tooltip>
-              <span v-else class="code-text">{{ customer.customerCode || customer.customerName }}</span>
+              <span
+                v-else
+                class="code-text"
+                :class="{ 'code-text--soup-missing': customer.isSoupMissing }"
+              >{{ customer.customerCode || customer.customerName }}</span>
               <div v-if="showSupplementaryTags && customer.supplementaryTags && customer.supplementaryTags.length > 0" class="supplementary-tags">
                 <span
                   v-for="(tag, idx) in customer.supplementaryTags"
@@ -475,6 +482,7 @@ export default {
       return (this.planData.customers || []).map(c => ({
         ...c,
         hasReplaced: (c.items || []).some(i => i.isReplaced),
+        isSoupMissing: this.isSoupMissing(c),
         supplementaryTags: this.getSupplementaryTags(c)
       }))
     },
@@ -856,9 +864,6 @@ export default {
       if (!dishTypes.includes('VEGETABLE')) {
         missingTags.push('无素菜')
       }
-      if (this.isSoupMissing(customer)) {
-        missingTags.push('无汤')
-      }
       if (!dishTypes.includes('RICE') && customer.includeRice !== 1) {
         missingTags.push('无米饭')
       }
@@ -1054,6 +1059,14 @@ export default {
 }
 .code-text--tooltip {
   cursor: pointer;
+}
+.code-text--soup-missing {
+  display: inline-block;
+  padding: 2px 10px;
+  border: 2px solid #ef4444;
+  border-radius: 999px;
+  background: rgba(254, 226, 226, 0.45);
+  color: #b91c1c;
 }
 .code-cell--replaced .code-text {
   display: inline-block;
