@@ -77,4 +77,84 @@ describe('MealScheduleCalendar.vue', () => {
       wrapper.destroy()
     })
   })
+
+  describe('meal selector reopen behavior', () => {
+    test('can reopen meal selector for the same selected date after close', async() => {
+      const wrapper = shallowMount(MealScheduleCalendar, {
+        propsData: {
+          value: [{ date: '2026-05-06', mealTypes: ['LUNCH', 'DINNER'] }]
+        },
+        stubs: {
+          'CalendarDay': { template: '<div class="calendar-day"></div>' },
+          'MealTypeSelector': { template: '<div class="meal-type-selector"></div>' },
+          'el-button': { template: '<button><slot></slot></button>' },
+          'el-button-group': { template: '<div><slot></slot></div>' },
+          'el-dialog': { template: '<div class="el-dialog"><slot></slot></div>', props: ['visible'] },
+          'el-message': { template: '<div class="el-message"></div>' }
+        }
+      })
+
+      const date = new Date('2026-05-06T00:00:00')
+      const mealTypes = ['LUNCH', 'DINNER']
+
+      wrapper.vm.openMealSelector(date, mealTypes)
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.showMealSelector).toBe(true)
+
+      wrapper.vm.handleMealSelectorVisibleChange(false)
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.showMealSelector).toBe(false)
+      expect(wrapper.vm.selectedDate).toBe(null)
+
+      wrapper.vm.openMealSelector(date, mealTypes)
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.showMealSelector).toBe(true)
+      expect(wrapper.vm.selectedDate).toEqual(date)
+
+      wrapper.destroy()
+    })
+  })
+
+  describe('clear button behavior', () => {
+    test('clear confirmation can be triggered repeatedly and resets selection', async() => {
+      const confirmMock = jest.fn(() => Promise.resolve())
+      const warningMock = jest.fn()
+      const wrapper = shallowMount(MealScheduleCalendar, {
+        propsData: {
+          value: [{ date: '2026-05-06', mealTypes: ['LUNCH', 'DINNER'] }],
+          startDate: '2026-05-01',
+          endDate: '2026-05-31'
+        },
+        mocks: {
+          $confirm: confirmMock,
+          $message: { warning: warningMock }
+        },
+        stubs: {
+          'CalendarDay': { template: '<div class="calendar-day"></div>' },
+          'MealTypeSelector': { template: '<div class="meal-type-selector"></div>' },
+          'el-button': { template: '<button><slot></slot></button>' },
+          'el-button-group': { template: '<div><slot></slot></div>' },
+          'el-dialog': { template: '<div class="el-dialog"><slot></slot></div>', props: ['visible'] },
+          'el-message': { template: '<div class="el-message"></div>' }
+        }
+      })
+
+      wrapper.vm.clearAllDates()
+      await Promise.resolve()
+      await wrapper.vm.$nextTick()
+
+      wrapper.vm.clearAllDates()
+      await Promise.resolve()
+      await wrapper.vm.$nextTick()
+
+      expect(confirmMock).toHaveBeenCalledTimes(2)
+      expect(warningMock).not.toHaveBeenCalled()
+
+      const inputEvents = wrapper.emitted('input') || []
+      expect(inputEvents.length).toBeGreaterThan(0)
+      expect(inputEvents[inputEvents.length - 1][0]).toEqual([])
+
+      wrapper.destroy()
+    })
+  })
 })
