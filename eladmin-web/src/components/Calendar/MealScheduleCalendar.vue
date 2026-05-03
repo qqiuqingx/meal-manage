@@ -54,10 +54,9 @@
       title="配置餐次"
       width="400px"
       :close-on-click-modal="false"
+      destroy-on-close
       append-to-body
-      :z-index="9999"
       modal-append-to-body
-      @close="closeMealSelector"
       @visible-change="handleMealSelectorVisibleChange"
     >
       <MealTypeSelector
@@ -100,6 +99,7 @@
 <script>
 import CalendarDay from './CalendarDay.vue'
 import MealTypeSelector from './MealTypeSelector.vue'
+import PopupManager from 'element-ui/lib/utils/popup/popup-manager'
 import {
   generateCalendarData,
   formatDate,
@@ -287,13 +287,6 @@ export default {
     openMealSelector(date, mealTypes) {
       this.selectedDate = date
       this.selectedDateMealTypes = [...mealTypes]
-      if (this.showMealSelector) {
-        this.showMealSelector = false
-        this.$nextTick(() => {
-          this.showMealSelector = true
-        })
-        return
-      }
       this.showMealSelector = true
     },
     handleMealTypesSave(mealTypes) {
@@ -360,7 +353,8 @@ export default {
       this.$confirm('确定要清空所有选中的日期吗？', '提示', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
-        type: 'warning'
+        type: 'warning',
+        zIndex: PopupManager.nextZIndex()
       }).then(() => {
         this.closeMealSelector()
         this.emitChange([])
