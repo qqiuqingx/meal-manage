@@ -57,6 +57,8 @@
       append-to-body
       :z-index="9999"
       modal-append-to-body
+      @close="closeMealSelector"
+      @visible-change="handleMealSelectorVisibleChange"
     >
       <MealTypeSelector
         v-if="selectedDate"
@@ -285,6 +287,13 @@ export default {
     openMealSelector(date, mealTypes) {
       this.selectedDate = date
       this.selectedDateMealTypes = [...mealTypes]
+      if (this.showMealSelector) {
+        this.showMealSelector = false
+        this.$nextTick(() => {
+          this.showMealSelector = true
+        })
+        return
+      }
       this.showMealSelector = true
     },
     handleMealTypesSave(mealTypes) {
@@ -302,6 +311,11 @@ export default {
       this.showMealSelector = false
       this.selectedDate = null
       this.selectedDateMealTypes = []
+    },
+    handleMealSelectorVisibleChange(visible) {
+      if (!visible) {
+        this.closeMealSelector()
+      }
     },
     handleMealTypesChange(mealTypes) {
       this.selectedDateMealTypes = [...mealTypes]
@@ -348,6 +362,7 @@ export default {
         cancelButtonText: '取消',
         type: 'warning'
       }).then(() => {
+        this.closeMealSelector()
         this.emitChange([])
       }).catch(() => {})
     },
