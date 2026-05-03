@@ -113,10 +113,43 @@ describe('MealScheduleCalendar.vue', () => {
 
       wrapper.destroy()
     })
+
+    test('opening another selected date while visible updates the selector content', async() => {
+      const wrapper = shallowMount(MealScheduleCalendar, {
+        propsData: {
+          value: [{ date: '2026-05-06', mealTypes: ['LUNCH', 'DINNER'] }]
+        },
+        stubs: {
+          'CalendarDay': { template: '<div class="calendar-day"></div>' },
+          'MealTypeSelector': { template: '<div class="meal-type-selector"></div>' },
+          'el-button': { template: '<button><slot></slot></button>' },
+          'el-button-group': { template: '<div><slot></slot></div>' },
+          'el-dialog': { template: '<div class="el-dialog"><slot></slot></div>', props: ['visible'] },
+          'el-message': { template: '<div class="el-message"></div>' }
+        }
+      })
+
+      const firstDate = new Date('2026-05-06T00:00:00')
+      const secondDate = new Date('2026-05-07T00:00:00')
+
+      wrapper.vm.openMealSelector(firstDate, ['LUNCH'])
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.showMealSelector).toBe(true)
+      expect(wrapper.vm.selectedDate).toEqual(firstDate)
+
+      wrapper.vm.openMealSelector(secondDate, ['DINNER'])
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.showMealSelector).toBe(true)
+      expect(wrapper.vm.selectedDate).toEqual(secondDate)
+      expect(wrapper.vm.selectedDateMealTypes).toEqual(['DINNER'])
+
+      wrapper.destroy()
+    })
   })
 
   describe('clear button behavior', () => {
-    test('clear confirmation can be triggered repeatedly and resets selection', async() => {
+    test('clear confirmation can be triggered repeatedly with a foreground z-index and resets selection', async() => {
       const confirmMock = jest.fn(() => Promise.resolve())
       const warningMock = jest.fn()
       const wrapper = shallowMount(MealScheduleCalendar, {
@@ -149,6 +182,8 @@ describe('MealScheduleCalendar.vue', () => {
 
       expect(confirmMock).toHaveBeenCalledTimes(2)
       expect(warningMock).not.toHaveBeenCalled()
+      expect(confirmMock.mock.calls[0][2].zIndex).toEqual(expect.any(Number))
+      expect(confirmMock.mock.calls[1][2].zIndex).toBeGreaterThan(confirmMock.mock.calls[0][2].zIndex)
 
       const inputEvents = wrapper.emitted('input') || []
       expect(inputEvents.length).toBeGreaterThan(0)
