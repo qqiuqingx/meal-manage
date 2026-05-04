@@ -64,7 +64,7 @@ public class MealPlanController {
     private final MealPlanService mealPlanService;
 
     /**
-     * 生成指定日期、指定餐次的排餐计划。
+     * 生成指定日期、指定餐次（BREAKFAST/LUNCH/DINNER）的排餐计划。
      */
     @Log("生成排餐计划")
     @ApiOperation("生成排餐计划")
@@ -72,7 +72,12 @@ public class MealPlanController {
     @Limit(key = "generate", period = 60, count = 5, name = "generateMealPlan", prefix = "mealPlan", limitType = LimitType.IP)
     @PreAuthorize("@el.check('mealPlan:generate')")
     public ResponseEntity<MealPlanGenerateResult> generateMealPlan(@Validated @RequestBody MealPlanGenerateRequest request) {
-        return new ResponseEntity<>(mealPlanService.generateMealPlan(request.getRecordDate(), request.getMealType(), request.getCustomerId()), HttpStatus.OK);
+        return new ResponseEntity<>(mealPlanService.generateMealPlan(
+                request.getRecordDate(),
+                request.getMealType(),
+                request.getCustomerId(),
+                request.getMenuWeekNum(),
+                request.getMenuDayOfWeek()), HttpStatus.OK);
     }
 
     /**
@@ -185,7 +190,7 @@ public class MealPlanController {
     @PreAuthorize("@el.check('mealPlan:del')")
     public ResponseEntity<Void> deleteMealPlan(
             @ApiParam(value = "排餐日期，格式 yyyy-MM-dd", required = true) @RequestParam String recordDate,
-            @ApiParam(value = "餐次（LUNCH午餐/DINNER晚餐）", required = true) @RequestParam String mealType,
+            @ApiParam(value = "餐次（BREAKFAST早餐/LUNCH午餐/DINNER晚餐）", required = true) @RequestParam String mealType,
             @ApiParam(value = "指定客户ID，不传则删除全部") @RequestParam(required = false) Long customerId) {
         mealPlanService.deleteMealPlan(recordDate, mealType, customerId);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);

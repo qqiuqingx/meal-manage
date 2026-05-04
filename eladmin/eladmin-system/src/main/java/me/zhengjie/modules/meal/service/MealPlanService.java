@@ -40,11 +40,25 @@ public interface MealPlanService {
      * 根据排餐日期和餐次生成排餐计划。
      *
      * @param recordDate 排餐日期，格式 yyyy-MM-dd
-     * @param mealType 餐次，支持 LUNCH / DINNER
+     * @param mealType 餐次，支持 BREAKFAST / LUNCH / DINNER
+     * @param customerId 指定客户ID，不传则生成全部客户的排餐计划
+     * @param menuWeekNum 指定菜单周次，需与 menuDayOfWeek 同时传入；不传则按 recordDate 推导
+     * @param menuDayOfWeek 指定菜单星期，需与 menuWeekNum 同时传入；不传则按 recordDate 推导
+     * @return 生成结果汇总
+     */
+    MealPlanGenerateResult generateMealPlan(String recordDate, String mealType, Long customerId, Integer menuWeekNum, Integer menuDayOfWeek);
+
+    /**
+     * 根据排餐日期和餐次生成排餐计划。
+     *
+     * @param recordDate 排餐日期，格式 yyyy-MM-dd
+     * @param mealType 餐次，支持 BREAKFAST / LUNCH / DINNER
      * @param customerId 指定客户ID，不传则生成全部客户的排餐计划
      * @return 生成结果汇总
      */
-    MealPlanGenerateResult generateMealPlan(String recordDate, String mealType, Long customerId);
+    default MealPlanGenerateResult generateMealPlan(String recordDate, String mealType, Long customerId) {
+        return generateMealPlan(recordDate, mealType, customerId, null, null);
+    }
 
     /**
      * 分页查询排餐计划列表

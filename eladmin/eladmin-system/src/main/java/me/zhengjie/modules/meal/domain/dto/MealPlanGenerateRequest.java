@@ -19,6 +19,8 @@ import io.swagger.annotations.ApiModelProperty;
 import lombok.Getter;
 import lombok.Setter;
 
+import javax.validation.constraints.Max;
+import javax.validation.constraints.Min;
 import javax.validation.constraints.NotBlank;
 
 /**
@@ -35,9 +37,19 @@ public class MealPlanGenerateRequest {
     private String recordDate;
 
     @NotBlank(message = "餐次不能为空")
-    @ApiModelProperty(value = "餐次，仅支持LUNCH/DINNER")
+    @ApiModelProperty(value = "餐次，仅支持BREAKFAST/LUNCH/DINNER")
     private String mealType;
 
     @ApiModelProperty(value = "指定客户ID，不传则生成全部客户的排餐计划")
     private Long customerId;
+
+    @Min(value = 1, message = "menuWeekNum范围仅支持1-4")
+    @Max(value = 4, message = "menuWeekNum范围仅支持1-4")
+    @ApiModelProperty(value = "指定菜单周次，需与menuDayOfWeek同时传入；不传则按recordDate推导，范围1-4")
+    private Integer menuWeekNum;
+
+    @Min(value = 1, message = "menuDayOfWeek范围仅支持1-7")
+    @Max(value = 7, message = "menuDayOfWeek范围仅支持1-7")
+    @ApiModelProperty(value = "指定菜单星期，需与menuWeekNum同时传入；不传则按recordDate推导，范围1-7")
+    private Integer menuDayOfWeek;
 }
