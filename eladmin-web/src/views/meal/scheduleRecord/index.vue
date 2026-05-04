@@ -265,6 +265,26 @@
             </el-option>
           </el-select>
         </el-form-item>
+        <el-divider content-position="left">菜单模板槽位（选填）</el-divider>
+        <el-form-item label="菜单周次" prop="menuWeekNum">
+          <el-select v-model="generateForm.menuWeekNum" placeholder="不选则按日期推导" clearable style="width: 100%;">
+            <el-option label="第 1 周" :value="1" />
+            <el-option label="第 2 周" :value="2" />
+            <el-option label="第 3 周" :value="3" />
+            <el-option label="第 4 周" :value="4" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="菜单星期" prop="menuDayOfWeek">
+          <el-select v-model="generateForm.menuDayOfWeek" placeholder="不选则按日期推导" clearable style="width: 100%;">
+            <el-option label="周一" :value="1" />
+            <el-option label="周二" :value="2" />
+            <el-option label="周三" :value="3" />
+            <el-option label="周四" :value="4" />
+            <el-option label="周五" :value="5" />
+            <el-option label="周六" :value="6" />
+            <el-option label="周日" :value="7" />
+          </el-select>
+        </el-form-item>
       </el-form>
       <div slot="footer">
         <el-button @click="generateDialog.visible = false">取 消</el-button>
@@ -431,7 +451,7 @@ export default {
 
       // 生成排餐计划弹窗
       generateDialog: { visible: false, loading: false },
-      generateForm: { date: null, mealType: 'LUNCH', customerId: null },
+      generateForm: { date: null, mealType: 'LUNCH', customerId: null, menuWeekNum: null, menuDayOfWeek: null },
       customerOptions: [],
       generateRules: {
         date: [{ required: true, message: '请选择排餐日期', trigger: 'change' }],
@@ -527,12 +547,13 @@ export default {
       const groups = {}
       ;(this.planData.customers || []).forEach(customer => {
         const code = customer.customerCode || customer.customerName || ''
-        ;(customer.items || []).filter(item => !item.isReplaced).forEach(item => {
-          const key = `${item.dishType}__${item.dishName}`
+        ;(customer.items || []).filter(item => !item.isReplaced || item.dishType === 'RICE').forEach(item => {
+          const displayName = item.dishType === 'RICE' ? (item.originalDishName || item.dishName) : item.dishName
+          const key = `${item.dishType}__${displayName}`
           if (!groups[key]) {
-            groups[key] = { dishType: item.dishType, dishName: item.dishName, eatCodes: [] }
+            groups[key] = { dishType: item.dishType, dishName: displayName, eatCodes: [] }
           }
-          if (!item.isAllergyFiltered) {
+          if (!item.isAllergyFiltered && (item.dishType !== 'RICE' || !item.isReplaced)) {
             if (!groups[key].eatCodes.includes(code)) {
               groups[key].eatCodes.push(code)
             }
@@ -659,15 +680,24 @@ export default {
     },
     resetGenerateForm() {
       this.$refs.generateForm && this.$refs.generateForm.resetFields()
-      this.generateForm = { date: null, mealType: 'LUNCH', customerId: null }
+      this.generateForm = { date: null, mealType: 'LUNCH', customerId: null, menuWeekNum: null, menuDayOfWeek: null }
     },
     handleGenerate() {
       this.$refs.generateForm.validate(valid => {
         if (!valid) return
+        const { menuWeekNum, menuDayOfWeek } = this.generateForm
+        if ((menuWeekNum != null) !== (menuDayOfWeek != null)) {
+          this.$message.warning('菜单周次和菜单星期必须同时选择或同时不选')
+          return
+        }
         this.generateDialog.loading = true
         const data = { recordDate: this.generateForm.date, mealType: this.generateForm.mealType }
         if (this.generateForm.customerId) {
           data.customerId = this.generateForm.customerId
+        }
+        if (menuWeekNum != null) {
+          data.menuWeekNum = menuWeekNum
+          data.menuDayOfWeek = menuDayOfWeek
         }
         generateMealPlan(data)
           .then(() => {

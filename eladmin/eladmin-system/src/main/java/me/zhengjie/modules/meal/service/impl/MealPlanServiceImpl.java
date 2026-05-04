@@ -265,7 +265,9 @@ public class MealPlanServiceImpl implements MealPlanService {
             throw new BadRequestException("menuWeekNum和menuDayOfWeek必须同时传入或同时不传");
         }
         if (menuWeekNum == null) {
-            return new MenuSlot(ScheduleKeyUtil.calcWeek(targetDate), ScheduleKeyUtil.calcDay(targetDate));
+            MenuSlot slot = new MenuSlot(ScheduleKeyUtil.calcWeek(targetDate), ScheduleKeyUtil.calcDay(targetDate), false);
+            log.info("排餐菜单槽位已确定 - source: {}, weekNum: {}, dayOfWeek: {}", "AUTO", slot.getWeekNum(), slot.getDayOfWeek());
+            return slot;
         }
         if (menuWeekNum < 1 || menuWeekNum > 4) {
             throw new BadRequestException("menuWeekNum范围仅支持1-4");
@@ -273,7 +275,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         if (menuDayOfWeek < 1 || menuDayOfWeek > 7) {
             throw new BadRequestException("menuDayOfWeek范围仅支持1-7");
         }
-        return new MenuSlot(menuWeekNum, menuDayOfWeek);
+        MenuSlot slot = new MenuSlot(menuWeekNum, menuDayOfWeek, true);
+        log.info("排餐菜单槽位已确定 - source: {}, weekNum: {}, dayOfWeek: {}", "MANUAL", slot.getWeekNum(), slot.getDayOfWeek());
+        return slot;
     }
 
     /**
@@ -1013,7 +1017,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         log.debug("加载次日排期菜品 - 日期: {}, 餐次: {}", nextDate, mealType);
 
         List<Dish> nextDayDishes = loadScheduledDishes(
-                new MenuSlot(ScheduleKeyUtil.calcWeek(nextDate), ScheduleKeyUtil.calcDay(nextDate)),
+                new MenuSlot(ScheduleKeyUtil.calcWeek(nextDate), ScheduleKeyUtil.calcDay(nextDate), false),
                 mealType);
         if (nextDayDishes.isEmpty()) {
             return Collections.emptyMap();
@@ -1529,10 +1533,12 @@ public class MealPlanServiceImpl implements MealPlanService {
     private static class MenuSlot {
         private final int weekNum;
         private final int dayOfWeek;
+        private final boolean manual;
 
-        private MenuSlot(int weekNum, int dayOfWeek) {
+        private MenuSlot(int weekNum, int dayOfWeek, boolean manual) {
             this.weekNum = weekNum;
             this.dayOfWeek = dayOfWeek;
+            this.manual = manual;
         }
 
         private int getWeekNum() {
@@ -1541,6 +1547,10 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         private int getDayOfWeek() {
             return dayOfWeek;
+        }
+
+        private boolean isManual() {
+            return manual;
         }
     }
 
