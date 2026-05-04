@@ -879,7 +879,19 @@ public class MealPlanServiceImpl implements MealPlanService {
                 }
             }
         }
-        // 未指定类型，回退到全部米饭
+        // 未指定类型（默认），选菜单中的米饭（排除RICE_TYPE特殊米饭）
+        if (result == null || result.getDish() == null) {
+            List<Dish> menuRice = new ArrayList<>();
+            for (Dish d : riceDishes) {
+                if (!DishTypeEnum.RICE_TYPE.getCode().equals(d.getDishType())) {
+                    menuRice.add(d);
+                }
+            }
+            if (!menuRice.isEmpty()) {
+                result = selectDish(menuRice, selectedDishIds, allergyTags, dishIngredientMap, categoryIngredientMap);
+            }
+        }
+        // 菜单米饭选不到，回退到全部米饭
         if (result == null || result.getDish() == null) {
             result = selectDish(riceDishes, selectedDishIds, allergyTags, dishIngredientMap, categoryIngredientMap);
         }
