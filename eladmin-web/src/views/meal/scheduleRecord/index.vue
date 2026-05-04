@@ -509,18 +509,28 @@ export default {
 
       const allergyFilteredCodesByDishName = {}
       const customersWithoutSoup = new Set()
-      const riceChangedDetailsByOriginalDishName = {}
+      const riceChangedDetailsByDisplayName = {}
+      // 预先确定菜单米饭名称（从非替换的米饭项中取），确保所有米饭归为同一行
+      let menuRiceName = null
+      ;(this.planData.customers || []).forEach(customer => {
+        (customer.items || []).forEach(item => {
+          if (item.dishType === 'RICE' && !item.isReplaced && item.dishName && !menuRiceName) {
+            menuRiceName = item.dishName
+          }
+        })
+      })
       ;(this.planData.customers || []).forEach(customer => {
         const code = customer.customerCode || customer.customerName || ''
         if (this.isSoupMissing(customer) && code) {
           customersWithoutSoup.add(code)
         }
         (customer.items || []).forEach(item => {
-          if (item.isReplaced && item.dishType === 'RICE' && item.originalDishName && code) {
-            if (!riceChangedDetailsByOriginalDishName[item.originalDishName]) {
-              riceChangedDetailsByOriginalDishName[item.originalDishName] = []
+          if (item.isReplaced && item.dishType === 'RICE' && code) {
+            const riceKey = menuRiceName || item.originalDishName || item.dishName
+            if (!riceChangedDetailsByDisplayName[riceKey]) {
+              riceChangedDetailsByDisplayName[riceKey] = []
             }
-            const detailGroups = riceChangedDetailsByOriginalDishName[item.originalDishName]
+            const detailGroups = riceChangedDetailsByDisplayName[riceKey]
             let detailGroup = detailGroups.find(group => group.dishName === item.dishName)
             if (!detailGroup) {
               detailGroup = { dishName: item.dishName, codes: [] }
@@ -529,7 +539,9 @@ export default {
             detailGroup.codes.push(code)
           }
           if (item.isAllergyFiltered) {
-            const filterDishName = (item.isReplaced && item.originalDishName) ? item.originalDishName : item.dishName
+            const filterDishName = item.dishType === 'RICE'
+              ? (menuRiceName || item.originalDishName || item.dishName)
+              : ((item.isReplaced && item.originalDishName) ? item.originalDishName : item.dishName)
             if (filterDishName) {
               if (!allergyFilteredCodesByDishName[filterDishName]) {
                 allergyFilteredCodesByDishName[filterDishName] = new Set()
@@ -548,7 +560,7 @@ export default {
       ;(this.planData.customers || []).forEach(customer => {
         const code = customer.customerCode || customer.customerName || ''
         ;(customer.items || []).filter(item => !item.isReplaced || item.dishType === 'RICE').forEach(item => {
-          const displayName = item.dishType === 'RICE' ? (item.originalDishName || item.dishName) : item.dishName
+          const displayName = item.dishType === 'RICE' ? (menuRiceName || item.originalDishName || item.dishName) : item.dishName
           const key = `${item.dishType}__${displayName}`
           if (!groups[key]) {
             groups[key] = { dishType: item.dishType, dishName: displayName, eatCodes: [] }
@@ -566,7 +578,7 @@ export default {
         .map(g => {
           const excludedSet = allergyFilteredCodesByDishName[g.dishName]
           const excludedCodes = excludedSet ? Array.from(excludedSet) : []
-          const riceChangedDetails = riceChangedDetailsByOriginalDishName[g.dishName] || []
+          const riceChangedDetails = riceChangedDetailsByDisplayName[g.dishName] || []
           const riceChangedText = this.buildRiceChangedCodeText(riceChangedDetails)
           const detailCodes = g.dishType === 'SOUP'
             ? Array.from(new Set([...excludedCodes, ...customersWithoutSoup]))
