@@ -112,12 +112,15 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public MealPlanGenerateResult generateMealPlan(String recordDate, String mealType, Long customerId) {
+    public MealPlanGenerateResult generateMealPlan(String recordDate, String mealType, Long customerId,
+                                                   Integer menuWeekNum, Integer menuDayOfWeek) {
         long startTime = System.currentTimeMillis();
-        log.info("开始生成排餐计划 - 日期: {}, 餐次: {}, 客户ID: {}", recordDate, mealType, customerId);
+        log.info("开始生成排餐计划 - 日期: {}, 餐次: {}, 客户ID: {}, 菜单周次: {}, 菜单星期: {}",
+                recordDate, mealType, customerId, menuWeekNum, menuDayOfWeek);
 
         LocalDate targetDate = ScheduleKeyUtil.parseDate(recordDate);
         String normalizedMealType = validateParams(mealType);
+        MenuSlot menuSlot = resolveMenuSlot(targetDate, menuWeekNum, menuDayOfWeek);
         String lockKey = buildGenerateLockKey(targetDate, normalizedMealType);
         log.debug("开始获取锁 - lockKey: {}", lockKey);
 
@@ -126,7 +129,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         log.debug("成功获取锁 - lockKey: {}", lockKey);
         registerLockCleanup(lockKey, lock);
 
-        MealPlanGenerateResult result = doGenerateMealPlan(targetDate, normalizedMealType, customerId);
+        MealPlanGenerateResult result = doGenerateMealPlan(targetDate, normalizedMealType, customerId, menuSlot);
 
         log.info("排餐计划生成完成 - 耗时: {}ms, 计划ID: {}, 成功数: {}, 失败数: {}",
                 System.currentTimeMillis() - startTime,
@@ -140,7 +143,8 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 执行排餐生成主流程：清理旧计划、加载候选数据、逐个订单生成并汇总结果。
      */
-    private MealPlanGenerateResult doGenerateMealPlan(LocalDate targetDate, String mealType, Long customerId) {
+    private MealPlanGenerateResult doGenerateMealPlan(LocalDate targetDate, String mealType, Long customerId,
+                                                      MenuSlot menuSlot) {
         log.debug("开始执行排餐生成主流程 - 日期: {}, 餐次: {}", targetDate, mealType);
 
         long startTime = System.currentTimeMillis();
@@ -163,7 +167,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         Map<Long, ParentPackage> parentPackageMap = loadParentPackages(orders);
         log.debug("加载父套餐完成 - 套餐数量: {}", parentPackageMap.size());
 
-        List<Dish> scheduledDishes = loadScheduledDishes(targetDate, mealType);
+        List<Dish> scheduledDishes = loadScheduledDishes(menuSlot, mealType);
         log.debug("加载排期菜品完成 - 菜品数量: {}", scheduledDishes.size());
 
         List<Dish> riceDishes = loadRiceDishes();
@@ -195,14 +199,16 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         for (int i = 0; i < orders.size(); i++) {
             CustomerOrder order = orders.get(i);
+            CustomerProfile customer = customerMap.get(order.getCustomerId());
+            String customerCode = customer != null ? customer.getCustomerCode() : null;
+            String customerName = customer != null ? customer.getCustomerName() : null;
             log.info("处理订单 {}/{} - 订单ID: {}, 客户: {}-{}, 父套餐ID: {},餐数:{}",
                     i + 1, orders.size(),
                     order.getId(),
-                    customerMap.get(order.getCustomerId()).getCustomerCode(),
-                    customerMap.get(order.getCustomerId()).getCustomerName(),
+                    customerCode,
+                    customerName,
                     order.getParentPackageId(),order.getMainDishCount()+","+order.getSideDishCount()+","+order.getVegCount()+","+order.getRiceCount()+","+order.getSoupCount());
 
-            CustomerProfile customer = customerMap.get(order.getCustomerId());
             if (customer == null) {
                 log.warn("订单处理失败：客户档案不存在 - 订单ID: {}, 客户ID: {}",
                         order.getId(), order.getCustomerId());
@@ -245,13 +251,29 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
-     * 校验餐次参数，只允许午餐和晚餐。
+     * 校验餐次参数，仅支持 BREAKFAST / LUNCH / DINNER。
      */
     private String validateParams(String mealType) {
         if (!MEAL_TYPE_LUNCH.equals(mealType) && !MEAL_TYPE_DINNER.equals(mealType) && !MEAL_TYPE_BREAKFAST.equals(mealType)) {
             throw new BadRequestException("餐次仅支持LUNCH、DINNER或BREAKFAST");
         }
         return mealType;
+    }
+
+    private MenuSlot resolveMenuSlot(LocalDate targetDate, Integer menuWeekNum, Integer menuDayOfWeek) {
+        if ((menuWeekNum == null) != (menuDayOfWeek == null)) {
+            throw new BadRequestException("menuWeekNum和menuDayOfWeek必须同时传入或同时不传");
+        }
+        if (menuWeekNum == null) {
+            return new MenuSlot(ScheduleKeyUtil.calcWeek(targetDate), ScheduleKeyUtil.calcDay(targetDate));
+        }
+        if (menuWeekNum < 1 || menuWeekNum > 4) {
+            throw new BadRequestException("menuWeekNum范围仅支持1-4");
+        }
+        if (menuDayOfWeek < 1 || menuDayOfWeek > 7) {
+            throw new BadRequestException("menuDayOfWeek范围仅支持1-7");
+        }
+        return new MenuSlot(menuWeekNum, menuDayOfWeek);
     }
 
     /**
@@ -562,16 +584,16 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 按排期和餐次查询当日候选菜品。
      */
-    private List<Dish> loadScheduledDishes(LocalDate targetDate, String mealType) {
+    private List<Dish> loadScheduledDishes(MenuSlot menuSlot, String mealType) {
         long startTime = System.currentTimeMillis();
         log.debug("查询排期菜品 - 周序号: {}, 星期: {}, 餐次: {}",
-                ScheduleKeyUtil.calcWeek(targetDate),
-                ScheduleKeyUtil.calcDay(targetDate),
+                menuSlot.getWeekNum(),
+                menuSlot.getDayOfWeek(),
                 mealType);
 
         List<Dish> scheduledDishes = mealSchedulePlanMapper.findBySchedule(
-                ScheduleKeyUtil.calcWeek(targetDate),
-                ScheduleKeyUtil.calcDay(targetDate),
+                menuSlot.getWeekNum(),
+                menuSlot.getDayOfWeek(),
                 mealType);
         if (scheduledDishes == null || scheduledDishes.isEmpty()) {
             return Collections.emptyList();
@@ -990,7 +1012,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         LocalDate nextDate = targetDate.plusDays(1);
         log.debug("加载次日排期菜品 - 日期: {}, 餐次: {}", nextDate, mealType);
 
-        List<Dish> nextDayDishes = loadScheduledDishes(nextDate, mealType);
+        List<Dish> nextDayDishes = loadScheduledDishes(
+                new MenuSlot(ScheduleKeyUtil.calcWeek(nextDate), ScheduleKeyUtil.calcDay(nextDate)),
+                mealType);
         if (nextDayDishes.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -1323,15 +1347,46 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 将内部排餐结果转换为接口返回对象。
      */
     private MealPlanGenerateResult buildResult(MealPlan mealPlan, List<MealPlanGenerateResult.FailDetail> failDetails) {
+        List<MealPlanGenerateResult.FailDetail> effectiveFailDetails = failDetails == null
+                ? Collections.emptyList()
+                : failDetails;
+        int failCount = mealPlan.getFailCount() == null ? 0 : mealPlan.getFailCount();
+        if (failCount != effectiveFailDetails.size()) {
+            log.info("排餐失败汇总与明细数量不一致，开始按当前有效失败记录重建 - 计划ID: {}, 汇总失败数: {}, 当前明细数: {}",
+                    mealPlan.getId(), failCount, effectiveFailDetails.size());
+            effectiveFailDetails = rebuildFailDetails(mealPlan.getId());
+            failCount = effectiveFailDetails.size();
+        }
+
         MealPlanGenerateResult result = new MealPlanGenerateResult();
         result.setMealPlanId(mealPlan.getId());
         result.setRecordDate(mealPlan.getRecordDate().toString());
         result.setMealType(mealPlan.getMealType());
         result.setTotalCount(mealPlan.getTotalCount());
         result.setSuccessCount(mealPlan.getSuccessCount());
-        result.setFailCount(mealPlan.getFailCount());
-        result.setFailDetails(failDetails);
+        result.setFailCount(failCount);
+        result.setFailDetails(effectiveFailDetails);
         return result;
+    }
+
+    private List<MealPlanGenerateResult.FailDetail> rebuildFailDetails(Long mealPlanId) {
+        if (mealPlanId == null) {
+            return Collections.emptyList();
+        }
+
+        List<MealPlanCustomer> customerPlans = mealPlanCustomerMapper.selectByMealPlanId(mealPlanId);
+        if (CollectionUtils.isEmpty(customerPlans)) {
+            return Collections.emptyList();
+        }
+
+        return customerPlans.stream()
+                .filter(plan -> Integer.valueOf(0).equals(plan.getStatus()))
+                .map(plan -> {
+                    MealPlanGenerateResult.FailDetail failDetail = new MealPlanGenerateResult.FailDetail();
+                    failDetail.setFailReason(plan.getFailReason());
+                    return failDetail;
+                })
+                .collect(Collectors.toList());
     }
 
     /**
@@ -1468,6 +1523,24 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         public void setMealTypes(List<String> mealTypes) {
             this.mealTypes = mealTypes;
+        }
+    }
+
+    private static class MenuSlot {
+        private final int weekNum;
+        private final int dayOfWeek;
+
+        private MenuSlot(int weekNum, int dayOfWeek) {
+            this.weekNum = weekNum;
+            this.dayOfWeek = dayOfWeek;
+        }
+
+        private int getWeekNum() {
+            return weekNum;
+        }
+
+        private int getDayOfWeek() {
+            return dayOfWeek;
         }
     }
 
