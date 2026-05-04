@@ -1,32 +1,255 @@
--- 配料表
-CREATE TABLE `dish_ingredient` (
-  `id` int NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `name` varchar(100) NOT NULL COMMENT '配料名称',
-  `category` varchar(50) DEFAULT NULL COMMENT '分类：MEAT肉类、VEGETABLE蔬菜、SEAFOOD海鲜、TOFU豆制品、SPICE调料、OTHER其他',
-  `unit` varchar(20) DEFAULT NULL COMMENT '单位：克g、毫升ml、个',
-  `calories` int DEFAULT NULL COMMENT '每单位热量（卡路里）',
-  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
-  `enabled` bit(1) DEFAULT b'1' COMMENT '是否启用',
-  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_name` (`name`),
-  KEY `idx_category` (`category`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='配料表';
+create table dish_ingredient
+(
+    id          int auto_increment comment '主键'
+        primary key,
+    name        varchar(100)                       not null comment '配料名称',
+    category_id int                                null comment '二级分类ID',
+    category    varchar(50)                        null comment '分类：MEAT肉类、VEGETABLE蔬菜、SEAFOOD海鲜、TOFU豆制品、SPICE调料、OTHER其他',
+    unit        varchar(20)                        null comment '单位：克g、毫升ml、个',
+    calories    int                                null comment '每单位热量（卡路里）',
+    remark      varchar(500)                       null comment '备注',
+    enabled     bit      default b'1'              null comment '是否启用',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '配料表' collate = utf8mb4_unicode_ci;
 
--- 菜品配料关联表
-CREATE TABLE `dish_ingredient_relation` (
-  `id` int NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `dish_id` int NOT NULL COMMENT '菜品ID',
-  `ingredient_id` int NOT NULL COMMENT '配料ID',
-  `quantity` decimal(10,2) DEFAULT NULL COMMENT '用量',
-  `remark` varchar(200) DEFAULT NULL COMMENT '备注',
-  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_dish_id` (`dish_id`),
-  KEY `idx_ingredient_id` (`ingredient_id`),
-  KEY `idx_dish_ingredient` (`dish_id`, `ingredient_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='菜品配料关联表';
+create index idx_category
+    on dish_ingredient (category);
 
--- 可选：将原 dish 表的 ingredients 字段数据迁移到新表
--- 建议：先保留原字段，待新功能测试完成后，再考虑是否删除
+create index idx_category_id
+    on dish_ingredient (category_id);
+
+create index idx_name
+    on dish_ingredient (name);
+
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (316, '三黄鸡', 40, 'MEAT', null, null, null, true, '2026-04-23 06:23:12', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (317, '乌鸡', 40, 'MEAT', null, null, null, true, '2026-04-23 06:23:13', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (318, '乳鸽', 43, 'MEAT', null, null, null, true, '2026-04-23 06:23:13', '2026-04-27 14:14:40');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (319, '五花肉', 37, 'MEAT', null, null, null, true, '2026-04-23 06:23:13', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (320, '兔丁', 42, 'MEAT', null, null, null, true, '2026-04-23 06:23:14', '2026-04-27 14:14:40');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (321, '兔子', 42, 'MEAT', null, null, null, true, '2026-04-23 06:23:14', '2026-04-27 14:14:40');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (322, '公鸡', 40, 'MEAT', null, null, null, true, '2026-04-23 06:23:14', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (323, '吊龙', 38, 'MEAT', null, null, null, true, '2026-04-23 06:23:15', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (324, '土公鸡', 40, 'MEAT', null, null, null, true, '2026-04-23 06:23:15', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (325, '土鸡', 40, 'MEAT', null, null, null, true, '2026-04-23 06:23:15', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (326, '小土鸭', 41, 'MEAT', null, null, null, true, '2026-04-23 06:23:16', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (327, '掌中宝', 40, 'MEAT', null, null, null, true, '2026-04-23 06:23:16', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (328, '排骨', 37, 'MEAT', null, null, null, true, '2026-04-23 06:23:16', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (329, '板筋', 38, 'MEAT', null, null, null, true, '2026-04-23 06:23:17', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (330, '梅花肉', 37, 'MEAT', null, null, null, true, '2026-04-23 06:23:17', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (331, '牛排', 38, 'MEAT', null, null, null, true, '2026-04-23 06:23:17', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (332, '牛柳', 38, 'MEAT', null, null, null, true, '2026-04-23 06:23:18', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (333, '牛肉', 38, 'MEAT', null, null, null, true, '2026-04-23 06:23:18', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (334, '牛肋排', 38, 'MEAT', null, null, null, true, '2026-04-23 06:23:18', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (335, '牛肋条', 38, 'MEAT', null, null, null, true, '2026-04-23 06:23:18', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (336, '牛腩', 38, 'MEAT', null, null, null, true, '2026-04-23 06:23:19', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (337, '牛腱子', 38, 'MEAT', null, null, null, true, '2026-04-23 06:23:19', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (338, '牛里脊', 38, 'MEAT', null, null, null, true, '2026-04-23 06:23:20', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (339, '猪手', 37, 'MEAT', null, null, null, true, '2026-04-23 06:23:20', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (340, '猪板筋', 37, 'MEAT', null, null, null, true, '2026-04-23 06:23:20', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (341, '猪肉', 37, 'MEAT', null, null, null, true, '2026-04-23 06:23:21', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (342, '猪肚', 37, 'MEAT', null, null, null, true, '2026-04-23 06:23:21', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (343, '猪腱子', 37, 'MEAT', null, null, null, true, '2026-04-23 06:23:21', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (344, '猪蹄', 37, 'MEAT', null, null, null, true, '2026-04-23 06:23:22', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (345, '老鸭', 41, 'MEAT', null, null, null, true, '2026-04-23 06:23:22', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (346, '里脊肉', 37, 'MEAT', null, null, null, true, '2026-04-23 06:23:23', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (347, '颈骨', 37, 'MEAT', null, null, null, true, '2026-04-23 06:23:23', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (348, '鸡翅', 40, 'MEAT', null, null, null, true, '2026-04-23 06:23:24', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (349, '鸡翅中', 40, 'MEAT', null, null, null, true, '2026-04-23 06:23:24', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (350, '鸡肉', 40, 'MEAT', null, null, null, true, '2026-04-23 06:23:24', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (351, '鸡胸肉', 40, 'MEAT', null, null, null, true, '2026-04-23 06:23:25', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (352, '鸡腿肉', 40, 'MEAT', null, null, null, true, '2026-04-23 06:23:25', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (353, '鸭子', 41, 'MEAT', null, null, null, true, '2026-04-23 06:23:26', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (354, '鸭肉', 41, 'MEAT', null, null, null, true, '2026-04-23 06:23:26', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (355, '鸽子', 43, 'MEAT', null, null, null, true, '2026-04-23 06:23:27', '2026-04-27 14:14:40');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (356, '鹌鹑蛋', 17, 'MEAT', null, null, null, true, '2026-04-23 06:23:27', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (357, '麻鸭', 41, 'MEAT', null, null, null, true, '2026-04-23 06:23:28', '2026-04-27 14:14:39');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (358, '三色藜麦', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:28', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (359, '丸子', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:28', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (360, '凤梨', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:29', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (361, '墨斗丸', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:29', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (362, '大米', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:29', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (363, '小米', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:30', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (364, '松仁', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:30', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (365, '板栗', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:31', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (366, '核桃仁', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:31', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (367, '桃仁', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:31', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (368, '椰子水', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:32', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (369, '椰肉', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:32', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (370, '橙子', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:32', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (371, '燕麦米', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:33', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (372, '牛肉丸', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:33', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (373, '猪肉丸', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:34', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (374, '玉米', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:34', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (375, '玉米碎', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:35', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (376, '玉米粒', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:35', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (377, '粉丝', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:36', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (378, '糙米', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:36', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (379, '红米', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:37', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (380, '肉丸', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:37', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (381, '腰果', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:37', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (382, '芝士', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:38', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (383, '花生', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:38', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (384, '苹果', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:39', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (385, '藜麦', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:39', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (386, '虾丸', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:39', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (387, '虾滑', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:39', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (388, '蛋清', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:40', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (389, '蛋皮', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:40', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (390, '蛋饺', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:40', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (391, '蛋黄', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:41', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (392, '西米', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:41', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (393, '话梅', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:42', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (394, '酥肉', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:42', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (395, '青提', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:42', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (396, '青桔', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:42', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (397, '面包糠', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:43', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (398, '马蹄', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:43', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (399, '鲜玉米', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:43', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (400, '鸡蛋', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:44', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (401, '黑米', 35, 'OTHER', null, null, null, true, '2026-04-23 06:23:44', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (402, '乌鱼', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:44', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (403, '基围虾', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:45', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (404, '多宝鱼', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:45', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (405, '大虾', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:45', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (406, '小黄鱼', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:45', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (407, '带鱼', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:46', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (408, '河虾', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:46', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (409, '海带', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:46', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (410, '潮汕虾丸', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:47', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (411, '紫菜', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:47', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (412, '花蛤', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:47', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (413, '虾', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:48', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (414, '虾仁', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:48', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (415, '青虾', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:48', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (416, '鱿鱼', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:49', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (417, '鲈鱼', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:49', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (418, '鲍鱼', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:49', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (419, '鲜虾', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:50', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (420, '鲫鱼', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:50', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (421, '鳕鱼', 21, 'SEAFOOD', null, null, null, true, '2026-04-23 06:23:50', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (422, '大枣', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:51', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (423, '大葱', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:51', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (424, '大蒜', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:51', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (425, '姜', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:52', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (426, '姜片', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:52', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (427, '小葱', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:52', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (428, '枸杞', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:53', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (429, '法香', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:53', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (430, '生姜', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:53', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (431, '白芝麻', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:54', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (432, '百合', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:54', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (433, '红枣', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:54', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (434, '老姜', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:55', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (435, '芝麻', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:55', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (436, '莲子', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:55', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (437, '葱', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:55', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (438, '葱丝', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:56', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (439, '葱段', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:56', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (440, '葱花', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:57', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (441, '蒜', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:57', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (442, '陈皮', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:57', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (443, '黑芝麻', 30, 'SPICE', null, null, null, true, '2026-04-23 06:23:57', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (444, '腐竹', 25, 'TOFU', null, null, null, true, '2026-04-23 06:23:58', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (445, '豆皮', 25, 'TOFU', null, null, null, true, '2026-04-23 06:23:58', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (446, '豆腐', 25, 'TOFU', null, null, null, true, '2026-04-23 06:23:58', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (447, '豆腐干', 25, 'TOFU', null, null, null, true, '2026-04-23 06:23:59', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (448, '三月瓜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:23:59', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (449, '上海青', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:23:59', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (450, '丝瓜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:00', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (451, '冬瓜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:00', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (452, '凤尾', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:00', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (453, '包心芥菜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:01', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (454, '南瓜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:01', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (455, '口蘑', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:01', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (456, '四季豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:02', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (457, '土豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:02', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (458, '娃娃菜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:02', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (459, '小土豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:03', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (460, '小番茄', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:03', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (461, '小白菜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:04', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (462, '小芹菜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:04', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (463, '小萝卜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:04', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (464, '山姆小番茄', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:05', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (465, '山药', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:05', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (466, '干香菇', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:05', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (467, '平菇', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:06', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (469, '木耳', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:07', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (470, '杏鲍菇', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:07', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (471, '杭白菜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:08', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (472, '松茸', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:08', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (473, '樱桃萝卜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:08', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (474, '毛豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:09', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (475, '油菜苔', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:09', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (476, '油麦菜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:10', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (477, '洋葱', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:10', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (478, '海鲜菇', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:10', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (479, '牛肝菌', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:11', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (480, '生菜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:11', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (481, '番茄', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:11', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (482, '白木耳', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:12', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (483, '白玉菇', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:12', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (484, '白萝卜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:12', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (485, '秋葵', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:13', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (486, '紫甘蓝', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:13', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (487, '紫薯', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:13', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (488, '红椒', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:14', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (489, '红腰豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:14', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (490, '红豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:14', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (491, '绿椒', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:15', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (492, '羊肚菌', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:15', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (493, '胡萝卜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:15', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (494, '芋头', 10, 'VEGETABLE', '克', 0, '', true, '2026-04-23 06:24:16', '2026-04-27 16:21:44');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (495, '芥兰', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:16', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (496, '芥兰苗', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:16', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (497, '芥菜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:17', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (498, '芦笋', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:17', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (499, '花菜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:17', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (500, '芹菜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:18', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (501, '苦菊', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:18', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (502, '茄子', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:18', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (503, '茭白', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:19', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (504, '荷兰豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:19', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (505, '莲花白', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:19', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (506, '莲藕', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:20', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (507, '菜心', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:20', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (508, '菠菜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:20', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (509, '萝卜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:20', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (510, '藕', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:21', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (511, '虫草花', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:21', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (512, '蟹味菇', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:21', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (513, '西南花', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:22', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (514, '西红柿', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:22', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (515, '西芹', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:22', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (516, '豆角', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:23', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (517, '豇豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:23', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (518, '豌豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:23', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (519, '贝贝南瓜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:24', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (520, '赤小豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:24', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (521, '赤松茸', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:25', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (522, '金耳', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:25', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (523, '金针菇', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:25', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (524, '银耳', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:26', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (525, '雪豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:26', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (526, '青笋', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:26', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (527, '青豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:27', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (528, '香菇', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:27', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (529, '鹿茸菌', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:27', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (530, '黄椒', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:28', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (531, '黄瓜', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:28', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (532, '黄花', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:28', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (533, '黄豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:29', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (534, '黑木耳', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:29', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (535, '黑豆', 13, 'VEGETABLE', null, null, null, true, '2026-04-23 06:24:29', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (536, '猴头菇', 13, 'VEGETABLE', '克', 0, '', true, '2026-04-24 08:45:31', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (537, '咸蛋黄', 35, null, '克', 0, '', true, '2026-04-24 08:53:12', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (538, '黄焖酱', 30, 'SPICE', '克', 0, '', true, '2026-04-24 09:03:09', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (539, '酱油', 30, 'SPICE', '克', 0, '', true, '2026-04-24 09:05:56', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (540, '豆豉', 30, 'SPICE', '克', 0, '', true, '2026-04-24 09:09:25', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (541, '红彩椒', 13, 'VEGETABLE', '克', 0, '', true, '2026-04-24 09:25:37', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (542, '黄彩椒', 13, 'VEGETABLE', '克', 0, '', true, '2026-04-24 09:25:51', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (543, '绿彩椒', 13, 'VEGETABLE', '克', 0, '', true, '2026-04-24 09:26:05', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (544, '虫草花调色', 30, 'SPICE', '克', 0, '', true, '2026-04-24 09:32:48', '2026-04-24 14:21:41');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (545, '猪里脊', 37, 'MEAT', '克', 0, '', true, '2026-04-27 16:34:21', '2026-04-27 14:14:38');
+INSERT INTO eladmin.dish_ingredient (id, name, category_id, category, unit, calories, remark, enabled, create_time, update_time) VALUES (547, '海带', 46, 'VEGETABLE', '克', 0, '', true, '2026-04-28 22:11:47', '2026-04-28 22:11:54');
