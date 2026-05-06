@@ -1999,13 +1999,17 @@ public class MealPlanServiceImpl implements MealPlanService {
     private MealPlanDetailVO.CustomerPlanDetail assembleCustomerDetail(
             MealPlanCustomer customer,
             Map<Long, List<MealPlanCustomerItem>> itemsByCustomerPlanId,
-            Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> ingredientsMap) {
+            Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> ingredientsMap,
+            Set<Long> firstMealCustomerPlanIds) {
         MealPlanDetailVO.CustomerPlanDetail detail = new MealPlanDetailVO.CustomerPlanDetail();
         detail.setId(customer.getId());
         detail.setCustomerId(customer.getCustomerId());
         detail.setCustomerName(customer.getCustomerName());
         detail.setPhone(customer.getPhone());
         detail.setCustomerCode(customer.getCustomerCode());
+        detail.setFirstMealOfOrder(customer.getStatus() != null
+                && customer.getStatus() == 1
+                && firstMealCustomerPlanIds.contains(customer.getId()));
         detail.setOrderId(customer.getOrderId());
         detail.setParentPackageId(customer.getParentPackageId());
         detail.setChildPackageId(customer.getChildPackageId());
@@ -2033,6 +2037,20 @@ public class MealPlanServiceImpl implements MealPlanService {
         return detail;
     }
 
+    private Set<Long> buildFirstMealCustomerPlanIdSet(List<MealPlanCustomer> customers) {
+        if (customers == null || customers.isEmpty()) {
+            return Collections.emptySet();
+        }
+        List<Long> customerPlanIds = customers.stream()
+                .map(MealPlanCustomer::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (customerPlanIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return new HashSet<>(mealPlanCustomerMapper.selectFirstSuccessfulCustomerPlanIds(customerPlanIds));
+    }
+
     private MealPlanListDetailVO assembleMealPlanListDetail(
             MealPlan plan,
             List<MealPlanCustomer> customers,
@@ -2048,8 +2066,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         vo.setStatus(plan.getStatus());
         vo.setGenerateTime(plan.getGenerateTime() != null ? plan.getGenerateTime().toString() : null);
 
+        Set<Long> firstMealCustomerPlanIds = buildFirstMealCustomerPlanIdSet(customers);
         List<MealPlanDetailVO.CustomerPlanDetail> customerDetails = customers.stream()
-                .map(customer -> assembleCustomerDetail(customer, itemsByCustomerPlanId, ingredientsMap))
+                .map(customer -> assembleCustomerDetail(customer, itemsByCustomerPlanId, ingredientsMap, firstMealCustomerPlanIds))
                 .collect(Collectors.toList());
         vo.setCustomers(customerDetails);
         vo.setTotalCustomers(customerDetails.size());
@@ -2213,8 +2232,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         result.setMealPlan(planVO);
 
         // 设置客户列表
+        Set<Long> firstMealCustomerPlanIds = buildFirstMealCustomerPlanIdSet(customers);
         List<MealPlanDetailVO.CustomerPlanDetail> customerDetails = customers.stream()
-                .map(customer -> assembleCustomerDetail(customer, itemsMap, finalIngredientsMap))
+                .map(customer -> assembleCustomerDetail(customer, itemsMap, finalIngredientsMap, firstMealCustomerPlanIds))
                 .collect(Collectors.toList());
 
         result.setCustomers(customerDetails);

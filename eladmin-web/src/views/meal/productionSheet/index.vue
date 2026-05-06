@@ -72,9 +72,15 @@
               v-for="customer in allCustomers"
               :key="customer.id"
               class="code-cell"
-              :class="{ 'code-cell--replaced': customer.hasReplaced }"
+              :class="{
+                'code-cell--replaced': customer.hasReplaced,
+                'code-cell--first': customer.firstMealOfOrder
+              }"
             >
-              <span class="code-text">{{ customer.customerCode || customer.customerName }}</span>
+              <div class="code-main">
+                <span class="code-text">{{ customer.customerCode || customer.customerName }}</span>
+                <span v-if="customer.firstMealOfOrder" class="code-first-badge">首</span>
+              </div>
             </div>
           </div>
         </div>
@@ -207,10 +213,13 @@ export default {
     // 所有客户列表（含是否有换菜标记）
     allCustomers() {
       if (!this.planData) return []
-      return (this.planData.customers || []).map(c => ({
+      const decorated = (this.planData.customers || []).map(c => ({
         ...c,
         hasReplaced: (c.items || []).some(i => i.isReplaced)
       }))
+      const firstCustomers = decorated.filter(item => item.firstMealOfOrder)
+      const normalCustomers = decorated.filter(item => !item.firstMealOfOrder)
+      return [...firstCustomers, ...normalCustomers]
     },
     // 常规排餐（非换菜）按菜聚合
     // 编号明细：显示「原本应该吃这道菜、但因换菜被替换掉」的客户编号
@@ -554,6 +563,32 @@ export default {
   font-weight: 700;
   color: #475569;
 }
+.code-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.code-cell--first {
+  border-left: 8px solid #16a34a;
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.code-first-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid #86efac;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
 /* 红框：有换菜的客户 */
 .code-cell--replaced .code-text {
   display: inline-block;
@@ -726,6 +761,16 @@ export default {
   }
   body {
     font-size: 12px;
+  }
+  .code-cell--first {
+    border-left-color: #166534 !important;
+    border-color: #166534 !important;
+    background: #ffffff !important;
+  }
+  .code-first-badge {
+    border-color: #166534 !important;
+    color: #166534 !important;
+    background: #ffffff !important;
   }
 }
 </style>
