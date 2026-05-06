@@ -102,4 +102,11 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
      * @return 未核销的客户排餐记录列表
      */
     List<MealPlanCustomer> selectUnverifiedByMealPlanId(@Param("mealPlanId") Long mealPlanId);
+
+    /**
+     * 批量查询当前页面中哪些客户排餐记录属于订单当前餐次的首次成功排餐
+     * @param customerPlanIds 当前排餐计划中的客户计划ID列表
+     * @return 首次成功排餐的客户计划ID列表
+     */
+    List<Long> selectFirstSuccessfulCustomerPlanIds(@Param("customerPlanIds") List<Long> customerPlanIds);
 }

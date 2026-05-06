@@ -982,9 +982,75 @@ class MealPlanServiceImplTest {
     }
 
     @Test
+    void shouldMarkFirstMealOfOrderWhenQueryMealPlanDetail() {
+        MealPlan mealPlan = new MealPlan();
+        mealPlan.setId(1L);
+        mealPlan.setRecordDate(LocalDate.of(2026, 5, 6));
+        mealPlan.setMealType("LUNCH");
+        mealPlan.setStatus("SUCCESS");
+
+        MealPlanCustomer firstCustomer = new MealPlanCustomer();
+        firstCustomer.setId(101L);
+        firstCustomer.setCustomerId(11L);
+        firstCustomer.setCustomerCode("A001");
+        firstCustomer.setCustomerName("张三");
+        firstCustomer.setOrderId(1001L);
+        firstCustomer.setStatus(1);
+
+        MealPlanCustomer normalCustomer = new MealPlanCustomer();
+        normalCustomer.setId(102L);
+        normalCustomer.setCustomerId(12L);
+        normalCustomer.setCustomerCode("A002");
+        normalCustomer.setCustomerName("李四");
+        normalCustomer.setOrderId(1002L);
+        normalCustomer.setStatus(1);
+
+        when(mealPlanMapper.selectById(1L)).thenReturn(mealPlan);
+        when(mealPlanCustomerMapper.selectByMealPlanId(1L)).thenReturn(Arrays.asList(firstCustomer, normalCustomer));
+        when(mealPlanCustomerMapper.selectFirstSuccessfulCustomerPlanIds(Arrays.asList(101L, 102L)))
+                .thenReturn(Collections.singletonList(101L));
+        when(mealPlanCustomerItemMapper.selectByCustomerPlanIds(Arrays.asList(101L, 102L)))
+                .thenReturn(Collections.emptyList());
+
+        MealPlanDetailVO detail = mealPlanService.queryMealPlanDetail(1L);
+
+        assertEquals(2, detail.getCustomers().size());
+        assertEquals(Boolean.TRUE, detail.getCustomers().get(0).getFirstMealOfOrder());
+        assertEquals(Boolean.FALSE, detail.getCustomers().get(1).getFirstMealOfOrder());
+    }
+
+    @Test
+    void shouldReturnFalseForFailedCustomerEvenIfIdIsInFirstSet() {
+        MealPlan mealPlan = new MealPlan();
+        mealPlan.setId(1L);
+        mealPlan.setRecordDate(LocalDate.of(2026, 5, 6));
+        mealPlan.setMealType("DINNER");
+        mealPlan.setStatus("FAILED");
+
+        MealPlanCustomer failedCustomer = new MealPlanCustomer();
+        failedCustomer.setId(201L);
+        failedCustomer.setCustomerId(21L);
+        failedCustomer.setCustomerCode("B001");
+        failedCustomer.setCustomerName("王五");
+        failedCustomer.setOrderId(2001L);
+        failedCustomer.setStatus(0);
+
+        when(mealPlanMapper.selectById(1L)).thenReturn(mealPlan);
+        when(mealPlanCustomerMapper.selectByMealPlanId(1L)).thenReturn(Collections.singletonList(failedCustomer));
+        when(mealPlanCustomerMapper.selectFirstSuccessfulCustomerPlanIds(Collections.singletonList(201L)))
+                .thenReturn(Collections.singletonList(201L));
+        when(mealPlanCustomerItemMapper.selectByCustomerPlanIds(Collections.singletonList(201L)))
+                .thenReturn(Collections.emptyList());
+
+        MealPlanDetailVO detail = mealPlanService.queryMealPlanDetail(1L);
+
+        assertEquals(Boolean.FALSE, detail.getCustomers().get(0).getFirstMealOfOrder());
+    }
+
+    @Test
     void testAssembleCustomerDetail_setsDishCounts() throws Exception {
         Method method = MealPlanServiceImpl.class.getDeclaredMethod(
-                "assembleCustomerDetail", MealPlanCustomer.class, java.util.Map.class, java.util.Map.class);
+                "assembleCustomerDetail", MealPlanCustomer.class, java.util.Map.class, java.util.Map.class, java.util.Set.class);
         method.setAccessible(true);
 
         MealPlanCustomer customer = new MealPlanCustomer();
@@ -1003,7 +1069,7 @@ class MealPlanServiceImplTest {
         customer.setSupplementarySoupCount(1);
 
         MealPlanDetailVO.CustomerPlanDetail detail = (MealPlanDetailVO.CustomerPlanDetail) method.invoke(
-                mealPlanService, customer, Collections.emptyMap(), Collections.emptyMap());
+                mealPlanService, customer, Collections.emptyMap(), Collections.emptyMap(), Collections.emptySet());
 
         assertEquals(Integer.valueOf(1), detail.getSupplementaryMainCount());
         assertEquals(Integer.valueOf(0), detail.getSupplementarySideCount());

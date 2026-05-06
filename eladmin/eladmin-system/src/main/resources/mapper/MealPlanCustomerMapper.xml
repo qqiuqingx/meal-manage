@@ -256,4 +256,32 @@
         order by id asc
     </select>
 
+    <!-- 批量查询哪些客户排餐记录属于订单当前餐次的首次成功排餐 -->
+    <select id="selectFirstSuccessfulCustomerPlanIds" resultType="java.lang.Long">
+        select current_rec.id
+        from meal_plan_customer current_rec
+        join meal_plan current_plan on current_plan.id = current_rec.meal_plan_id
+        where current_rec.deleted = 0
+          and current_plan.deleted = 0
+          and current_rec.status = 1
+          and current_rec.id in
+        <foreach collection="customerPlanIds" item="customerPlanId" open="(" separator="," close=")">
+            #{customerPlanId}
+        </foreach>
+          and not exists (
+            select 1
+            from meal_plan_customer previous_rec
+            join meal_plan previous_plan on previous_plan.id = previous_rec.meal_plan_id
+            where previous_rec.deleted = 0
+              and previous_plan.deleted = 0
+              and previous_rec.status = 1
+              and previous_rec.order_id = current_rec.order_id
+              and previous_plan.meal_type = current_plan.meal_type
+              and (
+                  previous_plan.record_date &lt; current_plan.record_date
+                  or (previous_plan.record_date = current_plan.record_date and previous_rec.id &lt; current_rec.id)
+              )
+          )
+    </select>
+
 </mapper>

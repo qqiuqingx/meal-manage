@@ -100,6 +100,7 @@
               v-for="customer in allCustomers"
               :key="customer.id"
               class="code-cell"
+              :class="{ 'code-cell--first': customer.firstMealOfOrder }"
             >
               <el-tooltip
                 v-if="customer.specialRequirements"
@@ -107,16 +108,21 @@
                 placement="top"
                 :content="customer.specialRequirements"
               >
+                <div class="code-main">
+                  <span
+                    class="code-text code-text--tooltip"
+                    :class="{ 'code-text--soup-missing': customer.isSoupMissing }"
+                  >{{ customer.customerCode || customer.customerName }}</span>
+                  <span v-if="customer.firstMealOfOrder" class="code-first-badge">首</span>
+                </div>
+              </el-tooltip>
+              <div v-else class="code-main">
                 <span
-                  class="code-text code-text--tooltip"
+                  class="code-text"
                   :class="{ 'code-text--soup-missing': customer.isSoupMissing }"
                 >{{ customer.customerCode || customer.customerName }}</span>
-              </el-tooltip>
-              <span
-                v-else
-                class="code-text"
-                :class="{ 'code-text--soup-missing': customer.isSoupMissing }"
-              >{{ customer.customerCode || customer.customerName }}</span>
+                <span v-if="customer.firstMealOfOrder" class="code-first-badge">首</span>
+              </div>
               <div v-if="showSupplementaryTags && customer.supplementaryTags && customer.supplementaryTags.length > 0" class="supplementary-tags">
                 <span
                   v-for="(tag, idx) in customer.supplementaryTags"
@@ -504,11 +510,14 @@ export default {
     },
     allCustomers() {
       if (!this.planData) return []
-      return (this.planData.customers || []).map(c => ({
+      const decorated = (this.planData.customers || []).map(c => ({
         ...c,
         isSoupMissing: this.isSoupMissing(c),
         supplementaryTags: this.getSupplementaryTags(c)
       }))
+      const firstCustomers = decorated.filter(item => item.firstMealOfOrder)
+      const normalCustomers = decorated.filter(item => !item.firstMealOfOrder)
+      return [...firstCustomers, ...normalCustomers]
     },
     regularDishes() {
       if (!this.planData) return []
@@ -1163,6 +1172,32 @@ export default {
 }
 .code-text--tooltip {
   cursor: pointer;
+}
+.code-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.code-cell--first {
+  border-left: 8px solid #16a34a;
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.code-first-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid #86efac;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
 }
 .code-text--soup-missing {
   display: inline-block;
