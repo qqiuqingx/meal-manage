@@ -350,4 +350,33 @@ describe('scheduleRecord special requirements display', () => {
       wrapper.destroy()
     })
   })
+
+  test('first meal customers are placed before normal customers and keep group order', async() => {
+    const wrapper = buildWrapper()
+
+    wrapper.setData({
+      planData: {
+        mealPlan: { id: 1, mealType: 'LUNCH', recordDate: '2026-05-06', generateTime: '2026-05-06 12:00:00', status: 'SUCCESS' },
+        totalCustomers: 3,
+        successCount: 3,
+        failCount: 0,
+        customers: [{
+          id: 101, customerCode: 'A003', customerName: '张三', firstMealOfOrder: false, includeSoup: 1, items: []
+        }, {
+          id: 102, customerCode: 'A001', customerName: '李四', firstMealOfOrder: true, includeSoup: 1, items: []
+        }, {
+          id: 103, customerCode: 'A002', customerName: '王五', firstMealOfOrder: true, includeSoup: 0, items: []
+        }]
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.vm.allCustomers.map(item => item.customerCode)).toEqual(['A001', 'A002', 'A003'])
+    expect(wrapper.findAll('.code-cell').at(0).classes()).toContain('code-cell--first')
+    expect(wrapper.findAll('.code-first-badge').at(0).text()).toBe('首')
+    expect(wrapper.findAll('.code-text').at(1).classes()).toContain('code-text--soup-missing')
+
+    wrapper.destroy()
+  })
 })

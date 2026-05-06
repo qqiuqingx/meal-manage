@@ -81,6 +81,9 @@ public class MealPlanDetailVO {
         @ApiModelProperty(value = "客户编码")
         private String customerCode;
 
+        @ApiModelProperty(value = "是否订单当前餐次首次成功排餐")
+        private Boolean firstMealOfOrder;
+
         @ApiModelProperty(value = "订单ID")
         private Long orderId;
 
