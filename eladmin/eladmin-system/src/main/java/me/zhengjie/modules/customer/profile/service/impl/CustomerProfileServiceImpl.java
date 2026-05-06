@@ -9,6 +9,9 @@ import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
+import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
 import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
 import me.zhengjie.modules.meal.service.DishService;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
@@ -26,6 +29,8 @@ import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.modules.customer.numberpool.domain.NumberPoolConfig;
 import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
+import me.zhengjie.modules.meal.domain.Dish;
+import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.PageUtil;
 import me.zhengjie.utils.SecurityUtils;
@@ -63,6 +68,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private final MealVerificationLogMapper verificationLogMapper;
     private final NumberPoolService numberPoolService;
     private final DishService dishService;
+    private final CustomerOrderReplaceRuleMapper replaceRuleMapper;
+    private final DishMapper dishMapper;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -563,6 +570,64 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         order.setRemark(profile.getRemark());
         order.setCreateBy(getCurrentUsername());
         customerOrderMapper.insert(order);
+        saveReplaceRules(order.getId(), orderInfo.getReplaceRules());
+    }
+
+    private void saveReplaceRules(Long orderId, List<CustomerOrderReplaceRuleDto> rules) {
+        if (rules == null || rules.isEmpty()) {
+            return;
+        }
+        validateReplaceRules(rules);
+
+        for (CustomerOrderReplaceRuleDto dto : rules) {
+            Dish sourceDish = dishMapper.selectById(dto.getSourceDishId().intValue());
+            Dish targetDish = dishMapper.selectById(dto.getTargetDishId().intValue());
+
+            CustomerOrderReplaceRule rule = new CustomerOrderReplaceRule();
+            rule.setOrderId(orderId);
+            rule.setSourceDishId(dto.getSourceDishId());
+            rule.setSourceDishName(sourceDish.getName());
+            rule.setSourceDishType(sourceDish.getDishType());
+            rule.setTargetDishId(dto.getTargetDishId());
+            rule.setTargetDishName(targetDish.getName());
+            rule.setTargetDishType(targetDish.getDishType());
+            rule.setEnabled(dto.getEnabled() != null ? dto.getEnabled() : true);
+            rule.setRemark(dto.getRemark());
+            rule.setDeleted(false);
+            rule.setCreateBy(getCurrentUsername());
+            replaceRuleMapper.insert(rule);
+        }
+    }
+
+    private void validateReplaceRules(List<CustomerOrderReplaceRuleDto> rules) {
+        if (rules == null || rules.isEmpty()) {
+            return;
+        }
+
+        Set<Long> sourceDishIds = new HashSet<>();
+        for (CustomerOrderReplaceRuleDto rule : rules) {
+            if (rule.getSourceDishId() == null) {
+                throw new BadRequestException("换菜规则中的原菜不能为空");
+            }
+            if (rule.getTargetDishId() == null) {
+                throw new BadRequestException("换菜规则中的目标菜不能为空");
+            }
+            if (rule.getSourceDishId().equals(rule.getTargetDishId())) {
+                throw new BadRequestException("原菜和目标菜不能相同");
+            }
+            if (!sourceDishIds.add(rule.getSourceDishId())) {
+                throw new BadRequestException("同一订单不能重复配置同一个原菜");
+            }
+
+            Dish sourceDish = dishMapper.selectById(rule.getSourceDishId().intValue());
+            if (sourceDish == null || !Boolean.TRUE.equals(sourceDish.getEnabled())) {
+                throw new BadRequestException("换菜规则中的原菜品不存在或已停用");
+            }
+            Dish targetDish = dishMapper.selectById(rule.getTargetDishId().intValue());
+            if (targetDish == null || !Boolean.TRUE.equals(targetDish.getEnabled())) {
+                throw new BadRequestException("换菜规则中的目标菜品不存在或已停用");
+            }
+        }
     }
 
     private String generateFirstOrderCode() {
