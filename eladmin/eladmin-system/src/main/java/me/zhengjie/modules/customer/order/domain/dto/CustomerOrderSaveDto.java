@@ -2,6 +2,8 @@ package me.zhengjie.modules.customer.order.domain.dto;
 
 import lombok.Data;
 
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
+
 import javax.validation.constraints.DecimalMin;
 import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
@@ -10,6 +12,7 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 客户订单保存 DTO
@@ -201,4 +204,9 @@ public class CustomerOrderSaveDto implements Serializable {
     @NotNull(message = "汤数量不能为空")
     @Min(value = 0, message = "汤数量不能为负数")
     private Integer soupCount;
+
+    /**
+     * 换菜规则列表
+     */
+    private List<CustomerOrderReplaceRuleDto> replaceRules;
 }

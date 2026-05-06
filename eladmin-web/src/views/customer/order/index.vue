@@ -219,6 +219,19 @@ import crudOperation from '@crud/CRUD.operation'
 import OrderForm from '@/components/Order/OrderForm.vue'
 import { parseTime } from '@/utils/index'
 
+function cleanReplaceRules(rules) {
+  if (!rules || !rules.length) return []
+  return rules.filter(r => r.sourceDishId && r.targetDishId).map(r => ({
+    sourceDishId: r.sourceDishId,
+    sourceDishName: r.sourceDishName,
+    sourceDishType: r.sourceDishType,
+    targetDishId: r.targetDishId,
+    targetDishName: r.targetDishName,
+    targetDishType: r.targetDishType,
+    remark: r.remark
+  }))
+}
+
 export default {
   name: 'CustomerOrder',
   components: { crudOperation, rrOperation, OrderForm },
@@ -330,9 +343,34 @@ export default {
     async submitForm() {
       const valid = await this.$refs.orderFormRef.validate().catch(() => false)
       if (!valid) return
+
+      // 前端校验换菜规则：原菜不能重复
+      const rules = this.form.replaceRules
+      if (rules && rules.length > 0) {
+        const sourceIds = rules.map(r => r.sourceDishId).filter(Boolean)
+        if (new Set(sourceIds).size !== sourceIds.length) {
+          this.$message.warning('同一订单不能重复配置同一个原菜')
+          return
+        }
+        for (const rule of rules) {
+          if (!rule.sourceDishId) {
+            this.$message.warning('换菜规则中的原菜不能为空')
+            return
+          }
+          if (!rule.targetDishId) {
+            this.$message.warning('换菜规则中的目标菜不能为空')
+            return
+          }
+          if (rule.sourceDishId === rule.targetDishId) {
+            this.$message.warning('原菜和目标菜不能相同')
+            return
+          }
+        }
+      }
+
       const payload = {
-        ...this.form
-        // deliveryDates 已在 OrderForm 中处理好，不需要再次序列化
+        ...this.form,
+        replaceRules: cleanReplaceRules(this.form.replaceRules)
       }
 
       // 先校验订单冲突（提交前校验）
