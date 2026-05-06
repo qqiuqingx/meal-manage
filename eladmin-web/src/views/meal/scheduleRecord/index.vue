@@ -438,6 +438,12 @@ export default {
         RICE: '米饭'
       },
       dishTypeOrder: { SOUP: 1, MAIN: 2, SIDE: 3, VEGETABLE: 4, RICE: 5 },
+      missingTagToDishType: {
+        无主菜: 'MAIN',
+        无副菜: 'SIDE',
+        无素菜: 'VEGETABLE',
+        无米饭: 'RICE'
+      },
       statusMap: {
         SUCCESS: '成功',
         FAILED: '部分失败',
@@ -509,22 +515,45 @@ export default {
 
       const allergyFilteredCodesByDishName = {}
       const customersWithoutSoup = new Set()
+      const missingCodesByDishType = {}
+      const replacedCodesByOriginalDishName = {}
       const riceChangedDetailsByDisplayName = {}
       // 预先确定菜单米饭名称（从非替换的米饭项中取），确保所有米饭归为同一行
       let menuRiceName = null
-      ;(this.planData.customers || []).forEach(customer => {
-        (customer.items || []).forEach(item => {
+      const customers = this.planData.customers || []
+      customers.forEach(customer => {
+        const items = customer.items || []
+        items.forEach(item => {
           if (item.dishType === 'RICE' && !item.isReplaced && item.dishName && !menuRiceName) {
             menuRiceName = item.dishName
           }
         })
       })
-      ;(this.planData.customers || []).forEach(customer => {
+      customers.forEach(customer => {
         const code = customer.customerCode || customer.customerName || ''
         if (this.isSoupMissing(customer) && code) {
           customersWithoutSoup.add(code)
         }
-        (customer.items || []).forEach(item => {
+        const missingTags = this.getMissingDishTags(customer)
+        missingTags.forEach(tag => {
+          const dishType = this.missingTagToDishType[tag]
+          if (!dishType || !code) return
+          if (!missingCodesByDishType[dishType]) {
+            missingCodesByDishType[dishType] = new Set()
+          }
+          missingCodesByDishType[dishType].add(`${code}(${tag})`)
+        })
+        const items = customer.items || []
+        items.forEach(item => {
+          if (item.isReplaced && item.dishType !== 'RICE' && code) {
+            const originalDishName = item.originalDishName || item.dishName
+            if (originalDishName) {
+              if (!replacedCodesByOriginalDishName[originalDishName]) {
+                replacedCodesByOriginalDishName[originalDishName] = new Set()
+              }
+              replacedCodesByOriginalDishName[originalDishName].add(code)
+            }
+          }
           if (item.isReplaced && item.dishType === 'RICE' && code) {
             const riceKey = menuRiceName || item.originalDishName || item.dishName
             if (!riceChangedDetailsByDisplayName[riceKey]) {
@@ -578,13 +607,17 @@ export default {
         .map(g => {
           const excludedSet = allergyFilteredCodesByDishName[g.dishName]
           const excludedCodes = excludedSet ? Array.from(excludedSet) : []
+          const replacedSet = replacedCodesByOriginalDishName[g.dishName]
+          const replacedCodes = replacedSet ? Array.from(replacedSet) : []
+          const missingCodesSet = missingCodesByDishType[g.dishType]
+          const missingCodes = missingCodesSet ? Array.from(missingCodesSet) : []
           const riceChangedDetails = riceChangedDetailsByDisplayName[g.dishName] || []
           const riceChangedText = this.buildRiceChangedCodeText(riceChangedDetails)
           const detailCodes = g.dishType === 'SOUP'
-            ? Array.from(new Set([...excludedCodes, ...customersWithoutSoup]))
+            ? Array.from(new Set([...excludedCodes, ...replacedCodes, ...customersWithoutSoup]))
             : g.dishType === 'RICE'
-              ? [...excludedCodes, ...(riceChangedText ? [riceChangedText] : [])]
-              : excludedCodes
+              ? Array.from(new Set([...excludedCodes, ...missingCodes, ...(riceChangedText ? [riceChangedText] : [])]))
+              : Array.from(new Set([...excludedCodes, ...replacedCodes, ...missingCodes]))
           return {
             ...g,
             count: g.eatCodes.length,
@@ -890,7 +923,7 @@ export default {
       return !dishTypes.includes('SOUP') && customer.includeSoup !== 1
     },
     getSupplementaryTags(customer) {
-      const missingTags = []
+      const missingTags = this.getMissingDishTags(customer)
       const addTags = []
 
       // 加菜标签
@@ -910,7 +943,11 @@ export default {
         addTags.push(`加素菜×${customer.supplementaryVegCount}`)
       }
 
-      // 无菜品标签
+      // 将"无菜"标签放在前面，"加菜"标签放在后面
+      return [...missingTags, ...addTags]
+    },
+    getMissingDishTags(customer) {
+      const missingTags = []
       const dishTypes = (customer.items || []).map(item => item.dishType)
       if (!dishTypes.includes('MAIN')) {
         missingTags.push('无主菜')
@@ -924,9 +961,7 @@ export default {
       if (!dishTypes.includes('RICE') && customer.includeRice !== 1) {
         missingTags.push('无米饭')
       }
-
-      // 将"无菜"标签放在前面，"加菜"标签放在后面
-      return [...missingTags, ...addTags]
+      return missingTags
     },
     buildFullCodeText(codes) {
       if (!codes || codes.length === 0) return '-'
