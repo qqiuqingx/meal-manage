@@ -22,6 +22,8 @@ import cn.hutool.json.JSONUtil;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
+import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
@@ -97,6 +99,7 @@ public class MealPlanServiceImpl implements MealPlanService {
     private static final String DISH_TYPE_RICE = "RICE";
     private static final String DEFAULT_RICE_TYPE = "默认";
     private static final String REPLACE_REASON_CUSTOMER_SELECTED = "客户选择替换";
+    private static final String REPLACE_REASON_ORDER_RULE = "ORDER_RULE";
     private static final Map<String, ReentrantLock> GENERATE_LOCKS = new ConcurrentHashMap<>();
 
     private final MealPlanMapper mealPlanMapper;
@@ -109,6 +112,7 @@ public class MealPlanServiceImpl implements MealPlanService {
     private final DishIngredientMapper dishIngredientMapper;
     private final MealSchedulePlanMapper mealSchedulePlanMapper;
     private final DishIngredientCategoryService dishIngredientCategoryService;
+    private final CustomerOrderReplaceRuleMapper replaceRuleMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -183,6 +187,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         Map<String, Set<String>> categoryIngredientMap = loadCategoryIngredientMapping();
         log.debug("加载分类→配料映射完成 - 分类数量: {}", categoryIngredientMap.size());
 
+        Map<Long, Map<Long, CustomerOrderReplaceRule>> orderReplaceRuleMap = buildOrderReplaceRuleMap(orders);
+        log.debug("加载订单换菜规则完成 - 有规则的订单数: {}", orderReplaceRuleMap.size());
+
         log.debug("数据加载总耗时: {}ms", System.currentTimeMillis() - dataLoadStart);
 
         // 步骤3: 获取或创建排餐计划主记录（复用模式）
@@ -225,6 +232,7 @@ public class MealPlanServiceImpl implements MealPlanService {
             try {
                 CustomerMealPlan customerPlan = buildCustomerPlan(order, customer, candidateDishMap, dishIngredientMap,
                         targetDate, mealType, parentPackageMap, categoryIngredientMap);
+                applyOrderReplaceRules(order.getId(), customerPlan, orderReplaceRuleMap);
                 saveSuccessPlan(mealPlan.getId(), order, customer, customerPlan, mealType);
                 successCount++;
                 log.debug("订单处理成功 - 订单ID: {}", order.getId());
@@ -1182,6 +1190,7 @@ public class MealPlanServiceImpl implements MealPlanService {
                     item.setOriginalDishId(selectedDish.getOriginalDish().getId());
                     item.setOriginalDishName(selectedDish.getOriginalDish().getName());
                 }
+                item.setOriginalDishType(selectedDish.getOriginalDishType());
                 item.setReplaceReason(selectedDish.getReplaceReason());
             }
             Set<String> matchedAllergies = selectedDish.getMatchedAllergyTags();
@@ -1720,11 +1729,100 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
     }
 
+    // ========== 订单换菜规则 ==========
+
+    /**
+     * 批量加载订单换菜规则，按 orderId -> sourceDishId 建立内存 Map。
+     */
+    private Map<Long, Map<Long, CustomerOrderReplaceRule>> buildOrderReplaceRuleMap(List<CustomerOrder> orders) {
+        if (orders == null || orders.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Set<Long> orderIds = orders.stream()
+                .map(CustomerOrder::getId)
+                .collect(Collectors.toSet());
+
+        List<CustomerOrderReplaceRule> rules = replaceRuleMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<CustomerOrderReplaceRule>()
+                        .in("order_id", orderIds)
+                        .eq("deleted", false)
+                        .eq("enabled", true));
+
+        if (rules.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<Long, Map<Long, CustomerOrderReplaceRule>> result = new HashMap<>();
+        for (CustomerOrderReplaceRule rule : rules) {
+            result.computeIfAbsent(rule.getOrderId(), k -> new HashMap<>())
+                    .put(rule.getSourceDishId(), rule);
+        }
+        return result;
+    }
+
+    /**
+     * 对已选菜品应用订单换菜规则。
+     * 若命中规则：替换为目标菜、记录原菜信息、清空过敏标记。
+     * 若目标菜已停用或已删除：跳过该规则、保留原始选菜、记录 WARN 日志。
+     */
+    private void applyOrderReplaceRules(Long orderId, CustomerMealPlan customerPlan,
+                                        Map<Long, Map<Long, CustomerOrderReplaceRule>> ruleMap) {
+        if (customerPlan == null || customerPlan.getSelectedDishes() == null || ruleMap == null) {
+            return;
+        }
+        Map<Long, CustomerOrderReplaceRule> sourceMap = ruleMap.get(orderId);
+        if (sourceMap == null || sourceMap.isEmpty()) {
+            return;
+        }
+
+        List<SelectedDish> newSelected = new ArrayList<>();
+        for (SelectedDish sd : customerPlan.getSelectedDishes()) {
+            if (sd.getDish() == null) {
+                newSelected.add(sd);
+                continue;
+            }
+            CustomerOrderReplaceRule rule = sourceMap.get(Long.valueOf(sd.getDish().getId()));
+            if (rule == null) {
+                newSelected.add(sd);
+                continue;
+            }
+
+            // 查找目标菜品
+            Dish targetDish = dishMapper.selectById(rule.getTargetDishId().intValue());
+            if (targetDish == null || !Boolean.TRUE.equals(targetDish.getEnabled())) {
+                log.warn("订单换菜规则跳过 - 规则ID: {}, 订单ID: {}, 原菜ID: {}, 目标菜ID: {} ({}), 原因: {}",
+                        rule.getId(), orderId, rule.getSourceDishId(), rule.getTargetDishId(),
+                        rule.getTargetDishName(),
+                        targetDish == null ? "菜品已删除" : "菜品已停用");
+                newSelected.add(sd);
+                continue;
+            }
+
+            log.info("订单换菜规则命中 - 订单ID: {}, 原菜: {}({}), 替换为: {}({})",
+                    orderId, sd.getDish().getName(), sd.getDish().getId(),
+                    targetDish.getName(), targetDish.getId());
+
+            // 用新构造器创建替换后的 SelectedDish，记录 originalDishType
+            SelectedDish replaced = new SelectedDish(
+                    targetDish.getDishType(),
+                    targetDish,
+                    true,
+                    sd.getDish(),
+                    sd.getDishType(),
+                    REPLACE_REASON_ORDER_RULE,
+                    Collections.emptySet()
+            );
+            newSelected.add(replaced);
+        }
+        customerPlan.setSelectedDishes(newSelected);
+    }
+
     private static class SelectedDish {
         private final String dishType;
         private final Dish dish;
         private final boolean isReplaced;
         private final Dish originalDish;
+        private final String originalDishType;
         private final String replaceReason;
         private final Set<String> matchedAllergyTags;
 
@@ -1733,6 +1831,7 @@ public class MealPlanServiceImpl implements MealPlanService {
             this.dish = dish;
             this.isReplaced = false;
             this.originalDish = null;
+            this.originalDishType = null;
             this.replaceReason = null;
             this.matchedAllergyTags = Collections.emptySet();
         }
@@ -1742,6 +1841,18 @@ public class MealPlanServiceImpl implements MealPlanService {
             this.dish = dish;
             this.isReplaced = isReplaced;
             this.originalDish = originalDish;
+            this.originalDishType = originalDish != null ? originalDish.getDishType() : null;
+            this.replaceReason = replaceReason;
+            this.matchedAllergyTags = matchedAllergyTags != null ? matchedAllergyTags : Collections.emptySet();
+        }
+
+        private SelectedDish(String dishType, Dish dish, boolean isReplaced, Dish originalDish,
+                             String originalDishType, String replaceReason, Set<String> matchedAllergyTags) {
+            this.dishType = dishType;
+            this.dish = dish;
+            this.isReplaced = isReplaced;
+            this.originalDish = originalDish;
+            this.originalDishType = originalDishType;
             this.replaceReason = replaceReason;
             this.matchedAllergyTags = matchedAllergyTags != null ? matchedAllergyTags : Collections.emptySet();
         }
@@ -1760,6 +1871,10 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         public Dish getOriginalDish() {
             return originalDish;
+        }
+
+        public String getOriginalDishType() {
+            return originalDishType;
         }
 
         public String getReplaceReason() {

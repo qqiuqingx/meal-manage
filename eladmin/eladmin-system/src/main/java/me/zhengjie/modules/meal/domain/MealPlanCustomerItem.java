@@ -64,7 +64,10 @@ public class MealPlanCustomerItem extends BaseEntity {
     @ApiModelProperty(value = "原本想选的菜品名称")
     private String originalDishName;
 
-    @ApiModelProperty(value = "替换原因：ALLERGY-过敏，NOT_FOUND-当日不足，NEXT_DAY-次日回退")
+    @ApiModelProperty(value = "原菜品类型(被替换前的类型)")
+    private String originalDishType;
+
+    @ApiModelProperty(value = "替换原因：ALLERGY-过敏，NOT_FOUND-当日不足，NEXT_DAY-次日回退，ORDER_RULE-订单换菜规则")
     private String replaceReason;
 
     @ApiModelProperty(value = "是否因过敏被过滤")

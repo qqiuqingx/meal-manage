@@ -7,6 +7,9 @@ import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.order.service.CustomerOrderService;
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
+import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.domain.SubPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
@@ -14,9 +17,12 @@ import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
+import me.zhengjie.modules.meal.domain.Dish;
+import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.SecurityUtils;
 import me.zhengjie.utils.StringUtils;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
@@ -58,6 +64,12 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
     @Autowired
     private SubPackageMapper subPackageMapper;
+
+    @Autowired
+    private CustomerOrderReplaceRuleMapper replaceRuleMapper;
+
+    @Autowired
+    private DishMapper dishMapper;
 
     private static final DateTimeFormatter ORDER_CODE_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
 
@@ -119,6 +131,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             order.setCreateBy(getCurrentUsername());
             try {
                 orderMapper.insert(order);
+                saveReplaceRules(order.getId(), dto.getReplaceRules());
                 return;
             } catch (DuplicateKeyException ex) {
                 if (attempt >= 2) {
@@ -160,6 +173,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         order.setUpdateBy(getCurrentUsername());
 
         orderMapper.updateById(order);
+        softDeleteRules(dto.getId());
+        saveReplaceRules(dto.getId(), dto.getReplaceRules());
     }
 
     @Override
@@ -395,6 +410,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setSoupCount(order.getSoupCount());
         dto.setCreateTime(order.getCreateTime());
         dto.setUpdateTime(order.getUpdateTime());
+        dto.setReplaceRules(loadReplaceRules(order.getId()));
         return dto;
     }
 
@@ -628,5 +644,132 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         } catch (Exception e) {
             return Collections.emptyList();
         }
+    }
+
+    // ========== 换菜规则相关方法 ==========
+
+    /**
+     * 校验换菜规则
+     */
+    private void validateReplaceRules(List<CustomerOrderReplaceRuleDto> rules) {
+        if (rules == null || rules.isEmpty()) {
+            return;
+        }
+
+        Set<Long> sourceDishIds = new HashSet<>();
+        for (CustomerOrderReplaceRuleDto rule : rules) {
+            if (rule.getSourceDishId() == null) {
+                throw new BadRequestException("换菜规则中的原菜不能为空");
+            }
+            if (rule.getTargetDishId() == null) {
+                throw new BadRequestException("换菜规则中的目标菜不能为空");
+            }
+            if (rule.getSourceDishId().equals(rule.getTargetDishId())) {
+                throw new BadRequestException("原菜和目标菜不能相同");
+            }
+            if (!sourceDishIds.add(rule.getSourceDishId())) {
+                throw new BadRequestException("同一订单不能重复配置同一个原菜");
+            }
+
+            Dish sourceDish = dishMapper.selectById(rule.getSourceDishId().intValue());
+            if (sourceDish == null || !Boolean.TRUE.equals(sourceDish.getEnabled())) {
+                throw new BadRequestException("换菜规则中的原菜品不存在或已停用");
+            }
+            Dish targetDish = dishMapper.selectById(rule.getTargetDishId().intValue());
+            if (targetDish == null || !Boolean.TRUE.equals(targetDish.getEnabled())) {
+                throw new BadRequestException("换菜规则中的目标菜品不存在或已停用");
+            }
+        }
+    }
+
+    /**
+     * 保存换菜规则（新增）
+     */
+    private void saveReplaceRules(Long orderId, List<CustomerOrderReplaceRuleDto> rules) {
+        if (rules == null || rules.isEmpty()) {
+            return;
+        }
+        validateReplaceRules(rules);
+
+        for (CustomerOrderReplaceRuleDto dto : rules) {
+            Dish sourceDish = dishMapper.selectById(dto.getSourceDishId().intValue());
+            Dish targetDish = dishMapper.selectById(dto.getTargetDishId().intValue());
+
+            CustomerOrderReplaceRule rule = new CustomerOrderReplaceRule();
+            rule.setOrderId(orderId);
+            rule.setSourceDishId(dto.getSourceDishId());
+            rule.setSourceDishName(sourceDish.getName());
+            rule.setSourceDishType(sourceDish.getDishType());
+            rule.setTargetDishId(dto.getTargetDishId());
+            rule.setTargetDishName(targetDish.getName());
+            rule.setTargetDishType(targetDish.getDishType());
+            rule.setEnabled(dto.getEnabled() != null ? dto.getEnabled() : true);
+            rule.setRemark(dto.getRemark());
+            rule.setDeleted(false);
+            rule.setCreateBy(getCurrentUsername());
+            replaceRuleMapper.insert(rule);
+        }
+    }
+
+    /**
+     * 软删除订单的所有换菜规则
+     */
+    private void softDeleteRules(Long orderId) {
+        CustomerOrderReplaceRule update = new CustomerOrderReplaceRule();
+        update.setDeleted(true);
+        update.setUpdateBy(getCurrentUsername());
+        replaceRuleMapper.update(update, new QueryWrapper<CustomerOrderReplaceRule>()
+                .eq("order_id", orderId)
+                .eq("deleted", false));
+    }
+
+    /**
+     * 加载订单的换菜规则（详情回显，联查菜品表获取最新名称）
+     */
+    private List<CustomerOrderReplaceRuleDto> loadReplaceRules(Long orderId) {
+        List<CustomerOrderReplaceRule> rules = replaceRuleMapper.selectList(
+                new QueryWrapper<CustomerOrderReplaceRule>()
+                        .eq("order_id", orderId)
+                        .eq("deleted", false));
+        if (rules.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<CustomerOrderReplaceRuleDto> result = new ArrayList<>();
+        for (CustomerOrderReplaceRule rule : rules) {
+            CustomerOrderReplaceRuleDto dto = new CustomerOrderReplaceRuleDto();
+            dto.setId(rule.getId());
+            dto.setOrderId(rule.getOrderId());
+            dto.setSourceDishId(rule.getSourceDishId());
+            dto.setTargetDishId(rule.getTargetDishId());
+            dto.setEnabled(rule.getEnabled());
+            dto.setRemark(rule.getRemark());
+
+            // 联查菜品表获取最新名称和类型
+            Dish sourceDish = dishMapper.selectById(rule.getSourceDishId().intValue());
+            if (sourceDish != null && Boolean.TRUE.equals(sourceDish.getEnabled())) {
+                dto.setSourceDishName(sourceDish.getName());
+                dto.setSourceDishType(sourceDish.getDishType());
+                dto.setSourceDishInvalid(false);
+            } else {
+                dto.setSourceDishName(rule.getSourceDishName());
+                dto.setSourceDishType(rule.getSourceDishType());
+                dto.setSourceDishInvalid(true);
+            }
+
+            Dish targetDish = dishMapper.selectById(rule.getTargetDishId().intValue());
+            if (targetDish != null && Boolean.TRUE.equals(targetDish.getEnabled())) {
+                dto.setTargetDishName(targetDish.getName());
+                dto.setTargetDishType(targetDish.getDishType());
+                dto.setTargetDishInvalid(false);
+            } else {
+                dto.setTargetDishName(rule.getTargetDishName());
+                dto.setTargetDishType(rule.getTargetDishType());
+                dto.setTargetDishInvalid(true);
+            }
+
+            result.add(dto);
+        }
+        return result;
     }
 }
