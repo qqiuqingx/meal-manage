@@ -167,6 +167,76 @@
         </el-col>
       </el-row>
 
+      <!-- ===== 换菜规则 ===== -->
+      <el-divider content-position="left">换菜规则</el-divider>
+      <div class="replace-rules-section">
+        <p class="replace-rules-tip" style="color: #909399; font-size: 12px; margin: 0 0 10px 0;">
+          当排餐命中原菜时，将自动替换为目标菜，规则全订单生效
+        </p>
+        <div v-for="(rule, index) in form.replaceRules" :key="index" class="replace-rule-row">
+          <el-row :gutter="10">
+            <el-col :span="9">
+              <el-select
+                v-model="rule.sourceDishId"
+                :disabled="readonly"
+                filterable
+                remote
+                placeholder="搜索原菜品"
+                :remote-method="query => searchDishForRule(query, 'source', index)"
+                :loading="rule._sourceLoading"
+                style="width: 100%;"
+                @change="val => onRuleDishChange(val, 'source', index)"
+              >
+                <el-option
+                  v-for="item in (rule._sourceOptions || [])"
+                  :key="item.id"
+                  :label="item.name + '（' + (item.dishType || '') + '）'"
+                  :value="item.id"
+                />
+                <template v-if="rule.sourceDishName && (!rule._sourceOptions || rule._sourceOptions.length === 0)">
+                  <el-option :label="rule.sourceDishName + (rule.sourceDishInvalid ? '（已失效）' : '')" :value="rule.sourceDishId" />
+                </template>
+              </el-select>
+            </el-col>
+            <el-col :span="1" style="text-align: center; line-height: 32px;">
+              <i class="el-icon-right" />
+            </el-col>
+            <el-col :span="9">
+              <el-select
+                v-model="rule.targetDishId"
+                :disabled="readonly"
+                filterable
+                remote
+                placeholder="搜索目标菜品"
+                :remote-method="query => searchDishForRule(query, 'target', index)"
+                :loading="rule._targetLoading"
+                style="width: 100%;"
+                @change="val => onRuleDishChange(val, 'target', index)"
+              >
+                <el-option
+                  v-for="item in (rule._targetOptions || [])"
+                  :key="item.id"
+                  :label="item.name + '（' + (item.dishType || '') + '）'"
+                  :value="item.id"
+                />
+                <template v-if="rule.targetDishName && (!rule._targetOptions || rule._targetOptions.length === 0)">
+                  <el-option :label="rule.targetDishName + (rule.targetDishInvalid ? '（已失效）' : '')" :value="rule.targetDishId" />
+                </template>
+              </el-select>
+            </el-col>
+            <el-col :span="3">
+              <el-input v-model="rule.remark" :disabled="readonly" placeholder="备注" size="small" />
+            </el-col>
+            <el-col :span="2" style="text-align: center;">
+              <el-button v-if="!readonly" type="danger" icon="el-icon-delete" circle size="mini" @click="removeReplaceRule(index)" />
+            </el-col>
+          </el-row>
+        </div>
+        <el-button v-if="!readonly" type="primary" plain size="small" icon="el-icon-plus" @click="addReplaceRule">
+          新增规则
+        </el-button>
+      </div>
+
       <!-- ===== 金额信息 ===== -->
       <el-divider content-position="left">金额信息</el-divider>
       <el-row :gutter="20">
@@ -480,7 +550,8 @@ export function createOrderDefaultForm() {
     vegCount: 0,
     riceCount: 1,
     riceType: DEFAULT_RICE_TYPE_OPTION_VALUE,
-    soupCount: 0
+    soupCount: 0,
+    replaceRules: []
   }
 }
 
@@ -509,7 +580,8 @@ export function createFirstOrderDefaultForm() {
     vegCount: 0,
     riceCount: 1,
     riceType: DEFAULT_RICE_TYPE_OPTION_VALUE,
-    soupCount: 0
+    soupCount: 0,
+    replaceRules: []
   }
 }
 
@@ -601,6 +673,7 @@ export default {
           this.loadChildPackages(val.parentPackageId)
         }
         this.syncCalendarSelectionFromDeliveryDates(val && val.deliveryDates)
+        this.initReplaceRuleOptions(val && val.replaceRules)
       },
       immediate: true
     },
@@ -880,6 +953,80 @@ export default {
           else reject(new Error('validation failed'))
         })
       })
+    },
+
+    // ========== 换菜规则 ==========
+
+    addReplaceRule() {
+      if (!this.form.replaceRules) {
+        this.$set(this.form, 'replaceRules', [])
+      }
+      this.form.replaceRules.push({
+        sourceDishId: null,
+        sourceDishName: null,
+        sourceDishType: null,
+        targetDishId: null,
+        targetDishName: null,
+        targetDishType: null,
+        remark: null,
+        _sourceOptions: [],
+        _targetOptions: [],
+        _sourceLoading: false,
+        _targetLoading: false
+      })
+    },
+
+    removeReplaceRule(index) {
+      this.form.replaceRules.splice(index, 1)
+    },
+
+    searchDishForRule(query, field, index) {
+      if (!query || query.length < 1) return
+      const rule = this.form.replaceRules[index]
+      if (!rule) return
+      this.$set(rule, '_' + field + 'Loading', true)
+      dishApi.queryDishes({ name: query, enabled: true, page: 0, size: 20 }).then(res => {
+        const dishes = res.content || res.data || []
+        this.$set(rule, '_' + field + 'Options', dishes)
+      }).catch(() => {
+        this.$set(rule, '_' + field + 'Options', [])
+      }).finally(() => {
+        this.$set(rule, '_' + field + 'Loading', false)
+      })
+    },
+
+    onRuleDishChange(val, field, index) {
+      const rule = this.form.replaceRules[index]
+      if (!rule) return
+      const options = rule['_' + field + 'Options'] || []
+      const dish = options.find(d => d.id === val)
+      if (dish) {
+        this.$set(rule, field + 'DishName', dish.name)
+        this.$set(rule, field + 'DishType', dish.dishType)
+      }
+    },
+
+    initReplaceRuleOptions(rules) {
+      if (!rules || !rules.length) return
+      rules.forEach(rule => {
+        // 为回显初始化 options 列表，确保 select 组件能显示已选中的值
+        if (rule.sourceDishId && rule.sourceDishName) {
+          this.$set(rule, '_sourceOptions', [{
+            id: rule.sourceDishId,
+            name: rule.sourceDishName,
+            dishType: rule.sourceDishType
+          }])
+        }
+        if (rule.targetDishId && rule.targetDishName) {
+          this.$set(rule, '_targetOptions', [{
+            id: rule.targetDishId,
+            name: rule.targetDishName,
+            dishType: rule.targetDishType
+          }])
+        }
+        if (!rule._sourceLoading) this.$set(rule, '_sourceLoading', false)
+        if (!rule._targetLoading) this.$set(rule, '_targetLoading', false)
+      })
     }
   }
 }
@@ -888,5 +1035,15 @@ export default {
 <style scoped>
 .order-form {
   width: 100%;
+}
+.replace-rules-section {
+  margin-bottom: 10px;
+}
+.replace-rule-row {
+  margin-bottom: 8px;
+}
+.replace-rules-tip {
+  color: #909399;
+  font-size: 12px;
 }
 </style>

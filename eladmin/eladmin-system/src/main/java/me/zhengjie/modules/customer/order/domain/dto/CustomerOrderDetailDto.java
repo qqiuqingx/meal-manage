@@ -1,11 +1,13 @@
 package me.zhengjie.modules.customer.order.domain.dto;
 
 import lombok.Data;
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 客户订单详情 DTO
@@ -98,4 +100,9 @@ public class CustomerOrderDetailDto implements Serializable {
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;
+
+    /**
+     * 换菜规则列表
+     */
+    private List<CustomerOrderReplaceRuleDto> replaceRules;
 }

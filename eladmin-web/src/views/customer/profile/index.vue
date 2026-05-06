@@ -347,6 +347,19 @@ const defaultForm = {
   orderInfo: createFirstOrderDefaultForm()
 }
 
+function cleanReplaceRules(rules) {
+  if (!rules || !rules.length) return []
+  return rules.filter(r => r.sourceDishId && r.targetDishId).map(r => ({
+    sourceDishId: r.sourceDishId,
+    sourceDishName: r.sourceDishName,
+    sourceDishType: r.sourceDishType,
+    targetDishId: r.targetDishId,
+    targetDishName: r.targetDishName,
+    targetDishType: r.targetDishType,
+    remark: r.remark
+  }))
+}
+
 export default {
   name: 'CustomerProfile',
   components: { crudOperation, rrOperation, OrderForm, CustomerDetailDialog, MealScheduleCalendar },
@@ -500,7 +513,8 @@ export default {
           vegCount: orderInfo.vegCount || 0,
           riceCount: orderInfo.riceCount == null ? 1 : orderInfo.riceCount,
           riceType: orderInfo.riceType || '白米饭',
-          soupCount: orderInfo.soupCount || 0
+          soupCount: orderInfo.soupCount || 0,
+          replaceRules: cleanReplaceRules(orderInfo.replaceRules)
         }
       }
 
