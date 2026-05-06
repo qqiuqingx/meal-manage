@@ -1,6 +1,7 @@
 package me.zhengjie.modules.customer.profile.domain.dto;
 
 import lombok.Data;
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
 
 import java.io.Serializable;
 import java.util.List;
@@ -95,5 +96,6 @@ public class CustomerProfileSaveDto implements Serializable {
         private Integer riceCount;
         private String riceType;
         private Integer soupCount;
+        private List<CustomerOrderReplaceRuleDto> replaceRules;
     }
 }
