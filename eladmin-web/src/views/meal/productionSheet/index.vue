@@ -73,8 +73,7 @@
               :key="customer.id"
               class="code-cell"
               :class="{
-                'code-cell--replaced': customer.hasReplaced,
-                'code-cell--first': customer.firstMealOfOrder
+                'code-cell--replaced': customer.hasReplaced
               }"
             >
               <div class="code-main">
@@ -566,16 +565,14 @@ export default {
 .code-main {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.code-cell--first {
-  border-left: 8px solid #16a34a;
-  border-color: #86efac;
-  background: #f0fdf4;
+  justify-content: flex-start;
+  gap: 6px;
 }
 .code-first-badge {
-  display: inline-flex;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
   align-items: center;
   justify-content: center;
   min-width: 24px;
@@ -761,11 +758,6 @@ export default {
   }
   body {
     font-size: 12px;
-  }
-  .code-cell--first {
-    border-left-color: #166534 !important;
-    border-color: #166534 !important;
-    background: #ffffff !important;
   }
   .code-first-badge {
     border-color: #166534 !important;

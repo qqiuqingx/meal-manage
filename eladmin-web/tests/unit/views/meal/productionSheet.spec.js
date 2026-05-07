@@ -38,8 +38,8 @@ test('production sheet places first meal customers before normal customers', asy
   await wrapper.vm.$nextTick()
 
   expect(wrapper.vm.allCustomers.map(item => item.customerCode)).toEqual(['C001', 'C002', 'C003'])
-  expect(wrapper.findAll('.code-cell').at(0).classes()).toContain('code-cell--first')
   expect(wrapper.findAll('.code-first-badge').at(0).text()).toBe('首')
+  expect(wrapper.findAll('.code-cell').at(0).classes()).not.toContain('code-cell--first')
 
   wrapper.destroy()
 })
