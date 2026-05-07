@@ -391,8 +391,7 @@ export default {
           { required: true, message: '请输入手机号', trigger: 'blur' },
           { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确', trigger: 'blur' }
         ],
-        'orderInfo.startDate': [{ required: true, message: '请选择开始日期', trigger: 'change' }],
-        'orderInfo.endDate': [{ required: true, message: '请选择结束日期', trigger: 'change' }]
+        'orderInfo.startDate': [{ required: true, message: '请选择开始日期', trigger: 'change' }]
       },
       submitLoading: false,
       excludeDatesExpanded: false,
@@ -505,7 +504,6 @@ export default {
           scheduleMode: orderInfo.scheduleMode || 'SCHEDULE',
           startDate: orderInfo.startDate,
           startMealType: orderInfo.startMealType || 'BREAKFAST',
-          endDate: orderInfo.endDate,
           mealType: orderInfo.mealType || 'ALL',
           customerSource: orderInfo.customerSource || null,
           deliveryDates: this.serializeDeliveryDates(deliveryDatesSource),

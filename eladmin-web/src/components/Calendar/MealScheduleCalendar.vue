@@ -372,12 +372,16 @@ export default {
     },
     selectAllDates() {
       if (this.readonly) return
-      if (!this.startDate || !this.endDate) {
-        this.$message.warning('请先设置订单的开始和结束日期')
-        return
+
+      let dateRange
+      if (this.startDate && this.endDate) {
+        dateRange = getDateRange(this.startDate, this.endDate)
+      } else {
+        dateRange = this.calendarDays
+          .filter(day => day.isCurrentMonth && this.isDateValid(parseDate(day.date)))
+          .map(day => day.date)
       }
 
-      const dateRange = getDateRange(this.startDate, this.endDate)
       const newSelected = dateRange.map(date => ({
         date,
         mealTypes: [...this.getAllowedMealTypesForDate(parseDate(date))]
