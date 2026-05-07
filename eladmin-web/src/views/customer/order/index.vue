@@ -451,9 +451,9 @@ export default {
       return map[startMealType] || '早餐起'
     },
     formatOrderPeriod(row) {
+      if (!row.startDate) return '-'
       const startDate = this.formatDate(row.startDate)
-      const endDate = this.formatDate(row.endDate)
-      return `${startDate}（${this.startMealTypeText(row.startMealType)}） ~ ${endDate}`
+      return `${startDate}（${this.startMealTypeText(row.startMealType)}）起`
     },
     checkboxT() {
       return true
