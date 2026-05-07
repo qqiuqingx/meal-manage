@@ -100,7 +100,6 @@
               v-for="customer in allCustomers"
               :key="customer.id"
               class="code-cell"
-              :class="{ 'code-cell--first': customer.firstMealOfOrder }"
             >
               <el-tooltip
                 v-if="customer.specialRequirements"
@@ -1176,16 +1175,14 @@ export default {
 .code-main {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.code-cell--first {
-  border-left: 8px solid #16a34a;
-  border-color: #86efac;
-  background: #f0fdf4;
+  justify-content: flex-start;
+  gap: 6px;
 }
 .code-first-badge {
-  display: inline-flex;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
   align-items: center;
   justify-content: center;
   min-width: 24px;
@@ -1339,6 +1336,18 @@ export default {
     max-width: 100%;
   }
   .code-cell { min-height: 60px; padding: 12px 10px; }
+  .code-main { gap: 4px; }
+  .code-first-badge {
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 4px;
+    top: 8px;
+    right: 8px;
+    line-height: 1;
+  }
   .dish-table tr:hover td { background: initial; }
   .dish-table tr:nth-child(even) td { background: rgba(0,0,0,0.02); }
   body { font-size: 12px; }
