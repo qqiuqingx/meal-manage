@@ -73,7 +73,6 @@
               v-model="form.deliveryDatesWithMealTypes"
               :start-date="form.startDate"
               :start-meal-type="form.startMealType"
-              :end-date="form.endDate"
               :readonly="readonly"
               :order-meal-type="form.mealType"
               @selection-change="onCalendarSelectionChange"
@@ -455,9 +454,9 @@
         </el-row>
       </template>
 
-      <!-- 开始/结束日期：两种模式均显示，prop 按 mode 区分 -->
+      <!-- 开始日期和餐次：两种模式均显示 -->
       <el-row :gutter="20">
-        <el-col :span="8">
+        <el-col :span="12">
           <el-form-item
             :label="mode === 'order' ? '订单开始日期' : '开始日期'"
             :prop="mode === 'firstOrder' ? 'startDate' : ''"
@@ -472,7 +471,7 @@
             />
           </el-form-item>
         </el-col>
-        <el-col :span="8">
+        <el-col :span="12">
           <el-form-item label="开始餐次">
             <el-select v-model="form.startMealType" :disabled="readonly" placeholder="请选择开始餐次" style="width: 100%;">
               <el-option
@@ -482,21 +481,6 @@
                 :value="item.value"
               />
             </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item
-            :label="mode === 'order' ? '订单结束日期' : '结束日期'"
-            :prop="mode === 'firstOrder' ? 'endDate' : ''"
-          >
-            <el-date-picker
-              v-model="form.endDate"
-              :disabled="readonly"
-              type="date"
-              placeholder="选择结束日期"
-              style="width: 100%;"
-              value-format="yyyy-MM-dd"
-            />
           </el-form-item>
         </el-col>
       </el-row>
@@ -574,7 +558,6 @@ export function createOrderDefaultForm() {
     firstDeliveryTime: null,
     startDate: null,
     startMealType: 'BREAKFAST',
-    endDate: null,
     status: 1,
     mealType: 'ALL',
     scheduleMode: 'SCHEDULE',
@@ -610,7 +593,6 @@ export function createFirstOrderDefaultForm() {
     deliveryDates: [],
     startDate: null,
     startMealType: 'BREAKFAST',
-    endDate: null,
     mealType: 'ALL',
     customerSource: null,
     mainDishCount: 0,

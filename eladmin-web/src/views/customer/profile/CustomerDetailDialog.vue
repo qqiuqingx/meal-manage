@@ -286,7 +286,8 @@ export default {
       return map[startMealType] || '早餐起'
     },
     formatOrderPeriod(row) {
-      return `${row.startDate || '-'}（${this.startMealTypeText(row.startMealType)}） ~ ${row.endDate || '-'}`
+      if (!row.startDate) return '-'
+      return `${row.startDate}（${this.startMealTypeText(row.startMealType)}）起`
     },
     handleClose() {
       this.dialogVisible = false
