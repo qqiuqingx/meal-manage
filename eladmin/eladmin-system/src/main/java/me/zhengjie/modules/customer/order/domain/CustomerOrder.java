@@ -120,6 +120,11 @@ public class CustomerOrder implements Serializable {
     private LocalDate startDate;
 
     /**
+     * 开始餐次(BREAKFAST/LUNCH/DINNER)
+     */
+    private String startMealType;
+
+    /**
      * 订单结束日期
      */
     private LocalDate endDate;

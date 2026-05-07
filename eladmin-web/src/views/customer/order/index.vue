@@ -107,7 +107,7 @@
       </el-table-column>
       <el-table-column label="订单期间" width="180">
         <template slot-scope="{ row }">
-          {{ formatDate(row.startDate) }} ~ {{ formatDate(row.endDate) }}
+          {{ formatOrderPeriod(row) }}
         </template>
       </el-table-column>
       <el-table-column label="成交时间" prop="dealTime" width="150" />
@@ -441,6 +441,19 @@ export default {
         WEEKDAY: '工作日'
       }
       return map[scheduleMode] || '-'
+    },
+    startMealTypeText(startMealType) {
+      const map = {
+        BREAKFAST: '早餐起',
+        LUNCH: '午餐起',
+        DINNER: '晚餐起'
+      }
+      return map[startMealType] || '早餐起'
+    },
+    formatOrderPeriod(row) {
+      const startDate = this.formatDate(row.startDate)
+      const endDate = this.formatDate(row.endDate)
+      return `${startDate}（${this.startMealTypeText(row.startMealType)}） ~ ${endDate}`
     },
     checkboxT() {
       return true

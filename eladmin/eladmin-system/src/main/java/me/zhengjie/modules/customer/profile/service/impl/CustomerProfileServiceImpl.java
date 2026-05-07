@@ -9,6 +9,7 @@ import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
 import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
@@ -485,6 +486,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         if (totalCount <= 0) {
             throw new BadRequestException("首单份数必须大于0");
         }
+        orderInfo.setMealType(OrderStartMealTypeUtil.normalizeOrderMealType(orderInfo.getMealType()));
+        orderInfo.setStartMealType(OrderStartMealTypeUtil.normalizeStartMealType(orderInfo.getMealType(), orderInfo.getStartMealType()));
+        if (!OrderStartMealTypeUtil.isStartMealTypeAllowed(orderInfo.getMealType(), orderInfo.getStartMealType())) {
+            throw new BadRequestException("首单开始餐次与订单餐次类型不匹配");
+        }
         orderInfo.setMainDishCount(orderInfo.getMainDishCount() != null ? orderInfo.getMainDishCount() : 0);
         orderInfo.setSideDishCount(orderInfo.getSideDishCount() != null ? orderInfo.getSideDishCount() : 0);
         orderInfo.setVegCount(orderInfo.getVegCount() != null ? orderInfo.getVegCount() : 0);
@@ -550,6 +556,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         order.setMealBalance(orderInfo.getFinalAmount() != null ? orderInfo.getFinalAmount() : BigDecimal.ZERO);
         order.setRemainingCount(orderInfo.getTotalCount());
         order.setStartDate(LocalDate.parse(orderInfo.getStartDate(), DATE_FORMATTER));
+        order.setStartMealType(orderInfo.getStartMealType());
         if (!StringUtils.isBlank(orderInfo.getEndDate())){
             order.setEndDate(LocalDate.parse(orderInfo.getEndDate(), DATE_FORMATTER));
         }

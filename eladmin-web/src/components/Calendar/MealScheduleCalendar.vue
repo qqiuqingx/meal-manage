@@ -63,7 +63,7 @@
         v-if="selectedDate"
         :date="selectedDate"
         :value="selectedDateMealTypes"
-        :allowed-meal-types="allowedMealTypesForSelector"
+        :allowed-meal-types="selectedDateAllowedMealTypes"
         @input="handleMealTypesChange"
         @save="handleMealTypesSave"
         @cancel="closeMealSelector"
@@ -128,6 +128,11 @@ export default {
       type: String,
       default: null
     },
+    // 订单开始餐次
+    startMealType: {
+      type: String,
+      default: 'BREAKFAST'
+    },
     // 订单结束日期
     endDate: {
       type: String,
@@ -171,33 +176,8 @@ export default {
     mealCounts() {
       return calculateMealCounts(this.internalSelectedDates)
     },
-    // 根据订单餐次类型决定日历新增日期的默认餐次
-    defaultMealTypes() {
-      switch (this.orderMealType) {
-        case 'LUNCH_DINNER':
-          return [MealType.LUNCH, MealType.DINNER]
-        case 'LUNCH':
-          return [MealType.LUNCH]
-        case 'DINNER':
-          return [MealType.DINNER]
-        case 'ALL':
-        default:
-          return [MealType.BREAKFAST, MealType.LUNCH, MealType.DINNER]
-      }
-    },
-    // 餐次选择器允许选择的餐次
-    allowedMealTypesForSelector() {
-      switch (this.orderMealType) {
-        case 'LUNCH_DINNER':
-          return [MealType.LUNCH, MealType.DINNER]
-        case 'LUNCH':
-          return [MealType.LUNCH]
-        case 'DINNER':
-          return [MealType.DINNER]
-        case 'ALL':
-        default:
-          return [MealType.BREAKFAST, MealType.LUNCH, MealType.DINNER]
-      }
+    selectedDateAllowedMealTypes() {
+      return this.getAllowedMealTypesForDate(this.selectedDate)
     }
   },
   watch: {
@@ -207,6 +187,7 @@ export default {
         const normalized = normalizeDeliveryDates(val)
         console.log('[Calendar] normalized:', JSON.stringify(normalized))
         this.internalSelectedDates = normalized
+        this.normalizeSelectionsForConstraints()
         this.$forceUpdate()
       },
       immediate: true
@@ -218,9 +199,18 @@ export default {
       this.generateCalendar()
     },
     startDate() {
+      this.normalizeSelectionsForConstraints()
       this.generateCalendar()
     },
+    startMealType() {
+      this.normalizeSelectionsForConstraints()
+    },
     endDate() {
+      this.normalizeSelectionsForConstraints()
+      this.generateCalendar()
+    },
+    orderMealType() {
+      this.normalizeSelectionsForConstraints()
       this.generateCalendar()
     }
   },
@@ -228,6 +218,7 @@ export default {
     console.log('[Calendar] created, startDate:', this.startDate, 'endDate:', this.endDate, 'value:', JSON.stringify(this.value))
     // 立即初始化 internalSelectedDates，防止首次渲染时数据为空
     this.internalSelectedDates = normalizeDeliveryDates(this.value)
+    this.normalizeSelectionsForConstraints()
     console.log('[Calendar] created internalSelectedDates:', JSON.stringify(this.internalSelectedDates))
     this.generateCalendar()
     // 如果有开始日期，跳到开始日期所在月份
@@ -256,6 +247,49 @@ export default {
       const selected = this.internalSelectedDates.find(item => item.date === formattedDate)
       return selected ? selected.mealTypes : []
     },
+    getBaseAllowedMealTypes() {
+      switch (this.orderMealType) {
+        case 'LUNCH_DINNER':
+          return [MealType.LUNCH, MealType.DINNER]
+        case 'LUNCH':
+          return [MealType.LUNCH]
+        case 'DINNER':
+          return [MealType.DINNER]
+        case 'ALL':
+        default:
+          return [MealType.BREAKFAST, MealType.LUNCH, MealType.DINNER]
+      }
+    },
+    getAllowedMealTypesForDate(date) {
+      const baseAllowedMealTypes = this.getBaseAllowedMealTypes()
+      if (!date || !this.startDate) {
+        return baseAllowedMealTypes
+      }
+      const start = parseDate(this.startDate)
+      if (!start || formatDate(start) !== formatDate(date)) {
+        return baseAllowedMealTypes
+      }
+      const mealOrder = {
+        [MealType.BREAKFAST]: 1,
+        [MealType.LUNCH]: 2,
+        [MealType.DINNER]: 3
+      }
+      const startOrder = mealOrder[this.startMealType] || mealOrder[MealType.BREAKFAST]
+      return baseAllowedMealTypes.filter(type => (mealOrder[type] || 0) >= startOrder)
+    },
+    normalizeSelectionsForConstraints() {
+      const normalized = normalizeDeliveryDates(this.internalSelectedDates).map(item => {
+        const allowedMealTypes = this.getAllowedMealTypesForDate(parseDate(item.date))
+        return {
+          ...item,
+          mealTypes: (item.mealTypes || []).filter(type => allowedMealTypes.includes(type))
+        }
+      }).filter(item => this.isDateValid(parseDate(item.date)) && item.mealTypes.length > 0)
+
+      if (JSON.stringify(normalized) !== JSON.stringify(this.internalSelectedDates)) {
+        this.emitChange(normalized)
+      }
+    },
     handleDateClick({ date, formattedDate }) {
       if (this.readonly) return
 
@@ -271,13 +305,14 @@ export default {
     },
     addDate(date) {
       const formattedDate = formatDate(date)
+      const defaultMealTypes = this.getAllowedMealTypesForDate(date)
       const newSelected = [
         ...this.internalSelectedDates,
-        { date: formattedDate, mealTypes: [...this.defaultMealTypes] }
+        { date: formattedDate, mealTypes: [...defaultMealTypes] }
       ]
       this.emitChange(newSelected)
       // 自动打开餐次配置
-      this.openMealSelector(date, [...this.defaultMealTypes])
+      this.openMealSelector(date, [...defaultMealTypes])
     },
     removeDate(date) {
       const formattedDate = formatDate(date)
@@ -286,7 +321,8 @@ export default {
     },
     openMealSelector(date, mealTypes) {
       this.selectedDate = date
-      this.selectedDateMealTypes = [...mealTypes]
+      const allowedMealTypes = this.getAllowedMealTypesForDate(date)
+      this.selectedDateMealTypes = mealTypes.filter(type => allowedMealTypes.includes(type))
       this.showMealSelector = true
     },
     handleMealTypesSave(mealTypes) {
@@ -344,8 +380,8 @@ export default {
       const dateRange = getDateRange(this.startDate, this.endDate)
       const newSelected = dateRange.map(date => ({
         date,
-        mealTypes: [...this.defaultMealTypes]
-      }))
+        mealTypes: [...this.getAllowedMealTypesForDate(parseDate(date))]
+      })).filter(item => item.mealTypes.length > 0)
       this.emitChange(newSelected)
     },
     clearAllDates() {

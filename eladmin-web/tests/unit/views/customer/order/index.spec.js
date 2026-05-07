@@ -25,6 +25,7 @@ function createOrderDefaultForm() {
     dealTime: null,
     firstDeliveryTime: null,
     startDate: null,
+    startMealType: 'BREAKFAST',
     endDate: null,
     status: 1,
     mealType: 'ALL',
@@ -116,6 +117,7 @@ describe('CustomerOrder edit flow', () => {
 
     expect(beforeToCU(ctx)).toBe(true)
     expect(ctx.form.scheduleMode).toBe('SCHEDULE')
+    expect(ctx.form.startMealType).toBe('BREAKFAST')
     expect(ctx.form.deliveryDatesWithMealTypes).toEqual([])
     expect(ctx.form.deliveryDates).toBe('[{\"date\":\"2026-04-24\",\"mealTypes\":[\"LUNCH\",\"DINNER\"]}]')
   })
