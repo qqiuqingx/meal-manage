@@ -122,6 +122,7 @@
                 >{{ customer.customerCode || customer.customerName }}</span>
                 <span v-if="customer.firstMealOfOrder" class="code-first-badge">首</span>
               </div>
+              <div v-if="getRiceRequirement(customer)" class="rice-requirement-tag">{{ getRiceRequirement(customer) }}</div>
               <div v-if="showSupplementaryTags && customer.supplementaryTags && customer.supplementaryTags.length > 0" class="supplementary-tags">
                 <span
                   v-for="(tag, idx) in customer.supplementaryTags"
@@ -930,6 +931,12 @@ export default {
       const dishTypes = (customer.items || []).map(item => item.dishType)
       return !dishTypes.includes('SOUP') && customer.includeSoup !== 1
     },
+    getRiceRequirement(customer) {
+      const req = customer.specialRequirements
+      if (!req) return ''
+      const match = req.match(/加\s*\d+\s*份米饭/)
+      return match ? match[0] : ''
+    },
     getSupplementaryTags(customer) {
       const missingTags = this.getMissingDishTags(customer)
       const addTags = []
@@ -1226,6 +1233,16 @@ export default {
   background: #fee2e2;
   color: #991b1b;
   border-color: #fca5a5;
+}
+.rice-requirement-tag {
+  margin-top: 4px;
+  padding: 2px 6px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 4px;
+  display: inline-block;
 }
 
 /* 右栏 */
