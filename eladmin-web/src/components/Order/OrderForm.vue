@@ -72,6 +72,7 @@
             <MealScheduleCalendar
               v-model="form.deliveryDatesWithMealTypes"
               :start-date="form.startDate"
+              :start-meal-type="form.startMealType"
               :end-date="form.endDate"
               :readonly="readonly"
               :order-meal-type="form.mealType"
@@ -456,7 +457,7 @@
 
       <!-- 开始/结束日期：两种模式均显示，prop 按 mode 区分 -->
       <el-row :gutter="20">
-        <el-col :span="12">
+        <el-col :span="8">
           <el-form-item
             :label="mode === 'order' ? '订单开始日期' : '开始日期'"
             :prop="mode === 'firstOrder' ? 'startDate' : ''"
@@ -471,7 +472,19 @@
             />
           </el-form-item>
         </el-col>
-        <el-col :span="12">
+        <el-col :span="8">
+          <el-form-item label="开始餐次">
+            <el-select v-model="form.startMealType" :disabled="readonly" placeholder="请选择开始餐次" style="width: 100%;">
+              <el-option
+                v-for="item in startMealTypeOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
           <el-form-item
             :label="mode === 'order' ? '订单结束日期' : '结束日期'"
             :prop="mode === 'firstOrder' ? 'endDate' : ''"
@@ -501,6 +514,29 @@ import MealScheduleCalendar from '@/components/Calendar/MealScheduleCalendar.vue
 import { normalizeDeliveryDates } from '@/utils/calendar'
 
 export const DEFAULT_RICE_TYPE_OPTION_VALUE = '默认'
+export const START_MEAL_TYPE_OPTIONS = {
+  ALL: [
+    { label: '早餐开始', value: 'BREAKFAST' },
+    { label: '午餐开始', value: 'LUNCH' },
+    { label: '晚餐开始', value: 'DINNER' }
+  ],
+  LUNCH_DINNER: [
+    { label: '午餐开始', value: 'LUNCH' },
+    { label: '晚餐开始', value: 'DINNER' }
+  ],
+  LUNCH: [
+    { label: '午餐开始', value: 'LUNCH' }
+  ],
+  DINNER: [
+    { label: '晚餐开始', value: 'DINNER' }
+  ]
+}
+
+function getDefaultStartMealType(mealType) {
+  if (mealType === 'DINNER') return 'DINNER'
+  if (mealType === 'LUNCH' || mealType === 'LUNCH_DINNER') return 'LUNCH'
+  return 'BREAKFAST'
+}
 
 function serializeDeliveryDates(value) {
   const normalized = normalizeDeliveryDates(value)
@@ -537,6 +573,7 @@ export function createOrderDefaultForm() {
     dealTime: null,
     firstDeliveryTime: null,
     startDate: null,
+    startMealType: 'BREAKFAST',
     endDate: null,
     status: 1,
     mealType: 'ALL',
@@ -572,6 +609,7 @@ export function createFirstOrderDefaultForm() {
     deliveryDatesWithMealTypes: [],
     deliveryDates: [],
     startDate: null,
+    startMealType: 'BREAKFAST',
     endDate: null,
     mealType: 'ALL',
     customerSource: null,
@@ -658,6 +696,9 @@ export default {
       set(val) {
         this.form.deliveryDatesWithMealTypes = val
       }
+    },
+    startMealTypeOptions() {
+      return START_MEAL_TYPE_OPTIONS[this.form.mealType] || START_MEAL_TYPE_OPTIONS.ALL
     }
   },
   watch: {
@@ -668,6 +709,7 @@ export default {
         this.normalizeFormNumbers()
         this.ensureRiceTypeValue(val)
         this.ensureRiceTypeOption(val && val.riceType)
+        this.syncStartMealType()
         // 当外部 value 变化时（如编辑时加载数据），同步子套餐列表和日历数据
         if (val.parentPackageId) {
           this.loadChildPackages(val.parentPackageId)
@@ -683,6 +725,9 @@ export default {
       },
       deep: true,
       immediate: true
+    },
+    'form.mealType'() {
+      this.syncStartMealType()
     }
   },
   created() {
@@ -784,6 +829,17 @@ export default {
         return
       }
       this.$set(this.form, 'riceType', DEFAULT_RICE_TYPE_OPTION_VALUE)
+    },
+    syncStartMealType() {
+      const options = this.startMealTypeOptions
+      if (!options.length) {
+        return
+      }
+      const current = this.form.startMealType
+      const valid = options.some(item => item.value === current)
+      if (!valid) {
+        this.$set(this.form, 'startMealType', getDefaultStartMealType(this.form.mealType))
+      }
     },
     async loadRiceTypeOptions() {
       try {

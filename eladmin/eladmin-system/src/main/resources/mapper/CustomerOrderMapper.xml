@@ -23,6 +23,7 @@
         <result column="deal_time" property="dealTime"/>
         <result column="first_delivery_time" property="firstDeliveryTime"/>
         <result column="start_date" property="startDate"/>
+        <result column="start_meal_type" property="startMealType"/>
         <result column="end_date" property="endDate"/>
         <result column="status" property="status"/>
         <result column="meal_type" property="mealType"/>

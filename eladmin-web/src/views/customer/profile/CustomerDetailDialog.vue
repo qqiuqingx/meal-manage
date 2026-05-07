@@ -91,7 +91,7 @@
           </el-table-column>
           <el-table-column label="订单期间" width="180" show-overflow-tooltip>
             <template slot-scope="scope">
-              {{ scope.row.startDate }} ~ {{ scope.row.endDate }}
+              {{ formatOrderPeriod(scope.row) }}
             </template>
           </el-table-column>
           <el-table-column label="送餐日期" width="180" show-overflow-tooltip>
@@ -280,6 +280,13 @@ export default {
       if (!mealType || mealType === 'ALL') return '-'
       const map = { LUNCH: '午餐', DINNER: '晚餐', LUNCH_DINNER: '午+晚' }
       return map[mealType] || mealType
+    },
+    startMealTypeText(startMealType) {
+      const map = { BREAKFAST: '早餐起', LUNCH: '午餐起', DINNER: '晚餐起' }
+      return map[startMealType] || '早餐起'
+    },
+    formatOrderPeriod(row) {
+      return `${row.startDate || '-'}（${this.startMealTypeText(row.startMealType)}） ~ ${row.endDate || '-'}`
     },
     handleClose() {
       this.dialogVisible = false

@@ -7,6 +7,7 @@ import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.order.service.CustomerOrderService;
+import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
 import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
@@ -304,9 +305,11 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             dto.setStatus(1);
         }
 
-        // 餐次类型默认值（兼容老数据）
-        if (dto.getMealType() == null) {
-            dto.setMealType("ALL");
+        dto.setMealType(OrderStartMealTypeUtil.normalizeOrderMealType(dto.getMealType()));
+        dto.setStartMealType(OrderStartMealTypeUtil.normalizeStartMealType(dto.getMealType(), dto.getStartMealType()));
+        if (!OrderStartMealTypeUtil.isStartMealTypeAllowed(dto.getMealType(), dto.getStartMealType())) {
+            throw new BadRequestException("开始餐次与订单餐次类型不匹配，可选开始餐次：" +
+                    String.join("、", toMealTypeDescList(OrderStartMealTypeUtil.allowedStartMealTypes(dto.getMealType()))));
         }
     }
 
@@ -331,6 +334,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         order.setDealTime(dto.getDealTime());
         order.setFirstDeliveryTime(dto.getFirstDeliveryTime());
         order.setStartDate(dto.getStartDate());
+        order.setStartMealType(dto.getStartMealType());
         order.setEndDate(dto.getEndDate());
         order.setStatus(dto.getStatus());
         order.setMealType(dto.getMealType());
@@ -393,6 +397,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setDealTime(order.getDealTime());
         dto.setFirstDeliveryTime(order.getFirstDeliveryTime());
         dto.setStartDate(order.getStartDate());
+        dto.setStartMealType(order.getStartMealType());
         dto.setEndDate(order.getEndDate());
         dto.setStatus(order.getStatus());
         dto.setStatusDesc(getStatusDesc(order.getStatus()));
@@ -453,10 +458,15 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         }
 
         LocalDate startDate = dto.getStartDate();
+        String mealType = OrderStartMealTypeUtil.normalizeOrderMealType(dto.getMealType());
+        String startMealType = OrderStartMealTypeUtil.normalizeStartMealType(mealType, dto.getStartMealType());
+        if (!OrderStartMealTypeUtil.isStartMealTypeAllowed(mealType, startMealType)) {
+            throw new BadRequestException("开始餐次与订单餐次类型不匹配");
+        }
 
         // 校验规则：
         // 1. 全餐次订单：冲突范围内不能已有任何覆盖午/晚的订单
-        if ("ALL".equals(dto.getMealType())) {
+        if ("ALL".equals(mealType)) {
             int count = orderMapper.countAllMealTypeOrders(dto.getCustomerId(), startDate, excludeId);
             if (count > 0) {
                 throw new BadRequestException("同一开始日期已存在全餐次订单，不能重复创建");
@@ -477,7 +487,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         }
 
         // 2. 午餐+晚餐订单：与 ALL / LUNCH / DINNER / LUNCH_DINNER 均互斥
-        if ("LUNCH_DINNER".equals(dto.getMealType())) {
+        if ("LUNCH_DINNER".equals(mealType)) {
             int allCount = orderMapper.countAllMealTypeOrders(dto.getCustomerId(), startDate, excludeId);
             if (allCount > 0) {
                 throw new BadRequestException("同一开始日期已存在全餐次订单，不能创建午餐+晚餐订单");
@@ -498,7 +508,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         }
 
         // 3. 午餐或晚餐订单：原有逻辑 + 增加 LUNCH_DINNER 互斥检查
-        if ("LUNCH".equals(dto.getMealType()) || "DINNER".equals(dto.getMealType())) {
+        if ("LUNCH".equals(mealType) || "DINNER".equals(mealType)) {
             int lunchDinnerCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, "LUNCH_DINNER", excludeId);
             if (lunchDinnerCount > 0) {
                 throw new BadRequestException("同一开始日期已存在午餐+晚餐订单，不能创建单独餐次订单");
@@ -509,7 +519,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
                 throw new BadRequestException("同一开始日期最多只能有两个不同餐次的订单");
             }
 
-            int sameTypeCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, dto.getMealType(), excludeId);
+            int sameTypeCount = orderMapper.countMealTypeOrders(dto.getCustomerId(), startDate, mealType, excludeId);
             if (sameTypeCount > 0) {
                 throw new BadRequestException("同一开始日期已存在相同餐次的订单");
             }
@@ -644,6 +654,14 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         } catch (Exception e) {
             return Collections.emptyList();
         }
+    }
+
+    private List<String> toMealTypeDescList(List<String> mealTypes) {
+        List<String> labels = new ArrayList<>();
+        for (String mealType : mealTypes) {
+            labels.add(OrderStartMealTypeUtil.mealTypeDesc(mealType));
+        }
+        return labels;
     }
 
     // ========== 换菜规则相关方法 ==========

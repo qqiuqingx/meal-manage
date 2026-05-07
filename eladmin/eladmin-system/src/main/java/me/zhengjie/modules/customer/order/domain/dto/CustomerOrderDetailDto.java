@@ -65,6 +65,8 @@ public class CustomerOrderDetailDto implements Serializable {
 
     private LocalDate startDate;
 
+    private String startMealType;
+
     private LocalDate endDate;
 
     private Integer status;
