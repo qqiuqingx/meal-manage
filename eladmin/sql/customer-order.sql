@@ -28,6 +28,7 @@ CREATE TABLE customer_order (
     deal_time DATETIME NULL COMMENT '成交时间',
     first_delivery_time DATETIME NULL COMMENT '第一次送餐时间',
     start_date DATE NULL COMMENT '订单开始日期',
+    start_meal_type VARCHAR(20) NULL COMMENT '开始餐次(BREAKFAST/LUNCH/DINNER)',
     end_date DATE NULL COMMENT '订单结束日期',
     status TINYINT NOT NULL DEFAULT 1 COMMENT '订单状态(0=已取消,1=进行中,2=已完成)',
     meal_type VARCHAR(20) NULL COMMENT '餐次类型: LUNCH=午餐订单, DINNER=晚餐订单, ALL=全餐次订单',
@@ -62,6 +63,13 @@ CREATE INDEX idx_meal_type ON customer_order(meal_type);
 ALTER TABLE customer_order
 ADD COLUMN delivery_dates TEXT NULL COMMENT '送餐日期(JSON数组格式)'
 AFTER schedule_mode;
+
+-- ============================================
+-- Migration: Add start_meal_type field (for existing databases)
+-- ============================================
+ALTER TABLE customer_order
+ADD COLUMN start_meal_type VARCHAR(20) NULL COMMENT '开始餐次(BREAKFAST/LUNCH/DINNER)'
+AFTER start_date;
 
 -- ============================================
 -- Sys Menu (for permission management)

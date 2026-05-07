@@ -504,6 +504,7 @@ export default {
           finalAmount: orderInfo.finalAmount || 0,
           scheduleMode: orderInfo.scheduleMode || 'SCHEDULE',
           startDate: orderInfo.startDate,
+          startMealType: orderInfo.startMealType || 'BREAKFAST',
           endDate: orderInfo.endDate,
           mealType: orderInfo.mealType || 'ALL',
           customerSource: orderInfo.customerSource || null,

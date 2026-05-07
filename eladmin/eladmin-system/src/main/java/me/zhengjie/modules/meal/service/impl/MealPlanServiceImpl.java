@@ -22,6 +22,7 @@ import cn.hutool.json.JSONUtil;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
 import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
@@ -408,6 +409,12 @@ public class MealPlanServiceImpl implements MealPlanService {
             if (customerId != null && !Objects.equals(order.getCustomerId(), customerId)) {
                 continue;
             }
+            String startMealTypeReason = getStartMealTypeMismatchReason(order, mealType, targetDate);
+            if (startMealTypeReason != null) {
+                log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 餐次: {}, 原因: {}",
+                        order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(), mealType, startMealTypeReason);
+                continue;
+            }
             String matchReason = getScheduleModeMatchReason(order, mealType,targetDate);
             if (matchReason != null) {
                 log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 餐次: {}, 配送模式: {}, 原因: {}",
@@ -444,6 +451,16 @@ public class MealPlanServiceImpl implements MealPlanService {
                 System.currentTimeMillis() - startTime);
 
         return validOrders;
+    }
+
+    private String getStartMealTypeMismatchReason(CustomerOrder order, String targetMealType, LocalDate targetDate) {
+        String normalizedStartMealType = OrderStartMealTypeUtil.normalizeStartMealType(order.getMealType(), order.getStartMealType());
+        if (OrderStartMealTypeUtil.hasStartedForMeal(order.getStartDate(), normalizedStartMealType, targetDate, targetMealType)) {
+            return null;
+        }
+        return String.format("开始餐次为%s，当前餐次%s尚未开始",
+                OrderStartMealTypeUtil.mealTypeDesc(normalizedStartMealType),
+                OrderStartMealTypeUtil.mealTypeDesc(targetMealType));
     }
 
     /**
