@@ -527,6 +527,7 @@ export default {
       const missingCodesByDishType = {}
       const replacedCodesByOriginalDishName = {}
       const riceChangedDetailsByDisplayName = {}
+      const riceRequirementCodesByDisplayName = {}
       // 预先确定菜单米饭名称（从非替换的米饭项中取），确保所有米饭归为同一行
       let menuRiceName = null
       const customers = this.planData.customers || []
@@ -540,6 +541,16 @@ export default {
       })
       customers.forEach(customer => {
         const code = customer.customerCode || customer.customerName || ''
+        const items = customer.items || []
+        const riceRequirementText = this.getRiceRequirement(customer)
+        const customerRiceItem = items.find(item => item.dishType === 'RICE')
+        const customerRiceDisplayName = menuRiceName || (customerRiceItem && (customerRiceItem.originalDishName || customerRiceItem.dishName))
+        if (riceRequirementText && code && customerRiceDisplayName) {
+          if (!riceRequirementCodesByDisplayName[customerRiceDisplayName]) {
+            riceRequirementCodesByDisplayName[customerRiceDisplayName] = new Set()
+          }
+          riceRequirementCodesByDisplayName[customerRiceDisplayName].add(`${code}(${riceRequirementText})`)
+        }
         if (this.isSoupMissing(customer) && code) {
           customersWithoutSoup.add(code)
         }
@@ -552,7 +563,6 @@ export default {
           }
           missingCodesByDishType[dishType].add(`${code}(${tag})`)
         })
-        const items = customer.items || []
         items.forEach(item => {
           if (item.isReplaced && item.dishType !== 'RICE' && code) {
             const originalDishName = item.originalDishName || item.dishName
@@ -621,11 +631,13 @@ export default {
           const missingCodesSet = missingCodesByDishType[g.dishType]
           const missingCodes = missingCodesSet ? Array.from(missingCodesSet) : []
           const riceChangedDetails = riceChangedDetailsByDisplayName[g.dishName] || []
-          const riceChangedText = this.buildRiceChangedCodeText(riceChangedDetails)
+          const riceChangedCodes = this.buildRiceChangedCodeEntries(riceChangedDetails)
+          const riceRequirementSet = riceRequirementCodesByDisplayName[g.dishName]
+          const riceRequirementCodes = riceRequirementSet ? Array.from(riceRequirementSet) : []
           const detailCodes = g.dishType === 'SOUP'
             ? Array.from(new Set([...excludedCodes, ...replacedCodes, ...customersWithoutSoup]))
             : g.dishType === 'RICE'
-              ? Array.from(new Set([...excludedCodes, ...missingCodes, ...(riceChangedText ? [riceChangedText] : [])]))
+              ? this.mergeRiceCodeDetails(Array.from(new Set([...excludedCodes, ...missingCodes, ...riceChangedCodes, ...riceRequirementCodes])))
               : Array.from(new Set([...excludedCodes, ...replacedCodes, ...missingCodes]))
           return {
             ...g,
@@ -982,17 +994,52 @@ export default {
       if (!codes || codes.length === 0) return '-'
       return codes.join(', ')
     },
-    buildRiceChangedCodeText(detailGroups) {
-      if (!detailGroups || detailGroups.length === 0) return ''
-      return detailGroups.map(group => {
-        if (!group.codes || group.codes.length === 0) return ''
-        if (group.codes.length === 1) {
-          return `${group.codes[0]}(${group.dishName})`
+    buildRiceChangedCodeEntries(detailGroups) {
+      if (!detailGroups || detailGroups.length === 0) return []
+      return detailGroups.reduce((entries, group) => {
+        if (!group.codes || group.codes.length === 0) return entries
+        group.codes.forEach(code => {
+          entries.push(`${code}(${group.dishName})`)
+        })
+        return entries
+      }, [])
+    },
+    mergeRiceCodeDetails(entries) {
+      if (!entries || entries.length === 0) return []
+      const mergedByCode = {}
+      const orderedCodes = []
+      const passthroughEntries = []
+      const entryReg = /^([^(),\s]+)((?:\([^)]*\))*)$/
+
+      entries.forEach(entry => {
+        const text = (entry || '').trim()
+        if (!text) return
+        const match = text.match(entryReg)
+        if (!match) {
+          passthroughEntries.push(text)
+          return
         }
-        const leadingCodes = group.codes.slice(0, -1)
-        const lastCode = group.codes[group.codes.length - 1]
-        return `${this.buildFullCodeText(leadingCodes)}, ${lastCode}(${group.dishName})`
-      }).filter(Boolean).join(', ')
+        const code = match[1]
+        const tagPart = match[2] || ''
+        if (!mergedByCode[code]) {
+          mergedByCode[code] = []
+          orderedCodes.push(code)
+        }
+        const tagMatches = tagPart.match(/\(([^)]*)\)/g) || []
+        tagMatches.forEach(tagChunk => {
+          const tagText = tagChunk.substring(1, tagChunk.length - 1)
+          if (tagText && !mergedByCode[code].includes(tagText)) {
+            mergedByCode[code].push(tagText)
+          }
+        })
+      })
+
+      const mergedEntries = orderedCodes.map(code => {
+        const tags = mergedByCode[code]
+        if (!tags || tags.length === 0) return code
+        return `${code}${tags.map(tag => `(${tag})`).join('')}`
+      })
+      return [...mergedEntries, ...passthroughEntries]
     },
     formatDate(dateStr) {
       if (!dateStr) return '-'
