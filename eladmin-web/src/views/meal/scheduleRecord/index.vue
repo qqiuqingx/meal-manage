@@ -1007,7 +1007,8 @@ export default {
     mergeRiceCodeDetails(entries) {
       if (!entries || entries.length === 0) return []
       const mergedByCode = {}
-      const orderedCodes = []
+      const codeOrder = {}
+      let orderCounter = 0
       const passthroughEntries = []
       const entryReg = /^([^(),\s]+)((?:\([^)]*\))*)$/
 
@@ -1023,7 +1024,7 @@ export default {
         const tagPart = match[2] || ''
         if (!mergedByCode[code]) {
           mergedByCode[code] = []
-          orderedCodes.push(code)
+          codeOrder[code] = orderCounter++
         }
         const tagMatches = tagPart.match(/\(([^)]*)\)/g) || []
         tagMatches.forEach(tagChunk => {
@@ -1034,11 +1035,45 @@ export default {
         })
       })
 
-      const mergedEntries = orderedCodes.map(code => {
-        const tags = mergedByCode[code]
-        if (!tags || tags.length === 0) return code
-        return `${code}${tags.map(tag => `(${tag})`).join('')}`
+      const singleTagGroups = {}
+      const outputWithOrder = []
+      Object.keys(mergedByCode).forEach(code => {
+        const tags = mergedByCode[code] || []
+        const idx = codeOrder[code]
+        if (tags.length <= 0) {
+          outputWithOrder.push({ idx, text: code })
+          return
+        }
+        if (tags.length > 1) {
+          outputWithOrder.push({ idx, text: `${code}${tags.map(tag => `(${tag})`).join('')}` })
+          return
+        }
+        const singleTag = tags[0]
+        if (!singleTagGroups[singleTag]) {
+          singleTagGroups[singleTag] = []
+        }
+        singleTagGroups[singleTag].push({ code, idx })
       })
+
+      Object.keys(singleTagGroups).forEach(tag => {
+        const rows = singleTagGroups[tag].sort((a, b) => a.idx - b.idx)
+        const idx = rows[0].idx
+        if (tag === '白米饭') {
+          const mergedCodes = rows.map(item => item.code).join(', ')
+          outputWithOrder.push({ idx, text: mergedCodes })
+          return
+        }
+        if (rows.length === 1) {
+          outputWithOrder.push({ idx, text: `${rows[0].code}(${tag})` })
+          return
+        }
+        const mergedCodes = rows.map(item => item.code).join(', ')
+        outputWithOrder.push({ idx, text: `${mergedCodes}(${tag})` })
+      })
+
+      const mergedEntries = outputWithOrder
+        .sort((a, b) => a.idx - b.idx)
+        .map(item => item.text)
       return [...mergedEntries, ...passthroughEntries]
     },
     formatDate(dateStr) {
