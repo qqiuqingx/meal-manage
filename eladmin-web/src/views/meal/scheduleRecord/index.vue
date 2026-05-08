@@ -1060,7 +1060,7 @@ export default {
         const idx = rows[0].idx
         if (tag === '白米饭') {
           const mergedCodes = rows.map(item => item.code).join(', ')
-          outputWithOrder.push({ idx, text: mergedCodes })
+          outputWithOrder.push({ idx, text: `${mergedCodes}(白米饭)` })
           return
         }
         if (rows.length === 1) {
