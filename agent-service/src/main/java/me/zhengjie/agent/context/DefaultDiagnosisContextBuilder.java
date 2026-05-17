@@ -14,6 +14,7 @@ public class DefaultDiagnosisContextBuilder implements DiagnosisContextBuilder {
     public DiagnosisContextDto build(DiagnosisRequest request) {
         DiagnosisContextDto context = new DiagnosisContextDto();
         context.setCustomerId(request.getCustomerId());
+        context.setCustomerCode(request.getCustomerCode());
         context.setRecordDate(request.getRecordDate());
         context.setMealType(request.getMealType());
         context.setOrders(java.util.List.of());

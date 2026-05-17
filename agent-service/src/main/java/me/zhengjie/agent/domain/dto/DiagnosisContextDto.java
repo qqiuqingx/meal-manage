@@ -11,6 +11,7 @@ import java.util.Map;
 public class DiagnosisContextDto {
 
     private Long customerId;
+    private String customerCode;
     private String customerName;
     private String recordDate;
     private String mealType;
@@ -25,6 +26,14 @@ public class DiagnosisContextDto {
 
     public void setCustomerId(Long customerId) {
         this.customerId = customerId;
+    }
+
+    public String getCustomerCode() {
+        return customerCode;
+    }
+
+    public void setCustomerCode(String customerCode) {
+        this.customerCode = customerCode;
     }
 
     public String getCustomerName() {
