@@ -214,4 +214,14 @@ public class CustomerOrderSaveDto implements Serializable {
      * 换菜规则列表
      */
     private List<CustomerOrderReplaceRuleDto> replaceRules;
+
+    /**
+     * 过敏食物标签（编辑时同步到客户档案）
+     */
+    private List<String> allergyTags;
+
+    /**
+     * 特殊要求（编辑时同步到客户档案）
+     */
+    private String specialRequirements;
 }

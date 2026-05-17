@@ -122,7 +122,13 @@
                 >{{ customer.customerCode || customer.customerName }}</span>
                 <span v-if="customer.firstMealOfOrder" class="code-first-badge">首</span>
               </div>
-              <div v-if="getRiceRequirement(customer)" class="rice-requirement-tag">{{ getRiceRequirement(customer) }}</div>
+              <div v-if="customer.specialRequirementTags && customer.specialRequirementTags.length > 0" class="special-requirement-tags">
+                <span
+                  v-for="(tag, idx) in customer.specialRequirementTags"
+                  :key="idx"
+                  class="special-requirement-tag"
+                >{{ tag }}</span>
+              </div>
               <div v-if="showSupplementaryTags && customer.supplementaryTags && customer.supplementaryTags.length > 0" class="supplementary-tags">
                 <span
                   v-for="(tag, idx) in customer.supplementaryTags"
@@ -450,6 +456,12 @@ export default {
         无素菜: 'VEGETABLE',
         无米饭: 'RICE'
       },
+      specialRequirementDishMap: {
+        米饭: 'RICE',
+        主菜: 'MAIN',
+        副菜: 'SIDE',
+        素菜: 'VEGETABLE'
+      },
       statusMap: {
         SUCCESS: '成功',
         FAILED: '部分失败',
@@ -513,6 +525,7 @@ export default {
       const decorated = (this.planData.customers || []).map(c => ({
         ...c,
         isSoupMissing: this.isSoupMissing(c),
+        specialRequirementTags: this.getSpecialRequirementTags(c),
         supplementaryTags: this.getSupplementaryTags(c)
       }))
       const firstCustomers = decorated.filter(item => item.firstMealOfOrder)
@@ -525,9 +538,9 @@ export default {
       const allergyFilteredCodesByDishName = {}
       const customersWithoutSoup = new Set()
       const missingCodesByDishType = {}
+      const specialRequirementCodesByDishType = {}
       const replacedCodesByOriginalDishName = {}
       const riceChangedDetailsByDisplayName = {}
-      const riceRequirementCodesByDisplayName = {}
       // 预先确定菜单米饭名称（从非替换的米饭项中取），确保所有米饭归为同一行
       let menuRiceName = null
       const customers = this.planData.customers || []
@@ -542,15 +555,15 @@ export default {
       customers.forEach(customer => {
         const code = customer.customerCode || customer.customerName || ''
         const items = customer.items || []
-        const riceRequirementText = this.getRiceRequirement(customer)
-        const customerRiceItem = items.find(item => item.dishType === 'RICE')
-        const customerRiceDisplayName = menuRiceName || (customerRiceItem && (customerRiceItem.originalDishName || customerRiceItem.dishName))
-        if (riceRequirementText && code && customerRiceDisplayName) {
-          if (!riceRequirementCodesByDisplayName[customerRiceDisplayName]) {
-            riceRequirementCodesByDisplayName[customerRiceDisplayName] = new Set()
+        const specialRequirementTags = this.getSpecialRequirementTags(customer)
+        specialRequirementTags.forEach(tag => {
+          const dishType = this.getSpecialRequirementDishType(tag)
+          if (!dishType || !code) return
+          if (!specialRequirementCodesByDishType[dishType]) {
+            specialRequirementCodesByDishType[dishType] = new Set()
           }
-          riceRequirementCodesByDisplayName[customerRiceDisplayName].add(`${code}(${riceRequirementText})`)
-        }
+          specialRequirementCodesByDishType[dishType].add(`${code}(${tag})`)
+        })
         if (this.isSoupMissing(customer) && code) {
           customersWithoutSoup.add(code)
         }
@@ -630,15 +643,15 @@ export default {
           const replacedCodes = replacedSet ? Array.from(replacedSet) : []
           const missingCodesSet = missingCodesByDishType[g.dishType]
           const missingCodes = missingCodesSet ? Array.from(missingCodesSet) : []
+          const specialRequirementSet = specialRequirementCodesByDishType[g.dishType]
+          const specialRequirementCodes = specialRequirementSet ? Array.from(specialRequirementSet) : []
           const riceChangedDetails = riceChangedDetailsByDisplayName[g.dishName] || []
           const riceChangedCodes = this.buildRiceChangedCodeEntries(riceChangedDetails)
-          const riceRequirementSet = riceRequirementCodesByDisplayName[g.dishName]
-          const riceRequirementCodes = riceRequirementSet ? Array.from(riceRequirementSet) : []
           const detailCodes = g.dishType === 'SOUP'
             ? Array.from(new Set([...excludedCodes, ...replacedCodes, ...customersWithoutSoup]))
             : g.dishType === 'RICE'
-              ? this.mergeRiceCodeDetails(Array.from(new Set([...excludedCodes, ...missingCodes, ...riceChangedCodes, ...riceRequirementCodes])))
-              : Array.from(new Set([...excludedCodes, ...replacedCodes, ...missingCodes]))
+              ? this.mergeRiceCodeDetails(Array.from(new Set([...excludedCodes, ...missingCodes, ...riceChangedCodes, ...specialRequirementCodes])))
+              : Array.from(new Set([...excludedCodes, ...replacedCodes, ...missingCodes, ...specialRequirementCodes]))
           return {
             ...g,
             count: g.eatCodes.length,
@@ -944,10 +957,41 @@ export default {
       return !dishTypes.includes('SOUP') && customer.includeSoup !== 1
     },
     getRiceRequirement(customer) {
+      const tags = this.getSpecialRequirementTags(customer)
+      return tags.find(tag => this.getSpecialRequirementDishType(tag) === 'RICE' && tag.startsWith('加')) || ''
+    },
+    getSpecialRequirementTags(customer) {
       const req = customer.specialRequirements
-      if (!req) return ''
-      const match = req.match(/加\s*\d+\s*份米饭/)
-      return match ? match[0] : ''
+      if (!req) return []
+      const matches = []
+      const addReg = /加\s*(?:\d+\s*份\s*)?(米饭|主菜|副菜|素菜)/g
+      const removeReg = /(?:不要|不加|去掉|免)\s*(米饭|主菜|副菜|素菜)/g
+      this.collectSpecialRequirementMatches(req, removeReg, matches)
+      this.collectSpecialRequirementMatches(req, addReg, matches)
+      const tags = []
+      matches
+        .sort((a, b) => a.index - b.index)
+        .forEach(item => {
+          if (item.tag && !tags.includes(item.tag)) {
+            tags.push(item.tag)
+          }
+        })
+      return tags
+    },
+    collectSpecialRequirementMatches(req, reg, matches) {
+      let match = reg.exec(req)
+      while (match) {
+        const tag = match[0].trim()
+        if (tag) {
+          matches.push({ tag, index: match.index })
+        }
+        match = reg.exec(req)
+      }
+    },
+    getSpecialRequirementDishType(tag) {
+      if (!tag) return null
+      const dishName = Object.keys(this.specialRequirementDishMap).find(name => tag.indexOf(name) !== -1)
+      return dishName ? this.specialRequirementDishMap[dishName] : null
     },
     getSupplementaryTags(customer) {
       const missingTags = this.getMissingDishTags(customer)

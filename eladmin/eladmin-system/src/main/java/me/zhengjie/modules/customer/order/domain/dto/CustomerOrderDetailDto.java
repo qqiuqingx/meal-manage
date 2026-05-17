@@ -85,6 +85,8 @@ public class CustomerOrderDetailDto implements Serializable {
 
     private String specialRequirements;
 
+    private List<String> allergyTags;
+
     private String customerSource;
 
     private Integer mainDishCount;

@@ -351,6 +351,124 @@ describe('scheduleRecord special requirements display', () => {
     })
   })
 
+  test('special requirement tags include add and remove dish instructions', async() => {
+    const wrapper = buildWrapper()
+
+    wrapper.setData({
+      planData: {
+        mealPlan: { id: 1, mealType: 'LUNCH', recordDate: '2026-05-06', generateTime: '2026-05-06 12:00:00', status: 'SUCCESS' },
+        totalCustomers: 1,
+        successCount: 1,
+        failCount: 0,
+        customers: [{
+          id: 101,
+          customerCode: 'A170',
+          customerName: '张三',
+          includeSoup: 1,
+          specialRequirements: '不要米饭，加主菜，不要副菜，加素菜',
+          items: []
+        }]
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.vm.getSpecialRequirementTags(wrapper.vm.allCustomers[0])).toEqual([
+      '不要米饭',
+      '加主菜',
+      '不要副菜',
+      '加素菜'
+    ])
+    expect(wrapper.text()).toContain('不要米饭')
+    expect(wrapper.text()).toContain('加主菜')
+    expect(wrapper.text()).toContain('不要副菜')
+    expect(wrapper.text()).toContain('加素菜')
+
+    wrapper.destroy()
+  })
+
+  test('special requirement instructions are shown in matching menu summary rows', async() => {
+    const wrapper = buildWrapper()
+
+    wrapper.setData({
+      planData: {
+        mealPlan: { id: 1, mealType: 'LUNCH', recordDate: '2026-05-06', generateTime: '2026-05-06 12:00:00', status: 'SUCCESS' },
+        totalCustomers: 2,
+        successCount: 2,
+        failCount: 0,
+        customers: [{
+          id: 101,
+          customerCode: 'A170',
+          customerName: '张三',
+          includeSoup: 1,
+          specialRequirements: '不要米饭，加主菜，不要副菜，加素菜',
+          items: [{
+            dishType: 'MAIN',
+            dishName: '凤梨牛肉粒',
+            isReplaced: false,
+            isAllergyFiltered: false
+          }, {
+            dishType: 'SIDE',
+            dishName: '秋葵虾滑',
+            isReplaced: false,
+            isAllergyFiltered: false
+          }, {
+            dishType: 'VEGETABLE',
+            dishName: '上海青',
+            isReplaced: false,
+            isAllergyFiltered: false
+          }, {
+            dishType: 'RICE',
+            dishName: '白米饭',
+            isReplaced: false,
+            isAllergyFiltered: false
+          }]
+        }, {
+          id: 102,
+          customerCode: 'B5600',
+          customerName: '李四',
+          includeSoup: 1,
+          specialRequirements: '加 2 份米饭、不要主菜、加副菜、不要素菜',
+          items: [{
+            dishType: 'MAIN',
+            dishName: '凤梨牛肉粒',
+            isReplaced: false,
+            isAllergyFiltered: false
+          }, {
+            dishType: 'SIDE',
+            dishName: '秋葵虾滑',
+            isReplaced: false,
+            isAllergyFiltered: false
+          }, {
+            dishType: 'VEGETABLE',
+            dishName: '上海青',
+            isReplaced: false,
+            isAllergyFiltered: false
+          }, {
+            dishType: 'RICE',
+            dishName: '白米饭',
+            isReplaced: false,
+            isAllergyFiltered: false
+          }]
+        }]
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+
+    const mainDish = wrapper.vm.regularDishes.find(dish => dish.dishType === 'MAIN')
+    const sideDish = wrapper.vm.regularDishes.find(dish => dish.dishType === 'SIDE')
+    const vegDish = wrapper.vm.regularDishes.find(dish => dish.dishType === 'VEGETABLE')
+    const riceDish = wrapper.vm.regularDishes.find(dish => dish.dishType === 'RICE')
+
+    expect(mainDish.codeSnippet).toBe('A170(加主菜), B5600(不要主菜)')
+    expect(sideDish.codeSnippet).toBe('A170(不要副菜), B5600(加副菜)')
+    expect(vegDish.codeSnippet).toBe('A170(加素菜), B5600(不要素菜)')
+    expect(riceDish.codeSnippet).toBe('A170(不要米饭), B5600(加 2 份米饭)')
+
+    wrapper.destroy()
+  })
+
   test('first meal customers are placed before normal customers and keep group order', async() => {
     const wrapper = buildWrapper()
 
