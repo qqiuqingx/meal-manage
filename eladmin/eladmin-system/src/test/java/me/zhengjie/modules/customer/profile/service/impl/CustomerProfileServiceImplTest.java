@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
+import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
@@ -14,6 +17,8 @@ import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
+import me.zhengjie.modules.meal.domain.Dish;
+import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
 import me.zhengjie.modules.meal.service.DishService;
 import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
@@ -34,6 +39,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,6 +61,9 @@ class CustomerProfileServiceImplTest {
     private CustomerOrderMapper customerOrderMapper;
 
     @Mock
+    private CustomerOrderReplaceRuleMapper replaceRuleMapper;
+
+    @Mock
     private CustomerProfileMapper profileMapper;
 
     @Mock
@@ -74,6 +83,9 @@ class CustomerProfileServiceImplTest {
 
     @Mock
     private DishService dishService;
+
+    @Mock
+    private DishMapper dishMapper;
 
     @InjectMocks
     private CustomerProfileServiceImpl customerProfileService;
@@ -546,6 +558,72 @@ class CustomerProfileServiceImplTest {
         assertEquals(Integer.valueOf(1), order.getRiceCount());
         assertEquals(Integer.valueOf(2), order.getSoupCount());
         assertEquals(Long.valueOf(10L), order.getParentPackageId());
+    }
+
+    @Test
+    void testSaveFirstOrder_PersistsReplaceRules() throws Exception {
+        Method method = CustomerProfileServiceImpl.class.getDeclaredMethod(
+            "saveFirstOrder", CustomerProfile.class, CustomerProfileSaveDto.OrderInfoDto.class);
+        method.setAccessible(true);
+
+        Dish sourceDish = new Dish();
+        sourceDish.setId(101);
+        sourceDish.setName("原主菜");
+        sourceDish.setDishType("MAIN");
+        sourceDish.setEnabled(true);
+
+        Dish targetDish = new Dish();
+        targetDish.setId(202);
+        targetDish.setName("目标主菜");
+        targetDish.setDishType("MAIN");
+        targetDish.setEnabled(true);
+
+        when(dishMapper.selectById(101)).thenReturn(sourceDish);
+        when(dishMapper.selectById(202)).thenReturn(targetDish);
+        doAnswer(invocation -> {
+            CustomerOrder order = invocation.getArgument(0);
+            order.setId(99L);
+            return 1;
+        }).when(customerOrderMapper).insert(any(CustomerOrder.class));
+
+        CustomerOrderReplaceRuleDto replaceRule = new CustomerOrderReplaceRuleDto();
+        replaceRule.setSourceDishId(101L);
+        replaceRule.setTargetDishId(202L);
+        replaceRule.setRemark("首单换菜");
+
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = new CustomerProfileSaveDto.OrderInfoDto();
+        orderInfo.setParentPackageId(10L);
+        orderInfo.setBreakfastCount(5);
+        orderInfo.setLunchDinnerCount(10);
+        orderInfo.setTotalCount(15);
+        orderInfo.setBreakfastPrice(new BigDecimal("12"));
+        orderInfo.setLunchDinnerPrice(new BigDecimal("28"));
+        orderInfo.setTotalAmount(new BigDecimal("340"));
+        orderInfo.setDepositAmount(new BigDecimal("50"));
+        orderInfo.setFinalAmount(new BigDecimal("290"));
+        orderInfo.setScheduleMode("SCHEDULE");
+        orderInfo.setStartDate("2026-04-18");
+        orderInfo.setMealType("ALL");
+        orderInfo.setDeliveryDates("[\"2026-04-18\"]");
+        orderInfo.setMainDishCount(2);
+        orderInfo.setSideDishCount(1);
+        orderInfo.setVegCount(3);
+        orderInfo.setRiceCount(1);
+        orderInfo.setSoupCount(2);
+        orderInfo.setReplaceRules(Collections.singletonList(replaceRule));
+
+        method.invoke(customerProfileService, profile, orderInfo);
+
+        ArgumentCaptor<CustomerOrderReplaceRule> captor = ArgumentCaptor.forClass(CustomerOrderReplaceRule.class);
+        verify(replaceRuleMapper).insert(captor.capture());
+        CustomerOrderReplaceRule savedRule = captor.getValue();
+        assertEquals(Long.valueOf(99L), savedRule.getOrderId());
+        assertEquals(Long.valueOf(101L), savedRule.getSourceDishId());
+        assertEquals("原主菜", savedRule.getSourceDishName());
+        assertEquals(Long.valueOf(202L), savedRule.getTargetDishId());
+        assertEquals("目标主菜", savedRule.getTargetDishName());
+        assertEquals(Boolean.TRUE, savedRule.getEnabled());
+        assertEquals("首单换菜", savedRule.getRemark());
     }
 
     @Test

@@ -485,6 +485,52 @@
         </el-col>
       </el-row>
 
+      <!-- ===== 客户饮食信息（仅订单模式） ===== -->
+      <template v-if="mode === 'order'">
+        <el-divider content-position="left">客户饮食信息</el-divider>
+        <el-alert
+          title="修改后会同步更新客户档案，影响该客户后续全部订单的排餐"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 15px;"
+        />
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="过敏食物">
+              <el-select
+                v-model="form.allergyTags"
+                multiple
+                filterable
+                remote
+                allow-create
+                default-first-option
+                :disabled="readonly"
+                :remote-method="searchAllergy"
+                :loading="allergyLoading"
+                placeholder="输入配料名称搜索"
+                style="width: 100%;"
+              >
+                <el-option v-for="item in allergyOptions" :key="item.id" :label="item.name" :value="item.name" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="特殊要求">
+              <el-input
+                v-model="form.specialRequirements"
+                type="textarea"
+                :rows="3"
+                :disabled="readonly"
+                placeholder="客户特殊要求"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </template>
+
     </el-form>
   </div>
 </template>
@@ -494,6 +540,7 @@ import * as profileApi from '@/api/customer/profile'
 import * as packageApi from '@/api/customer/package'
 import * as dictDetailApi from '@/api/system/dictDetail'
 import * as dishApi from '@/api/dish'
+import { queryIngredients } from '@/api/dishIngredient'
 import MealScheduleCalendar from '@/components/Calendar/MealScheduleCalendar.vue'
 import { normalizeDeliveryDates } from '@/utils/calendar'
 
@@ -571,7 +618,9 @@ export function createOrderDefaultForm() {
     riceCount: 1,
     riceType: DEFAULT_RICE_TYPE_OPTION_VALUE,
     soupCount: 0,
-    replaceRules: []
+    replaceRules: [],
+    allergyTags: [],
+    specialRequirements: null
   }
 }
 
@@ -651,6 +700,8 @@ export default {
       childPackages: [],
       customerSourceOptions: [],
       riceTypeOptions: [],
+      allergyOptions: [],
+      allergyLoading: false,
       availableDates: [],
       hydratingForm: false,
       hydrationTimer: null
@@ -871,6 +922,22 @@ export default {
         console.error('searchCustomer error', e)
       } finally {
         this.customerLoading = false
+      }
+    },
+    // 远程搜索过敏食物（配料）
+    async searchAllergy(query) {
+      if (!query) {
+        this.allergyOptions = []
+        return
+      }
+      this.allergyLoading = true
+      try {
+        const res = await queryIngredients({ name: query, page: 0, size: 20 })
+        this.allergyOptions = res.content || []
+      } catch (e) {
+        console.error('searchAllergy error', e)
+      } finally {
+        this.allergyLoading = false
       }
     },
     // 客户选择变更

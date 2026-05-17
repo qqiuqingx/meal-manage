@@ -24,6 +24,7 @@ import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.SecurityUtils;
 import me.zhengjie.utils.StringUtils;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
@@ -174,6 +175,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         order.setUpdateBy(getCurrentUsername());
 
         orderMapper.updateById(order);
+        syncProfileDietaryInfo(dto);
         softDeleteRules(dto.getId());
         saveReplaceRules(dto.getId(), dto.getReplaceRules());
     }
@@ -353,6 +355,56 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     }
 
     /**
+     * 同步客户档案的饮食偏好字段（编辑订单时）
+     */
+    private void syncProfileDietaryInfo(CustomerOrderSaveDto dto) {
+        if (dto.getCustomerId() == null) {
+            return;
+        }
+        boolean hasAllergyTags = dto.getAllergyTags() != null;
+        boolean hasSpecialRequirements = dto.getSpecialRequirements() != null;
+        if (!hasAllergyTags && !hasSpecialRequirements) {
+            return;
+        }
+        List<String> cleaned = null;
+        String val = null;
+
+        if (hasAllergyTags) {
+            cleaned = new ArrayList<>();
+            if (dto.getAllergyTags() != null) {
+                for (String tag : dto.getAllergyTags()) {
+                    if (tag == null) continue;
+                    String trimmed = tag.trim();
+                    if (!trimmed.isEmpty() && !cleaned.contains(trimmed)) {
+                        cleaned.add(trimmed);
+                    }
+                }
+            }
+        }
+
+        if (hasSpecialRequirements) {
+            val = dto.getSpecialRequirements();
+            if (val != null) {
+                val = val.trim();
+                if (val.isEmpty()) {
+                    val = null;
+                }
+            }
+        }
+
+        LambdaUpdateWrapper<CustomerProfile> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.eq(CustomerProfile::getId, dto.getCustomerId());
+        if (hasAllergyTags) {
+            updateWrapper.set(CustomerProfile::getAllergyTags, cleaned);
+        }
+        if (hasSpecialRequirements) {
+            updateWrapper.set(CustomerProfile::getSpecialRequirements, val);
+        }
+        updateWrapper.set(CustomerProfile::getUpdateBy, getCurrentUsername());
+        profileMapper.update(null, updateWrapper);
+    }
+
+    /**
      * 构建详情 DTO
      */
     private CustomerOrderDetailDto buildDetailDto(CustomerOrder order, CustomerProfile profile) {
@@ -365,6 +417,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             dto.setCustomerName(profile.getCustomerName());
             dto.setPhone(profile.getPhone());
             dto.setSpecialRequirements(profile.getSpecialRequirements());
+            dto.setAllergyTags(profile.getAllergyTags());
         }
 
         // 填充套餐名称
