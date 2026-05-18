@@ -4,8 +4,27 @@ docker/volumes/
 
 ### IDEA ###
 .idea/*
+**/.idea/
 .DS_Store
 application.pid
+*.iml
+
+### Local agent/tooling state ###
+.claude/
+.codex/
+.cursor/
+.planning/
+.superpowers/
+
+### Build and runtime output ###
+**/target/
+**/logs/
+**/log.path_IS_UNDEFINED/
+*.log
+
+### Local media/debug artifacts ###
+*.mov
+agent-service/img.png
 
 ### Worktrees ###
 .worktrees/

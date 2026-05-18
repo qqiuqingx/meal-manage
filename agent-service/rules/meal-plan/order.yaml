@@ -1,0 +1,54 @@
+- ruleId: ORDER_MISSING
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 缺少可用订单
+  description: 客户在目标日期附近没有可用于排餐的订单。
+  requiredData:
+    - orders
+    - recordDate
+    - mealType
+  decisionHints:
+    - 如果订单列表为空或没有有效订单，提示先核对订单状态。
+  evidenceFields:
+    - orders.orderId
+    - orders.status
+  severity: HIGH
+  owner: meal-plan
+- ruleId: ORDER_NOT_EFFECTIVE
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 订单未在目标餐次生效
+  description: 订单日期范围、餐次或首日生效餐次不满足目标排餐条件。
+  requiredData:
+    - orders.startDate
+    - orders.endDate
+    - orders.mealType
+    - orders.startMealType
+    - recordDate
+    - mealType
+  decisionHints:
+    - 如果 recordDate 不在订单起止日期内，则订单未生效。
+    - 如果 recordDate 等于 startDate，需要继续判断 startMealType。
+  evidenceFields:
+    - orders.orderId
+    - orders.startDate
+    - orders.endDate
+    - orders.startMealType
+  severity: HIGH
+  owner: meal-plan
+- ruleId: ORDER_REMAINING_COUNT_EMPTY
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 订单剩余餐数不足
+  description: 订单对应餐次没有剩余可排餐数。
+  requiredData:
+    - orders.remainingCount
+    - orders.usedCount
+    - mealType
+  decisionHints:
+    - 如果 remainingCount 为 0，提示核对订单剩余餐数。
+  evidenceFields:
+    - orders.orderId
+    - orders.remainingCount
+  severity: HIGH
+  owner: meal-plan

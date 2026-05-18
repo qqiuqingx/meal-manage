@@ -14,6 +14,9 @@ public class DiagnosisResponse {
     private String recordDate;
     private String mealType;
     private String summary;
+    private String ruleVersionDigest;
+    private String modelName;
+    private boolean fallback;
     private List<DiagnosisReasonDto> reasons = new ArrayList<>();
 
     public String getRequestId() {
@@ -62,6 +65,30 @@ public class DiagnosisResponse {
 
     public void setSummary(String summary) {
         this.summary = summary;
+    }
+
+    public String getRuleVersionDigest() {
+        return ruleVersionDigest;
+    }
+
+    public void setRuleVersionDigest(String ruleVersionDigest) {
+        this.ruleVersionDigest = ruleVersionDigest;
+    }
+
+    public String getModelName() {
+        return modelName;
+    }
+
+    public void setModelName(String modelName) {
+        this.modelName = modelName;
+    }
+
+    public boolean isFallback() {
+        return fallback;
+    }
+
+    public void setFallback(boolean fallback) {
+        this.fallback = fallback;
     }
 
     public List<DiagnosisReasonDto> getReasons() {

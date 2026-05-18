@@ -115,6 +115,21 @@ detect_changes() {
   fi
 }
 
+check_agent_rule_sync() {
+  local previous_commit="$1"
+  local current_commit
+  current_commit=$(git -C "$DEPLOY_BASE_DIR" rev-parse HEAD)
+
+  if [[ -z "$previous_commit" ]]; then
+    return
+  fi
+
+  if [[ -x "$DEPLOY_BASE_DIR/scripts/check-agent-rule-sync.sh" ]]; then
+    log "checking agent rule registry sync"
+    REPO_DIR="$DEPLOY_BASE_DIR" "$DEPLOY_BASE_DIR/scripts/check-agent-rule-sync.sh" "$previous_commit" "$current_commit"
+  fi
+}
+
 # 根据变更文件确定需要构建的目标
 determine_build_targets() {
   local changed_files="$1"
@@ -194,6 +209,7 @@ deploy_compose() {
   local changed_files
   local build_targets
   changed_files=$(detect_changes "$previous_commit")
+  check_agent_rule_sync "$previous_commit"
   build_targets=$(determine_build_targets "$changed_files")
 
   # 解析构建目标

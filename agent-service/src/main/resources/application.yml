@@ -4,7 +4,22 @@ server:
 spring:
   application:
     name: agent-service
+  ai:
+    model:
+      audio:
+        speech: none
+        transcription: none
+      embedding: none
+      image: none
+    openai:
+      api-key: ${AGENT_OPENAI_API_KEY:unused}
+      base-url: ${AGENT_OPENAI_BASE_URL:https://api.openai.com}
+      chat:
+        options:
+          model: ${AGENT_OPENAI_MODEL:gpt-4o-mini}
 
 agent:
-  context-base-url: http://localhost:8080
+  context-base-url: ${AGENT_CONTEXT_BASE_URL:http://localhost:8000}
   context-path: /api/internal/agent/meal-plan/context
+  ai:
+    enabled: ${AGENT_AI_ENABLED:false}
