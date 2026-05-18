@@ -29,7 +29,7 @@
 - 现有 `eladmin-system` 保持业务主系统定位不变
 - 新增独立 `agent-service` 作为诊断编排层
 - 客服仍然通过现有 `eladmin-web` 进入“智能排查助手”页面
-- 第一阶段以规则诊断为主，AI 总结为辅
+- 第一阶段采用“结构化规则 + 业务上下文 + AI 直接分析”的方案
 
 ### 2.2 选择该方案的原因
 
@@ -53,9 +53,10 @@
 
 - 接收诊断请求
 - 拉取诊断所需业务上下文
-- 执行规则分析器
-- 汇总可能原因与证据
-- 可选调用大模型，对结构化结果进行润色总结
+- 加载当前生效的 rule registry
+- 组装“用户问题 + 规则 + 业务数据”的提示词
+- 调用大模型直接分析原因、证据与建议
+- 校验 AI 输出结构，并在失败时返回兜底结果
 
 ### 3.3 前端职责
 
@@ -72,8 +73,10 @@ eladmin-web
   -> eladmin-system
       -> agent-service
           -> 诊断编排服务
-          -> 原因分析器集合
-          -> AI 总结层（可选）
+          -> rule registry
+          -> prompt builder
+          -> LLM client
+          -> result validator
       -> 内部诊断数据接口
           -> 客户数据
           -> 订单数据
@@ -118,7 +121,8 @@ eladmin-web
 建议使用：
 
 - JDK 17
-- Spring Boot 3.x
+- Spring Boot 3.5.x
+- Spring AI 1.1.6
 
 理由：
 
@@ -129,16 +133,54 @@ eladmin-web
 
 ### 5.3 AI 接入策略
 
-第一阶段建议采用“可插拔总结层”：
+第一阶段建议采用“AI 直接分析 + 结构化输出校验”：
 
-- 没有模型时，也能输出结构化诊断结果
-- 有模型时，再将结构化结果整理成更自然的客服说明
+- `agent-service` 不再把原因判断硬编码在多个分析器里
+- 业务规则以 rule registry 形式维护，作为 AI 的真相源之一
+- `agent-service` 负责把“规则 + 数据 + 用户问题”发给 AI
+- AI 必须输出固定 JSON 结构，便于前端展示和审计
+- 模型失败或输出不合法时，回退为兜底结构化结果
 
-统一抽象为：
+统一抽象建议为：
 
-- `DiagnosisSummaryService`
+- `ChatClient`
+- `RuleRegistryLoader`
+- `DiagnosisPromptBuilder`
+- `DiagnosisAiClient`
+- `DiagnosisResultValidator`
+- `AgentToolRegistry`
+- `AgentAdvisorChain`
 
-后续可接任意模型供应商，不把业务逻辑绑定到某个厂商 SDK。
+后续可接任意模型供应商，不把诊断链路绑定到某个厂商 SDK。
+
+### 5.4 Spring AI 能力分层
+
+建议 `agent-service` 直接基于 Spring AI 构建，避免后续再次重构为 Agent 形态。
+
+- `ChatClient`
+  - 作为统一模型调用入口
+- `Structured Output`
+  - 要求模型输出固定 JSON 结构，映射到 `DiagnosisResponse`
+- `Tool Calling`
+  - 将只读查询和未来的写操作包装成工具，而不是让模型直接访问数据库
+- `Advisors`
+  - 用于统一注入审计、提示词增强、权限上下文、兜底策略
+- `ChatMemory`
+  - 用于支持多轮补充问题、后续的客服会话连续排查
+
+### 5.5 Spring AI 版本策略
+
+`agent-service` 的 AI 依赖需要独立版本管理，不跟随 `eladmin-system` 的依赖节奏。
+
+建议策略：
+
+- Spring Boot 使用 `3.5.x`
+- Spring AI 使用 `spring-ai-bom` 管理依赖版本
+- Spring AI 使用 `1.1.6`
+- 第一阶段只使用 GA 或 patch 版本，不使用 milestone 版本
+- 模型供应商 starter 通过配置切换，业务代码只依赖内部 `DiagnosisAiClient` 抽象
+
+截至 2026-05-18，Spring AI 官方文档说明 Spring AI 支持 Spring Boot 3.4.x 和 3.5.x，当前稳定文档版本为 Spring AI 1.1.6。Spring AI 已提供 `ChatClient`、结构化输出、Tool Calling、Advisors、ChatMemory 等能力。
 
 ---
 
@@ -152,14 +194,19 @@ agent-service
 │   ├── controller
 │   ├── service
 │   ├── orchestrator
-│   ├── analyzer
 │   ├── client
+│   ├── prompt
+│   ├── rule
+│   ├── tool
+│   ├── advisor
+│   ├── memory
+│   ├── validator
 │   ├── domain
 │   │   ├── dto
 │   │   ├── model
 │   │   └── enum
-│   ├── summary
 │   └── config
+├── rules
 └── src/main/resources
 ```
 
@@ -170,13 +217,21 @@ agent-service
 - `service`
   - 面向控制器的应用服务入口
 - `orchestrator`
-  - 负责编排分析器执行顺序
-- `analyzer`
-  - 每种原因一个分析器，输出统一结构
+  - 负责编排取数、规则加载、提示词构建、AI 调用和结果校验
 - `client`
-  - 调用 `eladmin-system` 内部接口
-- `summary`
-  - 负责 AI 总结或模板化总结
+  - 调用 `eladmin-system` 内部接口和大模型客户端
+- `prompt`
+  - 负责拼装提示词与结构化输出协议
+- `rule`
+  - 负责加载和管理 rule registry
+- `tool`
+  - 负责注册 Spring AI tool calling 所需的查询工具和写操作工具
+- `advisor`
+  - 负责统一注入审计、权限、兜底和模型策略
+- `memory`
+  - 负责会话记忆和多轮问题承接
+- `validator`
+  - 负责校验 AI 输出结构和字段完整性
 - `domain`
   - 定义诊断请求、诊断结果、证据项等领域模型
 
@@ -195,28 +250,26 @@ agent-service
 ### 7.2 处理流程
 
 1. 定位客户
-2. 拉取客户档案
-3. 拉取该客户相关有效订单
-4. 拉取目标日期与餐次的排餐主记录及客户记录
-5. 拉取排除日期、过敏、排除菜品、菜单候选等上下文
-6. 依次执行原因分析器
-7. 汇总所有命中的原因与证据
-8. 生成结构化诊断结果
-9. 可选执行 AI 总结
+2. 拉取客户档案、订单、排餐、候选菜等诊断上下文
+3. 加载当前生效的 rule registry
+4. 组装“用户问题 + 规则 + 数据”的提示词
+5. 通过 Spring AI `ChatClient` 调用模型输出结构化诊断结果
+6. 校验返回 JSON 的字段完整性和可追溯性
+7. 输出结果；如 AI 失败则返回兜底结构化结果
 
 ### 7.3 输出原则
 
 - 不直接给出“唯一结论”
 - 输出“高概率原因 + 证据 + 人工确认建议”
-- 每一项判断必须可追溯到字段或业务规则
+- 每一项判断必须可追溯到字段、ruleId 或版本号
 
 ---
 
-## 8. 第一阶段原因分析器清单
+## 8. 第一阶段 rule registry 清单
 
-第一阶段建议最少落这 9 类分析器。
+第一阶段建议最少维护以下 9 类规则项，由 `agent-service` 统一加载后交给 AI 使用。
 
-### 8.1 客户不存在分析器
+### 8.1 客户不存在规则
 
 用于判断客户是否存在、是否被误输入。
 
@@ -225,7 +278,7 @@ agent-service
 - customerId 查询为空
 - customerCode 未命中
 
-### 8.2 订单缺失分析器
+### 8.2 订单缺失规则
 
 用于判断客户在目标日期附近是否存在可用订单。
 
@@ -234,7 +287,7 @@ agent-service
 - 客户无进行中订单
 - 所有订单均非 `status=1`
 
-### 8.3 订单生效分析器
+### 8.3 订单生效规则
 
 用于判断订单在目标日期和餐次是否满足生效条件。
 
@@ -249,7 +302,7 @@ agent-service
 - 订单开始日期晚于目标日期
 - 订单开始当天仅晚餐生效，但当前查询的是午餐
 
-### 8.4 订单剩余餐数分析器
+### 8.4 订单剩余餐数规则
 
 用于判断是否仍有剩余可排餐数。
 
@@ -265,7 +318,7 @@ agent-service
 - `remaining_count=0`
 - 对应餐次已达到订单上限
 
-### 8.5 排餐模式分析器
+### 8.5 排餐模式规则
 
 用于判断 `schedule_mode` 是否允许该日期配送。
 
@@ -281,7 +334,7 @@ agent-service
 - 当前为周六，但订单为 `WEEKDAY`
 - `delivery_dates` 中不包含该日期或该餐次
 
-### 8.6 客户排除日期分析器
+### 8.6 客户排除日期规则
 
 用于判断客户是否明确配置了该日期和餐次不配送。
 
@@ -293,7 +346,7 @@ agent-service
 
 - `exclude_dates` 中包含 `2026-05-17 + LUNCH`
 
-### 8.7 候选菜池分析器
+### 8.7 候选菜池规则
 
 用于判断当天菜单和套餐候选池是否为空。
 
@@ -308,7 +361,7 @@ agent-service
 - 当天该餐次无菜单候选
 - 父套餐过滤后无可选菜
 
-### 8.8 过滤后无菜可排分析器
+### 8.8 过滤后无菜可排规则
 
 用于判断候选菜经过过敏、排除菜、替换规则等处理后是否被清空。
 
@@ -323,7 +376,7 @@ agent-service
 - 过滤前 6 个候选菜，过滤后 0 个
 - 命中过敏分类导致全部剔除
 
-### 8.9 已生成失败分析器
+### 8.9 已生成失败规则
 
 用于判断是否曾生成过该客户排餐，但结果失败。
 
@@ -338,6 +391,71 @@ agent-service
 - 当天排餐主任务存在
 - 客户记录存在且 `status=0`
 - `fail_reason` 非空
+
+### 8.10 rule registry 文件结构
+
+规则文件不是普通说明文档，而是 `agent-service` 运行时会加载的结构化输入。
+
+建议目录：
+
+```text
+agent-service/rules
+└── meal-plan
+    ├── customer.yaml
+    ├── order.yaml
+    ├── schedule.yaml
+    ├── dish-candidate.yaml
+    └── generated-result.yaml
+```
+
+单条规则建议字段：
+
+```yaml
+- ruleId: ORDER_START_MEAL_TYPE_NOT_EFFECTIVE
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 订单首日餐次未生效
+  description: 目标日期等于订单开始日期时，需要判断 startMealType 是否允许当前餐次生效。
+  requiredData:
+    - orders.startDate
+    - orders.endDate
+    - orders.startMealType
+    - request.recordDate
+    - request.mealType
+  decisionHints:
+    - 如果 recordDate 等于 startDate，且 mealType 早于 startMealType，则认为当前餐次未生效。
+    - 如果 recordDate 晚于 startDate，则不再受 startMealType 限制。
+  evidenceFields:
+    - orders.orderId
+    - orders.startDate
+    - orders.startMealType
+  severity: HIGH
+  owner: meal-plan
+```
+
+### 8.11 rule registry 维护原则
+
+为了减少后期维护成本，规则文件应遵循以下原则：
+
+- 不重复写业务代码里的完整实现，只描述 AI 诊断所需的业务口径、关键字段、判断提示和证据字段
+- 每条规则必须有稳定 `ruleId`
+- 每次规则含义变化必须递增 `version`
+- 每条规则必须声明 `requiredData`，用于倒逼上下文接口补齐数据
+- AI 输出的每个原因必须引用至少一个 `ruleId` 或明确的数据字段
+- 规则文件作为运行时输入，不再依赖散落的人工说明文档
+
+### 8.12 防止代码和规则漂移
+
+业务规则如果只写在文档里，后续代码变更但文档未同步，AI 就会拿到过期规则。因此本项目不把普通文档作为规则真相源，而采用以下约束：
+
+- `agent-service/rules/` 是 AI 诊断规则真相源
+- 与排餐诊断相关的代码变更，需要同步检查规则文件是否需要变更
+- 如果确认规则无需变化，需要在提交信息或变更说明中明确写明 `rules-no-change`
+- 部署脚本检测到诊断代码变更但规则文件未变更，且提交信息没有 `rules-no-change` 时，应拒绝部署
+- 单测需要覆盖规则文件可加载、`ruleId` 唯一、`requiredData` 非空、版本号合法
+- 诊断日志需要记录本次使用的规则文件版本摘要，便于追溯
+
+建议优先在 `/Users/qqx/job/code/eladmin-mp/scripts/deploy-from-github.sh` 中增加轻量校验。后续如果接入 CI，再把同一套校验前移到 pull request 阶段。
 
 ---
 
@@ -387,6 +505,25 @@ agent-service
   - 字段级证据
 - `suggestion`
   - 人工下一步核对建议
+
+### 9.2 AI 输出约束
+
+AI 必须输出可被服务端解析的固定结构，服务端不能直接把模型原文透传给前端。
+
+最低约束：
+
+- `summary` 不能为空
+- `reasons` 可以为空，但不能为空值
+- 每个 `reason.code` 必须稳定
+- 每个 `reason.level` 只能是 `HIGH`、`MEDIUM`、`LOW`
+- 每个 `reason` 至少包含一个 `evidence` 或一个 `ruleId`
+- 不允许输出“已修复”“已修改数据”等实际未发生动作
+
+校验失败时，`agent-service` 返回兜底结果：
+
+- 摘要提示“AI 诊断结果不可用”
+- 附带上下文是否获取成功、规则是否加载成功、模型是否超时
+- 建议客服按固定清单人工核对
 
 ---
 
@@ -471,13 +608,32 @@ agent-service
 - 谁发起了诊断
 - 诊断了哪个客户
 - 查询日期和餐次
-- 是否调用了 AI 总结
+- 使用了哪版 rule registry
+- 调用了哪个模型、是否命中兜底
 
 ### 12.3 数据安全
 
 - `agent-service` 不允许写业务数据库
 - 所有诊断接口默认为只读
 - 模型提示词中避免无必要输出手机号等敏感字段
+- 所有写操作必须通过 Spring AI tool calling 调用受控业务工具
+- “新增客户”类动作必须采用“生成草稿 -> 人工确认 -> 正式提交”的两段式流程
+
+### 12.4 未来 AI 新增客户的边界
+
+未来如果扩展到“客户也通过 AI 来新增”，建议仍然沿用 Spring AI，但不能让模型直接写数据库。
+
+推荐流程：
+
+1. 客服或客户输入自然语言需求
+2. AI 调用只读工具查询套餐、地址、配送规则等上下文
+3. AI 生成 `CustomerCreateDraft`
+4. 服务端校验草稿字段、权限、必填项和业务冲突
+5. 前端展示草稿差异和风险提示
+6. 人工确认后，由 `eladmin-system` 的正式业务接口创建客户
+7. 审计日志记录 AI 原始输入、草稿、确认人和最终提交结果
+
+这类能力应放在第二阶段之后实现，不与第一阶段排餐诊断混在一起。
 
 ---
 
@@ -497,7 +653,24 @@ agent-service
 ### 13.3 可用性建议
 
 - `agent-service` 超时不应影响主业务系统
-- AI 总结超时时，直接回退为结构化诊断结果
+- AI 调用超时时，直接回退为兜底结构化诊断结果
+
+### 13.4 规则同步部署校验
+
+当前项目尚未接入 CI，已有部署入口为：
+
+- `/Users/qqx/job/code/eladmin-mp/scripts/deploy-from-github.sh`
+
+建议先在该脚本中加入部署前校验：
+
+- 检测本次变更是否包含 `agent-service/src/main/java/me/zhengjie/agent/analyzer/`
+- 检测本次变更是否包含 `agent-service/src/main/java/me/zhengjie/agent/orchestrator/`
+- 检测本次变更是否包含 `agent-service/src/main/java/me/zhengjie/agent/context/`
+- 检测本次变更是否包含 `eladmin/eladmin-system/src/main/java/me/zhengjie/modules/agent/`
+- 如果包含以上诊断相关代码变更，但不包含 `agent-service/rules/` 变更，则读取提交信息
+- 如果提交信息不包含 `rules-no-change`，部署失败并提示补充规则文件或显式说明无需变更
+
+这样不能做到绝对强制，但能在没有 CI 的前提下先建立“改诊断代码必须想一遍规则”的工程习惯。
 
 ---
 
@@ -507,15 +680,16 @@ agent-service
 
 - 建立 `agent-service`
 - 打通 `eladmin-system` 内部诊断上下文接口
-- 落地 8 类原因分析器
+- 建立 rule registry 并接入 AI 直接分析
 - 后台新增“智能排查助手”页面
 - 输出结构化诊断结果
 
-### 第二期：AI 总结增强
+### 第二期：AI 诊断增强
 
-- 接入模型总结能力
-- 优化客服可读性
+- 优化提示词与结构化输出质量
+- 增加多轮追问与补充字段
 - 增加诊断建议模板
+- 引入 ChatMemory 和 Advisors，支持连续排查会话
 
 ### 第三期：扩展更多排查场景
 
@@ -523,6 +697,7 @@ agent-service
 - 核销异常排查
 - 退餐异常排查
 - 客服知识问答
+- AI 辅助新增客户、编辑客户、发起审批
 
 ---
 
@@ -533,13 +708,17 @@ agent-service
 应对：
 
 - 核心业务判断尽量收敛到 `eladmin-system` 的聚合接口
+- `agent-service/rules/` 只描述 AI 诊断所需口径，不复制主系统完整业务实现
+- 部署脚本校验诊断代码和规则文件是否同步变更
 
 ### 15.2 风险：Agent 结果不可信
 
 应对：
 
-- 第一阶段坚持“规则先判断，AI 只总结”
-- 所有结论必须附证据
+- 规则以 rule registry 为真相源，不直接依赖手工文档
+- 所有结论必须附证据、ruleId 或字段引用
+- 对 AI 输出执行结构校验和兜底降级
+- 诊断页面明确展示“AI 建议，需要人工确认”
 
 ### 15.3 风险：范围膨胀
 
@@ -547,6 +726,7 @@ agent-service
 
 - 第一阶段只做“未生成排餐诊断”
 - 不把知识问答、自动修复、多轮对话一起塞进去
+- “AI 新增客户”只预留工具调用架构，不在第一期实现写操作
 
 ---
 
@@ -557,6 +737,6 @@ agent-service
 - `eladmin-system` 继续做业务底座
 - 新建独立 `agent-service`
 - 第一阶段只做“排餐未生成原因诊断”
-- 技术路线采用“规则诊断 + AI 总结”的稳妥方案
+- 技术路线采用“rule registry + 业务上下文 + AI 直接分析”的方案
 
 这样既不会强行升级老系统，也给后续 AI 能力扩展留出了清晰空间。
