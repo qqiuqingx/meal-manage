@@ -1,16 +1,14 @@
 package me.zhengjie.agent.service.impl;
 
-import me.zhengjie.agent.analyzer.impl.ExcludeDateAnalyzer;
+import me.zhengjie.agent.client.DiagnosisAiClient;
 import me.zhengjie.agent.context.DiagnosisContextBuilder;
 import me.zhengjie.agent.domain.dto.DiagnosisContextDto;
 import me.zhengjie.agent.domain.dto.DiagnosisRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.orchestrator.MealPlanDiagnosisOrchestrator;
-import me.zhengjie.agent.summary.TemplateDiagnosisSummaryService;
+import me.zhengjie.agent.rule.RuleRegistry;
+import me.zhengjie.agent.rule.RuleRegistryLoader;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -24,18 +22,20 @@ class MealPlanDiagnosisServiceImplTest {
             context.setCustomerName("张三");
             context.setRecordDate(request.getRecordDate());
             context.setMealType(request.getMealType());
-            context.setCustomerProfile(Map.of(
-                "excludeDates", List.of(
-                    Map.of("date", "2026-05-17", "mealTypes", List.of("LUNCH"))
-                )
-            ));
             return context;
         };
 
-        MealPlanDiagnosisOrchestrator orchestrator = new MealPlanDiagnosisOrchestrator(
-            List.of(new ExcludeDateAnalyzer()),
-            new TemplateDiagnosisSummaryService()
-        );
+        RuleRegistryLoader ruleRegistryLoader = scene -> {
+            RuleRegistry registry = new RuleRegistry();
+            registry.setScene(scene);
+            return registry;
+        };
+        DiagnosisAiClient aiClient = (context, ruleRegistry) -> {
+            DiagnosisResponse response = new DiagnosisResponse();
+            response.setSummary("AI 判断命中客户排除日期");
+            return response;
+        };
+        MealPlanDiagnosisOrchestrator orchestrator = new MealPlanDiagnosisOrchestrator(ruleRegistryLoader, aiClient);
         MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator);
 
         DiagnosisRequest request = new DiagnosisRequest();
@@ -45,8 +45,7 @@ class MealPlanDiagnosisServiceImplTest {
 
         DiagnosisResponse response = service.diagnose(request);
 
-        assertEquals("命中客户排除日期", response.getSummary());
-        assertEquals(1, response.getReasons().size());
+        assertEquals("AI 判断命中客户排除日期", response.getSummary());
         assertEquals("张三", response.getCustomerName());
     }
 }

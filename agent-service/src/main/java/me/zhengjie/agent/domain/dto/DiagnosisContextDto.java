@@ -19,6 +19,7 @@ public class DiagnosisContextDto {
     private List<Map<String, Object>> orders = new ArrayList<>();
     private Map<String, Object> mealPlan = new HashMap<>();
     private List<Map<String, Object>> customerPlans = new ArrayList<>();
+    private List<Map<String, Object>> candidateDishStats = new ArrayList<>();
 
     public Long getCustomerId() {
         return customerId;
@@ -90,5 +91,13 @@ public class DiagnosisContextDto {
 
     public void setCustomerPlans(List<Map<String, Object>> customerPlans) {
         this.customerPlans = customerPlans;
+    }
+
+    public List<Map<String, Object>> getCandidateDishStats() {
+        return candidateDishStats;
+    }
+
+    public void setCandidateDishStats(List<Map<String, Object>> candidateDishStats) {
+        this.candidateDishStats = candidateDishStats;
     }
 }

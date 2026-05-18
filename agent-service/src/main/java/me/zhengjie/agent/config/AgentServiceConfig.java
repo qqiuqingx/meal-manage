@@ -1,0 +1,21 @@
+package me.zhengjie.agent.config;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import me.zhengjie.agent.prompt.DiagnosisPromptBuilder;
+import me.zhengjie.agent.validator.DiagnosisResultValidator;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AgentServiceConfig {
+
+    @Bean
+    public DiagnosisPromptBuilder diagnosisPromptBuilder(ObjectMapper objectMapper) {
+        return new DiagnosisPromptBuilder(objectMapper);
+    }
+
+    @Bean
+    public DiagnosisResultValidator diagnosisResultValidator() {
+        return new DiagnosisResultValidator();
+    }
+}

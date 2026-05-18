@@ -1,0 +1,18 @@
+- ruleId: MEAL_PLAN_GENERATED_FAILED
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 排餐任务已生成但客户失败
+  description: 当天排餐主任务或客户排餐记录存在，但客户记录为失败状态。
+  requiredData:
+    - mealPlan
+    - customerPlans
+    - customerPlans.status
+    - customerPlans.failReason
+  decisionHints:
+    - 如果客户排餐记录存在且状态失败，优先展示失败原因。
+  evidenceFields:
+    - mealPlan.planId
+    - customerPlans.status
+    - customerPlans.failReason
+  severity: HIGH
+  owner: meal-plan

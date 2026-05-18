@@ -1,0 +1,31 @@
+- ruleId: CUSTOMER_NOT_FOUND
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 客户不存在
+  description: 客户ID或客户编号未命中客户档案。
+  requiredData:
+    - customerId
+    - customerCode
+    - customerProfile
+  decisionHints:
+    - 如果客户档案为空，优先提示核对客户ID或客户编号。
+  evidenceFields:
+    - customerId
+    - customerCode
+  severity: HIGH
+  owner: meal-plan
+- ruleId: CUSTOMER_EXCLUDE_DATE_HIT
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 命中客户排除日期
+  description: 客户档案配置了目标日期和餐次不配送。
+  requiredData:
+    - customerProfile.excludeDates
+    - recordDate
+    - mealType
+  decisionHints:
+    - 如果 excludeDates 包含目标日期和餐次，优先判断为客户停送或请假。
+  evidenceFields:
+    - customerProfile.excludeDates
+  severity: HIGH
+  owner: meal-plan

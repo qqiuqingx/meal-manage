@@ -1,0 +1,33 @@
+- ruleId: CANDIDATE_DISH_EMPTY
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 候选菜池为空
+  description: 目标日期和餐次没有可用于排餐的菜单候选菜。
+  requiredData:
+    - mealPlan.candidateDishStats
+    - recordDate
+    - mealType
+  decisionHints:
+    - 如果候选菜数量为 0，提示核对菜单计划和父套餐配置。
+  evidenceFields:
+    - mealPlan.candidateDishStats
+  severity: HIGH
+  owner: meal-plan
+- ruleId: DISH_FILTERED_EMPTY
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 过滤后无菜可排
+  description: 候选菜经过过敏、忌口、排除菜等过滤后为空。
+  requiredData:
+    - mealPlan.candidateDishStats.beforeFilterCount
+    - mealPlan.candidateDishStats.afterFilterCount
+    - customerProfile.allergyTags
+    - customerProfile.excludedDishIds
+  decisionHints:
+    - 如果过滤前有菜、过滤后为 0，提示重点核对过敏和忌口配置。
+  evidenceFields:
+    - mealPlan.candidateDishStats
+    - customerProfile.allergyTags
+    - customerProfile.excludedDishIds
+  severity: HIGH
+  owner: meal-plan

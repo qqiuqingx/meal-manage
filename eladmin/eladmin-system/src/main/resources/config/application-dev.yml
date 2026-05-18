@@ -138,3 +138,11 @@ amz:
     defaultBucket: 填写你的存储桶名称
     # 文件存储路径
     timeformat: yyyy-MM
+
+# 智能排查 agent-service
+agent:
+  service:
+    base-url: http://localhost:18081
+    diagnose-path: /api/agent/meal-plan/diagnose
+    connect-timeout: 3000
+    read-timeout: 120000

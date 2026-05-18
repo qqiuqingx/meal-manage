@@ -1,0 +1,18 @@
+- ruleId: SCHEDULE_MODE_NOT_MATCH
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 排餐模式不匹配
+  description: 订单或客户的排餐模式不允许目标日期配送。
+  requiredData:
+    - orders.scheduleMode
+    - orders.deliveryDates
+    - recordDate
+    - mealType
+  decisionHints:
+    - 如果 scheduleMode 为 WEEKDAY 且目标日期为周末，则不应配送。
+    - 如果 scheduleMode 为 SCHEDULE，需要判断 deliveryDates 是否包含目标日期和餐次。
+  evidenceFields:
+    - orders.scheduleMode
+    - orders.deliveryDates
+  severity: MEDIUM
+  owner: meal-plan
