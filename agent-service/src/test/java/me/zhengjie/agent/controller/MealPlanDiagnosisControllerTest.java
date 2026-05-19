@@ -3,6 +3,8 @@ package me.zhengjie.agent.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.domain.dto.DiagnosisRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
+import me.zhengjie.agent.domain.dto.LlmConnectivityResponse;
+import me.zhengjie.agent.service.LlmConnectivityService;
 import me.zhengjie.agent.service.MealPlanDiagnosisService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -29,8 +31,9 @@ class MealPlanDiagnosisControllerTest {
             response.setReasons(Collections.emptyList());
             return response;
         };
+        LlmConnectivityService connectivityService = request -> new LlmConnectivityResponse();
         MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new MealPlanDiagnosisController(diagnosisService))
+            .standaloneSetup(new MealPlanDiagnosisController(diagnosisService, connectivityService))
             .build();
 
         DiagnosisResponse response = new DiagnosisResponse();
@@ -50,5 +53,32 @@ class MealPlanDiagnosisControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.customerId").value(1001L))
             .andExpect(jsonPath("$.summary").value("命中客户排除日期"));
+    }
+
+    @Test
+    void shouldReturnLlmConnectivityResult() throws Exception {
+        MealPlanDiagnosisService diagnosisService = request -> new DiagnosisResponse();
+        LlmConnectivityService connectivityService = request -> {
+            LlmConnectivityResponse response = new LlmConnectivityResponse();
+            response.setSuccess(true);
+            response.setBaseUrl("https://llm.example.com");
+            response.setModel("test-model");
+            response.setContent("pong");
+            response.setCostMs(12L);
+            return response;
+        };
+        MockMvc mockMvc = MockMvcBuilders
+            .standaloneSetup(new MealPlanDiagnosisController(diagnosisService, connectivityService))
+            .build();
+
+        mockMvc.perform(post("/api/agent/meal-plan/llm/test")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(java.util.Map.of("prompt", "ping"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.baseUrl").value("https://llm.example.com"))
+            .andExpect(jsonPath("$.model").value("test-model"))
+            .andExpect(jsonPath("$.content").value("pong"))
+            .andExpect(jsonPath("$.costMs").value(12L));
     }
 }
