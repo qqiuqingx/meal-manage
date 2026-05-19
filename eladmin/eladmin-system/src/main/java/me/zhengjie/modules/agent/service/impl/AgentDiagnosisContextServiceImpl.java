@@ -72,7 +72,7 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
     @Override
     public CustomerProfileDetailDto resolveCustomerProfile(Long customerId, String customerCode) {
         try {
-            if (customerId != null) {
+            if (customerId != null && customerId > 0) {
                 return customerProfileService.getDetail(customerId);
             }
 
