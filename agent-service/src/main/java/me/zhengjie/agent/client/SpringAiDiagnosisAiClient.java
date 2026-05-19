@@ -2,6 +2,7 @@ package me.zhengjie.agent.client;
 
 import me.zhengjie.agent.domain.dto.DiagnosisContextDto;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
+import me.zhengjie.agent.observability.DiagnosisToolCallLoggingAdvisor;
 import me.zhengjie.agent.prompt.DiagnosisPromptBuilder;
 import me.zhengjie.agent.rule.RuleRegistry;
 import me.zhengjie.agent.tool.AgentToolRegistry;
@@ -10,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.ToolCallAdvisor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -28,17 +30,20 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
     private final DiagnosisPromptBuilder promptBuilder;
     private final DiagnosisResultValidator resultValidator;
     private final AgentToolRegistry agentToolRegistry;
+    private final DiagnosisToolCallLoggingAdvisor toolCallLoggingAdvisor;
     private final boolean toolModeEnabled;
 
     public SpringAiDiagnosisAiClient(ChatClient.Builder chatClientBuilder,
                                      DiagnosisPromptBuilder promptBuilder,
                                      DiagnosisResultValidator resultValidator,
                                      AgentToolRegistry agentToolRegistry,
+                                     DiagnosisToolCallLoggingAdvisor toolCallLoggingAdvisor,
                                      @Value("${agent.diagnosis.tool-mode-enabled:true}") boolean toolModeEnabled) {
         this.chatClient = chatClientBuilder.build();
         this.promptBuilder = promptBuilder;
         this.resultValidator = resultValidator;
         this.agentToolRegistry = agentToolRegistry;
+        this.toolCallLoggingAdvisor = toolCallLoggingAdvisor;
         this.toolModeEnabled = toolModeEnabled;
     }
 
@@ -54,7 +59,11 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
                 toolModeEnabled, prompt.length(), ruleRegistry.getRules() == null ? 0 : ruleRegistry.getRules().size());
             ChatClient.ChatClientRequestSpec requestSpec = chatClient.prompt();
             if (toolModeEnabled) {
-                requestSpec = requestSpec.tools(agentToolRegistry);
+                requestSpec = requestSpec
+                    .advisors(ToolCallAdvisor.builder().build(), toolCallLoggingAdvisor)
+                    .tools(agentToolRegistry);
+            } else {
+                requestSpec = requestSpec.advisors(toolCallLoggingAdvisor);
             }
             DiagnosisResponse response = requestSpec.user(prompt)
                 .call()
