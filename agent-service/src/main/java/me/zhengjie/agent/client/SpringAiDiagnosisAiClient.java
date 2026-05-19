@@ -4,6 +4,7 @@ import me.zhengjie.agent.domain.dto.DiagnosisContextDto;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.prompt.DiagnosisPromptBuilder;
 import me.zhengjie.agent.rule.RuleRegistry;
+import me.zhengjie.agent.tool.AgentToolRegistry;
 import me.zhengjie.agent.validator.DiagnosisResultValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,13 +26,16 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
     private final ChatClient chatClient;
     private final DiagnosisPromptBuilder promptBuilder;
     private final DiagnosisResultValidator resultValidator;
+    private final AgentToolRegistry agentToolRegistry;
 
     public SpringAiDiagnosisAiClient(ChatClient.Builder chatClientBuilder,
                                      DiagnosisPromptBuilder promptBuilder,
-                                     DiagnosisResultValidator resultValidator) {
+                                     DiagnosisResultValidator resultValidator,
+                                     AgentToolRegistry agentToolRegistry) {
         this.chatClient = chatClientBuilder.build();
         this.promptBuilder = promptBuilder;
         this.resultValidator = resultValidator;
+        this.agentToolRegistry = agentToolRegistry;
     }
 
     @Override
@@ -43,6 +47,7 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
                 MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType(),
                 prompt.length(), ruleRegistry.getRules() == null ? 0 : ruleRegistry.getRules().size());
             DiagnosisResponse response = chatClient.prompt()
+                .tools(agentToolRegistry)
                 .user(prompt)
                 .call()
                 .entity(DiagnosisResponse.class);
