@@ -9,6 +9,7 @@ import me.zhengjie.agent.service.MealPlanDiagnosisService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -19,14 +20,17 @@ public class MealPlanDiagnosisServiceImpl implements MealPlanDiagnosisService {
 
     private final DiagnosisContextBuilder contextBuilder;
     private final MealPlanDiagnosisOrchestrator orchestrator;
+    private final boolean toolModeEnabled;
 
     /**
      * 组装上下文构建器和诊断编排器，串起完整诊断链路。
      */
     public MealPlanDiagnosisServiceImpl(DiagnosisContextBuilder contextBuilder,
-                                        MealPlanDiagnosisOrchestrator orchestrator) {
+                                        MealPlanDiagnosisOrchestrator orchestrator,
+                                        @Value("${agent.diagnosis.tool-mode-enabled:true}") boolean toolModeEnabled) {
         this.contextBuilder = contextBuilder;
         this.orchestrator = orchestrator;
+        this.toolModeEnabled = toolModeEnabled;
     }
 
     /**
@@ -35,7 +39,7 @@ public class MealPlanDiagnosisServiceImpl implements MealPlanDiagnosisService {
     @Override
     public DiagnosisResponse diagnose(DiagnosisRequest request) {
         long start = System.currentTimeMillis();
-        DiagnosisContextDto context = buildLightweightContext(request);
+        DiagnosisContextDto context = toolModeEnabled ? lightweightContext(request) : contextBuilder.build(request);
         log.info("diagnosis context built requestId={} customerId={} customerCode={} customerName={} recordDate={} mealType={} orders={} customerPlans={} candidateDishStats={} mealPlanPresent={} costMs={}",
             MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getCustomerCode(), context.getCustomerName(),
             context.getRecordDate(), context.getMealType(), sizeOf(context.getOrders()), sizeOf(context.getCustomerPlans()),
@@ -49,7 +53,7 @@ public class MealPlanDiagnosisServiceImpl implements MealPlanDiagnosisService {
         return response;
     }
 
-    private DiagnosisContextDto buildLightweightContext(DiagnosisRequest request) {
+    private DiagnosisContextDto lightweightContext(DiagnosisRequest request) {
         DiagnosisContextDto context = new DiagnosisContextDto();
         context.setCustomerId(request.getCustomerId());
         context.setCustomerCode(request.getCustomerCode());

@@ -11,6 +11,9 @@ import me.zhengjie.agent.rule.RuleRegistryLoader;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -42,7 +45,7 @@ class MealPlanDiagnosisServiceImplTest {
             return response;
         };
         MealPlanDiagnosisOrchestrator orchestrator = new MealPlanDiagnosisOrchestrator(ruleRegistryLoader, aiClient);
-        MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator);
+        MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator, true);
 
         DiagnosisRequest request = new DiagnosisRequest();
         request.setCustomerId(1001L);
@@ -69,7 +72,7 @@ class MealPlanDiagnosisServiceImplTest {
             RuleRegistryLoader ruleRegistryLoader = scene -> new RuleRegistry();
             DiagnosisAiClient aiClient = (context, ruleRegistry) -> new DiagnosisResponse();
             MealPlanDiagnosisOrchestrator orchestrator = new MealPlanDiagnosisOrchestrator(ruleRegistryLoader, aiClient);
-            MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator);
+            MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator, true);
 
             DiagnosisRequest request = new DiagnosisRequest();
             request.setCustomerId(1001L);
@@ -82,5 +85,43 @@ class MealPlanDiagnosisServiceImplTest {
         } finally {
             MDC.clear();
         }
+    }
+
+    @Test
+    void shouldUseRemoteContextWhenToolModeDisabled() {
+        DiagnosisRequest request = new DiagnosisRequest();
+        request.setCustomerId(1001L);
+        request.setCustomerCode("C1001");
+        request.setRecordDate("2026-05-17");
+        request.setMealType("LUNCH");
+
+        DiagnosisContextBuilder contextBuilder = source -> {
+            DiagnosisContextDto context = new DiagnosisContextDto();
+            context.setCustomerId(source.getCustomerId());
+            context.setCustomerCode(source.getCustomerCode());
+            context.setCustomerName("张三");
+            context.setRecordDate(source.getRecordDate());
+            context.setMealType(source.getMealType());
+            context.setOrders(List.of(Map.of("orderId", 1L)));
+            return context;
+        };
+        RuleRegistryLoader ruleRegistryLoader = scene -> new RuleRegistry();
+        DiagnosisAiClient aiClient = (context, ruleRegistry) -> {
+            assertEquals(1001L, context.getCustomerId());
+            assertEquals("C1001", context.getCustomerCode());
+            assertEquals("张三", context.getCustomerName());
+            assertEquals("2026-05-17", context.getRecordDate());
+            assertEquals("LUNCH", context.getMealType());
+            assertEquals(1, context.getOrders().size());
+            DiagnosisResponse response = new DiagnosisResponse();
+            response.setSummary("legacy context");
+            return response;
+        };
+        MealPlanDiagnosisOrchestrator orchestrator = new MealPlanDiagnosisOrchestrator(ruleRegistryLoader, aiClient);
+        MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator, false);
+
+        DiagnosisResponse response = service.diagnose(request);
+
+        assertEquals("legacy context", response.getSummary());
     }
 }
