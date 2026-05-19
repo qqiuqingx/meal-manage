@@ -1,5 +1,7 @@
 package me.zhengjie.agent.prompt;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.domain.dto.DiagnosisContextDto;
 import me.zhengjie.agent.rule.DiagnosisRule;
 import me.zhengjie.agent.rule.RuleRegistry;
@@ -12,11 +14,22 @@ import java.util.stream.Collectors;
  */
 public class DiagnosisPromptBuilder {
 
+    private final ObjectMapper objectMapper;
+
+    public DiagnosisPromptBuilder(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
+
     public DiagnosisPromptBuilder() {
+        this(new ObjectMapper());
     }
 
     public String build(DiagnosisContextDto context, RuleRegistry registry) {
-        List<DiagnosisRule> diagnosisRules = registry.getRules() == null ? List.of() : registry.getRules();
+        return buildToolPrompt(context, registry);
+    }
+
+    public String buildToolPrompt(DiagnosisContextDto context, RuleRegistry registry) {
+        List<DiagnosisRule> diagnosisRules = registry == null || registry.getRules() == null ? List.of() : registry.getRules();
         String rules = diagnosisRules.stream()
             .map(this::formatRule)
             .collect(Collectors.joining("\n"));
@@ -44,17 +57,66 @@ public class DiagnosisPromptBuilder {
             规则列表：
             %s
             """.formatted(
-            context.getCustomerId(),
-            context.getCustomerCode(),
-            context.getRecordDate(),
-            context.getMealType(),
-            registry.getVersionDigest(),
+            context == null ? null : context.getCustomerId(),
+            context == null ? null : context.getCustomerCode(),
+            context == null ? null : context.getRecordDate(),
+            context == null ? null : context.getMealType(),
+            registry == null ? null : registry.getVersionDigest(),
+            rules
+        );
+    }
+
+    public String buildLegacyPrompt(DiagnosisContextDto context, RuleRegistry registry) {
+        List<DiagnosisRule> diagnosisRules = registry == null || registry.getRules() == null ? List.of() : registry.getRules();
+        String rules = diagnosisRules.stream()
+            .map(this::formatRule)
+            .collect(Collectors.joining("\n"));
+
+        return """
+            你是排餐未生成原因诊断助手，请基于用户请求、业务上下文 JSON 和规则进行分析。
+            请输出 JSON，结构必须映射到 DiagnosisResponse。
+            AI 诊断结果仅作为建议，需要客服结合证据人工确认。
+            不允许声称已经修复、已经修改数据库或已经创建客户。
+            如果业务上下文证据不足，请返回需要人工核对，不允许猜测。
+
+            用户问题：
+            客户ID：%s
+            客户编号：%s
+            客户名称：%s
+            诊断日期：%s
+            餐次：%s
+
+            业务上下文 JSON：
+            %s
+
+            规则版本：%s
+            规则列表：
+            %s
+            """.formatted(
+            context == null ? null : context.getCustomerId(),
+            context == null ? null : context.getCustomerCode(),
+            context == null ? null : context.getCustomerName(),
+            context == null ? null : context.getRecordDate(),
+            context == null ? null : context.getMealType(),
+            serializeContext(context),
+            registry == null ? null : registry.getVersionDigest(),
             rules
         );
     }
 
     private String formatRule(DiagnosisRule rule) {
+        if (rule == null) {
+            return "- ruleId: null, version: null, title: null, description: null";
+        }
         return "- ruleId: %s, version: %s, title: %s, description: %s"
             .formatted(rule.getRuleId(), rule.getVersion(), rule.getTitle(), rule.getDescription());
+    }
+
+    private String serializeContext(DiagnosisContextDto context) {
+        try {
+            return objectMapper.writeValueAsString(context);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize diagnosis context", ex);
+        }
     }
 }

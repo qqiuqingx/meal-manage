@@ -17,6 +17,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.http.HttpMethod.POST;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
@@ -27,6 +28,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 class HttpDiagnosisToolDataClientTest {
 
+    private static final String INTERNAL_TOKEN = "test-internal-token";
+
     private MockRestServiceServer server;
     private HttpDiagnosisToolDataClient client;
 
@@ -34,12 +37,22 @@ class HttpDiagnosisToolDataClientTest {
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        client = new HttpDiagnosisToolDataClient(builder, "http://localhost:8000");
+        client = new HttpDiagnosisToolDataClient(builder, "http://localhost:8000", INTERNAL_TOKEN);
     }
 
     @AfterEach
     void tearDown() {
         MDC.clear();
+    }
+
+    @Test
+    void shouldRejectBlankInternalToken() {
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new HttpDiagnosisToolDataClient(RestClient.builder(), "http://localhost:8000", "   ")
+        );
+
+        assertEquals("agent.internal-token must be configured", exception.getMessage());
     }
 
     @Test
@@ -52,6 +65,7 @@ class HttpDiagnosisToolDataClientTest {
         server.expect(requestTo("http://localhost:8000/api/internal/agent/customer-profile"))
             .andExpect(method(POST))
             .andExpect(header("X-Request-Id", "trace-1001"))
+            .andExpect(header("X-Agent-Internal-Token", INTERNAL_TOKEN))
             .andExpect(content().contentType(MediaType.APPLICATION_JSON))
             .andExpect(content().json("{\"customerId\":1001,\"customerCode\":\"C1001\"}", false))
             .andRespond(withSuccess("{\"id\":1001,\"customerName\":\"张三\"}", APPLICATION_JSON));
@@ -75,6 +89,7 @@ class HttpDiagnosisToolDataClientTest {
         server.expect(requestTo("http://localhost:8000/api/internal/agent/customer-orders"))
             .andExpect(method(POST))
             .andExpect(header("X-Request-Id", ""))
+            .andExpect(header("X-Agent-Internal-Token", INTERNAL_TOKEN))
             .andExpect(content().contentType(MediaType.APPLICATION_JSON))
             .andExpect(content().json("{\"customerId\":1001,\"customerCode\":\"C1001\",\"page\":1,\"size\":20}", false))
             .andRespond(withSuccess("[{\"id\":2001,\"customerId\":1001}]", APPLICATION_JSON));
@@ -95,6 +110,7 @@ class HttpDiagnosisToolDataClientTest {
         server.expect(requestTo("http://localhost:8000/api/internal/agent/meal-plan"))
             .andExpect(method(POST))
             .andExpect(header("X-Request-Id", ""))
+            .andExpect(header("X-Agent-Internal-Token", INTERNAL_TOKEN))
             .andExpect(content().contentType(MediaType.APPLICATION_JSON))
             .andExpect(content().json("{\"recordDate\":\"2026-05-17\",\"mealType\":\"LUNCH\"}", false))
             .andRespond(withSuccess("{\"totalCustomers\":3}", APPLICATION_JSON));
@@ -113,6 +129,7 @@ class HttpDiagnosisToolDataClientTest {
         server.expect(requestTo("http://localhost:8000/api/internal/agent/candidate-dish-stats"))
             .andExpect(method(POST))
             .andExpect(header("X-Request-Id", ""))
+            .andExpect(header("X-Agent-Internal-Token", INTERNAL_TOKEN))
             .andExpect(content().contentType(MediaType.APPLICATION_JSON))
             .andExpect(content().json("{\"recordDate\":\"2026-05-17\"}", false))
             .andRespond(withSuccess("[{\"packageCode\":\"PKG001\"}]", APPLICATION_JSON));

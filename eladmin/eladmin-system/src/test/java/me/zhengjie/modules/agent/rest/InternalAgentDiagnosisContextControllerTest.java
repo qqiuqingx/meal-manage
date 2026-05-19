@@ -11,29 +11,41 @@ import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class InternalAgentDiagnosisContextControllerTest {
 
+    private static final String INTERNAL_TOKEN = "agent-diagnosis-internal-token";
+
     @Mock
     private AgentDiagnosisContextService contextService;
 
     @InjectMocks
     private InternalAgentDiagnosisContextController controller;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(controller, "internalToken", INTERNAL_TOKEN);
+    }
 
     @Test
     void shouldDelegateContextBuild() {
@@ -46,11 +58,67 @@ class InternalAgentDiagnosisContextControllerTest {
         context.setCustomerId(1001L);
         when(contextService.buildContext(any(MealPlanDiagnosisContextRequest.class))).thenReturn(context);
 
-        ResponseEntity<MealPlanDiagnosisContextDto> response = controller.buildContext("rid-1", request);
+        ResponseEntity<MealPlanDiagnosisContextDto> response = controller.buildContext("rid-1", INTERNAL_TOKEN, request);
 
         assertNotNull(response.getBody());
         assertEquals(1001L, response.getBody().getCustomerId());
         verify(contextService).buildContext(request);
+    }
+
+    @Test
+    void shouldRejectInvalidInternalToken() {
+        MealPlanDiagnosisContextRequest request = new MealPlanDiagnosisContextRequest();
+        request.setCustomerId(1001L);
+        request.setRecordDate("2026-05-17");
+        request.setMealType("LUNCH");
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> controller.buildContext("rid-1", "wrong-token", request));
+
+        assertEquals(403, exception.getStatus().value());
+        assertEquals("Invalid agent internal token", exception.getReason());
+        verify(contextService, never()).buildContext(any(MealPlanDiagnosisContextRequest.class));
+    }
+
+    @Test
+    void shouldRejectBlankInternalToken() {
+        MealPlanDiagnosisContextRequest request = new MealPlanDiagnosisContextRequest();
+        request.setCustomerId(1001L);
+        request.setRecordDate("2026-05-17");
+        request.setMealType("LUNCH");
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> controller.buildContext("rid-1", "   ", request));
+
+        assertEquals(403, exception.getStatus().value());
+        assertEquals("Invalid agent internal token", exception.getReason());
+        verify(contextService, never()).buildContext(any(MealPlanDiagnosisContextRequest.class));
+    }
+
+    @Test
+    void shouldRejectBlankConfiguredInternalTokenOnStartup() {
+        ReflectionTestUtils.setField(controller, "internalToken", "   ");
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> ReflectionTestUtils.invokeMethod(controller, "validateInternalToken"));
+
+        assertEquals("agent.internal-token must be configured", exception.getMessage());
+    }
+
+    @Test
+    void shouldRejectRequestWhenConfiguredInternalTokenIsBlank() {
+        ReflectionTestUtils.setField(controller, "internalToken", "   ");
+        MealPlanDiagnosisContextRequest request = new MealPlanDiagnosisContextRequest();
+        request.setCustomerId(1001L);
+        request.setRecordDate("2026-05-17");
+        request.setMealType("LUNCH");
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> controller.buildContext("rid-1", "   ", request));
+
+        assertEquals(403, exception.getStatus().value());
+        assertEquals("Invalid agent internal token", exception.getReason());
+        verify(contextService, never()).buildContext(any(MealPlanDiagnosisContextRequest.class));
     }
 
     @Test
@@ -61,7 +129,7 @@ class InternalAgentDiagnosisContextControllerTest {
         profile.setId(1001L);
         when(contextService.resolveCustomerProfile(1001L, null)).thenReturn(profile);
 
-        ResponseEntity<CustomerProfileDetailDto> response = controller.getCustomerProfile("rid-1", request);
+        ResponseEntity<CustomerProfileDetailDto> response = controller.getCustomerProfile("rid-1", INTERNAL_TOKEN, request);
 
         assertNotNull(response.getBody());
         assertEquals(1001L, response.getBody().getId());
@@ -78,7 +146,7 @@ class InternalAgentDiagnosisContextControllerTest {
         order.setId(2001L);
         when(contextService.resolveOrders(1001L, null, 1, 20)).thenReturn(Collections.singletonList(order));
 
-        ResponseEntity<java.util.List<CustomerOrderDetailDto>> response = controller.listCustomerOrders("rid-1", request);
+        ResponseEntity<java.util.List<CustomerOrderDetailDto>> response = controller.listCustomerOrders("rid-1", INTERNAL_TOKEN, request);
 
         assertNotNull(response.getBody());
         assertEquals(1, response.getBody().size());
@@ -94,7 +162,7 @@ class InternalAgentDiagnosisContextControllerTest {
         detail.setTotalCustomers(2);
         when(contextService.resolveMealPlan("2026-05-17", "LUNCH")).thenReturn(detail);
 
-        ResponseEntity<MealPlanDetailVO> response = controller.getMealPlan("rid-1", request);
+        ResponseEntity<MealPlanDetailVO> response = controller.getMealPlan("rid-1", INTERNAL_TOKEN, request);
 
         assertNotNull(response.getBody());
         assertEquals(2, response.getBody().getTotalCustomers());
@@ -109,7 +177,7 @@ class InternalAgentDiagnosisContextControllerTest {
         stat.setPackageCode("PKG001");
         when(contextService.resolveCandidateDishStats("2026-05-17")).thenReturn(Collections.singletonList(stat));
 
-        ResponseEntity<java.util.List<MealPackageStatDto>> response = controller.getCandidateDishStats("rid-1", request);
+        ResponseEntity<java.util.List<MealPackageStatDto>> response = controller.getCandidateDishStats("rid-1", INTERNAL_TOKEN, request);
 
         assertNotNull(response.getBody());
         assertEquals(1, response.getBody().size());
