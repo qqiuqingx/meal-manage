@@ -5,6 +5,7 @@ import me.zhengjie.agent.domain.dto.DiagnosisContextDto;
 import me.zhengjie.agent.domain.dto.DiagnosisEvidenceDto;
 import me.zhengjie.agent.domain.dto.DiagnosisReasonDto;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
+import me.zhengjie.agent.observability.DiagnosisToolCallLoggingAdvisor;
 import me.zhengjie.agent.prompt.DiagnosisPromptBuilder;
 import me.zhengjie.agent.rule.DiagnosisRule;
 import me.zhengjie.agent.rule.RuleRegistry;
@@ -12,6 +13,7 @@ import me.zhengjie.agent.tool.AgentToolRegistry;
 import me.zhengjie.agent.validator.DiagnosisResultValidator;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.ToolCallAdvisor;
 
 import java.lang.reflect.Proxy;
 import java.util.List;
@@ -31,12 +33,15 @@ class SpringAiDiagnosisAiClientTest {
             new DiagnosisPromptBuilder(new ObjectMapper()),
             new DiagnosisResultValidator(),
             agentToolRegistry,
+            new DiagnosisToolCallLoggingAdvisor(),
             true
         );
 
         client.diagnose(context(), registry());
 
         assertTrue(recording.toolsRegisteredWith(agentToolRegistry));
+        assertTrue(recording.advisorRegistered(ToolCallAdvisor.class));
+        assertTrue(recording.advisorRegistered(DiagnosisToolCallLoggingAdvisor.class));
         assertTrue(recording.userPrompt().contains("getCustomerProfile"));
         assertTrue(recording.userPrompt().contains("listCustomerOrders"));
         assertFalse(recording.userPrompt().contains("业务上下文 JSON"));
@@ -52,12 +57,14 @@ class SpringAiDiagnosisAiClientTest {
             new DiagnosisPromptBuilder(new ObjectMapper()),
             new DiagnosisResultValidator(),
             toolRegistry(),
+            new DiagnosisToolCallLoggingAdvisor(),
             false
         );
 
         client.diagnose(context(), registry());
 
         assertFalse(recording.toolsRegistered());
+        assertTrue(recording.advisorRegistered(DiagnosisToolCallLoggingAdvisor.class));
         assertTrue(recording.userPrompt().contains("业务上下文 JSON"));
         assertTrue(recording.userPrompt().contains("excludeDates"));
         assertTrue(recording.userPrompt().contains("remainingCount"));
@@ -133,6 +140,7 @@ class SpringAiDiagnosisAiClientTest {
 
         private String userPrompt;
         private Object[] tools;
+        private Object[] advisors;
 
         private ChatClient.Builder builder() {
             return proxy(ChatClient.Builder.class, (proxy, method, args) -> {
@@ -162,6 +170,10 @@ class SpringAiDiagnosisAiClientTest {
             return proxy(ChatClient.ChatClientRequestSpec.class, (proxy, method, args) -> {
                 if ("tools".equals(method.getName())) {
                     tools = args == null ? null : (Object[]) args[0];
+                    return proxy;
+                }
+                if ("advisors".equals(method.getName())) {
+                    advisors = args == null ? null : (Object[]) args[0];
                     return proxy;
                 }
                 if ("user".equals(method.getName()) && args != null && args.length == 1 && args[0] instanceof String) {
@@ -197,6 +209,14 @@ class SpringAiDiagnosisAiClientTest {
 
         private boolean toolsRegisteredWith(Object toolRegistry) {
             return toolsRegistered() && tools[0] == toolRegistry;
+        }
+
+        private boolean advisorsRegistered() {
+            return advisors != null && advisors.length > 0;
+        }
+
+        private boolean advisorRegistered(Class<?> advisorType) {
+            return advisorsRegistered() && java.util.Arrays.stream(advisors).anyMatch(advisorType::isInstance);
         }
 
         @SuppressWarnings("unchecked")
