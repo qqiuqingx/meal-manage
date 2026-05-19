@@ -44,7 +44,7 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
     @Override
     public MealPlanDiagnosisContextDto buildContext(MealPlanDiagnosisContextRequest request) {
         long start = System.currentTimeMillis();
-        log.info("build agent diagnosis context start customerId={} customerCode={} recordDate={} mealType={}",
+        log.info("诊断阶段 stage=内部上下文聚合开始 customerId={} customerCode={} recordDate={} mealType={}",
                 request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
         MealPlanDiagnosisContextDto context = new MealPlanDiagnosisContextDto();
         context.setCustomerId(request.getCustomerId());
@@ -62,7 +62,7 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
         context.setOrders(resolveOrders(context.getCustomerId(), context.getCustomerCode(), null, null));
         context.setMealPlan(resolveMealPlan(request.getRecordDate(), request.getMealType()));
         context.setCandidateDishStats(resolveCandidateDishStats(request.getRecordDate()));
-        log.info("build agent diagnosis context completed customerId={} customerCode={} customerName={} recordDate={} mealType={} orders={} mealPlanPresent={} candidateDishStats={} costMs={}",
+        log.info("诊断阶段 stage=内部上下文聚合完成 customerId={} customerCode={} customerName={} recordDate={} mealType={} orders={} mealPlanPresent={} candidateDishStats={} costMs={}",
                 context.getCustomerId(), context.getCustomerCode(), context.getCustomerName(), context.getRecordDate(),
                 context.getMealType(), context.getOrders() == null ? 0 : context.getOrders().size(), context.getMealPlan() != null,
                 context.getCandidateDishStats() == null ? 0 : context.getCandidateDishStats().size(), System.currentTimeMillis() - start);
@@ -97,7 +97,7 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             CustomerProfile profile = (CustomerProfile) item;
             return customerProfileService.getDetail(profile.getId());
         } catch (RuntimeException ex) {
-            log.warn("resolve customer profile failed customerId={} customerCode={} errorType={} errorMessage={}",
+            log.warn("诊断阶段 stage=内部客户档案解析失败 customerId={} customerCode={} errorType={} errorMessage={}",
                     customerId, customerCode, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             return null;
         }
@@ -128,7 +128,7 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             }
             return orders;
         } catch (RuntimeException ex) {
-            log.warn("resolve customer orders failed customerId={} resolvedCustomerId={} customerCode={} page={} size={} errorType={} errorMessage={}",
+            log.warn("诊断阶段 stage=内部客户订单解析失败 customerId={} resolvedCustomerId={} customerCode={} page={} size={} errorType={} errorMessage={}",
                     customerId, resolvedCustomerId, customerCode, normalizedPage, normalizedSize,
                     ex.getClass().getSimpleName(), ex.getMessage(), ex);
             return Collections.emptyList();
@@ -158,7 +158,7 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             }
             return mealPlanService.queryMealPlanDetail(mealPlan.getId());
         } catch (RuntimeException ex) {
-            log.warn("resolve meal plan failed recordDate={} mealType={} errorType={} errorMessage={}",
+            log.warn("诊断阶段 stage=内部排餐解析失败 recordDate={} mealType={} errorType={} errorMessage={}",
                     recordDate, mealType, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             return null;
         }
@@ -170,7 +170,7 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             List<MealPackageStatDto> stats = mealPlanService.statByDate(recordDate);
             return stats == null ? Collections.emptyList() : stats;
         } catch (RuntimeException ex) {
-            log.warn("resolve candidate dish stats failed recordDate={} errorType={} errorMessage={}",
+            log.warn("诊断阶段 stage=内部候选菜品统计解析失败 recordDate={} errorType={} errorMessage={}",
                     recordDate, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             return Collections.emptyList();
         }

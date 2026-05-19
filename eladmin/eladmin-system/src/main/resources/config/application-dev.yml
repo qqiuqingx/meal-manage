@@ -146,3 +146,4 @@ agent:
     diagnose-path: /api/agent/meal-plan/diagnose
     connect-timeout: 3000
     read-timeout: 120000
+  internal-token: ${AGENT_INTERNAL_TOKEN:agent-diagnosis-internal-token}

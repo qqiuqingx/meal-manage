@@ -47,15 +47,15 @@ public class MealPlanDiagnosisController {
         MDC.put(REQUEST_ID_KEY, traceId);
         long start = System.currentTimeMillis();
         try {
-            log.info("agent diagnose request received requestId={} customerId={} customerCode={} recordDate={} mealType={}",
+            log.info("诊断阶段 stage=接收请求 requestId={} customerId={} customerCode={} recordDate={} mealType={}",
                 traceId, request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
             DiagnosisResponse response = diagnosisService.diagnose(request);
-            log.info("agent diagnose request completed requestId={} customerId={} recordDate={} mealType={} fallback={} reasonCount={} costMs={}",
+            log.info("诊断阶段 stage=请求完成 requestId={} customerId={} recordDate={} mealType={} fallback={} reasonCount={} costMs={}",
                 traceId, request.getCustomerId(), request.getRecordDate(), request.getMealType(), response.isFallback(),
                 response.getReasons() == null ? 0 : response.getReasons().size(), System.currentTimeMillis() - start);
             return response;
         } catch (RuntimeException ex) {
-            log.error("agent diagnose request failed requestId={} customerId={} customerCode={} recordDate={} mealType={} costMs={} errorType={} errorMessage={}",
+            log.error("诊断阶段 stage=请求失败 requestId={} customerId={} customerCode={} recordDate={} mealType={} costMs={} errorType={} errorMessage={}",
                 traceId, request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType(),
                 System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             throw ex;

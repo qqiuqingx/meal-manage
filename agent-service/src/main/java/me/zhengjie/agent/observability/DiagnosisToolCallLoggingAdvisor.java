@@ -29,6 +29,9 @@ public class DiagnosisToolCallLoggingAdvisor implements CallAdvisor {
 
     private final LogSink logSink;
 
+    /**
+     * 默认走 slf4j 输出，测试里会注入自定义 sink 做行为校验。
+     */
     public DiagnosisToolCallLoggingAdvisor() {
         this(new Slf4jLogSink());
     }
@@ -64,6 +67,9 @@ public class DiagnosisToolCallLoggingAdvisor implements CallAdvisor {
         return ORDER;
     }
 
+    /**
+     * 同一个 ChatClientRequest 会在工具调用链里复用，这里把轮次记到 context 里便于后续递增。
+     */
     private int nextRound(ChatClientRequest request) {
         Object current = request.context().get(ROUND_CONTEXT_KEY);
         int round = current instanceof Number number ? number.intValue() + 1 : 1;
@@ -71,6 +77,9 @@ public class DiagnosisToolCallLoggingAdvisor implements CallAdvisor {
         return round;
     }
 
+    /**
+     * 只提取工具名和数量，不展开参数和返回内容，避免把敏感业务数据写进日志。
+     */
     private ToolCallSummary summarizeToolCalls(ChatClientResponse response) {
         ChatResponse chatResponse = response == null ? null : response.chatResponse();
         if (chatResponse == null || !chatResponse.hasToolCalls()) {
@@ -100,18 +109,18 @@ public class DiagnosisToolCallLoggingAdvisor implements CallAdvisor {
     private static class Slf4jLogSink implements LogSink {
         @Override
         public void modelCallStart(int round) {
-            log.info("diagnosis spring ai model call start requestId={} round={}", MDC.get("requestId"), round);
+            log.info("诊断阶段 stage=模型轮次开始 requestId={} round={}", MDC.get("requestId"), round);
         }
 
         @Override
         public void modelCallCompleted(int round, boolean hasToolCalls, int toolCallCount, String toolNames, long costMs) {
-            log.info("diagnosis spring ai model call completed requestId={} round={} hasToolCalls={} toolCallCount={} toolNames={} costMs={}",
+            log.info("诊断阶段 stage=模型轮次完成 requestId={} round={} hasToolCalls={} toolCallCount={} toolNames={} costMs={}",
                 MDC.get("requestId"), round, hasToolCalls, toolCallCount, toolNames, costMs);
         }
 
         @Override
         public void modelCallFailed(int round, RuntimeException ex, long costMs) {
-            log.warn("diagnosis spring ai model call failed requestId={} round={} costMs={} errorType={} errorMessage={}",
+            log.warn("诊断阶段 stage=模型轮次失败 requestId={} round={} costMs={} errorType={} errorMessage={}",
                 MDC.get("requestId"), round, costMs, ex.getClass().getSimpleName(), ex.getMessage());
         }
     }

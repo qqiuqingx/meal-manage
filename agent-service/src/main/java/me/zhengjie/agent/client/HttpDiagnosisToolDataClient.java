@@ -33,6 +33,9 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
     private final RestClient restClient;
     private final String internalToken;
 
+    /**
+     * 初始化工具数据客户端，并要求内部 token 必填，所有工具查询都走同一套受保护链路。
+     */
     public HttpDiagnosisToolDataClient(RestClient.Builder builder,
                                        @Value("${agent.context-base-url:http://localhost:8080}") String contextBaseUrl,
                                        @Value("${agent.internal-token}") String internalToken) {
@@ -61,38 +64,61 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
         return postList(CANDIDATE_DISH_STATS_PATH, request, "getCandidateDishStats");
     }
 
+    /**
+     * 查询单对象类工具数据，统一补 requestId 和内部 token，并收敛日志格式。
+     */
     private Map<String, Object> postMap(String path, Object request, String toolName) {
         long start = System.currentTimeMillis();
         String requestId = requestId();
-        Map<String, Object> body = restClient.post()
-            .uri(path)
-            .contentType(MediaType.APPLICATION_JSON)
-            .header(REQUEST_ID_HEADER, requestId)
-            .header(INTERNAL_TOKEN_HEADER, internalToken)
-            .body(request)
-            .retrieve()
-            .body(new ParameterizedTypeReference<Map<String, Object>>() {});
-        log.info("diagnosis tool data fetched requestId={} tool={} path={} present={} costMs={}",
-            requestId, toolName, path, body != null && !body.isEmpty(), System.currentTimeMillis() - start);
-        return body == null ? Collections.emptyMap() : body;
+        log.info("诊断阶段 stage=工具数据查询开始 requestId={} tool={} path={}", requestId, toolName, path);
+        try {
+            Map<String, Object> body = restClient.post()
+                .uri(path)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(REQUEST_ID_HEADER, requestId)
+                .header(INTERNAL_TOKEN_HEADER, internalToken)
+                .body(request)
+                .retrieve()
+                .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+            log.info("诊断阶段 stage=工具数据查询完成 requestId={} tool={} path={} present={} costMs={}",
+                requestId, toolName, path, body != null && !body.isEmpty(), System.currentTimeMillis() - start);
+            return body == null ? Collections.emptyMap() : body;
+        } catch (RuntimeException ex) {
+            log.warn("诊断阶段 stage=工具数据查询失败 requestId={} tool={} path={} costMs={} errorType={} errorMessage={}",
+                requestId, toolName, path, System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            throw ex;
+        }
     }
 
+    /**
+     * 查询列表类工具数据，和 postMap 共享相同的鉴权与链路日志策略。
+     */
     private List<Map<String, Object>> postList(String path, Object request, String toolName) {
         long start = System.currentTimeMillis();
         String requestId = requestId();
-        List<Map<String, Object>> body = restClient.post()
-            .uri(path)
-            .contentType(MediaType.APPLICATION_JSON)
-            .header(REQUEST_ID_HEADER, requestId)
-            .header(INTERNAL_TOKEN_HEADER, internalToken)
-            .body(request)
-            .retrieve()
-            .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
-        log.info("diagnosis tool data fetched requestId={} tool={} path={} count={} costMs={}",
-            requestId, toolName, path, body == null ? 0 : body.size(), System.currentTimeMillis() - start);
-        return body == null ? Collections.emptyList() : body;
+        log.info("诊断阶段 stage=工具数据查询开始 requestId={} tool={} path={}", requestId, toolName, path);
+        try {
+            List<Map<String, Object>> body = restClient.post()
+                .uri(path)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header(REQUEST_ID_HEADER, requestId)
+                .header(INTERNAL_TOKEN_HEADER, internalToken)
+                .body(request)
+                .retrieve()
+                .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+            log.info("诊断阶段 stage=工具数据查询完成 requestId={} tool={} path={} count={} costMs={}",
+                requestId, toolName, path, body == null ? 0 : body.size(), System.currentTimeMillis() - start);
+            return body == null ? Collections.emptyList() : body;
+        } catch (RuntimeException ex) {
+            log.warn("诊断阶段 stage=工具数据查询失败 requestId={} tool={} path={} costMs={} errorType={} errorMessage={}",
+                requestId, toolName, path, System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            throw ex;
+        }
     }
 
+    /**
+     * 把外层诊断请求的 requestId 透传到工具查询，方便排查单次诊断内的所有子调用。
+     */
     private String requestId() {
         String requestId = MDC.get(REQUEST_ID_KEY);
         return requestId == null ? "" : requestId;

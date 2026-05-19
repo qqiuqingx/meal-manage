@@ -9,6 +9,9 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class AgentServiceConfig {
 
+    /**
+     * 让提示词构建器复用统一 ObjectMapper，避免 legacy 模式下的上下文 JSON 序列化口径漂移。
+     */
     @Bean
     public DiagnosisPromptBuilder diagnosisPromptBuilder(ObjectMapper objectMapper) {
         return new DiagnosisPromptBuilder(objectMapper);

@@ -39,15 +39,19 @@ public class MealPlanDiagnosisServiceImpl implements MealPlanDiagnosisService {
     @Override
     public DiagnosisResponse diagnose(DiagnosisRequest request) {
         long start = System.currentTimeMillis();
+        log.info("诊断阶段 stage=上下文构建开始 requestId={} customerId={} customerCode={} recordDate={} mealType={}",
+            MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
         DiagnosisContextDto context = toolModeEnabled ? lightweightContext(request) : contextBuilder.build(request);
-        log.info("diagnosis context built requestId={} customerId={} customerCode={} customerName={} recordDate={} mealType={} orders={} customerPlans={} candidateDishStats={} mealPlanPresent={} costMs={}",
+        log.info("诊断阶段 stage=上下文构建完成 requestId={} customerId={} customerCode={} customerName={} recordDate={} mealType={} orders={} customerPlans={} candidateDishStats={} mealPlanPresent={} costMs={}",
             MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getCustomerCode(), context.getCustomerName(),
             context.getRecordDate(), context.getMealType(), sizeOf(context.getOrders()), sizeOf(context.getCustomerPlans()),
             sizeOf(context.getCandidateDishStats()), context.getMealPlan() != null && !context.getMealPlan().isEmpty(),
             System.currentTimeMillis() - start);
+        log.info("诊断阶段 stage=进入规则编排 requestId={} customerId={} recordDate={} mealType={}",
+            MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType());
         DiagnosisResponse response = orchestrator.orchestrate(context);
         response.setRequestId(MDC.get(REQUEST_ID_KEY));
-        log.info("diagnosis response ready requestId={} customerId={} recordDate={} mealType={} fallback={} modelName={} reasonCount={}",
+        log.info("诊断阶段 stage=结果就绪 requestId={} customerId={} recordDate={} mealType={} fallback={} modelName={} reasonCount={}",
             response.getRequestId(), response.getCustomerId(), response.getRecordDate(), response.getMealType(),
             response.isFallback(), response.getModelName(), sizeOf(response.getReasons()));
         return response;

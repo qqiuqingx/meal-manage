@@ -41,17 +41,17 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         long start = System.currentTimeMillis();
         String url = buildUrl();
         try {
-            log.info("call agent-service start requestId={} url={} customerId={} customerCode={} recordDate={} mealType={}",
+            log.info("诊断阶段 stage=调用agent-service开始 requestId={} url={} customerId={} customerCode={} recordDate={} mealType={}",
                     requestId, url, request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
             ResponseEntity<String> response = restTemplate().postForEntity(url, requestEntity(request, requestId), String.class);
             AgentDiagnosisResponse diagnosisResponse = JSON.parseObject(response.getBody(), AgentDiagnosisResponse.class);
-            log.info("call agent-service completed requestId={} url={} status={} fallback={} reasonCount={} costMs={}",
+            log.info("诊断阶段 stage=调用agent-service完成 requestId={} url={} status={} fallback={} reasonCount={} costMs={}",
                     requestId, url, response.getStatusCodeValue(), diagnosisResponse != null && diagnosisResponse.isFallback(),
                     diagnosisResponse == null || diagnosisResponse.getReasons() == null ? 0 : diagnosisResponse.getReasons().size(),
                     System.currentTimeMillis() - start);
             return diagnosisResponse;
         } catch (RestClientException ex) {
-            log.warn("call agent-service failed, fallback to manual diagnosis hint requestId={} url={} customerId={} customerCode={} recordDate={} mealType={} costMs={} errorType={} errorMessage={}",
+            log.warn("诊断阶段 stage=调用agent-service失败并回退人工提示 requestId={} url={} customerId={} customerCode={} recordDate={} mealType={} costMs={} errorType={} errorMessage={}",
                     requestId, url, request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType(),
                     System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             return fallback(request, requestId);
