@@ -30,6 +30,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class AgentDiagnosisContextServiceImplTest {
@@ -173,6 +174,28 @@ class AgentDiagnosisContextServiceImplTest {
         assertNotNull(result);
         assertEquals(1001L, result.getId());
         assertEquals("张三", result.getCustomerName());
+    }
+
+    @Test
+    void shouldIgnoreNonPositiveCustomerIdAndResolveProfileByCode() {
+        CustomerProfile profileEntity = new CustomerProfile();
+        profileEntity.setId(1003L);
+        profileEntity.setCustomerCode("C1003");
+        when(customerProfileService.queryAll(any(CustomerProfileQueryCriteria.class), any(Page.class)))
+                .thenReturn(new PageResult<>(Collections.singletonList(profileEntity), 1L));
+
+        CustomerProfileDetailDto detail = new CustomerProfileDetailDto();
+        detail.setId(1003L);
+        detail.setCustomerCode("C1003");
+        detail.setCustomerName("李四");
+        when(customerProfileService.getDetail(1003L)).thenReturn(detail);
+
+        CustomerProfileDetailDto result = service.resolveCustomerProfile(0L, "C1003");
+
+        assertNotNull(result);
+        assertEquals(1003L, result.getId());
+        assertEquals("李四", result.getCustomerName());
+        verify(customerProfileService, never()).getDetail(0L);
     }
 
     @Test
