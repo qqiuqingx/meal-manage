@@ -9,6 +9,7 @@ import org.springframework.http.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.util.Assert;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -22,18 +23,23 @@ public class HttpDiagnosisContextClient implements DiagnosisContextClient {
 
     private static final Logger log = LoggerFactory.getLogger(HttpDiagnosisContextClient.class);
     private static final String REQUEST_ID_KEY = "requestId";
+    private static final String INTERNAL_TOKEN_HEADER = "X-Agent-Internal-Token";
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
     private final String contextPath;
+    private final String internalToken;
 
     public HttpDiagnosisContextClient(RestClient.Builder builder,
                                       ObjectMapper objectMapper,
                                       @Value("${agent.context-base-url:http://localhost:8080}") String contextBaseUrl,
-                                      @Value("${agent.context-path:/api/internal/agent/meal-plan/context}") String contextPath) {
+                                      @Value("${agent.context-path:/api/internal/agent/meal-plan/context}") String contextPath,
+                                      @Value("${agent.internal-token}") String internalToken) {
+        Assert.hasText(internalToken, "agent.internal-token must be configured");
         this.restClient = builder.baseUrl(contextBaseUrl).build();
         this.objectMapper = objectMapper;
         this.contextPath = contextPath;
+        this.internalToken = internalToken;
     }
 
     @Override
@@ -46,6 +52,7 @@ public class HttpDiagnosisContextClient implements DiagnosisContextClient {
             .uri(contextPath)
             .contentType(MediaType.APPLICATION_JSON)
             .header("X-Request-Id", requestId())
+            .header(INTERNAL_TOKEN_HEADER, internalToken)
             .body(request)
             .retrieve()
             .body(new ParameterizedTypeReference<Map<String, Object>>() {});

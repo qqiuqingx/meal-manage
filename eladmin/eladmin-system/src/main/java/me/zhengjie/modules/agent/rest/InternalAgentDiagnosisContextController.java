@@ -6,6 +6,7 @@ import me.zhengjie.modules.agent.domain.dto.AgentCustomerOrdersRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentMealPlanLookupRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import me.zhengjie.annotation.rest.AnonymousPostMapping;
 import me.zhengjie.modules.agent.domain.dto.MealPlanDiagnosisContextDto;
 import me.zhengjie.modules.agent.domain.dto.MealPlanDiagnosisContextRequest;
 import me.zhengjie.modules.agent.service.AgentDiagnosisContextService;
@@ -14,14 +15,20 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
+import javax.annotation.PostConstruct;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.List;
 
 /**
@@ -34,12 +41,25 @@ import java.util.List;
 public class InternalAgentDiagnosisContextController {
 
     private static final String REQUEST_ID_KEY = "requestId";
+    private static final String INTERNAL_TOKEN_HEADER = "X-Agent-Internal-Token";
 
     private final AgentDiagnosisContextService contextService;
 
-    @PostMapping("/meal-plan/context")
+    @Value("${agent.internal-token}")
+    private String internalToken;
+
+    @PostConstruct
+    void validateInternalToken() {
+        if (!StringUtils.hasText(internalToken)) {
+            throw new IllegalStateException("agent.internal-token must be configured");
+        }
+    }
+
+    @AnonymousPostMapping("/meal-plan/context")
     public ResponseEntity<MealPlanDiagnosisContextDto> buildContext(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
+                                                                    @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String agentToken,
                                                                     @Validated @RequestBody MealPlanDiagnosisContextRequest request) {
+        verifyInternalToken(agentToken);
         bindRequestId(requestId);
         long start = System.currentTimeMillis();
         try {
@@ -55,9 +75,11 @@ public class InternalAgentDiagnosisContextController {
         }
     }
 
-    @PostMapping("/customer-profile")
+    @AnonymousPostMapping("/customer-profile")
     public ResponseEntity<CustomerProfileDetailDto> getCustomerProfile(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
+                                                                       @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String agentToken,
                                                                        @Validated @RequestBody AgentCustomerLookupRequest request) {
+        verifyInternalToken(agentToken);
         bindRequestId(requestId);
         long start = System.currentTimeMillis();
         try {
@@ -71,9 +93,11 @@ public class InternalAgentDiagnosisContextController {
         }
     }
 
-    @PostMapping("/customer-orders")
+    @AnonymousPostMapping("/customer-orders")
     public ResponseEntity<List<CustomerOrderDetailDto>> listCustomerOrders(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
+                                                                          @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String agentToken,
                                                                           @Validated @RequestBody AgentCustomerOrdersRequest request) {
+        verifyInternalToken(agentToken);
         bindRequestId(requestId);
         long start = System.currentTimeMillis();
         try {
@@ -87,9 +111,11 @@ public class InternalAgentDiagnosisContextController {
         }
     }
 
-    @PostMapping("/meal-plan")
+    @AnonymousPostMapping("/meal-plan")
     public ResponseEntity<MealPlanDetailVO> getMealPlan(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
+                                                        @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String agentToken,
                                                         @Validated @RequestBody AgentMealPlanLookupRequest request) {
+        verifyInternalToken(agentToken);
         bindRequestId(requestId);
         long start = System.currentTimeMillis();
         try {
@@ -103,9 +129,11 @@ public class InternalAgentDiagnosisContextController {
         }
     }
 
-    @PostMapping("/candidate-dish-stats")
+    @AnonymousPostMapping("/candidate-dish-stats")
     public ResponseEntity<List<MealPackageStatDto>> getCandidateDishStats(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
+                                                                          @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String agentToken,
                                                                           @Validated @RequestBody AgentCandidateDishStatsRequest request) {
+        verifyInternalToken(agentToken);
         bindRequestId(requestId);
         long start = System.currentTimeMillis();
         try {
@@ -116,6 +144,17 @@ public class InternalAgentDiagnosisContextController {
             return ResponseEntity.ok(stats);
         } finally {
             MDC.remove(REQUEST_ID_KEY);
+        }
+    }
+
+    private void verifyInternalToken(String agentToken) {
+        if (!StringUtils.hasText(agentToken) || !StringUtils.hasText(internalToken)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid agent internal token");
+        }
+        byte[] expectedBytes = internalToken.getBytes(StandardCharsets.UTF_8);
+        byte[] actualBytes = agentToken.getBytes(StandardCharsets.UTF_8);
+        if (!MessageDigest.isEqual(expectedBytes, actualBytes)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid agent internal token");
         }
     }
 

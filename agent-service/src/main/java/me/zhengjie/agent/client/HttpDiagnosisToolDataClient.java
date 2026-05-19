@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.util.Assert;
 import org.springframework.web.client.RestClient;
 
 import java.util.Collections;
@@ -23,16 +24,21 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
     private static final Logger log = LoggerFactory.getLogger(HttpDiagnosisToolDataClient.class);
     private static final String REQUEST_ID_KEY = "requestId";
     private static final String REQUEST_ID_HEADER = "X-Request-Id";
+    private static final String INTERNAL_TOKEN_HEADER = "X-Agent-Internal-Token";
     private static final String CUSTOMER_PROFILE_PATH = "/api/internal/agent/customer-profile";
     private static final String CUSTOMER_ORDERS_PATH = "/api/internal/agent/customer-orders";
     private static final String MEAL_PLAN_PATH = "/api/internal/agent/meal-plan";
     private static final String CANDIDATE_DISH_STATS_PATH = "/api/internal/agent/candidate-dish-stats";
 
     private final RestClient restClient;
+    private final String internalToken;
 
     public HttpDiagnosisToolDataClient(RestClient.Builder builder,
-                                       @Value("${agent.context-base-url:http://localhost:8080}") String contextBaseUrl) {
+                                       @Value("${agent.context-base-url:http://localhost:8080}") String contextBaseUrl,
+                                       @Value("${agent.internal-token}") String internalToken) {
+        Assert.hasText(internalToken, "agent.internal-token must be configured");
         this.restClient = builder.baseUrl(contextBaseUrl).build();
+        this.internalToken = internalToken;
     }
 
     @Override
@@ -62,6 +68,7 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
             .uri(path)
             .contentType(MediaType.APPLICATION_JSON)
             .header(REQUEST_ID_HEADER, requestId)
+            .header(INTERNAL_TOKEN_HEADER, internalToken)
             .body(request)
             .retrieve()
             .body(new ParameterizedTypeReference<Map<String, Object>>() {});
@@ -77,6 +84,7 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
             .uri(path)
             .contentType(MediaType.APPLICATION_JSON)
             .header(REQUEST_ID_HEADER, requestId)
+            .header(INTERNAL_TOKEN_HEADER, internalToken)
             .body(request)
             .retrieve()
             .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});

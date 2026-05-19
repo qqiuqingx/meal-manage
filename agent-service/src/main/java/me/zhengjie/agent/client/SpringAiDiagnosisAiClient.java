@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -27,28 +28,35 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
     private final DiagnosisPromptBuilder promptBuilder;
     private final DiagnosisResultValidator resultValidator;
     private final AgentToolRegistry agentToolRegistry;
+    private final boolean toolModeEnabled;
 
     public SpringAiDiagnosisAiClient(ChatClient.Builder chatClientBuilder,
                                      DiagnosisPromptBuilder promptBuilder,
                                      DiagnosisResultValidator resultValidator,
-                                     AgentToolRegistry agentToolRegistry) {
+                                     AgentToolRegistry agentToolRegistry,
+                                     @Value("${agent.diagnosis.tool-mode-enabled:true}") boolean toolModeEnabled) {
         this.chatClient = chatClientBuilder.build();
         this.promptBuilder = promptBuilder;
         this.resultValidator = resultValidator;
         this.agentToolRegistry = agentToolRegistry;
+        this.toolModeEnabled = toolModeEnabled;
     }
 
     @Override
     public DiagnosisResponse diagnose(DiagnosisContextDto context, RuleRegistry ruleRegistry) {
         long start = System.currentTimeMillis();
         try {
-            String prompt = promptBuilder.build(context, ruleRegistry);
-            log.info("spring ai diagnose start requestId={} customerId={} recordDate={} mealType={} promptChars={} ruleCount={}",
+            String prompt = toolModeEnabled
+                ? promptBuilder.buildToolPrompt(context, ruleRegistry)
+                : promptBuilder.buildLegacyPrompt(context, ruleRegistry);
+            log.info("spring ai diagnose start requestId={} customerId={} recordDate={} mealType={} toolModeEnabled={} promptChars={} ruleCount={}",
                 MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType(),
-                prompt.length(), ruleRegistry.getRules() == null ? 0 : ruleRegistry.getRules().size());
-            DiagnosisResponse response = chatClient.prompt()
-                .tools(agentToolRegistry)
-                .user(prompt)
+                toolModeEnabled, prompt.length(), ruleRegistry.getRules() == null ? 0 : ruleRegistry.getRules().size());
+            ChatClient.ChatClientRequestSpec requestSpec = chatClient.prompt();
+            if (toolModeEnabled) {
+                requestSpec = requestSpec.tools(agentToolRegistry);
+            }
+            DiagnosisResponse response = requestSpec.user(prompt)
                 .call()
                 .entity(DiagnosisResponse.class);
             DiagnosisResponse validated = resultValidator.validateOrFallback(response, context, ruleRegistry.getVersionDigest());

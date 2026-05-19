@@ -8,8 +8,10 @@ import org.springframework.web.client.RestClient;
 import org.springframework.test.web.client.MockRestServiceServer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -17,6 +19,22 @@ import static org.springframework.http.HttpMethod.POST;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 
 class HttpDiagnosisContextClientTest {
+
+    @Test
+    void shouldRejectBlankInternalToken() {
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new HttpDiagnosisContextClient(
+                RestClient.builder(),
+                new ObjectMapper(),
+                "http://localhost:18080",
+                "/api/internal/agent/meal-plan/context",
+                "   "
+            )
+        );
+
+        assertEquals("agent.internal-token must be configured", exception.getMessage());
+    }
 
     @Test
     void shouldFetchAndConvertRemoteContext() throws Exception {
@@ -46,6 +64,7 @@ class HttpDiagnosisContextClientTest {
 
         server.expect(requestTo("http://localhost:18080/api/internal/agent/meal-plan/context"))
             .andExpect(method(POST))
+            .andExpect(header("X-Agent-Internal-Token", "test-internal-token"))
             .andExpect(content().contentType(APPLICATION_JSON))
             .andRespond(withSuccess(responseJson, APPLICATION_JSON));
 
@@ -53,7 +72,8 @@ class HttpDiagnosisContextClientTest {
             builder,
             objectMapper,
             "http://localhost:18080",
-            "/api/internal/agent/meal-plan/context"
+            "/api/internal/agent/meal-plan/context",
+            "test-internal-token"
         );
 
         DiagnosisRequest request = new DiagnosisRequest();
