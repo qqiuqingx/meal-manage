@@ -16,6 +16,9 @@ public class DiagnosisPromptBuilder {
 
     private final ObjectMapper objectMapper;
 
+    /**
+     * 复用 Spring 容器里的 ObjectMapper，保证提示词里的上下文 JSON 和业务序列化配置一致。
+     */
     public DiagnosisPromptBuilder(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
@@ -28,6 +31,9 @@ public class DiagnosisPromptBuilder {
         return buildToolPrompt(context, registry);
     }
 
+    /**
+     * 工具模式下只注入最小请求信息和规则，把上下文查询交给模型按需触发工具。
+     */
     public String buildToolPrompt(DiagnosisContextDto context, RuleRegistry registry) {
         List<DiagnosisRule> diagnosisRules = registry == null || registry.getRules() == null ? List.of() : registry.getRules();
         String rules = diagnosisRules.stream()
@@ -36,10 +42,12 @@ public class DiagnosisPromptBuilder {
 
         return """
             你是排餐未生成原因诊断助手，只能基于用户请求、规则和工具返回的业务数据进行分析。
-            请输出 JSON，结构必须映射到 DiagnosisResponse。
+            请输出 JSON，结构必须严格映射到 DiagnosisResponse，字段只能使用 summary、reasons、modelName、fallback、ruleVersionDigest、customerId、customerName、recordDate、mealType、requestId。
             AI 诊断结果仅作为建议，需要客服结合证据人工确认。
             不允许声称已经修复、已经修改数据库或已经创建客户。
             如果证据不足，必须调用可用工具查询；如果工具无数据或失败，请返回需要人工核对，不允许猜测。
+            reasons 至少包含 1 条；每条 reason 必须包含 code、title、level、description、suggestion、evidence。
+            evidence 必须是对象数组，每个对象包含 label 和 value。
 
             用户问题：
             客户ID：%s
@@ -66,6 +74,9 @@ public class DiagnosisPromptBuilder {
         );
     }
 
+    /**
+     * 兼容旧模式时直接把完整上下文 JSON 放进提示词，保持历史行为不变。
+     */
     public String buildLegacyPrompt(DiagnosisContextDto context, RuleRegistry registry) {
         List<DiagnosisRule> diagnosisRules = registry == null || registry.getRules() == null ? List.of() : registry.getRules();
         String rules = diagnosisRules.stream()
@@ -74,10 +85,12 @@ public class DiagnosisPromptBuilder {
 
         return """
             你是排餐未生成原因诊断助手，请基于用户请求、业务上下文 JSON 和规则进行分析。
-            请输出 JSON，结构必须映射到 DiagnosisResponse。
+            请输出 JSON，结构必须严格映射到 DiagnosisResponse，字段只能使用 summary、reasons、modelName、fallback、ruleVersionDigest、customerId、customerName、recordDate、mealType、requestId。
             AI 诊断结果仅作为建议，需要客服结合证据人工确认。
             不允许声称已经修复、已经修改数据库或已经创建客户。
             如果业务上下文证据不足，请返回需要人工核对，不允许猜测。
+            reasons 至少包含 1 条；每条 reason 必须包含 code、title、level、description、suggestion、evidence。
+            evidence 必须是对象数组，每个对象包含 label 和 value。
 
             用户问题：
             客户ID：%s
@@ -104,6 +117,9 @@ public class DiagnosisPromptBuilder {
         );
     }
 
+    /**
+     * 规则文件里允许出现空项，提示词层统一兜底，避免拼接时直接抛空指针。
+     */
     private String formatRule(DiagnosisRule rule) {
         if (rule == null) {
             return "- ruleId: null, version: null, title: null, description: null";
@@ -112,6 +128,9 @@ public class DiagnosisPromptBuilder {
             .formatted(rule.getRuleId(), rule.getVersion(), rule.getTitle(), rule.getDescription());
     }
 
+    /**
+     * 旧模式依赖上下文 JSON 直接入模，序列化失败时显式抛错，避免 silent fallback 掩盖问题。
+     */
     private String serializeContext(DiagnosisContextDto context) {
         try {
             return objectMapper.writeValueAsString(context);

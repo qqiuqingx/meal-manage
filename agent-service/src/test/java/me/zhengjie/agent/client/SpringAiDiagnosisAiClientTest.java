@@ -13,7 +13,11 @@ import me.zhengjie.agent.tool.AgentToolRegistry;
 import me.zhengjie.agent.validator.DiagnosisResultValidator;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.ToolCallAdvisor;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
 
 import java.lang.reflect.Proxy;
 import java.util.List;
@@ -30,10 +34,12 @@ class SpringAiDiagnosisAiClientTest {
         AgentToolRegistry agentToolRegistry = toolRegistry();
         SpringAiDiagnosisAiClient client = new SpringAiDiagnosisAiClient(
             recording.builder(),
+            new ObjectMapper(),
             new DiagnosisPromptBuilder(new ObjectMapper()),
             new DiagnosisResultValidator(),
             agentToolRegistry,
             new DiagnosisToolCallLoggingAdvisor(),
+            "gpt-4o-mini",
             true
         );
 
@@ -54,10 +60,12 @@ class SpringAiDiagnosisAiClientTest {
         RecordingChatClient recording = new RecordingChatClient();
         SpringAiDiagnosisAiClient client = new SpringAiDiagnosisAiClient(
             recording.builder(),
+            new ObjectMapper(),
             new DiagnosisPromptBuilder(new ObjectMapper()),
             new DiagnosisResultValidator(),
             toolRegistry(),
             new DiagnosisToolCallLoggingAdvisor(),
+            "gpt-4o-mini",
             false
         );
 
@@ -70,6 +78,58 @@ class SpringAiDiagnosisAiClientTest {
         assertTrue(recording.userPrompt().contains("remainingCount"));
         assertTrue(recording.userPrompt().contains("张三"));
         assertFalse(recording.userPrompt().contains("如果证据不足，必须调用可用工具查询"));
+    }
+
+    @Test
+    void shouldParseFencedJsonAndNormalizeLevel() {
+        RecordingChatClient recording = new RecordingChatClient();
+        recording.content = "```json\n{\"summary\":\"deepseek reasoning path\",\"reasons\":[{\"code\":\"CUSTOMER_EXCLUDE_DATE_HIT\",\"title\":\"命中客户排除日期\",\"level\":\"ERROR\",\"description\":\"目标日期不配送。\",\"suggestion\":\"请人工核对排除日期。\",\"evidence\":[{\"label\":\"excludeDates\",\"value\":\"2026-05-17\"}]}]}\n```";
+        SpringAiDiagnosisAiClient client = new SpringAiDiagnosisAiClient(
+            recording.builder(),
+            new ObjectMapper(),
+            new DiagnosisPromptBuilder(new ObjectMapper()),
+            new DiagnosisResultValidator(),
+            toolRegistry(),
+            new DiagnosisToolCallLoggingAdvisor(),
+            "deepseek-v4-flash",
+            true
+        );
+
+        DiagnosisResponse response = client.diagnose(context(), registry());
+
+        assertTrue(response.getSummary().contains("deepseek reasoning path"));
+        assertTrue(recording.toolsRegistered());
+        assertTrue(response.getReasons().stream().anyMatch(reason -> "HIGH".equals(reason.getLevel())));
+    }
+
+    @Test
+    void shouldExtractFencedJsonFromNarrativeContent() {
+        RecordingChatClient recording = new RecordingChatClient();
+        recording.content = """
+            好，让我分析已有数据：
+
+            1. 客户档案返回空对象。
+
+            ```json
+            {"summary":"客户不存在且无可用订单。","reasons":[{"code":"CUSTOMER_NOT_FOUND","title":"客户不存在","level":"critical","description":"客户档案为空。","suggestion":"请人工核实客户编号。","evidence":[{"label":"客户编号","value":"B3302"}]}]}
+            ```
+            """;
+        SpringAiDiagnosisAiClient client = new SpringAiDiagnosisAiClient(
+            recording.builder(),
+            new ObjectMapper(),
+            new DiagnosisPromptBuilder(new ObjectMapper()),
+            new DiagnosisResultValidator(),
+            toolRegistry(),
+            new DiagnosisToolCallLoggingAdvisor(),
+            "deepseek-v4-flash",
+            true
+        );
+
+        DiagnosisResponse response = client.diagnose(context(), registry());
+
+        assertFalse(response.isFallback());
+        assertTrue(response.getSummary().contains("客户不存在"));
+        assertTrue(response.getReasons().stream().anyMatch(reason -> "HIGH".equals(reason.getLevel())));
     }
 
     private DiagnosisContextDto context() {
@@ -139,6 +199,7 @@ class SpringAiDiagnosisAiClientTest {
     private static class RecordingChatClient {
 
         private String userPrompt;
+        private String content = "{\"summary\":\"命中客户排除日期。\",\"reasons\":[{\"code\":\"CUSTOMER_EXCLUDE_DATE_HIT\",\"title\":\"命中客户排除日期\",\"level\":\"HIGH\",\"description\":\"目标日期不配送。\",\"suggestion\":\"请人工核对排除日期。\",\"evidence\":[{\"label\":\"excludeDates\",\"value\":\"2026-05-17\"}]}]}";
         private Object[] tools;
         private Object[] advisors;
 
@@ -192,6 +253,12 @@ class SpringAiDiagnosisAiClientTest {
 
         private ChatClient.CallResponseSpec callResponseSpec() {
             return proxy(ChatClient.CallResponseSpec.class, (proxy, method, args) -> {
+                if ("chatClientResponse".equals(method.getName())) {
+                    return new ChatClientResponse(rawChatResponse(), Map.of());
+                }
+                if ("chatResponse".equals(method.getName())) {
+                    return rawChatResponse();
+                }
                 if ("entity".equals(method.getName()) && args != null && args.length == 1 && args[0] == DiagnosisResponse.class) {
                     return response();
                 }
@@ -238,6 +305,13 @@ class SpringAiDiagnosisAiClientTest {
                 return '\0';
             }
             return null;
+        }
+
+        private ChatResponse rawChatResponse() {
+            AssistantMessage message = AssistantMessage.builder()
+                .content(content)
+                .build();
+            return new ChatResponse(List.of(new Generation(message)));
         }
     }
 }
