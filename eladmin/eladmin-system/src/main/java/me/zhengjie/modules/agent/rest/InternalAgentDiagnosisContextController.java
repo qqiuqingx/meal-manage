@@ -48,6 +48,9 @@ public class InternalAgentDiagnosisContextController {
     @Value("${agent.internal-token}")
     private String internalToken;
 
+    /**
+     * 启动时强制要求内部调用 token 已配置，避免内部工具接口意外以空口令暴露。
+     */
     @PostConstruct
     void validateInternalToken() {
         if (!StringUtils.hasText(internalToken)) {
@@ -63,10 +66,10 @@ public class InternalAgentDiagnosisContextController {
         bindRequestId(requestId);
         long start = System.currentTimeMillis();
         try {
-            log.info("internal agent context request received requestId={} customerId={} customerCode={} recordDate={} mealType={}",
+            log.info("诊断阶段 stage=内部上下文请求接收 requestId={} customerId={} customerCode={} recordDate={} mealType={}",
                     MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
             MealPlanDiagnosisContextDto context = contextService.buildContext(request);
-            log.info("internal agent context request completed requestId={} customerId={} recordDate={} mealType={} costMs={}",
+            log.info("诊断阶段 stage=内部上下文请求完成 requestId={} customerId={} recordDate={} mealType={} costMs={}",
                     MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType(),
                     System.currentTimeMillis() - start);
             return ResponseEntity.ok(context);
@@ -84,7 +87,7 @@ public class InternalAgentDiagnosisContextController {
         long start = System.currentTimeMillis();
         try {
             CustomerProfileDetailDto profile = contextService.resolveCustomerProfile(request.getCustomerId(), request.getCustomerCode());
-            log.info("internal agent customer profile completed requestId={} customerId={} customerCode={} present={} costMs={}",
+            log.info("诊断阶段 stage=内部客户档案查询完成 requestId={} customerId={} customerCode={} present={} costMs={}",
                     MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), profile != null,
                     System.currentTimeMillis() - start);
             return ResponseEntity.ok(profile);
@@ -102,7 +105,7 @@ public class InternalAgentDiagnosisContextController {
         long start = System.currentTimeMillis();
         try {
             List<CustomerOrderDetailDto> orders = contextService.resolveOrders(request.getCustomerId(), request.getCustomerCode(), request.getPage(), request.getSize());
-            log.info("internal agent customer orders completed requestId={} customerId={} customerCode={} orders={} costMs={}",
+            log.info("诊断阶段 stage=内部客户订单查询完成 requestId={} customerId={} customerCode={} orders={} costMs={}",
                     MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), orders == null ? 0 : orders.size(),
                     System.currentTimeMillis() - start);
             return ResponseEntity.ok(orders);
@@ -120,7 +123,7 @@ public class InternalAgentDiagnosisContextController {
         long start = System.currentTimeMillis();
         try {
             MealPlanDetailVO mealPlan = contextService.resolveMealPlan(request.getRecordDate(), request.getMealType());
-            log.info("internal agent meal plan completed requestId={} recordDate={} mealType={} present={} costMs={}",
+            log.info("诊断阶段 stage=内部排餐查询完成 requestId={} recordDate={} mealType={} present={} costMs={}",
                     MDC.get(REQUEST_ID_KEY), request.getRecordDate(), request.getMealType(), mealPlan != null,
                     System.currentTimeMillis() - start);
             return ResponseEntity.ok(mealPlan);
@@ -138,7 +141,7 @@ public class InternalAgentDiagnosisContextController {
         long start = System.currentTimeMillis();
         try {
             List<MealPackageStatDto> stats = contextService.resolveCandidateDishStats(request.getRecordDate());
-            log.info("internal agent candidate dish stats completed requestId={} recordDate={} stats={} costMs={}",
+            log.info("诊断阶段 stage=内部候选菜品统计查询完成 requestId={} recordDate={} stats={} costMs={}",
                     MDC.get(REQUEST_ID_KEY), request.getRecordDate(), stats == null ? 0 : stats.size(),
                     System.currentTimeMillis() - start);
             return ResponseEntity.ok(stats);
@@ -147,6 +150,9 @@ public class InternalAgentDiagnosisContextController {
         }
     }
 
+    /**
+     * 使用常量时间比较校验内部 token，既拦住未授权请求，也避免把 token 内容写入日志。
+     */
     private void verifyInternalToken(String agentToken) {
         if (!StringUtils.hasText(agentToken) || !StringUtils.hasText(internalToken)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid agent internal token");
@@ -158,6 +164,9 @@ public class InternalAgentDiagnosisContextController {
         }
     }
 
+    /**
+     * 把上游 requestId 绑定到 MDC，便于把 agent-service 和内部查询日志串成同一条链路。
+     */
     private void bindRequestId(String requestId) {
         if (requestId != null && !requestId.trim().isEmpty()) {
             MDC.put(REQUEST_ID_KEY, requestId.trim());
