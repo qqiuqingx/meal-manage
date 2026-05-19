@@ -20,8 +20,8 @@ public class SpringAiLlmConnectivityService implements LlmConnectivityService {
     private final String model;
 
     public SpringAiLlmConnectivityService(ChatClient.Builder chatClientBuilder,
-                                          @Value("${spring.ai.openai.base-url:}") String baseUrl,
-                                          @Value("${spring.ai.openai.chat.options.model:}") String model) {
+                                          @Value("${spring.ai.deepseek.base-url:}") String baseUrl,
+                                          @Value("${spring.ai.deepseek.chat.options.model:}") String model) {
         this.chatClient = chatClientBuilder.build();
         this.baseUrl = baseUrl;
         this.model = model;

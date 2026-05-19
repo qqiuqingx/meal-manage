@@ -53,6 +53,9 @@ class DiagnosisPromptBuilderTest {
         assertTrue(prompt.contains("listCustomerOrders"));
         assertTrue(prompt.contains("getMealPlan"));
         assertTrue(prompt.contains("getCandidateDishStats"));
+        assertTrue(prompt.contains("字段只能使用 summary、reasons、modelName、fallback、ruleVersionDigest、customerId、customerName、recordDate、mealType、requestId"));
+        assertTrue(prompt.contains("reasons 至少包含 1 条"));
+        assertTrue(prompt.contains("evidence 必须是对象数组"));
         assertFalse(prompt.contains("张三"));
         assertFalse(prompt.contains("客户名称"));
         assertFalse(prompt.contains("excludeDates"));
