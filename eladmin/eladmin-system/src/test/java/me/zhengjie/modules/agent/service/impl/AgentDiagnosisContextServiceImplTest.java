@@ -160,4 +160,72 @@ class AgentDiagnosisContextServiceImplTest {
         assertEquals("李四", context.getCustomerName());
         assertEquals(1, context.getOrders().size());
     }
+
+    @Test
+    void shouldResolveCustomerProfileById() {
+        CustomerProfileDetailDto profile = new CustomerProfileDetailDto();
+        profile.setId(1001L);
+        profile.setCustomerName("张三");
+        when(customerProfileService.getDetail(1001L)).thenReturn(profile);
+
+        CustomerProfileDetailDto result = service.resolveCustomerProfile(1001L, null);
+
+        assertNotNull(result);
+        assertEquals(1001L, result.getId());
+        assertEquals("张三", result.getCustomerName());
+    }
+
+    @Test
+    void shouldResolveOrdersByCustomerCodeWithNormalizedPaging() {
+        CustomerProfile profileEntity = new CustomerProfile();
+        profileEntity.setId(1003L);
+        profileEntity.setCustomerCode("C1003");
+        when(customerProfileService.queryAll(any(CustomerProfileQueryCriteria.class), any(Page.class)))
+                .thenReturn(new PageResult<>(Collections.singletonList(profileEntity), 1L));
+
+        CustomerProfileDetailDto detail = new CustomerProfileDetailDto();
+        detail.setId(1003L);
+        when(customerProfileService.getDetail(1003L)).thenReturn(detail);
+
+        CustomerOrderDetailDto order = new CustomerOrderDetailDto();
+        order.setId(2001L);
+        order.setCustomerId(1003L);
+        when(customerOrderService.getOrdersByCustomerId(1003L, 1, 100))
+                .thenReturn((PageResult) new PageResult<>(Collections.singletonList(order), 1L));
+
+        java.util.List<CustomerOrderDetailDto> result = service.resolveOrders(null, "C1003", -1, 500);
+
+        assertEquals(1, result.size());
+        assertEquals(2001L, result.get(0).getId());
+        verify(customerOrderService).getOrdersByCustomerId(1003L, 1, 100);
+    }
+
+    @Test
+    void shouldResolveMealPlanDetail() {
+        MealPlan plan = new MealPlan();
+        plan.setId(3001L);
+        when(mealPlanService.queryAll(any(MealPlanQueryCriteria.class)))
+                .thenReturn(new PageResult<>(Collections.singletonList(plan), 1L));
+
+        MealPlanDetailVO detail = new MealPlanDetailVO();
+        detail.setTotalCustomers(3);
+        when(mealPlanService.queryMealPlanDetail(3001L)).thenReturn(detail);
+
+        MealPlanDetailVO result = service.resolveMealPlan("2026-05-17", "LUNCH");
+
+        assertNotNull(result);
+        assertEquals(3, result.getTotalCustomers());
+    }
+
+    @Test
+    void shouldResolveCandidateDishStats() {
+        MealPackageStatDto stat = new MealPackageStatDto();
+        stat.setPackageCode("PKG001");
+        when(mealPlanService.statByDate("2026-05-17")).thenReturn(Collections.singletonList(stat));
+
+        java.util.List<MealPackageStatDto> result = service.resolveCandidateDishStats("2026-05-17");
+
+        assertEquals(1, result.size());
+        assertEquals("PKG001", result.get(0).getPackageCode());
+    }
 }

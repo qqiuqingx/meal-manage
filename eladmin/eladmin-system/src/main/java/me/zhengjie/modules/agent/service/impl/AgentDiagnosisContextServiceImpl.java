@@ -34,6 +34,9 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextService {
 
+    private static final int DEFAULT_ORDER_PAGE = 1;
+    private static final int MAX_ORDER_PAGE_SIZE = 100;
+
     private final CustomerProfileService customerProfileService;
     private final CustomerOrderService customerOrderService;
     private final MealPlanService mealPlanService;
@@ -56,7 +59,7 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             context.setCustomerName(customerProfile.getCustomerName());
         }
 
-        context.setOrders(resolveOrders(context.getCustomerId()));
+        context.setOrders(resolveOrders(context.getCustomerId(), context.getCustomerCode(), null, null));
         context.setMealPlan(resolveMealPlan(request.getRecordDate(), request.getMealType()));
         context.setCandidateDishStats(resolveCandidateDishStats(request.getRecordDate()));
         log.info("build agent diagnosis context completed customerId={} customerCode={} customerName={} recordDate={} mealType={} orders={} mealPlanPresent={} candidateDishStats={} costMs={}",
@@ -66,7 +69,8 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
         return context;
     }
 
-    private CustomerProfileDetailDto resolveCustomerProfile(Long customerId, String customerCode) {
+    @Override
+    public CustomerProfileDetailDto resolveCustomerProfile(Long customerId, String customerCode) {
         try {
             if (customerId != null) {
                 return customerProfileService.getDetail(customerId);
@@ -99,12 +103,20 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
         }
     }
 
-    private List<CustomerOrderDetailDto> resolveOrders(Long customerId) {
-        if (customerId == null) {
+    @Override
+    public List<CustomerOrderDetailDto> resolveOrders(Long customerId, String customerCode, Integer page, Integer size) {
+        Long resolvedCustomerId = customerId;
+        if (resolvedCustomerId == null) {
+            CustomerProfileDetailDto customerProfile = resolveCustomerProfile(null, customerCode);
+            resolvedCustomerId = customerProfile == null ? null : customerProfile.getId();
+        }
+        if (resolvedCustomerId == null) {
             return Collections.emptyList();
         }
+        int normalizedPage = page == null || page < DEFAULT_ORDER_PAGE ? DEFAULT_ORDER_PAGE : page;
+        int normalizedSize = size == null || size < 1 ? MAX_ORDER_PAGE_SIZE : Math.min(size, MAX_ORDER_PAGE_SIZE);
         try {
-            PageResult<?> pageResult = customerOrderService.getOrdersByCustomerId(customerId, 1, 100);
+            PageResult<?> pageResult = customerOrderService.getOrdersByCustomerId(resolvedCustomerId, normalizedPage, normalizedSize);
             if (pageResult == null || CollectionUtils.isEmpty(pageResult.getContent())) {
                 return Collections.emptyList();
             }
@@ -116,13 +128,15 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             }
             return orders;
         } catch (RuntimeException ex) {
-            log.warn("resolve customer orders failed customerId={} errorType={} errorMessage={}",
-                    customerId, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            log.warn("resolve customer orders failed customerId={} resolvedCustomerId={} customerCode={} page={} size={} errorType={} errorMessage={}",
+                    customerId, resolvedCustomerId, customerCode, normalizedPage, normalizedSize,
+                    ex.getClass().getSimpleName(), ex.getMessage(), ex);
             return Collections.emptyList();
         }
     }
 
-    private MealPlanDetailVO resolveMealPlan(String recordDate, String mealType) {
+    @Override
+    public MealPlanDetailVO resolveMealPlan(String recordDate, String mealType) {
         try {
             MealPlanQueryCriteria criteria = new MealPlanQueryCriteria();
             criteria.setRecordDate(recordDate);
@@ -150,7 +164,8 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
         }
     }
 
-    private List<MealPackageStatDto> resolveCandidateDishStats(String recordDate) {
+    @Override
+    public List<MealPackageStatDto> resolveCandidateDishStats(String recordDate) {
         try {
             List<MealPackageStatDto> stats = mealPlanService.statByDate(recordDate);
             return stats == null ? Collections.emptyList() : stats;
