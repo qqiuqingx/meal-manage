@@ -6,6 +6,9 @@ import me.zhengjie.agent.domain.dto.DiagnosisRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -16,6 +19,9 @@ import java.util.Map;
  */
 @Component
 public class HttpDiagnosisContextClient implements DiagnosisContextClient {
+
+    private static final Logger log = LoggerFactory.getLogger(HttpDiagnosisContextClient.class);
+    private static final String REQUEST_ID_KEY = "requestId";
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
@@ -32,15 +38,27 @@ public class HttpDiagnosisContextClient implements DiagnosisContextClient {
 
     @Override
     public DiagnosisContextDto fetch(DiagnosisRequest request) {
+        long start = System.currentTimeMillis();
+        log.info("fetch diagnosis context start requestId={} path={} customerId={} customerCode={} recordDate={} mealType={}",
+            MDC.get(REQUEST_ID_KEY), contextPath, request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(),
+            request.getMealType());
         Map<String, Object> body = restClient.post()
             .uri(contextPath)
             .contentType(MediaType.APPLICATION_JSON)
+            .header("X-Request-Id", requestId())
             .body(request)
             .retrieve()
             .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+        log.info("fetch diagnosis context completed requestId={} path={} bodyPresent={} costMs={}",
+            MDC.get(REQUEST_ID_KEY), contextPath, body != null, System.currentTimeMillis() - start);
         if (body == null) {
             return new DiagnosisContextDto();
         }
         return objectMapper.convertValue(body, DiagnosisContextDto.class);
+    }
+
+    private String requestId() {
+        String requestId = MDC.get(REQUEST_ID_KEY);
+        return requestId == null ? "" : requestId;
     }
 }

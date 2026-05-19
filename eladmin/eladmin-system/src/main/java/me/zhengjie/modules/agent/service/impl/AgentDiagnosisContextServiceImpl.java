@@ -2,6 +2,7 @@ package me.zhengjie.modules.agent.service.impl;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.modules.agent.domain.dto.MealPlanDiagnosisContextDto;
 import me.zhengjie.modules.agent.domain.dto.MealPlanDiagnosisContextRequest;
 import me.zhengjie.modules.agent.service.AgentDiagnosisContextService;
@@ -28,6 +29,7 @@ import java.util.Objects;
 /**
  * 默认诊断上下文聚合实现
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextService {
@@ -38,6 +40,9 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
 
     @Override
     public MealPlanDiagnosisContextDto buildContext(MealPlanDiagnosisContextRequest request) {
+        long start = System.currentTimeMillis();
+        log.info("build agent diagnosis context start customerId={} customerCode={} recordDate={} mealType={}",
+                request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
         MealPlanDiagnosisContextDto context = new MealPlanDiagnosisContextDto();
         context.setCustomerId(request.getCustomerId());
         context.setCustomerCode(request.getCustomerCode());
@@ -54,6 +59,10 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
         context.setOrders(resolveOrders(context.getCustomerId()));
         context.setMealPlan(resolveMealPlan(request.getRecordDate(), request.getMealType()));
         context.setCandidateDishStats(resolveCandidateDishStats(request.getRecordDate()));
+        log.info("build agent diagnosis context completed customerId={} customerCode={} customerName={} recordDate={} mealType={} orders={} mealPlanPresent={} candidateDishStats={} costMs={}",
+                context.getCustomerId(), context.getCustomerCode(), context.getCustomerName(), context.getRecordDate(),
+                context.getMealType(), context.getOrders() == null ? 0 : context.getOrders().size(), context.getMealPlan() != null,
+                context.getCandidateDishStats() == null ? 0 : context.getCandidateDishStats().size(), System.currentTimeMillis() - start);
         return context;
     }
 
@@ -84,6 +93,8 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             CustomerProfile profile = (CustomerProfile) item;
             return customerProfileService.getDetail(profile.getId());
         } catch (RuntimeException ex) {
+            log.warn("resolve customer profile failed customerId={} customerCode={} errorType={} errorMessage={}",
+                    customerId, customerCode, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             return null;
         }
     }
@@ -105,6 +116,8 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             }
             return orders;
         } catch (RuntimeException ex) {
+            log.warn("resolve customer orders failed customerId={} errorType={} errorMessage={}",
+                    customerId, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             return Collections.emptyList();
         }
     }
@@ -131,6 +144,8 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             }
             return mealPlanService.queryMealPlanDetail(mealPlan.getId());
         } catch (RuntimeException ex) {
+            log.warn("resolve meal plan failed recordDate={} mealType={} errorType={} errorMessage={}",
+                    recordDate, mealType, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             return null;
         }
     }
@@ -140,6 +155,8 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             List<MealPackageStatDto> stats = mealPlanService.statByDate(recordDate);
             return stats == null ? Collections.emptyList() : stats;
         } catch (RuntimeException ex) {
+            log.warn("resolve candidate dish stats failed recordDate={} errorType={} errorMessage={}",
+                    recordDate, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             return Collections.emptyList();
         }
     }

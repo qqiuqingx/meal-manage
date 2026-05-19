@@ -41,6 +41,19 @@
         </encoder>
     </appender>
 
+    <!-- Agent 诊断调用日志文件（每天一个文件，保留30天） -->
+    <appender name="AGENT_DIAGNOSIS_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${log.path}/agent-diagnosis.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${log.path}/agent-diagnosis.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level requestId=%X{requestId} %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
     <!-- 排餐计划服务日志单独写文件 -->
     <logger name="me.zhengjie.modules.meal.service.impl.MealPlanServiceImpl" level="info" additivity="false">
         <appender-ref ref="MEAL_PLAN_FILE" />
@@ -50,6 +63,12 @@
     <!-- 核销服务日志单独写文件 -->
     <logger name="me.zhengjie.modules.meal.service.impl.MealVerificationServiceImpl" level="info" additivity="false">
         <appender-ref ref="MEAL_VERIFICATION_FILE" />
+        <appender-ref ref="console" />
+    </logger>
+
+    <!-- Agent 诊断日志单独写文件 -->
+    <logger name="me.zhengjie.modules.agent" level="info" additivity="false">
+        <appender-ref ref="AGENT_DIAGNOSIS_FILE" />
         <appender-ref ref="console" />
     </logger>
 

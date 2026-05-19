@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="30 seconds" debug="false">
+    <contextName>agent-service</contextName>
+    <property name="log.charset" value="utf-8" />
+    <property name="log.pattern" value="%contextName- %d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level requestId=%X{requestId} %logger{36} - %msg%n" />
+
+    <springProperty scope="context" name="log.path" source="logging.path" defaultValue="./logs"/>
+
+    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${log.pattern}</pattern>
+            <charset>${log.charset}</charset>
+        </encoder>
+    </appender>
+
+    <appender name="AGENT_SERVICE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${log.path}/agent-service.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${log.path}/agent-service.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${log.pattern}</pattern>
+            <charset>${log.charset}</charset>
+        </encoder>
+    </appender>
+
+    <logger name="me.zhengjie.agent" level="info" additivity="false">
+        <appender-ref ref="AGENT_SERVICE_FILE" />
+        <appender-ref ref="console" />
+    </logger>
+
+    <root level="info">
+        <appender-ref ref="console" />
+    </root>
+
+    <logger name="org.springframework" level="warn" />
+    <logger name="org.apache.catalina.core.ContainerBase.[Tomcat].[localhost].[/]" level="ERROR"/>
+    <logger name="org.springframework.web.servlet.DispatcherServlet" level="ERROR"/>
+</configuration>

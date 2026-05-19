@@ -9,6 +9,7 @@ import me.zhengjie.agent.orchestrator.MealPlanDiagnosisOrchestrator;
 import me.zhengjie.agent.rule.RuleRegistry;
 import me.zhengjie.agent.rule.RuleRegistryLoader;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -47,5 +48,35 @@ class MealPlanDiagnosisServiceImplTest {
 
         assertEquals("AI 判断命中客户排除日期", response.getSummary());
         assertEquals("张三", response.getCustomerName());
+    }
+
+    @Test
+    void shouldCopyRequestIdFromLogContextIntoResponse() {
+        MDC.put("requestId", "trace-1001");
+        try {
+            DiagnosisContextBuilder contextBuilder = request -> {
+                DiagnosisContextDto context = new DiagnosisContextDto();
+                context.setCustomerId(request.getCustomerId());
+                context.setRecordDate(request.getRecordDate());
+                context.setMealType(request.getMealType());
+                return context;
+            };
+
+            RuleRegistryLoader ruleRegistryLoader = scene -> new RuleRegistry();
+            DiagnosisAiClient aiClient = (context, ruleRegistry) -> new DiagnosisResponse();
+            MealPlanDiagnosisOrchestrator orchestrator = new MealPlanDiagnosisOrchestrator(ruleRegistryLoader, aiClient);
+            MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator);
+
+            DiagnosisRequest request = new DiagnosisRequest();
+            request.setCustomerId(1001L);
+            request.setRecordDate("2026-05-17");
+            request.setMealType("LUNCH");
+
+            DiagnosisResponse response = service.diagnose(request);
+
+            assertEquals("trace-1001", response.getRequestId());
+        } finally {
+            MDC.clear();
+        }
     }
 }

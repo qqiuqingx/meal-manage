@@ -1,6 +1,9 @@
 server:
   port: 18081
 
+logging:
+  path: ${AGENT_LOG_PATH:./logs}
+
 spring:
   application:
     name: agent-service

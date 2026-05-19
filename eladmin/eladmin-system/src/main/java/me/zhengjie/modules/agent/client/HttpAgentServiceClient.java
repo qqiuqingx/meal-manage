@@ -14,6 +14,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.UUID;
+
 /**
  * HTTP 调用独立 agent-service。
  */
@@ -35,18 +37,31 @@ public class HttpAgentServiceClient implements AgentServiceClient {
 
     @Override
     public AgentDiagnosisResponse diagnoseMealPlan(AgentDiagnosisRequest request) {
+        String requestId = UUID.randomUUID().toString();
+        long start = System.currentTimeMillis();
+        String url = buildUrl();
         try {
-            ResponseEntity<String> response = restTemplate().postForEntity(buildUrl(), requestEntity(request), String.class);
-            return JSON.parseObject(response.getBody(), AgentDiagnosisResponse.class);
+            log.info("call agent-service start requestId={} url={} customerId={} customerCode={} recordDate={} mealType={}",
+                    requestId, url, request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
+            ResponseEntity<String> response = restTemplate().postForEntity(url, requestEntity(request, requestId), String.class);
+            AgentDiagnosisResponse diagnosisResponse = JSON.parseObject(response.getBody(), AgentDiagnosisResponse.class);
+            log.info("call agent-service completed requestId={} url={} status={} fallback={} reasonCount={} costMs={}",
+                    requestId, url, response.getStatusCodeValue(), diagnosisResponse != null && diagnosisResponse.isFallback(),
+                    diagnosisResponse == null || diagnosisResponse.getReasons() == null ? 0 : diagnosisResponse.getReasons().size(),
+                    System.currentTimeMillis() - start);
+            return diagnosisResponse;
         } catch (RestClientException ex) {
-            log.warn("call agent-service failed, fallback to manual diagnosis hint", ex);
-            return fallback(request);
+            log.warn("call agent-service failed, fallback to manual diagnosis hint requestId={} url={} customerId={} customerCode={} recordDate={} mealType={} costMs={} errorType={} errorMessage={}",
+                    requestId, url, request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType(),
+                    System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            return fallback(request, requestId);
         }
     }
 
-    private HttpEntity<String> requestEntity(AgentDiagnosisRequest request) {
+    private HttpEntity<String> requestEntity(AgentDiagnosisRequest request, String requestId) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Request-Id", requestId);
         return new HttpEntity<>(JSON.toJSONString(request), headers);
     }
 
@@ -69,8 +84,9 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         return value == null ? "" : value.replaceAll("^/+", "");
     }
 
-    private AgentDiagnosisResponse fallback(AgentDiagnosisRequest request) {
+    private AgentDiagnosisResponse fallback(AgentDiagnosisRequest request, String requestId) {
         AgentDiagnosisResponse response = new AgentDiagnosisResponse();
+        response.setRequestId(requestId);
         response.setCustomerId(request.getCustomerId());
         response.setRecordDate(request.getRecordDate());
         response.setMealType(request.getMealType());
