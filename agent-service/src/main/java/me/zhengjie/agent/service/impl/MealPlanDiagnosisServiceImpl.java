@@ -35,7 +35,7 @@ public class MealPlanDiagnosisServiceImpl implements MealPlanDiagnosisService {
     @Override
     public DiagnosisResponse diagnose(DiagnosisRequest request) {
         long start = System.currentTimeMillis();
-        DiagnosisContextDto context = contextBuilder.build(request);
+        DiagnosisContextDto context = buildLightweightContext(request);
         log.info("diagnosis context built requestId={} customerId={} customerCode={} customerName={} recordDate={} mealType={} orders={} customerPlans={} candidateDishStats={} mealPlanPresent={} costMs={}",
             MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getCustomerCode(), context.getCustomerName(),
             context.getRecordDate(), context.getMealType(), sizeOf(context.getOrders()), sizeOf(context.getCustomerPlans()),
@@ -47,6 +47,15 @@ public class MealPlanDiagnosisServiceImpl implements MealPlanDiagnosisService {
             response.getRequestId(), response.getCustomerId(), response.getRecordDate(), response.getMealType(),
             response.isFallback(), response.getModelName(), sizeOf(response.getReasons()));
         return response;
+    }
+
+    private DiagnosisContextDto buildLightweightContext(DiagnosisRequest request) {
+        DiagnosisContextDto context = new DiagnosisContextDto();
+        context.setCustomerId(request.getCustomerId());
+        context.setCustomerCode(request.getCustomerCode());
+        context.setRecordDate(request.getRecordDate());
+        context.setMealType(request.getMealType());
+        return context;
     }
 
     private int sizeOf(java.util.Collection<?> values) {
