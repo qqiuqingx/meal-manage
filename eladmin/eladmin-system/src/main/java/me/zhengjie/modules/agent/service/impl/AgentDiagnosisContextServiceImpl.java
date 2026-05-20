@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.modules.agent.domain.dto.MealPlanDiagnosisContextDto;
 import me.zhengjie.modules.agent.domain.dto.MealPlanDiagnosisContextRequest;
 import me.zhengjie.modules.agent.service.AgentDiagnosisContextService;
+import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
 import me.zhengjie.modules.customer.order.service.CustomerOrderService;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
@@ -124,6 +125,8 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             for (Object item : pageResult.getContent()) {
                 if (item instanceof CustomerOrderDetailDto) {
                     orders.add((CustomerOrderDetailDto) item);
+                } else if (item instanceof CustomerOrder) {
+                    orders.add(toOrderDetailDto((CustomerOrder) item));
                 }
             }
             return orders;
@@ -132,6 +135,85 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
                     customerId, resolvedCustomerId, customerCode, normalizedPage, normalizedSize,
                     ex.getClass().getSimpleName(), ex.getMessage(), ex);
             return Collections.emptyList();
+        }
+    }
+
+    private CustomerOrderDetailDto toOrderDetailDto(CustomerOrder order) {
+        CustomerOrderDetailDto dto = new CustomerOrderDetailDto();
+        dto.setId(order.getId());
+        dto.setCustomerId(order.getCustomerId());
+        dto.setCustomerName(order.getCustomerName());
+        dto.setPhone(order.getPhone());
+        dto.setParentPackageName(order.getParentPackageName());
+        dto.setChildPackageName(order.getChildPackageName());
+        dto.setOrderCode(order.getOrderCode());
+        dto.setDepositAmount(order.getDepositAmount());
+        dto.setTotalAmount(order.getTotalAmount());
+        dto.setFinalAmount(order.getFinalAmount());
+        dto.setBreakfastCount(order.getBreakfastCount());
+        dto.setLunchDinnerCount(order.getLunchDinnerCount());
+        dto.setTotalCount(totalCount(order));
+        dto.setBreakfastPrice(order.getBreakfastPrice());
+        dto.setLunchDinnerPrice(order.getLunchDinnerPrice());
+        dto.setVerifiedCount(order.getVerifiedCount());
+        dto.setVerifiedAmount(order.getVerifiedAmount());
+        dto.setMealBalance(order.getMealBalance());
+        dto.setRemainingCount(order.getRemainingCount());
+        dto.setDealTime(order.getDealTime());
+        dto.setFirstDeliveryTime(order.getFirstDeliveryTime());
+        dto.setStartDate(order.getStartDate());
+        dto.setEndDate(order.getEndDate());
+        dto.setStatus(order.getStatus());
+        dto.setStatusDesc(statusDesc(order.getStatus()));
+        dto.setMealType(order.getMealType());
+        dto.setMealTypeDesc(mealTypeDesc(order.getMealType()));
+        dto.setScheduleMode(order.getScheduleMode());
+        dto.setDeliveryDates(order.getDeliveryDates());
+        dto.setRemark(order.getRemark());
+        dto.setCustomerSource(order.getCustomerSource());
+        dto.setCreateTime(order.getCreateTime());
+        dto.setUpdateTime(order.getUpdateTime());
+        return dto;
+    }
+
+    private Integer totalCount(CustomerOrder order) {
+        if (order.getTotalCount() != null) {
+            return order.getTotalCount();
+        }
+        int breakfast = order.getBreakfastCount() == null ? 0 : order.getBreakfastCount();
+        int lunchDinner = order.getLunchDinnerCount() == null ? 0 : order.getLunchDinnerCount();
+        return breakfast + lunchDinner;
+    }
+
+    private String statusDesc(Integer status) {
+        if (status == null) {
+            return "未知";
+        }
+        switch (status) {
+            case 0:
+                return "已取消";
+            case 1:
+                return "进行中";
+            case 2:
+                return "已完成";
+            default:
+                return "未知";
+        }
+    }
+
+    private String mealTypeDesc(String mealType) {
+        if (mealType == null) {
+            return "全餐次";
+        }
+        switch (mealType) {
+            case "LUNCH":
+                return "午餐";
+            case "DINNER":
+                return "晚餐";
+            case "ALL":
+                return "全餐次";
+            default:
+                return "未知";
         }
     }
 
