@@ -3,6 +3,7 @@ package me.zhengjie.modules.agent.service.impl;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.agent.domain.dto.MealPlanDiagnosisContextDto;
 import me.zhengjie.modules.agent.domain.dto.MealPlanDiagnosisContextRequest;
+import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
 import me.zhengjie.modules.customer.order.service.CustomerOrderService;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
@@ -221,6 +222,34 @@ class AgentDiagnosisContextServiceImplTest {
         assertEquals(1, result.size());
         assertEquals(2001L, result.get(0).getId());
         verify(customerOrderService).getOrdersByCustomerId(1003L, 1, 100);
+    }
+
+    @Test
+    void shouldConvertCustomerOrderEntitiesWhenResolvingOrders() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(70L);
+        order.setCustomerId(69L);
+        order.setCustomerCode("B3302");
+        order.setOrderCode("ORD20260520001");
+        order.setBreakfastCount(1);
+        order.setLunchDinnerCount(2);
+        order.setRemainingCount(3);
+        order.setStatus(1);
+        order.setMealType("ALL");
+        order.setParentPackageName("月子餐");
+        order.setChildPackageName("标准套餐");
+        when(customerOrderService.getOrdersByCustomerId(69L, 1, 10))
+                .thenReturn((PageResult) new PageResult<>(Collections.singletonList(order), 1L));
+
+        java.util.List<CustomerOrderDetailDto> result = service.resolveOrders(69L, "B3302", 1, 10);
+
+        assertEquals(1, result.size());
+        assertEquals(70L, result.get(0).getId());
+        assertEquals(69L, result.get(0).getCustomerId());
+        assertEquals("ORD20260520001", result.get(0).getOrderCode());
+        assertEquals(3, result.get(0).getTotalCount());
+        assertEquals("进行中", result.get(0).getStatusDesc());
+        assertEquals("全餐次", result.get(0).getMealTypeDesc());
     }
 
     @Test
