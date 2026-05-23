@@ -8,6 +8,14 @@ export function getProfiles(params) {
   })
 }
 
+export function getMealStats(params) {
+  return axios({
+    url: '/api/customerProfile/mealStats',
+    method: 'get',
+    params
+  })
+}
+
 export function getProfile(id) {
   return axios({
     url: `/api/customerProfile/${id}`,
@@ -47,5 +55,4 @@ export function del(ids) {
   })
 }
 
-export default { getProfiles, getProfile, generateCode, add, edit, del }
-
+export default { getProfiles, getMealStats, getProfile, generateCode, add, edit, del }

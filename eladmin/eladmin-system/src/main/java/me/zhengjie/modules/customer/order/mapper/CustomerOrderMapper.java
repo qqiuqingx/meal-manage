@@ -3,6 +3,7 @@ package me.zhengjie.modules.customer.order.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
 import org.apache.ibatis.annotations.Mapper;
@@ -43,6 +44,11 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      * @return 有效订单列表，按成交时间倒序
      */
     List<CustomerOrder> findActiveOrdersByCustomerId(@Param("customerId") Long customerId);
+
+    /**
+     * 批量查询客户的进行中订单
+     */
+    List<CustomerOrder> findActiveOrdersByCustomerIds(@Param("customerIds") List<Long> customerIds);
 
     /**
      * 统计同一客户在同一时间段内的订单数量
@@ -113,6 +119,11 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      * @return 各餐次已核销数列表
      */
     List<OrderVerifiedCountDto> sumVerifiedCountByOrderId(@Param("orderId") Long orderId);
+
+    /**
+     * 批量统计订单各餐次已核销餐数
+     */
+    List<OrderMealVerifiedCountDto> sumVerifiedCountByOrderIds(@Param("orderIds") List<Long> orderIds);
 
     /**
      * 回退核销状态（删除核销日志时调用）

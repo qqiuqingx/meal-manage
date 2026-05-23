@@ -82,6 +82,18 @@ export const constantRouterMap = [
         meta: { title: '菜品主档列表', noCache: true }
       }
     ]
+  },
+  {
+    path: '/customer-meal-stats',
+    component: Layout,
+    children: [
+      {
+        path: 'index',
+        component: (resolve) => require(['@/views/customer/mealStats/index'], resolve),
+        name: 'CustomerMealStats',
+        meta: { title: '客户用餐统计', icon: 'table', noCache: true }
+      }
+    ]
   }
 ]
 
