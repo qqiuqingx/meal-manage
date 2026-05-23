@@ -184,6 +184,17 @@
         ORDER BY deal_time DESC
     </select>
 
+    <select id="findActiveOrdersByCustomerIds" resultMap="BaseResultMap">
+        SELECT *
+        FROM customer_order
+        WHERE status = 1
+          AND customer_id IN
+        <foreach collection="customerIds" item="customerId" open="(" separator="," close=")">
+            #{customerId}
+        </foreach>
+        ORDER BY customer_id ASC, start_date ASC, deal_time ASC, id ASC
+    </select>
+
     <!-- 统计同一客户在同一时间段内的订单数量（去除结束日期限制） -->
     <select id="countOverlappingOrders" resultType="int">
         SELECT COUNT(*)
@@ -327,6 +338,23 @@
         WHERE order_id = #{orderId}
           AND (deleted = 0 OR deleted IS NULL)
         GROUP BY meal_type
+    </select>
+
+    <resultMap id="OrderMealVerifiedCountResultMap" type="me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto">
+        <result column="order_id" property="orderId"/>
+        <result column="meal_type" property="mealType"/>
+        <result column="verified_count" property="verifiedCount"/>
+    </resultMap>
+
+    <select id="sumVerifiedCountByOrderIds" resultMap="OrderMealVerifiedCountResultMap">
+        SELECT order_id, meal_type, SUM(verification_count) AS verified_count
+        FROM meal_verification_log
+        WHERE order_id IN
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+          AND (deleted = 0 OR deleted IS NULL)
+        GROUP BY order_id, meal_type
     </select>
 
     <!-- 回退核销状态（删除核销日志时调用） -->

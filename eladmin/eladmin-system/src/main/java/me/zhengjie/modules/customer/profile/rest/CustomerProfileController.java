@@ -3,6 +3,8 @@ package me.zhengjie.modules.customer.profile.rest;
 import me.zhengjie.annotation.Log;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsRowDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
@@ -37,6 +39,17 @@ public class CustomerProfileController {
                                                                  @RequestParam(defaultValue = "10") Integer size) {
         Page<Object> page1 = new Page<>(page, size);
         return ResponseEntity.ok(profileService.queryAll(criteria, page1));
+    }
+
+    /**
+     * 分页查询客户用餐统计
+     */
+    @GetMapping("/mealStats")
+    @PreAuthorize("@el.check('customerProfile:list')")
+    public ResponseEntity<PageResult<CustomerMealStatsRowDto>> queryMealStats(CustomerMealStatsQueryCriteria criteria,
+                                                                              @RequestParam(defaultValue = "1") Integer page,
+                                                                              @RequestParam(defaultValue = "10") Integer size) {
+        return ResponseEntity.ok(profileService.queryMealStats(criteria, page, size));
     }
 
     /**
