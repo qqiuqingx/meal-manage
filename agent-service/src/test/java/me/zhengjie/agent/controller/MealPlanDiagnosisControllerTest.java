@@ -1,6 +1,10 @@
 package me.zhengjie.agent.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import me.zhengjie.agent.chat.MealPlanChatService;
+import me.zhengjie.agent.domain.chat.ChatStatus;
+import me.zhengjie.agent.domain.dto.AgentChatRequest;
+import me.zhengjie.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.agent.domain.dto.DiagnosisRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.domain.dto.LlmConnectivityResponse;
@@ -32,8 +36,9 @@ class MealPlanDiagnosisControllerTest {
             return response;
         };
         LlmConnectivityService connectivityService = request -> new LlmConnectivityResponse();
+        MealPlanChatService chatService = request -> new AgentChatResponse();
         MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new MealPlanDiagnosisController(diagnosisService, connectivityService))
+            .standaloneSetup(new MealPlanDiagnosisController(diagnosisService, connectivityService, chatService))
             .build();
 
         DiagnosisResponse response = new DiagnosisResponse();
@@ -67,8 +72,9 @@ class MealPlanDiagnosisControllerTest {
             response.setCostMs(12L);
             return response;
         };
+        MealPlanChatService chatService = request -> new AgentChatResponse();
         MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new MealPlanDiagnosisController(diagnosisService, connectivityService))
+            .standaloneSetup(new MealPlanDiagnosisController(diagnosisService, connectivityService, chatService))
             .build();
 
         mockMvc.perform(post("/api/agent/meal-plan/llm/test")
@@ -80,5 +86,36 @@ class MealPlanDiagnosisControllerTest {
             .andExpect(jsonPath("$.model").value("test-model"))
             .andExpect(jsonPath("$.content").value("pong"))
             .andExpect(jsonPath("$.costMs").value(12L));
+    }
+
+    @Test
+    void shouldReturnChatResponse() throws Exception {
+        MealPlanDiagnosisService diagnosisService = request -> new DiagnosisResponse();
+        LlmConnectivityService connectivityService = request -> new LlmConnectivityResponse();
+        MealPlanChatService chatService = request -> {
+            AgentChatResponse response = new AgentChatResponse();
+            response.setSessionId("session-1");
+            response.setStatus(ChatStatus.NEED_MORE_INFO);
+            response.setAssistantMessage("请补充餐次：早餐、午餐还是晚餐？");
+            response.setQuickReplies(java.util.List.of("早餐", "午餐", "晚餐"));
+            return response;
+        };
+        MockMvc mockMvc = MockMvcBuilders
+            .standaloneSetup(new MealPlanDiagnosisController(diagnosisService, connectivityService, chatService))
+            .build();
+
+        AgentChatRequest request = new AgentChatRequest();
+        request.setSessionId(null);
+        request.setMessage("查客户 C10001 今天");
+
+        mockMvc.perform(post("/api/agent/meal-plan/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-Request-Id", "request-1")
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessionId").value("session-1"))
+            .andExpect(jsonPath("$.status").value("NEED_MORE_INFO"))
+            .andExpect(jsonPath("$.assistantMessage").value("请补充餐次：早餐、午餐还是晚餐？"))
+            .andExpect(jsonPath("$.quickReplies[0]").value("早餐"));
     }
 }
