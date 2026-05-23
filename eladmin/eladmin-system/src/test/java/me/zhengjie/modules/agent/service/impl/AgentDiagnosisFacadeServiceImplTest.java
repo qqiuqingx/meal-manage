@@ -1,6 +1,8 @@
 package me.zhengjie.modules.agent.service.impl;
 
 import me.zhengjie.modules.agent.client.AgentServiceClient;
+import me.zhengjie.modules.agent.domain.dto.AgentChatRequest;
+import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
 import org.junit.jupiter.api.Test;
@@ -32,5 +34,36 @@ class AgentDiagnosisFacadeServiceImplTest {
         assertEquals("2026-05-17", response.getRecordDate());
         assertEquals("LUNCH", response.getMealType());
         assertEquals("AI 判断命中客户排除日期", response.getSummary());
+    }
+
+    @Test
+    void shouldDelegateChatToAgentServiceClient() {
+        AgentServiceClient client = new AgentServiceClient() {
+            @Override
+            public AgentDiagnosisResponse diagnoseMealPlan(AgentDiagnosisRequest request) {
+                return new AgentDiagnosisResponse();
+            }
+
+            @Override
+            public AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId) {
+                AgentChatResponse response = new AgentChatResponse();
+                response.setSessionId("session-1");
+                response.setStatus("NEED_MORE_INFO");
+                response.setAssistantMessage("请补充餐次：早餐、午餐还是晚餐？");
+                response.setRequestId(requestId);
+                return response;
+            }
+        };
+        AgentDiagnosisFacadeServiceImpl service = new AgentDiagnosisFacadeServiceImpl(client);
+
+        AgentChatRequest request = new AgentChatRequest();
+        request.setMessage("查客户 C10001 今天");
+
+        AgentChatResponse response = service.chatMealPlan(request, "request-1");
+
+        assertEquals("session-1", response.getSessionId());
+        assertEquals("NEED_MORE_INFO", response.getStatus());
+        assertEquals("request-1", response.getRequestId());
+        assertEquals("请补充餐次：早餐、午餐还是晚餐？", response.getAssistantMessage());
     }
 }

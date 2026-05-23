@@ -1,6 +1,9 @@
 package me.zhengjie.agent.controller;
 
 import jakarta.validation.Valid;
+import me.zhengjie.agent.chat.MealPlanChatService;
+import me.zhengjie.agent.domain.dto.AgentChatRequest;
+import me.zhengjie.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.agent.domain.dto.DiagnosisRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.domain.dto.LlmConnectivityRequest;
@@ -27,14 +30,17 @@ public class MealPlanDiagnosisController {
 
     private final MealPlanDiagnosisService diagnosisService;
     private final LlmConnectivityService connectivityService;
+    private final MealPlanChatService chatService;
 
     /**
      * 注入诊断服务，控制器只负责接收请求和返回结果。
      */
     public MealPlanDiagnosisController(MealPlanDiagnosisService diagnosisService,
-                                       LlmConnectivityService connectivityService) {
+                                       LlmConnectivityService connectivityService,
+                                       MealPlanChatService chatService) {
         this.diagnosisService = diagnosisService;
         this.connectivityService = connectivityService;
+        this.chatService = chatService;
     }
 
     /**
@@ -58,6 +64,30 @@ public class MealPlanDiagnosisController {
             log.error("诊断阶段 stage=请求失败 requestId={} customerId={} customerCode={} recordDate={} mealType={} costMs={} errorType={} errorMessage={}",
                 traceId, request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType(),
                 System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            throw ex;
+        } finally {
+            MDC.remove(REQUEST_ID_KEY);
+        }
+    }
+
+    /**
+     * 聊天式排餐诊断。
+     */
+    @PostMapping("/chat")
+    public AgentChatResponse chat(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
+                                  @Valid @RequestBody AgentChatRequest request) {
+        String traceId = resolveRequestId(requestId);
+        MDC.put(REQUEST_ID_KEY, traceId);
+        long start = System.currentTimeMillis();
+        try {
+            log.info("聊天诊断阶段 stage=接收请求 requestId={} sessionId={}", traceId, request.getSessionId());
+            AgentChatResponse response = chatService.chat(request);
+            log.info("聊天诊断阶段 stage=请求完成 requestId={} sessionId={} status={} costMs={}",
+                traceId, response.getSessionId(), response.getStatus(), System.currentTimeMillis() - start);
+            return response;
+        } catch (RuntimeException ex) {
+            log.error("聊天诊断阶段 stage=请求失败 requestId={} sessionId={} costMs={} errorType={} errorMessage={}",
+                traceId, request.getSessionId(), System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             throw ex;
         } finally {
             MDC.remove(REQUEST_ID_KEY);

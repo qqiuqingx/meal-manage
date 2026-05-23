@@ -144,6 +144,7 @@ agent:
   service:
     base-url: http://localhost:18081
     diagnose-path: /api/agent/meal-plan/diagnose
+    chat-path: /api/agent/meal-plan/chat
     connect-timeout: 3000
     read-timeout: 120000
   internal-token: ${AGENT_INTERNAL_TOKEN:agent-diagnosis-internal-token}

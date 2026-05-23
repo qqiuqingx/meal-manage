@@ -8,4 +8,12 @@ export function diagnoseMealPlan(data) {
   })
 }
 
-export default { diagnoseMealPlan }
+export function chatMealPlan(data) {
+  return axios({
+    url: '/api/agent/meal-plan/chat',
+    method: 'post',
+    data
+  })
+}
+
+export default { diagnoseMealPlan, chatMealPlan }
