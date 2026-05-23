@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
 import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
@@ -22,6 +23,8 @@ import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsRowDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
@@ -41,9 +44,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -74,6 +79,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private static final DateTimeFormatter DISPLAY_DATE_FORMATTER = DateTimeFormatter.ofPattern("M.d");
 
     @Override
     public PageResult<CustomerProfile> queryAll(CustomerProfileQueryCriteria criteria, Page<Object> page) {
@@ -87,6 +93,77 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         }
         PageResult<CustomerProfile> result = PageUtil.toPage(pageResult);
         return result;
+    }
+
+    @Override
+    public PageResult<CustomerMealStatsRowDto> queryMealStats(CustomerMealStatsQueryCriteria criteria, Integer page, Integer size) {
+        CustomerProfileQueryCriteria profileCriteria = new CustomerProfileQueryCriteria();
+        profileCriteria.setCustomerCode(criteria.getCustomerCode());
+        profileCriteria.setCustomerName(criteria.getCustomerName());
+        profileCriteria.setPhone(criteria.getPhone());
+
+        List<CustomerProfile> profiles = profileMapper.findAll(profileCriteria);
+        if (profiles == null || profiles.isEmpty()) {
+            return new PageResult<>(Collections.emptyList(), 0L);
+        }
+
+        profiles.sort(Comparator.comparing(CustomerProfile::getCustomerCode, Comparator.nullsLast(String::compareTo)));
+        List<Long> customerIds = profiles.stream().map(CustomerProfile::getId).collect(Collectors.toList());
+
+        Map<Long, List<CustomerProfileAddress>> addressMap = addressMapper.selectList(
+                new QueryWrapper<CustomerProfileAddress>().in("customer_id", customerIds).orderByAsc("address_type", "id")
+        ).stream().collect(Collectors.groupingBy(CustomerProfileAddress::getCustomerId));
+
+        List<CustomerOrder> activeOrders = customerOrderMapper.findActiveOrdersByCustomerIds(customerIds);
+        if (activeOrders == null || activeOrders.isEmpty()) {
+            return new PageResult<>(Collections.emptyList(), 0L);
+        }
+        Map<Long, List<CustomerOrder>> ordersByCustomerId = activeOrders.stream()
+                .collect(Collectors.groupingBy(CustomerOrder::getCustomerId));
+
+        List<Long> orderIds = activeOrders.stream().map(CustomerOrder::getId).collect(Collectors.toList());
+        Map<Long, Map<String, Integer>> verifiedCountMap = buildVerifiedCountMap(orderIds);
+
+        List<CustomerMealStatsRowDto> rows = new ArrayList<>();
+        for (CustomerProfile profile : profiles) {
+            List<CustomerOrder> customerOrders = ordersByCustomerId.get(profile.getId());
+            if (customerOrders == null || customerOrders.isEmpty()) {
+                continue;
+            }
+
+            List<CustomerOrder> breakfastOrders = customerOrders.stream()
+                    .filter(order -> safeInt(order.getBreakfastCount()) > 0)
+                    .collect(Collectors.toList());
+            List<CustomerOrder> lunchDinnerOrders = customerOrders.stream()
+                    .filter(order -> safeInt(order.getLunchDinnerCount()) > 0)
+                    .collect(Collectors.toList());
+
+            List<CustomerMealStatsRowDto> customerRows = new ArrayList<>();
+            if (!breakfastOrders.isEmpty()) {
+                customerRows.add(buildMealStatsRow(profile, addressMap.get(profile.getId()), breakfastOrders,
+                        verifiedCountMap, "BREAKFAST"));
+            }
+            if (!lunchDinnerOrders.isEmpty()) {
+                customerRows.add(buildMealStatsRow(profile, addressMap.get(profile.getId()), lunchDinnerOrders,
+                        verifiedCountMap, "LUNCH_DINNER"));
+            }
+
+            for (int i = 0; i < customerRows.size(); i++) {
+                CustomerMealStatsRowDto row = customerRows.get(i);
+                row.setFirstRowInGroup(i == 0);
+                row.setGroupRowSpan(i == 0 ? customerRows.size() : 0);
+            }
+            rows.addAll(customerRows);
+        }
+
+        int safePage = page == null || page < 1 ? 1 : page;
+        int safeSize = size == null || size < 1 ? 10 : size;
+        int fromIndex = Math.min((safePage - 1) * safeSize, rows.size());
+        int toIndex = Math.min(fromIndex + safeSize, rows.size());
+
+        List<CustomerMealStatsRowDto> pageRows = new ArrayList<>(rows.subList(fromIndex, toIndex));
+        resetRowGroupSpan(pageRows);
+        return new PageResult<>(pageRows, rows.size());
     }
 
     @Override
@@ -685,6 +762,225 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             return "周末";
         }
         return addressType;
+    }
+
+    private Map<Long, Map<String, Integer>> buildVerifiedCountMap(List<Long> orderIds) {
+        if (orderIds == null || orderIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<OrderMealVerifiedCountDto> verifiedCounts = customerOrderMapper.sumVerifiedCountByOrderIds(orderIds);
+        if (verifiedCounts == null || verifiedCounts.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<Long, Map<String, Integer>> result = new HashMap<>();
+        for (OrderMealVerifiedCountDto item : verifiedCounts) {
+            result.computeIfAbsent(item.getOrderId(), key -> new HashMap<>())
+                    .merge(item.getMealType(), safeInt(item.getVerifiedCount()), Integer::sum);
+        }
+        return result;
+    }
+
+    private void resetRowGroupSpan(List<CustomerMealStatsRowDto> rows) {
+        int index = 0;
+        while (index < rows.size()) {
+            CustomerMealStatsRowDto current = rows.get(index);
+            int next = index + 1;
+            while (next < rows.size() && java.util.Objects.equals(rows.get(next).getCustomerId(), current.getCustomerId())) {
+                next++;
+            }
+            int span = next - index;
+            for (int i = index; i < next; i++) {
+                CustomerMealStatsRowDto row = rows.get(i);
+                row.setFirstRowInGroup(i == index);
+                row.setGroupRowSpan(i == index ? span : 0);
+            }
+            index = next;
+        }
+    }
+
+    private CustomerMealStatsRowDto buildMealStatsRow(CustomerProfile profile,
+                                                      List<CustomerProfileAddress> addresses,
+                                                      List<CustomerOrder> orders,
+                                                      Map<Long, Map<String, Integer>> verifiedCountMap,
+                                                      String mealBucket) {
+        CustomerMealStatsRowDto row = new CustomerMealStatsRowDto();
+        row.setRowKey(profile.getId() + "-" + mealBucket);
+        row.setCustomerId(profile.getId());
+        row.setCustomerCode(profile.getCustomerCode());
+        row.setPhone(profile.getPhone());
+        row.setAddressText(buildAddressText(profile, addresses));
+        row.setRemarkInfo(defaultString(profile.getRemark()));
+        row.setSpecialRequirementText(buildSpecialRequirementText(profile));
+        row.setMealBucket(mealBucket);
+
+        if ("BREAKFAST".equals(mealBucket)) {
+            int totalCount = orders.stream().mapToInt(order -> safeInt(order.getBreakfastCount())).sum();
+            int verifiedCount = orders.stream()
+                    .mapToInt(order -> getVerifiedCount(verifiedCountMap, order.getId(), "BREAKFAST"))
+                    .sum();
+            row.setSoupLabel("");
+            row.setDeliveryInfo("早餐");
+            row.setMealCount(totalCount);
+            row.setRemainingMealCount(Math.max(totalCount - verifiedCount, 0));
+        } else {
+            int totalCount = orders.stream().mapToInt(order -> safeInt(order.getLunchDinnerCount())).sum();
+            int verifiedCount = orders.stream()
+                    .mapToInt(order -> getVerifiedCount(verifiedCountMap, order.getId(), "LUNCH")
+                            + getVerifiedCount(verifiedCountMap, order.getId(), "DINNER"))
+                    .sum();
+            row.setSoupLabel(orders.stream().anyMatch(order -> safeInt(order.getSoupCount()) > 0) ? "含汤" : "");
+            row.setDeliveryInfo(buildLunchDinnerDeliveryInfo(orders));
+            row.setMealCount(totalCount);
+            row.setRemainingMealCount(Math.max(totalCount - verifiedCount, 0));
+        }
+
+        row.setPurchaseDateText(formatDisplayDate(orders.stream()
+                .map(CustomerOrder::getDealTime)
+                .filter(java.util.Objects::nonNull)
+                .min(LocalDateTime::compareTo)
+                .orElse(null)));
+        row.setStartDateText(formatDisplayDate(orders.stream()
+                .map(CustomerOrder::getStartDate)
+                .filter(java.util.Objects::nonNull)
+                .min(LocalDate::compareTo)
+                .orElse(null)));
+        return row;
+    }
+
+    private String buildAddressText(CustomerProfile profile, List<CustomerProfileAddress> addresses) {
+        if (addresses == null || addresses.isEmpty()) {
+            return "-";
+        }
+        CustomerProfileAddress address = pickPreferredAddress(addresses);
+        String contactName = StringUtils.isNotBlank(address.getContactName()) ? address.getContactName() : profile.getCustomerName();
+        String contactPhone = StringUtils.isNotBlank(address.getContactPhone()) ? address.getContactPhone() : profile.getPhone();
+
+        List<String> lines = new ArrayList<>();
+        if (StringUtils.isNotBlank(contactName)) {
+            lines.add("联系人：" + contactName);
+        }
+        if (StringUtils.isNotBlank(contactPhone)) {
+            lines.add("电话：" + contactPhone);
+        }
+        if (StringUtils.isNotBlank(address.getAddressDetail())) {
+            lines.add("地址：" + address.getAddressDetail());
+        }
+        return lines.isEmpty() ? "-" : String.join("\n", lines);
+    }
+
+    private CustomerProfileAddress pickPreferredAddress(List<CustomerProfileAddress> addresses) {
+        return addresses.stream()
+                .sorted(Comparator.comparingInt(address -> addressTypePriority(address.getAddressType())))
+                .findFirst()
+                .orElse(addresses.get(0));
+    }
+
+    private int addressTypePriority(String addressType) {
+        if ("DEFAULT".equals(addressType)) {
+            return 0;
+        }
+        if ("WORKDAY".equals(addressType)) {
+            return 1;
+        }
+        if ("WEEKEND".equals(addressType)) {
+            return 2;
+        }
+        return 99;
+    }
+
+    private String buildSpecialRequirementText(CustomerProfile profile) {
+        List<String> parts = new ArrayList<>();
+        if (StringUtils.isNotBlank(profile.getSpecialRequirements())) {
+            parts.add(profile.getSpecialRequirements().trim());
+        }
+        if (StringUtils.isNotBlank(profile.getMedicalRequirements())) {
+            parts.add(profile.getMedicalRequirements().trim());
+        }
+        return parts.isEmpty() ? "-" : String.join("/", parts);
+    }
+
+    private String buildLunchDinnerDeliveryInfo(List<CustomerOrder> orders) {
+        List<String> values = orders.stream()
+                .map(this::buildOrderDeliveryInfo)
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .collect(Collectors.toList());
+        return values.isEmpty() ? "-" : String.join("；", values);
+    }
+
+    private String buildOrderDeliveryInfo(CustomerOrder order) {
+        String schedulePart = mapScheduleModeLabel(order.getScheduleMode());
+        String mealTypePart = mapLunchDinnerMealTypeLabel(order.getMealType());
+        if (StringUtils.isBlank(schedulePart)) {
+            return mealTypePart;
+        }
+        if (StringUtils.isBlank(mealTypePart)) {
+            return schedulePart;
+        }
+        return schedulePart + "/" + mealTypePart;
+    }
+
+    private String mapScheduleModeLabel(String scheduleMode) {
+        if (StringUtils.isBlank(scheduleMode)) {
+            return "";
+        }
+        switch (scheduleMode) {
+            case "DAILY":
+                return "每日";
+            case "WEEKDAY":
+                return "工作日";
+            case "WEEKEND":
+                return "周末";
+            case "SCHEDULE":
+                return "指定日期";
+            default:
+                return scheduleMode;
+        }
+    }
+
+    private String mapLunchDinnerMealTypeLabel(String mealType) {
+        if (StringUtils.isBlank(mealType)) {
+            return "";
+        }
+        switch (mealType) {
+            case "ALL":
+            case "LUNCH_DINNER":
+                return "午餐/晚餐";
+            case "LUNCH":
+                return "午餐";
+            case "DINNER":
+                return "晚餐";
+            default:
+                return mealType;
+        }
+    }
+
+    private int getVerifiedCount(Map<Long, Map<String, Integer>> verifiedCountMap, Long orderId, String mealType) {
+        if (verifiedCountMap == null) {
+            return 0;
+        }
+        Map<String, Integer> orderMap = verifiedCountMap.get(orderId);
+        if (orderMap == null) {
+            return 0;
+        }
+        return safeInt(orderMap.get(mealType));
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private String defaultString(String value) {
+        return StringUtils.isBlank(value) ? "-" : value.trim();
+    }
+
+    private String formatDisplayDate(LocalDateTime value) {
+        return value == null ? "" : value.toLocalDate().format(DISPLAY_DATE_FORMATTER);
+    }
+
+    private String formatDisplayDate(LocalDate value) {
+        return value == null ? "" : value.format(DISPLAY_DATE_FORMATTER);
     }
 
     /**
