@@ -17,6 +17,7 @@ package me.zhengjie.modules.meal.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
@@ -105,6 +106,13 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
      */
     List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countTodayUnverifiedScheduledByOrderIds(@Param("orderIds") List<Long> orderIds,
                                                                                                              @Param("recordDate") LocalDate recordDate);
+
+    /**
+     * 查询客户在日期范围内已生成的排餐日期和餐次。
+     */
+    List<CustomerScheduledMealDto> selectScheduledMealsByCustomerIdsAndDateRange(@Param("customerIds") List<Long> customerIds,
+                                                                                 @Param("startDate") LocalDate startDate,
+                                                                                 @Param("endDate") LocalDate endDate);
 
     /**
      * 根据排餐计划ID查询所有未核销的客户排餐记录

@@ -155,7 +155,9 @@
               size="mini"
               :type="mealTagType(mealType)"
               effect="plain"
+              :class="{ 'readonly-calendar__tag--scheduled': isMealScheduled(day, mealType) }"
             >
+              <i v-if="isMealScheduled(day, mealType)" class="el-icon-check" />
               {{ mealTypeName(mealType) }}
             </el-tag>
           </div>
@@ -216,7 +218,10 @@ export default {
         return []
       }
       const scheduleMap = this.selectedScheduleDays.reduce((map, item) => {
-        map[item.date] = Array.isArray(item.mealTypes) ? item.mealTypes : []
+        map[item.date] = {
+          mealTypes: Array.isArray(item.mealTypes) ? item.mealTypes : [],
+          scheduledMealTypes: Array.isArray(item.scheduledMealTypes) ? item.scheduledMealTypes : []
+        }
         return map
       }, {})
       const firstDay = new Date(month.year, month.month - 1, 1)
@@ -229,19 +234,26 @@ export default {
         for (let i = prevMonthDays - 1; i >= 0; i--) {
           const day = prevDaysInMonth - i
           const date = this.formatDate(new Date(month.year, month.month - 2, day))
-          cells.push({ date, day, currentMonth: false, mealTypes: [] })
+          cells.push({ date, day, currentMonth: false, mealTypes: [], scheduledMealTypes: [] })
         }
       }
 
       for (let day = 1; day <= daysInMonth; day++) {
         const date = this.formatDate(new Date(month.year, month.month - 1, day))
-        cells.push({ date, day, currentMonth: true, mealTypes: scheduleMap[date] || [] })
+        const scheduleInfo = scheduleMap[date] || { mealTypes: [], scheduledMealTypes: [] }
+        cells.push({
+          date,
+          day,
+          currentMonth: true,
+          mealTypes: scheduleInfo.mealTypes,
+          scheduledMealTypes: scheduleInfo.scheduledMealTypes
+        })
       }
 
       const nextCells = 42 - cells.length
       for (let day = 1; day <= nextCells; day++) {
         const date = this.formatDate(new Date(month.year, month.month, day))
-        cells.push({ date, day, currentMonth: false, mealTypes: [] })
+        cells.push({ date, day, currentMonth: false, mealTypes: [], scheduledMealTypes: [] })
       }
       return cells
     }
@@ -345,6 +357,9 @@ export default {
         DINNER: ''
       }
       return map[mealType] || 'info'
+    },
+    isMealScheduled(day, mealType) {
+      return Array.isArray(day.scheduledMealTypes) && day.scheduledMealTypes.includes(mealType)
     }
   }
 }
@@ -419,6 +434,14 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.readonly-calendar__tag--scheduled {
+  font-weight: 600;
+}
+
+.readonly-calendar__tag--scheduled .el-icon-check {
+  margin-right: 2px;
 }
 
 .schedule-calendar-empty {

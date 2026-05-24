@@ -21,6 +21,7 @@ import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
 import me.zhengjie.modules.meal.domain.Dish;
 import me.zhengjie.modules.meal.mapper.DishMapper;
+import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
 import me.zhengjie.modules.meal.service.DishService;
 import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
@@ -81,6 +82,9 @@ class CustomerProfileServiceImplTest {
 
     @Mock
     private MealVerificationLogMapper verificationLogMapper;
+
+    @Mock
+    private MealPlanCustomerMapper mealPlanCustomerMapper;
 
     @Mock
     private NumberPoolService numberPoolService;
@@ -510,6 +514,52 @@ class CustomerProfileServiceImplTest {
         assertEquals(Arrays.asList("BREAKFAST", "LUNCH", "DINNER"), breakfastRow.getCustomerScheduleDays().get(0).getMealTypes());
         assertEquals(Arrays.asList("BREAKFAST", "LUNCH"), breakfastRow.getCustomerScheduleDays().get(1).getMealTypes());
         assertEquals(breakfastRow.getCustomerScheduleDays(), lunchDinnerRow.getCustomerScheduleDays());
+    }
+
+    @Test
+    void testQueryMealStats_WithScheduledMealTypesMarkedInCustomerScheduleDays() {
+        CustomerProfile customer = new CustomerProfile();
+        customer.setId(1L);
+        customer.setCustomerCode("A1001");
+        customer.setCustomerName("张三");
+        customer.setPhone("13800138000");
+
+        CustomerOrder order = new CustomerOrder();
+        order.setId(10L);
+        order.setCustomerId(1L);
+        order.setBreakfastCount(5);
+        order.setLunchDinnerCount(5);
+        order.setRemainingCount(10);
+        order.setStartDate(LocalDate.of(2026, 4, 1));
+        order.setEndDate(LocalDate.of(2026, 4, 2));
+        order.setStartMealType("BREAKFAST");
+        order.setMealType("ALL");
+        order.setScheduleMode("DAILY");
+
+        me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto scheduled =
+                new me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto();
+        scheduled.setCustomerId(1L);
+        scheduled.setRecordDate(LocalDate.of(2026, 4, 1));
+        scheduled.setMealType("LUNCH");
+
+        CustomerMealStatsQueryCriteria criteria = new CustomerMealStatsQueryCriteria();
+        criteria.setStatsMonth("2026-04");
+
+        when(profileMapper.findAll(any())).thenReturn(Collections.singletonList(customer));
+        when(addressMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(address1));
+        when(customerOrderMapper.findActiveOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1)))
+            .thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(10L)))
+            .thenReturn(Collections.emptyList());
+        when(mealPlanCustomerMapper.selectScheduledMealsByCustomerIdsAndDateRange(
+                Collections.singletonList(1L), LocalDate.of(2026, 4, 1), LocalDate.of(2026, 4, 30)))
+            .thenReturn(Collections.singletonList(scheduled));
+
+        PageResult<CustomerMealStatsRowDto> result = customerProfileService.queryMealStats(criteria, 1, 20);
+
+        CustomerMealStatsRowDto firstRow = result.getContent().get(0);
+        assertEquals(Collections.singletonList("LUNCH"), firstRow.getCustomerScheduleDays().get(0).getScheduledMealTypes());
+        assertEquals(Collections.emptyList(), firstRow.getCustomerScheduleDays().get(1).getScheduledMealTypes());
     }
 
     // ========== scheduleMode 填充测试 ==========
