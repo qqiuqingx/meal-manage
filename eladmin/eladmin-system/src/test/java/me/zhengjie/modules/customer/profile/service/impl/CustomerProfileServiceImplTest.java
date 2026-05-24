@@ -442,6 +442,10 @@ class CustomerProfileServiceImplTest {
         order.setBreakfastCount(5);
         order.setLunchDinnerCount(0);
         order.setRemainingCount(3);
+        order.setStartDate(LocalDate.of(2026, 4, 1));
+        order.setStartMealType("BREAKFAST");
+        order.setMealType("ALL");
+        order.setScheduleMode("DAILY");
 
         CustomerMealStatsQueryCriteria criteria = new CustomerMealStatsQueryCriteria();
         criteria.setStatsMonth("2026-04");
@@ -458,7 +462,54 @@ class CustomerProfileServiceImplTest {
         assertEquals(1L, result.getTotalElements());
         assertEquals(1, result.getContent().size());
         assertEquals(Integer.valueOf(5), result.getContent().get(0).getRemainingMealCount());
+        assertEquals(30, result.getContent().get(0).getScheduleDays().size());
         verify(customerOrderMapper).findActiveOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1));
+    }
+
+    @Test
+    void testQueryMealStats_WithMergedCustomerScheduleDaysOnGroupedRows() {
+        CustomerProfile customer = new CustomerProfile();
+        customer.setId(1L);
+        customer.setCustomerCode("A1001");
+        customer.setCustomerName("张三");
+        customer.setPhone("13800138000");
+
+        ExcludedDateDto excluded = new ExcludedDateDto();
+        excluded.setDate("2026-04-02");
+        excluded.setMealTypes(Collections.singletonList("DINNER"));
+        customer.setExcludedDates(Collections.singletonList(excluded));
+
+        CustomerOrder order = new CustomerOrder();
+        order.setId(10L);
+        order.setCustomerId(1L);
+        order.setBreakfastCount(5);
+        order.setLunchDinnerCount(5);
+        order.setRemainingCount(10);
+        order.setStartDate(LocalDate.of(2026, 4, 1));
+        order.setEndDate(LocalDate.of(2026, 4, 2));
+        order.setStartMealType("BREAKFAST");
+        order.setMealType("ALL");
+        order.setScheduleMode("DAILY");
+
+        CustomerMealStatsQueryCriteria criteria = new CustomerMealStatsQueryCriteria();
+        criteria.setStatsMonth("2026-04");
+
+        when(profileMapper.findAll(any())).thenReturn(Collections.singletonList(customer));
+        when(addressMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(address1));
+        when(customerOrderMapper.findActiveOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1)))
+            .thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(10L)))
+            .thenReturn(Collections.emptyList());
+
+        PageResult<CustomerMealStatsRowDto> result = customerProfileService.queryMealStats(criteria, 1, 20);
+
+        assertEquals(2, result.getContent().size());
+        CustomerMealStatsRowDto breakfastRow = result.getContent().get(0);
+        CustomerMealStatsRowDto lunchDinnerRow = result.getContent().get(1);
+        assertEquals(2, breakfastRow.getCustomerScheduleDays().size());
+        assertEquals(Arrays.asList("BREAKFAST", "LUNCH", "DINNER"), breakfastRow.getCustomerScheduleDays().get(0).getMealTypes());
+        assertEquals(Arrays.asList("BREAKFAST", "LUNCH"), breakfastRow.getCustomerScheduleDays().get(1).getMealTypes());
+        assertEquals(breakfastRow.getCustomerScheduleDays(), lunchDinnerRow.getCustomerScheduleDays());
     }
 
     // ========== scheduleMode 填充测试 ==========
