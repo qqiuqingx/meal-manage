@@ -1056,6 +1056,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         CustomerMealStatsRowDto row = new CustomerMealStatsRowDto();
         row.setRowKey(profile.getId() + "-" + mealBucket);
         row.setCustomerId(profile.getId());
+        row.setOrderId(orders.stream()
+                .map(CustomerOrder::getId)
+                .filter(Objects::nonNull)
+                .min(Long::compareTo)
+                .orElse(null));
         row.setCustomerCode(profile.getCustomerCode());
         row.setPhone(profile.getPhone());
         row.setAddressText(buildAddressText(profile, addresses));
