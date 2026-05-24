@@ -15,6 +15,11 @@ public class CustomerMealStatsRowDto {
 
     private Long customerId;
 
+    /**
+     * 当前餐池默认用于人工新增排餐的订单ID。
+     */
+    private Long orderId;
+
     private String customerCode;
 
     private String phone;

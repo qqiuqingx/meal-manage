@@ -148,29 +148,34 @@
           }"
         >
           <div class="readonly-calendar__date">{{ day.day }}</div>
-          <div v-if="day.mealTypes.length > 0" class="readonly-calendar__tags">
-            <el-tag
-              v-for="mealType in day.mealTypes"
+          <div class="readonly-calendar__tags">
+            <button
+              v-for="mealType in mealTypes"
               :key="mealType"
-              size="mini"
-              :type="mealTagType(mealType)"
-              effect="plain"
-              :class="{ 'readonly-calendar__tag--scheduled': isMealScheduled(day, mealType) }"
+              type="button"
+              class="readonly-calendar__meal-button"
+              :class="mealButtonClass(day, mealType)"
+              :disabled="!day.currentMonth || isMealScheduled(day, mealType)"
+              @click="toggleMeal(day, mealType)"
             >
               <span class="readonly-calendar__tag-label">{{ mealTypeName(mealType) }}</span>
-            </el-tag>
+            </button>
           </div>
         </div>
       </div>
       <div v-if="selectedScheduleDays.length === 0" class="schedule-calendar-empty">
         当前月份没有需要排餐的日期
       </div>
+      <span slot="footer" class="dialog-footer">
+        <el-button size="small" @click="calendarDialogVisible = false">取消</el-button>
+        <el-button type="primary" size="small" :loading="calendarSaving" @click="saveCalendarAdjustments">保存</el-button>
+      </span>
     </el-dialog>
   </div>
 </template>
 
 <script>
-import { getMealStats } from '@/api/customer/profile'
+import { getMealStats, saveMealScheduleAdjustments } from '@/api/customer/profile'
 
 const defaultQuery = () => ({
   customerCode: '',
@@ -199,8 +204,12 @@ export default {
         total: 0
       },
       calendarDialogVisible: false,
+      calendarSaving: false,
       selectedRow: null,
       selectedScheduleDays: [],
+      calendarExcludedDates: [],
+      calendarAdditions: [],
+      mealTypes: ['BREAKFAST', 'LUNCH', 'DINNER'],
       weekdays: ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
     }
   },
@@ -219,6 +228,9 @@ export default {
       const scheduleMap = this.selectedScheduleDays.reduce((map, item) => {
         map[item.date] = {
           mealTypes: Array.isArray(item.mealTypes) ? item.mealTypes : [],
+          baseMealTypes: Array.isArray(item.baseMealTypes) ? item.baseMealTypes : [],
+          excludedMealTypes: Array.isArray(item.excludedMealTypes) ? item.excludedMealTypes : [],
+          addedMealTypes: Array.isArray(item.addedMealTypes) ? item.addedMealTypes : [],
           scheduledMealTypes: Array.isArray(item.scheduledMealTypes) ? item.scheduledMealTypes : []
         }
         return map
@@ -233,18 +245,27 @@ export default {
         for (let i = prevMonthDays - 1; i >= 0; i--) {
           const day = prevDaysInMonth - i
           const date = this.formatDate(new Date(month.year, month.month - 2, day))
-          cells.push({ date, day, currentMonth: false, mealTypes: [], scheduledMealTypes: [] })
+          cells.push({ date, day, currentMonth: false, mealTypes: [], baseMealTypes: [], excludedMealTypes: [], addedMealTypes: [], scheduledMealTypes: [] })
         }
       }
 
       for (let day = 1; day <= daysInMonth; day++) {
         const date = this.formatDate(new Date(month.year, month.month - 1, day))
-        const scheduleInfo = scheduleMap[date] || { mealTypes: [], scheduledMealTypes: [] }
+        const scheduleInfo = scheduleMap[date] || {
+          mealTypes: [],
+          baseMealTypes: [],
+          excludedMealTypes: [],
+          addedMealTypes: [],
+          scheduledMealTypes: []
+        }
         cells.push({
           date,
           day,
           currentMonth: true,
           mealTypes: scheduleInfo.mealTypes,
+          baseMealTypes: scheduleInfo.baseMealTypes,
+          excludedMealTypes: scheduleInfo.excludedMealTypes,
+          addedMealTypes: scheduleInfo.addedMealTypes,
           scheduledMealTypes: scheduleInfo.scheduledMealTypes
         })
       }
@@ -252,7 +273,7 @@ export default {
       const nextCells = 42 - cells.length
       for (let day = 1; day <= nextCells; day++) {
         const date = this.formatDate(new Date(month.year, month.month, day))
-        cells.push({ date, day, currentMonth: false, mealTypes: [], scheduledMealTypes: [] })
+        cells.push({ date, day, currentMonth: false, mealTypes: [], baseMealTypes: [], excludedMealTypes: [], addedMealTypes: [], scheduledMealTypes: [] })
       }
       return cells
     }
@@ -326,6 +347,8 @@ export default {
     openScheduleCalendar(row) {
       this.selectedRow = row
       this.selectedScheduleDays = Array.isArray(row.customerScheduleDays) ? row.customerScheduleDays : []
+      this.calendarExcludedDates = this.extractExcludedDates(this.selectedScheduleDays)
+      this.calendarAdditions = this.extractAdditions(this.selectedScheduleDays)
       this.calendarDialogVisible = true
     },
     parseStatsMonth(value) {
@@ -349,16 +372,115 @@ export default {
       }
       return map[mealType] || mealType
     },
-    mealTagType(mealType) {
-      const map = {
-        BREAKFAST: 'success',
-        LUNCH: 'warning',
-        DINNER: ''
-      }
-      return map[mealType] || 'info'
-    },
     isMealScheduled(day, mealType) {
       return Array.isArray(day.scheduledMealTypes) && day.scheduledMealTypes.includes(mealType)
+    },
+    mealButtonClass(day, mealType) {
+      return {
+        'readonly-calendar__meal-button--base': this.isBaseMeal(day, mealType),
+        'readonly-calendar__meal-button--excluded': this.isMealExcluded(day, mealType),
+        'readonly-calendar__meal-button--added': this.isMealAdded(day, mealType),
+        'readonly-calendar__meal-button--scheduled': this.isMealScheduled(day, mealType)
+      }
+    },
+    isBaseMeal(day, mealType) {
+      return Array.isArray(day.baseMealTypes) && day.baseMealTypes.includes(mealType)
+    },
+    isMealExcluded(day, mealType) {
+      return this.hasExcludedMeal(day.date, mealType)
+    },
+    isMealAdded(day, mealType) {
+      return this.calendarAdditions.some(item => item.date === day.date && item.mealType === mealType)
+    },
+    hasExcludedMeal(date, mealType) {
+      return this.calendarExcludedDates.some(item => item.date === date && Array.isArray(item.mealTypes) && item.mealTypes.includes(mealType))
+    },
+    toggleMeal(day, mealType) {
+      if (!day.currentMonth || this.isMealScheduled(day, mealType)) {
+        return
+      }
+      if (this.hasExcludedMeal(day.date, mealType)) {
+        this.removeExcludedMeal(day.date, mealType)
+        return
+      }
+      if (this.isMealAdded(day, mealType)) {
+        this.calendarAdditions = this.calendarAdditions.filter(item => !(item.date === day.date && item.mealType === mealType))
+        return
+      }
+      if (this.isBaseMeal(day, mealType)) {
+        this.addExcludedMeal(day.date, mealType)
+        return
+      }
+      const orderId = this.resolveAdditionOrderId(mealType)
+      if (!orderId) {
+        this.$message.warning('没有可用于该餐次的进行中订单')
+        return
+      }
+      this.calendarAdditions.push({ orderId, date: day.date, mealType, remark: '' })
+    },
+    addExcludedMeal(date, mealType) {
+      let item = this.calendarExcludedDates.find(value => value.date === date)
+      if (!item) {
+        item = { date, mealTypes: [] }
+        this.calendarExcludedDates.push(item)
+      }
+      if (!item.mealTypes.includes(mealType)) {
+        item.mealTypes.push(mealType)
+      }
+    },
+    removeExcludedMeal(date, mealType) {
+      const item = this.calendarExcludedDates.find(value => value.date === date)
+      if (!item) {
+        return
+      }
+      item.mealTypes = item.mealTypes.filter(value => value !== mealType)
+      if (item.mealTypes.length === 0) {
+        this.calendarExcludedDates = this.calendarExcludedDates.filter(value => value.date !== date)
+      }
+    },
+    resolveAdditionOrderId(mealType) {
+      if (!this.selectedRow) {
+        return null
+      }
+      const row = this.rows.find(item => item.customerId === this.selectedRow.customerId && (
+        (mealType === 'BREAKFAST' && item.mealBucket === 'BREAKFAST') ||
+        (mealType !== 'BREAKFAST' && item.mealBucket === 'LUNCH_DINNER')
+      ))
+      return row && row.orderId
+    },
+    extractExcludedDates(days) {
+      return days
+        .filter(day => Array.isArray(day.excludedMealTypes) && day.excludedMealTypes.length > 0)
+        .map(day => ({ date: day.date, mealTypes: [...day.excludedMealTypes] }))
+    },
+    extractAdditions(days) {
+      const result = []
+      days.forEach(day => {
+        if (!Array.isArray(day.addedMealTypes)) {
+          return
+        }
+        day.addedMealTypes.forEach(mealType => {
+          result.push({ orderId: this.resolveAdditionOrderId(mealType), date: day.date, mealType, remark: '' })
+        })
+      })
+      return result.filter(item => item.orderId)
+    },
+    saveCalendarAdjustments() {
+      if (!this.selectedRow) {
+        return
+      }
+      this.calendarSaving = true
+      saveMealScheduleAdjustments({
+        customerId: this.selectedRow.customerId,
+        excludedDates: this.calendarExcludedDates,
+        additions: this.calendarAdditions
+      }).then(() => {
+        this.$message.success('排餐日历已保存')
+        this.calendarDialogVisible = false
+        this.loadData()
+      }).finally(() => {
+        this.calendarSaving = false
+      })
     }
   }
 }
@@ -435,15 +557,51 @@ export default {
   gap: 4px;
 }
 
-.readonly-calendar__tag--scheduled {
-  position: relative;
-  min-width: 32px;
+.readonly-calendar__meal-button {
+  width: 28px;
+  height: 24px;
+  border: 1px solid #dcdfe6;
+  background: #fff;
+  color: #606266;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 20px;
+  padding: 0;
   text-align: center;
+}
+
+.readonly-calendar__meal-button:disabled {
+  cursor: not-allowed;
+}
+
+.readonly-calendar__meal-button--base {
+  border-color: #409eff;
+  color: #409eff;
+}
+
+.readonly-calendar__meal-button--excluded {
+  border-color: #c0c4cc;
+  background: #f5f7fa;
+  color: #909399;
+  text-decoration: line-through;
+}
+
+.readonly-calendar__meal-button--added {
+  border-color: #67c23a;
+  background: #f0f9eb;
+  color: #529b2e;
+}
+
+.readonly-calendar__meal-button--scheduled {
+  position: relative;
+  border-color: #67c23a;
+  background: #ecf5ff;
+  color: #1f9d55;
   font-weight: 700;
   overflow: hidden;
 }
 
-.readonly-calendar__tag--scheduled::before {
+.readonly-calendar__meal-button--scheduled::before {
   content: "✓";
   position: absolute;
   top: 50%;
