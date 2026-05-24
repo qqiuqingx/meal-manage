@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper">
+
+    <select id="selectActiveByCustomerIdsAndDateRange" resultType="me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition">
+        select id, customer_id, order_id, record_date, meal_type, remark, deleted, create_by, update_by, create_time, update_time
+        from customer_meal_schedule_addition
+        where deleted = 0
+          and record_date &gt;= #{startDate}
+          and record_date &lt;= #{endDate}
+          and customer_id in
+        <foreach collection="customerIds" item="customerId" open="(" separator="," close=")">
+            #{customerId}
+        </foreach>
+        order by customer_id asc, record_date asc, meal_type asc
+    </select>
+
+    <select id="selectActiveByDateMeal" resultType="me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition">
+        select id, customer_id, order_id, record_date, meal_type, remark, deleted, create_by, update_by, create_time, update_time
+        from customer_meal_schedule_addition
+        where deleted = 0
+          and record_date = #{recordDate}
+          and meal_type = #{mealType}
+        order by id asc
+    </select>
+
+    <select id="selectActiveByOrderDateMeal" resultType="me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition">
+        select id, customer_id, order_id, record_date, meal_type, remark, deleted, create_by, update_by, create_time, update_time
+        from customer_meal_schedule_addition
+        where deleted = 0
+          and order_id = #{orderId}
+          and record_date = #{recordDate}
+          and meal_type = #{mealType}
+        limit 1
+    </select>
+
+    <update id="softDeleteMissingByCustomerId">
+        update customer_meal_schedule_addition
+        set deleted = 1, update_time = now()
+        where deleted = 0
+          and customer_id = #{customerId}
+        <if test="keepIds != null and keepIds.size() &gt; 0">
+          and id not in
+          <foreach collection="keepIds" item="id" open="(" separator="," close=")">
+              #{id}
+          </foreach>
+        </if>
+    </update>
+
+</mapper>
