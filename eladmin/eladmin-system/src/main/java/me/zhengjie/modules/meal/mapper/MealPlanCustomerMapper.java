@@ -24,6 +24,7 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -95,6 +96,15 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
      * @return 订单ID -> 已排数量 的映射
      */
     List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countScheduledByOrderIds(@Param("orderIds") List<Long> orderIds, @Param("mealType") String mealType);
+
+    /**
+     * 批量查询各订单今天已排餐但未核销的数量。
+     * @param orderIds 订单ID列表
+     * @param recordDate 统计日期
+     * @return 订单ID -> 今日未核销排餐数量 的映射
+     */
+    List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countTodayUnverifiedScheduledByOrderIds(@Param("orderIds") List<Long> orderIds,
+                                                                                                             @Param("recordDate") LocalDate recordDate);
 
     /**
      * 根据排餐计划ID查询所有未核销的客户排餐记录

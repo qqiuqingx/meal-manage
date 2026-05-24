@@ -82,7 +82,26 @@
       <el-table-column label="午晚" prop="lunchDinnerCount" width="60" align="center" />
       <el-table-column label="合计" prop="totalCount" width="60" align="center" />
       <el-table-column label="核销" prop="verifiedCount" width="60" align="center" />
-      <el-table-column label="剩余" prop="remainingCount" width="60" align="center" />
+      <el-table-column prop="remainingCount" width="70" align="center">
+        <template slot="header">
+          <span class="column-help">
+            剩余
+            <el-tooltip content="当前订单剩余餐数，已扣减所有已核销餐数。" placement="top">
+              <i class="el-icon-question" />
+            </el-tooltip>
+          </span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="estimatedRemainingCount" width="120" align="center">
+        <template slot="header">
+          <span class="column-help">
+            预计剩余餐数
+            <el-tooltip content="预计剩余餐数 = 剩余餐数 - 今天已排餐但未核销餐数；今天已核销的餐不重复扣减。" placement="top">
+              <i class="el-icon-question" />
+            </el-tooltip>
+          </span>
+        </template>
+      </el-table-column>
       <el-table-column label="余额" prop="mealBalance" width="90" align="right">
         <template slot-scope="scope">
           {{ formatMoney(scope.row.mealBalance) }}
@@ -518,5 +537,15 @@ export default {
 }
 .head-container .filter-item {
   margin-right: 10px;
+}
+.column-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.column-help .el-icon-question {
+  color: #909399;
+  cursor: help;
+  font-size: 13px;
 }
 </style>
