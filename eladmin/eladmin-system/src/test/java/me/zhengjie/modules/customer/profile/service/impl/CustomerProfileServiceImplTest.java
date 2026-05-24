@@ -12,11 +12,14 @@ import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentRequest;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentResult;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsRowDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
+import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
 import me.zhengjie.modules.meal.domain.Dish;
@@ -24,6 +27,7 @@ import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
 import me.zhengjie.modules.meal.service.DishService;
+import me.zhengjie.modules.meal.service.MealPlanService;
 import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
 import me.zhengjie.utils.PageResult;
 import org.junit.jupiter.api.BeforeEach;
@@ -85,6 +89,12 @@ class CustomerProfileServiceImplTest {
 
     @Mock
     private MealPlanCustomerMapper mealPlanCustomerMapper;
+
+    @Mock
+    private CustomerMealScheduleAdditionMapper customerMealScheduleAdditionMapper;
+
+    @Mock
+    private MealPlanService mealPlanService;
 
     @Mock
     private NumberPoolService numberPoolService;
@@ -215,6 +225,30 @@ class CustomerProfileServiceImplTest {
 
         assertNotNull(profile.getDefaultAddress());
         assertEquals("", profile.getDefaultAddress());
+    }
+
+    @Test
+    void shouldSaveMealScheduleAdjustmentsAndDeleteNewExcludedGeneratedMeals() {
+        ExcludedDateDto excludedDate = new ExcludedDateDto();
+        excludedDate.setDate("2026-05-24");
+        excludedDate.setMealTypes(Arrays.asList("LUNCH"));
+        CustomerMealScheduleAdjustmentRequest request = new CustomerMealScheduleAdjustmentRequest();
+        request.setCustomerId(1L);
+        request.setExcludedDates(Arrays.asList(excludedDate));
+        request.setAdditions(Collections.emptyList());
+
+        when(profileMapper.selectById(1L)).thenReturn(profile);
+        when(mealPlanService.deleteUnverifiedCustomerMealForCalendarAdjustment(1L, "2026-05-24", "LUNCH"))
+                .thenReturn(1);
+
+        CustomerMealScheduleAdjustmentResult result = customerProfileService.saveMealScheduleAdjustments(request);
+
+        assertEquals(1L, result.getCustomerId());
+        assertEquals(1, result.getExcludedMealCount());
+        assertEquals(0, result.getAdditionMealCount());
+        assertEquals(1, result.getDeletedUnverifiedPlanCount());
+        verify(profileMapper).updateById(profile);
+        verify(customerMealScheduleAdditionMapper).softDeleteMissingByCustomerId(1L, Collections.emptyList());
     }
 
     // ========== excludedDates 校验测试 ==========

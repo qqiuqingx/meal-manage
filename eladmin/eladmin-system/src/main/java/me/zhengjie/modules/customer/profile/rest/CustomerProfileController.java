@@ -3,6 +3,8 @@ package me.zhengjie.modules.customer.profile.rest;
 import me.zhengjie.annotation.Log;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentRequest;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentResult;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsRowDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
@@ -50,6 +52,17 @@ public class CustomerProfileController {
                                                                               @RequestParam(defaultValue = "1") Integer page,
                                                                               @RequestParam(defaultValue = "10") Integer size) {
         return ResponseEntity.ok(profileService.queryMealStats(criteria, page, size));
+    }
+
+    /**
+     * 保存客户排餐日历调整
+     */
+    @PutMapping("/mealStats/scheduleAdjustments")
+    @Log("保存客户排餐日历调整")
+    @PreAuthorize("@el.check('customerProfile:edit')")
+    public ResponseEntity<CustomerMealScheduleAdjustmentResult> saveMealScheduleAdjustments(
+            @Validated @RequestBody CustomerMealScheduleAdjustmentRequest request) {
+        return ResponseEntity.ok(profileService.saveMealScheduleAdjustments(request));
     }
 
     /**
