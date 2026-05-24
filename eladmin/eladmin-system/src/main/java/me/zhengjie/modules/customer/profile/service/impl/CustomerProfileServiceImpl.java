@@ -145,6 +145,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 statsMonthStart,
                 statsMonthStart.plusMonths(1).minusDays(1)
         );
+        Map<Long, Map<String, List<CustomerMealScheduleAddition>>> additionMap = buildManualAdditionMap(
+                customerIds,
+                statsMonthStart,
+                statsMonthStart.plusMonths(1).minusDays(1)
+        );
 
         List<CustomerMealStatsRowDto> rows = new ArrayList<>();
         for (CustomerProfile profile : profiles) {
@@ -170,6 +175,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                         verifiedCountMap, "LUNCH_DINNER", criteria.getStatsMonth()));
             }
             List<CustomerMealStatsScheduleUtil.ScheduleDay> customerScheduleDays = mergeScheduleDays(customerRows);
+            applyBaseAndExcludedMealTypes(customerScheduleDays, customerRows, profile.getExcludedDates());
+            applyManualAdditions(customerScheduleDays, additionMap.get(profile.getId()));
             applyScheduledMealTypes(customerScheduleDays, scheduledMealMap.get(profile.getId()));
             for (CustomerMealStatsRowDto row : customerRows) {
                 row.setCustomerScheduleDays(customerScheduleDays);
@@ -275,6 +282,65 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         }
     }
 
+    /**
+     * 标记基础应排餐次和被人工排除的餐次。
+     */
+    private void applyBaseAndExcludedMealTypes(List<CustomerMealStatsScheduleUtil.ScheduleDay> customerScheduleDays,
+                                               List<CustomerMealStatsRowDto> rows,
+                                               List<ExcludedDateDto> excludedDates) {
+        Map<String, CustomerMealStatsScheduleUtil.ScheduleDay> dayMap = customerScheduleDays.stream()
+                .collect(Collectors.toMap(CustomerMealStatsScheduleUtil.ScheduleDay::getDate, day -> day, (left, right) -> left, TreeMap::new));
+        for (CustomerMealStatsRowDto row : rows) {
+            if (row.getBaseScheduleDays() == null) {
+                continue;
+            }
+            for (CustomerMealStatsScheduleUtil.ScheduleDay baseDay : row.getBaseScheduleDays()) {
+                CustomerMealStatsScheduleUtil.ScheduleDay target = dayMap.computeIfAbsent(
+                        baseDay.getDate(),
+                        CustomerMealStatsScheduleUtil.ScheduleDay::new
+                );
+                target.addBaseMealTypes(baseDay.getMealTypes());
+            }
+        }
+        Set<String> excludedKeys = buildExcludedKeys(excludedDates);
+        for (String key : excludedKeys) {
+            String[] parts = key.split("#");
+            CustomerMealStatsScheduleUtil.ScheduleDay target = dayMap.computeIfAbsent(
+                    parts[0],
+                    CustomerMealStatsScheduleUtil.ScheduleDay::new
+            );
+            target.addExcludedMealType(parts[1]);
+        }
+        customerScheduleDays.clear();
+        customerScheduleDays.addAll(dayMap.values());
+    }
+
+    /**
+     * 将人工新增餐次合并进日历。
+     */
+    private void applyManualAdditions(List<CustomerMealStatsScheduleUtil.ScheduleDay> customerScheduleDays,
+                                      Map<String, List<CustomerMealScheduleAddition>> additionsByDate) {
+        if (additionsByDate == null || additionsByDate.isEmpty()) {
+            return;
+        }
+        Map<String, CustomerMealStatsScheduleUtil.ScheduleDay> dayMap = customerScheduleDays.stream()
+                .collect(Collectors.toMap(CustomerMealStatsScheduleUtil.ScheduleDay::getDate, day -> day, (left, right) -> left, TreeMap::new));
+        for (Map.Entry<String, List<CustomerMealScheduleAddition>> entry : additionsByDate.entrySet()) {
+            CustomerMealStatsScheduleUtil.ScheduleDay target = dayMap.computeIfAbsent(
+                    entry.getKey(),
+                    CustomerMealStatsScheduleUtil.ScheduleDay::new
+            );
+            for (CustomerMealScheduleAddition addition : entry.getValue()) {
+                target.addAddedMealType(addition.getMealType());
+                if (target.getMealTypes() != null && !target.getMealTypes().contains(addition.getMealType())) {
+                    target.getMealTypes().add(addition.getMealType());
+                }
+            }
+        }
+        customerScheduleDays.clear();
+        customerScheduleDays.addAll(dayMap.values());
+    }
+
     private Map<Long, Map<String, List<String>>> buildScheduledMealMap(List<Long> customerIds, LocalDate monthStart, LocalDate monthEnd) {
         if (customerIds == null || customerIds.isEmpty()) {
             return Collections.emptyMap();
@@ -296,6 +362,32 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             if (!mealTypes.contains(scheduledMeal.getMealType())) {
                 mealTypes.add(scheduledMeal.getMealType());
             }
+        }
+        return result;
+    }
+
+    /**
+     * 查询客户月份内的人工新增餐次。
+     */
+    private Map<Long, Map<String, List<CustomerMealScheduleAddition>>> buildManualAdditionMap(List<Long> customerIds,
+                                                                                             LocalDate monthStart,
+                                                                                             LocalDate monthEnd) {
+        if (customerIds == null || customerIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<CustomerMealScheduleAddition> additions =
+                customerMealScheduleAdditionMapper.selectActiveByCustomerIdsAndDateRange(customerIds, monthStart, monthEnd);
+        if (additions == null || additions.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, Map<String, List<CustomerMealScheduleAddition>>> result = new HashMap<>();
+        for (CustomerMealScheduleAddition addition : additions) {
+            if (addition == null || addition.getCustomerId() == null || addition.getRecordDate() == null) {
+                continue;
+            }
+            result.computeIfAbsent(addition.getCustomerId(), key -> new HashMap<>())
+                    .computeIfAbsent(addition.getRecordDate().toString(), key -> new ArrayList<>())
+                    .add(addition);
         }
         return result;
     }
@@ -971,6 +1063,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         row.setSpecialRequirementText(buildSpecialRequirementText(profile));
         row.setMealBucket(mealBucket);
         row.setScheduleDays(CustomerMealStatsScheduleUtil.buildMonthScheduleDays(orders, profile.getExcludedDates(), statsMonth, mealBucket));
+        row.setBaseScheduleDays(CustomerMealStatsScheduleUtil.buildMonthBaseScheduleDays(orders, statsMonth, mealBucket));
 
         if ("BREAKFAST".equals(mealBucket)) {
             int totalCount = orders.stream().mapToInt(order -> safeInt(order.getBreakfastCount())).sum();

@@ -66,6 +66,15 @@ public final class CustomerMealStatsScheduleUtil {
         return new ArrayList<>(dayMap.values());
     }
 
+    /**
+     * 构建不应用客户排除日期的月度基础应排餐日期，用于日历编辑时展示可恢复餐次。
+     */
+    public static List<ScheduleDay> buildMonthBaseScheduleDays(List<CustomerOrder> orders,
+                                                               String statsMonth,
+                                                               String mealBucket) {
+        return buildMonthScheduleDays(orders, Collections.emptyList(), statsMonth, mealBucket);
+    }
+
     private static YearMonth parseMonth(String statsMonth) {
         if (StringUtils.isBlank(statsMonth)) {
             return YearMonth.now();
@@ -229,6 +238,9 @@ public final class CustomerMealStatsScheduleUtil {
         private String date;
         private List<String> mealTypes = new ArrayList<>();
         private List<String> scheduledMealTypes = new ArrayList<>();
+        private List<String> baseMealTypes = new ArrayList<>();
+        private List<String> excludedMealTypes = new ArrayList<>();
+        private List<String> addedMealTypes = new ArrayList<>();
 
         public ScheduleDay() {
         }
@@ -238,17 +250,34 @@ public final class CustomerMealStatsScheduleUtil {
         }
 
         private void addMealTypes(List<String> values) {
+            addUniqueMealTypes(mealTypes, values);
+        }
+
+        public void addBaseMealTypes(List<String> values) {
+            addUniqueMealTypes(baseMealTypes, values);
+        }
+
+        public void addExcludedMealType(String mealType) {
+            addUniqueMealTypes(excludedMealTypes, Collections.singletonList(mealType));
+        }
+
+        public void addAddedMealType(String mealType) {
+            addUniqueMealTypes(addedMealTypes, Collections.singletonList(mealType));
+        }
+
+        private void addUniqueMealTypes(List<String> target, List<String> values) {
+            if (values == null) {
+                return;
+            }
             for (String value : values) {
-                if (!mealTypes.contains(value)) {
-                    mealTypes.add(value);
+                if (StringUtils.isNotBlank(value) && !target.contains(value)) {
+                    target.add(value);
                 }
             }
         }
 
         public void addScheduledMealType(String mealType) {
-            if (StringUtils.isNotBlank(mealType) && !scheduledMealTypes.contains(mealType)) {
-                scheduledMealTypes.add(mealType);
-            }
+            addUniqueMealTypes(scheduledMealTypes, Collections.singletonList(mealType));
         }
     }
 

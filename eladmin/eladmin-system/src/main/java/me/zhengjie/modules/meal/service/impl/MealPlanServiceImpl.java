@@ -27,7 +27,9 @@ import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplace
 import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
+import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.meal.domain.Dish;
 import me.zhengjie.modules.meal.domain.DishIngredientRelation;
@@ -115,6 +117,7 @@ public class MealPlanServiceImpl implements MealPlanService {
     private final MealSchedulePlanMapper mealSchedulePlanMapper;
     private final DishIngredientCategoryService dishIngredientCategoryService;
     private final CustomerOrderReplaceRuleMapper replaceRuleMapper;
+    private final CustomerMealScheduleAdditionMapper customerMealScheduleAdditionMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -379,6 +382,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
 
         List<CustomerOrder> candidateOrders = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
+        candidateOrders = mergeManualAdditionOrders(candidateOrders, targetDate, mealType);
         log.info("基础条件过滤后的候选订单 - 数量: {}", candidateOrders.size());
 
         // 批量查询各订单的已排餐数量
@@ -416,7 +420,8 @@ public class MealPlanServiceImpl implements MealPlanService {
                         order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(), mealType, startMealTypeReason);
                 continue;
             }
-            String matchReason = getScheduleModeMatchReason(order, mealType,targetDate);
+            boolean manualAddition = hasManualAddition(order.getId(), targetDate, mealType);
+            String matchReason = manualAddition ? null : getScheduleModeMatchReason(order, mealType,targetDate);
             if (matchReason != null) {
                 log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 餐次: {}, 配送模式: {}, 原因: {}",
                         order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(), order.getMealType(), order.getScheduleMode(), matchReason);
@@ -452,6 +457,41 @@ public class MealPlanServiceImpl implements MealPlanService {
                 System.currentTimeMillis() - startTime);
 
         return validOrders;
+    }
+
+    /**
+     * 加载指定日期餐次的人工新增订单，并合并进候选订单列表。
+     */
+    private List<CustomerOrder> mergeManualAdditionOrders(List<CustomerOrder> candidateOrders,
+                                                          LocalDate targetDate,
+                                                          String mealType) {
+        List<CustomerMealScheduleAddition> additions =
+                customerMealScheduleAdditionMapper.selectActiveByDateMeal(targetDate, mealType);
+        if (additions == null || additions.isEmpty()) {
+            return candidateOrders;
+        }
+        Set<Long> existingOrderIds = candidateOrders.stream()
+                .map(CustomerOrder::getId)
+                .collect(Collectors.toSet());
+        List<CustomerOrder> merged = new ArrayList<>(candidateOrders);
+        for (CustomerMealScheduleAddition addition : additions) {
+            if (addition == null || existingOrderIds.contains(addition.getOrderId())) {
+                continue;
+            }
+            CustomerOrder order = customerOrderMapper.selectById(addition.getOrderId());
+            if (order != null && order.getStatus() != null && order.getStatus() == 1) {
+                merged.add(order);
+                existingOrderIds.add(order.getId());
+            }
+        }
+        return merged;
+    }
+
+    /**
+     * 判断订单指定日期餐次是否存在人工新增记录。
+     */
+    private boolean hasManualAddition(Long orderId, LocalDate targetDate, String mealType) {
+        return customerMealScheduleAdditionMapper.selectActiveByOrderDateMeal(orderId, targetDate, mealType) != null;
     }
 
     private String getStartMealTypeMismatchReason(CustomerOrder order, String targetMealType, LocalDate targetDate) {

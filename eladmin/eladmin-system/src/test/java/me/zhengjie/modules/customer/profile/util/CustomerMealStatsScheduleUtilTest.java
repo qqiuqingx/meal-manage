@@ -73,4 +73,36 @@ class CustomerMealStatsScheduleUtilTest {
         assertEquals("2026-04-05", lunchDinnerDays.get(0).getDate());
         assertEquals(Arrays.asList("DINNER"), lunchDinnerDays.get(0).getMealTypes());
     }
+
+    @Test
+    void shouldBuildBaseScheduleWithoutApplyingExcludedDates() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(3L);
+        order.setCustomerId(10L);
+        order.setBreakfastCount(0);
+        order.setLunchDinnerCount(20);
+        order.setStartDate(LocalDate.of(2026, 4, 1));
+        order.setEndDate(LocalDate.of(2026, 4, 1));
+        order.setStartMealType("LUNCH");
+        order.setMealType("ALL");
+        order.setScheduleMode("DAILY");
+
+        ExcludedDateDto excluded = new ExcludedDateDto();
+        excluded.setDate("2026-04-01");
+        excluded.setMealTypes(Arrays.asList("DINNER"));
+
+        List<CustomerMealStatsScheduleUtil.ScheduleDay> effectiveDays = CustomerMealStatsScheduleUtil.buildMonthScheduleDays(
+                Arrays.asList(order), Arrays.asList(excluded), "2026-04", "LUNCH_DINNER");
+        List<CustomerMealStatsScheduleUtil.ScheduleDay> baseDays = CustomerMealStatsScheduleUtil.buildMonthBaseScheduleDays(
+                Arrays.asList(order), "2026-04", "LUNCH_DINNER");
+
+        assertEquals(Arrays.asList("LUNCH"), effectiveDays.get(0).getMealTypes());
+        assertEquals(Arrays.asList("LUNCH", "DINNER"), baseDays.get(0).getMealTypes());
+        baseDays.get(0).addBaseMealTypes(baseDays.get(0).getMealTypes());
+        baseDays.get(0).addExcludedMealType("DINNER");
+        baseDays.get(0).addAddedMealType("BREAKFAST");
+        assertEquals(Arrays.asList("LUNCH", "DINNER"), baseDays.get(0).getBaseMealTypes());
+        assertEquals(Arrays.asList("DINNER"), baseDays.get(0).getExcludedMealTypes());
+        assertEquals(Arrays.asList("BREAKFAST"), baseDays.get(0).getAddedMealTypes());
+    }
 }

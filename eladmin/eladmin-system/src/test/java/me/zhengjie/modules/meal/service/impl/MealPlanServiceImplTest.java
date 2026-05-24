@@ -6,7 +6,9 @@ import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
+import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.meal.domain.Dish;
 import me.zhengjie.modules.meal.domain.DishIngredientRelation;
@@ -75,6 +77,8 @@ class MealPlanServiceImplTest {
     private MealSchedulePlanMapper mealSchedulePlanMapper;
     @Mock
     private DishIngredientCategoryService dishIngredientCategoryService;
+    @Mock
+    private CustomerMealScheduleAdditionMapper customerMealScheduleAdditionMapper;
 
     @InjectMocks
     private MealPlanServiceImpl mealPlanService;
@@ -229,6 +233,54 @@ class MealPlanServiceImplTest {
 
         assertEquals(1, result.getSuccessCount());
         verify(mealSchedulePlanMapper).findBySchedule(1, 3, "LUNCH");
+    }
+
+    @Test
+    void shouldIncludeManualAdditionOrderWhenScheduleModeDoesNotMatch() {
+        CustomerOrder order = buildOrder();
+        order.setScheduleMode("WEEKEND");
+        order.setMainDishCount(1);
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+        CustomerMealScheduleAddition addition = new CustomerMealScheduleAddition();
+        addition.setOrderId(order.getId());
+        addition.setCustomerId(order.getCustomerId());
+        addition.setRecordDate(LocalDate.of(2026, 4, 1));
+        addition.setMealType("LUNCH");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.emptyList());
+        when(customerOrderMapper.findByDateRangeAndMealType(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Collections.singletonList(addition));
+        when(customerMealScheduleAdditionMapper.selectActiveByOrderDateMeal(order.getId(), LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(addition);
+        when(customerOrderMapper.selectById(order.getId())).thenReturn(order);
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.singletonList(mainIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getSuccessCount());
     }
 
     @Test
