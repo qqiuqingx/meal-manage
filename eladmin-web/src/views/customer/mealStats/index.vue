@@ -28,6 +28,16 @@
         class="filter-item"
         @keyup.enter.native="handleQuery"
       />
+      <el-date-picker
+        v-model="query.statsMonth"
+        type="month"
+        size="small"
+        value-format="yyyy-MM"
+        placeholder="统计月份"
+        style="width: 140px;"
+        class="filter-item"
+        @change="handleQuery"
+      />
       <el-button type="primary" size="small" icon="el-icon-search" @click="handleQuery">搜索</el-button>
       <el-button size="small" icon="el-icon-refresh-right" @click="resetQuery">重置</el-button>
     </div>
@@ -104,8 +114,15 @@ import { getMealStats } from '@/api/customer/profile'
 const defaultQuery = () => ({
   customerCode: '',
   customerName: '',
-  phone: ''
+  phone: '',
+  statsMonth: formatCurrentMonth()
 })
+
+function formatCurrentMonth() {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  return `${now.getFullYear()}-${month}`
+}
 
 export default {
   name: 'CustomerMealStats',
