@@ -157,8 +157,7 @@
               effect="plain"
               :class="{ 'readonly-calendar__tag--scheduled': isMealScheduled(day, mealType) }"
             >
-              <i v-if="isMealScheduled(day, mealType)" class="el-icon-check" />
-              {{ mealTypeName(mealType) }}
+              <span class="readonly-calendar__tag-label">{{ mealTypeName(mealType) }}</span>
             </el-tag>
           </div>
         </div>
@@ -437,11 +436,30 @@ export default {
 }
 
 .readonly-calendar__tag--scheduled {
-  font-weight: 600;
+  position: relative;
+  min-width: 32px;
+  text-align: center;
+  font-weight: 700;
+  overflow: hidden;
 }
 
-.readonly-calendar__tag--scheduled .el-icon-check {
-  margin-right: 2px;
+.readonly-calendar__tag--scheduled::before {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: #1f9d55;
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1;
+  opacity: 0.82;
+  transform: translate(-50%, -52%);
+  z-index: 2;
+}
+
+.readonly-calendar__tag-label {
+  position: relative;
+  z-index: 1;
 }
 
 .schedule-calendar-empty {
