@@ -19,10 +19,13 @@ import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.modules.meal.domain.Dish;
+import me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto;
 import me.zhengjie.modules.meal.mapper.DishMapper;
+import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.SecurityUtils;
 import me.zhengjie.utils.StringUtils;
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -42,9 +45,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 客户订单服务实现
@@ -73,6 +79,9 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     @Autowired
     private DishMapper dishMapper;
 
+    @Autowired
+    private MealPlanCustomerMapper mealPlanCustomerMapper;
+
     private static final DateTimeFormatter ORDER_CODE_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     @Override
@@ -87,14 +96,46 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         Page<CustomerOrder> page = new Page<>(current, size);
         List<CustomerOrder> list = orderMapper.findAll(criteria, page);
 
-        // 计算合计餐数字段
+        fillOrderCountFields(list);
+
+        return new PageResult<>(list, page.getTotal());
+    }
+
+    private void fillOrderCountFields(List<CustomerOrder> list) {
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        Map<Long, Integer> todayUnverifiedCountMap = buildTodayUnverifiedCountMap(list);
         for (CustomerOrder order : list) {
             int breakfast = order.getBreakfastCount() != null ? order.getBreakfastCount() : 0;
             int lunchDinner = order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0;
             order.setTotalCount(breakfast + lunchDinner);
+            int remaining = order.getRemainingCount() != null ? order.getRemainingCount() : 0;
+            int todayUnverified = todayUnverifiedCountMap.getOrDefault(order.getId(), 0);
+            order.setEstimatedRemainingCount(Math.max(remaining - todayUnverified, 0));
         }
+    }
 
-        return new PageResult<>(list, page.getTotal());
+    private Map<Long, Integer> buildTodayUnverifiedCountMap(List<CustomerOrder> list) {
+        List<Long> orderIds = list.stream()
+                .map(CustomerOrder::getId)
+                .filter(id -> id != null)
+                .collect(Collectors.toList());
+        if (orderIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<OrderScheduledCountDto> scheduledCounts =
+                mealPlanCustomerMapper.countTodayUnverifiedScheduledByOrderIds(orderIds, LocalDate.now());
+        if (scheduledCounts == null || scheduledCounts.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, Integer> result = new HashMap<>();
+        for (OrderScheduledCountDto item : scheduledCounts) {
+            if (item.getOrderId() != null) {
+                result.put(item.getOrderId(), item.getScheduledCount() != null ? item.getScheduledCount() : 0);
+            }
+        }
+        return result;
     }
 
     @Override
@@ -395,7 +436,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         LambdaUpdateWrapper<CustomerProfile> updateWrapper = new LambdaUpdateWrapper<>();
         updateWrapper.eq(CustomerProfile::getId, dto.getCustomerId());
         if (hasAllergyTags) {
-            updateWrapper.set(CustomerProfile::getAllergyTags, cleaned);
+            // JSON 列不能直接接收 List 参数，否则 MySQL 会把它当成 binary 对象处理
+            updateWrapper.set(CustomerProfile::getAllergyTags, JSON.toJSONString(cleaned));
         }
         if (hasSpecialRequirements) {
             updateWrapper.set(CustomerProfile::getSpecialRequirements, val);
