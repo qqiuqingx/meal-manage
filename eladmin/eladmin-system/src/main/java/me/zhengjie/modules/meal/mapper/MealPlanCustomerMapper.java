@@ -115,6 +115,18 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
                                                                                  @Param("endDate") LocalDate endDate);
 
     /**
+     * 查询客户指定日期餐次的有效已生成排餐记录。
+     *
+     * @param customerId 客户ID
+     * @param recordDate 排餐日期
+     * @param mealType 餐次
+     * @return 已生成排餐记录
+     */
+    List<me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto> selectGeneratedByCustomerDateMeal(@Param("customerId") Long customerId,
+                                                                                                            @Param("recordDate") LocalDate recordDate,
+                                                                                                            @Param("mealType") String mealType);
+
+    /**
      * 根据排餐计划ID查询所有未核销的客户排餐记录
      * @param mealPlanId 排餐计划ID
      * @return 未核销的客户排餐记录列表

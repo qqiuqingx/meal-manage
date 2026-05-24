@@ -277,6 +277,25 @@
         order by mpc.customer_id asc, mp.record_date asc, mp.meal_type asc
     </select>
 
+    <select id="selectGeneratedByCustomerDateMeal" resultType="me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto">
+        select
+            mp.id as mealPlanId,
+            mpc.id as customerPlanId,
+            mpc.customer_id as customerId,
+            mp.record_date as recordDate,
+            mp.meal_type as mealType,
+            case when mpc.is_verified = 1 then true else false end as verified
+        from meal_plan_customer mpc
+        join meal_plan mp on mpc.meal_plan_id = mp.id
+        where mpc.deleted = 0
+          and mp.deleted = 0
+          and mpc.status = 1
+          and mpc.customer_id = #{customerId}
+          and mp.record_date = #{recordDate}
+          and mp.meal_type = #{mealType}
+        order by mpc.id asc
+    </select>
+
     <!-- 根据排餐计划ID查询所有未核销的客户排餐记录 -->
     <select id="selectUnverifiedByMealPlanId" resultMap="BaseResultMap">
         select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
