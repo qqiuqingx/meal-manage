@@ -200,6 +200,12 @@ public class CustomerOrder implements Serializable {
     private Integer totalCount;
 
     /**
+     * 预计剩余餐数(当前剩余餐数 - 今日已排未核销餐数)
+     */
+    @TableField(exist = false)
+    private Integer estimatedRemainingCount;
+
+    /**
      * 父套餐名称(查询时填充)
      */
     @TableField(exist = false)
