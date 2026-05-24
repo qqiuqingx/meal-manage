@@ -16,6 +16,14 @@ export function getMealStats(params) {
   })
 }
 
+export function saveMealScheduleAdjustments(data) {
+  return axios({
+    url: '/api/customerProfile/mealStats/scheduleAdjustments',
+    method: 'put',
+    data
+  })
+}
+
 export function getProfile(id) {
   return axios({
     url: `/api/customerProfile/${id}`,
@@ -55,4 +63,4 @@ export function del(ids) {
   })
 }
 
-export default { getProfiles, getMealStats, getProfile, generateCode, add, edit, del }
+export default { getProfiles, getMealStats, getProfile, generateCode, add, edit, del, saveMealScheduleAdjustments }
