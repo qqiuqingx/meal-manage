@@ -15,6 +15,7 @@ import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.dto.DishQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
+import me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.modules.meal.mapper.MealSchedulePlanMapper;
@@ -109,6 +110,51 @@ class MealPlanServiceImplTest {
         assertThrows(BadRequestException.class,
                 () -> mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null, 2, 8));
         verify(mealPlanMapper, never()).insert(any(MealPlan.class));
+    }
+
+    @Test
+    void shouldRejectCalendarAdjustmentDeleteWhenGeneratedMealIsVerified() {
+        CustomerGeneratedMealPlanDto generated = new CustomerGeneratedMealPlanDto();
+        generated.setMealPlanId(10L);
+        generated.setCustomerPlanId(20L);
+        generated.setCustomerId(30L);
+        generated.setRecordDate(LocalDate.of(2026, 5, 24));
+        generated.setMealType("LUNCH");
+        generated.setVerified(true);
+
+        when(mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(30L, LocalDate.of(2026, 5, 24), "LUNCH"))
+                .thenReturn(Collections.singletonList(generated));
+
+        assertThrows(BadRequestException.class,
+                () -> mealPlanService.deleteUnverifiedCustomerMealForCalendarAdjustment(30L, "2026-05-24", "LUNCH"));
+        verify(mealPlanCustomerItemMapper, never()).softDeleteByCustomerPlanIds(anyList());
+        verify(mealPlanCustomerMapper, never()).softDeleteByIds(anyList());
+    }
+
+    @Test
+    void shouldSoftDeleteUnverifiedGeneratedMealForCalendarAdjustment() {
+        CustomerGeneratedMealPlanDto generated = new CustomerGeneratedMealPlanDto();
+        generated.setMealPlanId(10L);
+        generated.setCustomerPlanId(20L);
+        generated.setCustomerId(30L);
+        generated.setRecordDate(LocalDate.of(2026, 5, 24));
+        generated.setMealType("LUNCH");
+        generated.setVerified(false);
+
+        MealPlan mealPlan = new MealPlan();
+        mealPlan.setId(10L);
+        mealPlan.setDeleted(false);
+        when(mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(30L, LocalDate.of(2026, 5, 24), "LUNCH"))
+                .thenReturn(Collections.singletonList(generated));
+        when(mealPlanMapper.selectById(10L)).thenReturn(mealPlan);
+        when(mealPlanCustomerMapper.selectByMealPlanId(10L)).thenReturn(Collections.emptyList());
+
+        int deletedCount = mealPlanService.deleteUnverifiedCustomerMealForCalendarAdjustment(30L, "2026-05-24", "LUNCH");
+
+        assertEquals(1, deletedCount);
+        verify(mealPlanCustomerItemMapper).softDeleteByCustomerPlanIds(Collections.singletonList(20L));
+        verify(mealPlanCustomerMapper).softDeleteByIds(Collections.singletonList(20L));
+        verify(mealPlanMapper).softDeletePlanById(10L);
     }
 
     @Test
