@@ -12,6 +12,8 @@ import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsRowDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
@@ -22,6 +24,7 @@ import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
 import me.zhengjie.modules.meal.service.DishService;
 import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
+import me.zhengjie.utils.PageResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,6 +36,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -420,6 +424,41 @@ class CustomerProfileServiceImplTest {
         List<ExcludedDateDto> excludedDates = Arrays.asList(dto1, dto2, dto3);
 
         invokeValidateExcludedDates(excludedDates);
+    }
+
+    // ========== 客户用餐统计查询测试 ==========
+
+    @Test
+    void testQueryMealStats_WithStatsMonthFiltersRemainingOrdersStartedBeforeNextMonth() {
+        CustomerProfile customer = new CustomerProfile();
+        customer.setId(1L);
+        customer.setCustomerCode("A1001");
+        customer.setCustomerName("张三");
+        customer.setPhone("13800138000");
+
+        CustomerOrder order = new CustomerOrder();
+        order.setId(10L);
+        order.setCustomerId(1L);
+        order.setBreakfastCount(5);
+        order.setLunchDinnerCount(0);
+        order.setRemainingCount(3);
+
+        CustomerMealStatsQueryCriteria criteria = new CustomerMealStatsQueryCriteria();
+        criteria.setStatsMonth("2026-04");
+
+        when(profileMapper.findAll(any())).thenReturn(Collections.singletonList(customer));
+        when(addressMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(address1));
+        when(customerOrderMapper.findActiveOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1)))
+            .thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(10L)))
+            .thenReturn(Collections.emptyList());
+
+        PageResult<CustomerMealStatsRowDto> result = customerProfileService.queryMealStats(criteria, 1, 20);
+
+        assertEquals(1L, result.getTotalElements());
+        assertEquals(1, result.getContent().size());
+        assertEquals(Integer.valueOf(5), result.getContent().get(0).getRemainingMealCount());
+        verify(customerOrderMapper).findActiveOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1));
     }
 
     // ========== scheduleMode 填充测试 ==========

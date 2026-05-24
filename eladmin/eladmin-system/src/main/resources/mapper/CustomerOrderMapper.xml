@@ -188,6 +188,10 @@
         SELECT *
         FROM customer_order
         WHERE status = 1
+          AND COALESCE(remaining_count, 0) &gt; 0
+        <if test="startedBeforeDate != null">
+          AND start_date &lt; #{startedBeforeDate}
+        </if>
           AND customer_id IN
         <foreach collection="customerIds" item="customerId" open="(" separator="," close=")">
             #{customerId}
