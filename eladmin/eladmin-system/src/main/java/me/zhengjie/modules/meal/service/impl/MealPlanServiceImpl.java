@@ -34,6 +34,7 @@ import me.zhengjie.modules.meal.domain.DishIngredientRelation;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.MealPlanCustomerItem;
+import me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto;
 import me.zhengjie.modules.meal.domain.dto.DishQueryCriteria;
 import me.zhengjie.modules.meal.domain.enums.DishTypeEnum;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
@@ -2214,6 +2215,45 @@ public class MealPlanServiceImpl implements MealPlanService {
         mealPlanCustomerMapper.softDeleteByIds(customerPlanIds);
 
         log.info("批量删除客户排餐计划完成 - 数量: {}", customerPlanIds.size());
+    }
+
+    /**
+     * 删除客户指定日期餐次的未核销排餐记录；若存在已核销记录则拒绝日历取消操作。
+     *
+     * @param customerId 客户ID
+     * @param recordDate 排餐日期，格式 yyyy-MM-dd
+     * @param mealType 餐次，支持 BREAKFAST / LUNCH / DINNER
+     * @return 删除的客户排餐记录数量
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteUnverifiedCustomerMealForCalendarAdjustment(Long customerId, String recordDate, String mealType) {
+        LocalDate targetDate = ScheduleKeyUtil.parseDate(recordDate);
+        List<CustomerGeneratedMealPlanDto> generatedRecords =
+                mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(customerId, targetDate, mealType);
+        if (generatedRecords == null || generatedRecords.isEmpty()) {
+            return 0;
+        }
+        for (CustomerGeneratedMealPlanDto record : generatedRecords) {
+            if (Boolean.TRUE.equals(record.getVerified())) {
+                throw new BadRequestException("该日期餐次已核销，不能取消排餐");
+            }
+        }
+        List<Long> customerPlanIds = generatedRecords.stream()
+                .map(CustomerGeneratedMealPlanDto::getCustomerPlanId)
+                .collect(Collectors.toList());
+        mealPlanCustomerItemMapper.softDeleteByCustomerPlanIds(customerPlanIds);
+        mealPlanCustomerMapper.softDeleteByIds(customerPlanIds);
+        Set<Long> mealPlanIds = generatedRecords.stream()
+                .map(CustomerGeneratedMealPlanDto::getMealPlanId)
+                .collect(Collectors.toSet());
+        for (Long mealPlanId : mealPlanIds) {
+            MealPlan mealPlan = mealPlanMapper.selectById(mealPlanId);
+            if (mealPlan != null && !Boolean.TRUE.equals(mealPlan.getDeleted())) {
+                refreshMealPlanSummary(mealPlan, true);
+            }
+        }
+        return customerPlanIds.size();
     }
 
     // ========== 聚合查询接口实现 ==========
