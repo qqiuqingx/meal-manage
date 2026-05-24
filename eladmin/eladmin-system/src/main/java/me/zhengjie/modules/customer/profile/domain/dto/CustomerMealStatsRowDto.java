@@ -1,6 +1,9 @@
 package me.zhengjie.modules.customer.profile.domain.dto;
 
 import lombok.Data;
+import me.zhengjie.modules.customer.profile.util.CustomerMealStatsScheduleUtil;
+
+import java.util.List;
 
 /**
  * 客户用餐统计行
@@ -33,6 +36,10 @@ public class CustomerMealStatsRowDto {
     private Integer mealCount;
 
     private Integer remainingMealCount;
+
+    private List<CustomerMealStatsScheduleUtil.ScheduleDay> scheduleDays;
+
+    private List<CustomerMealStatsScheduleUtil.ScheduleDay> customerScheduleDays;
 
     private String mealBucket;
 

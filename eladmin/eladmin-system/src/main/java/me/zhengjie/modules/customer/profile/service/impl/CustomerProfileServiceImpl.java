@@ -31,6 +31,7 @@ import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
+import me.zhengjie.modules.customer.profile.util.CustomerMealStatsScheduleUtil;
 import me.zhengjie.modules.customer.numberpool.domain.NumberPoolConfig;
 import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
 import me.zhengjie.modules.meal.domain.Dish;
@@ -142,11 +143,15 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             List<CustomerMealStatsRowDto> customerRows = new ArrayList<>();
             if (!breakfastOrders.isEmpty()) {
                 customerRows.add(buildMealStatsRow(profile, addressMap.get(profile.getId()), breakfastOrders,
-                        verifiedCountMap, "BREAKFAST"));
+                        verifiedCountMap, "BREAKFAST", criteria.getStatsMonth()));
             }
             if (!lunchDinnerOrders.isEmpty()) {
                 customerRows.add(buildMealStatsRow(profile, addressMap.get(profile.getId()), lunchDinnerOrders,
-                        verifiedCountMap, "LUNCH_DINNER"));
+                        verifiedCountMap, "LUNCH_DINNER", criteria.getStatsMonth()));
+            }
+            List<CustomerMealStatsScheduleUtil.ScheduleDay> customerScheduleDays = mergeScheduleDays(customerRows);
+            for (CustomerMealStatsRowDto row : customerRows) {
+                row.setCustomerScheduleDays(customerScheduleDays);
             }
 
             for (int i = 0; i < customerRows.size(); i++) {
@@ -165,6 +170,36 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         List<CustomerMealStatsRowDto> pageRows = new ArrayList<>(rows.subList(fromIndex, toIndex));
         resetRowGroupSpan(pageRows);
         return new PageResult<>(pageRows, rows.size());
+    }
+
+    private List<CustomerMealStatsScheduleUtil.ScheduleDay> mergeScheduleDays(List<CustomerMealStatsRowDto> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<String, CustomerMealStatsScheduleUtil.ScheduleDay> dayMap = new java.util.TreeMap<>();
+        for (CustomerMealStatsRowDto row : rows) {
+            if (row.getScheduleDays() == null) {
+                continue;
+            }
+            for (CustomerMealStatsScheduleUtil.ScheduleDay sourceDay : row.getScheduleDays()) {
+                if (sourceDay == null || StringUtils.isBlank(sourceDay.getDate())) {
+                    continue;
+                }
+                CustomerMealStatsScheduleUtil.ScheduleDay targetDay = dayMap.computeIfAbsent(
+                        sourceDay.getDate(),
+                        CustomerMealStatsScheduleUtil.ScheduleDay::new
+                );
+                if (sourceDay.getMealTypes() == null) {
+                    continue;
+                }
+                for (String mealType : sourceDay.getMealTypes()) {
+                    if (!targetDay.getMealTypes().contains(mealType)) {
+                        targetDay.getMealTypes().add(mealType);
+                    }
+                }
+            }
+        }
+        return new ArrayList<>(dayMap.values());
     }
 
     private LocalDate parseStatsMonthExclusiveEnd(String statsMonth) {
@@ -815,7 +850,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                                                       List<CustomerProfileAddress> addresses,
                                                       List<CustomerOrder> orders,
                                                       Map<Long, Map<String, Integer>> verifiedCountMap,
-                                                      String mealBucket) {
+                                                      String mealBucket,
+                                                      String statsMonth) {
         CustomerMealStatsRowDto row = new CustomerMealStatsRowDto();
         row.setRowKey(profile.getId() + "-" + mealBucket);
         row.setCustomerId(profile.getId());
@@ -825,6 +861,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         row.setRemarkInfo(defaultString(profile.getRemark()));
         row.setSpecialRequirementText(buildSpecialRequirementText(profile));
         row.setMealBucket(mealBucket);
+        row.setScheduleDays(CustomerMealStatsScheduleUtil.buildMonthScheduleDays(orders, profile.getExcludedDates(), statsMonth, mealBucket));
 
         if ("BREAKFAST".equals(mealBucket)) {
             int totalCount = orders.stream().mapToInt(order -> safeInt(order.getBreakfastCount())).sum();
