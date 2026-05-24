@@ -39,6 +39,11 @@ public class CustomerMealStatsRowDto {
 
     private List<CustomerMealStatsScheduleUtil.ScheduleDay> scheduleDays;
 
+    /**
+     * 不应用排除日期的基础应排餐日期，用于日历编辑恢复。
+     */
+    private List<CustomerMealStatsScheduleUtil.ScheduleDay> baseScheduleDays;
+
     private List<CustomerMealStatsScheduleUtil.ScheduleDay> customerScheduleDays;
 
     private String mealBucket;
