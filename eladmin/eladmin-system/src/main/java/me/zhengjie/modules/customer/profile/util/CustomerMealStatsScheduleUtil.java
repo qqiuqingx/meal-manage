@@ -228,6 +228,7 @@ public final class CustomerMealStatsScheduleUtil {
     public static class ScheduleDay {
         private String date;
         private List<String> mealTypes = new ArrayList<>();
+        private List<String> scheduledMealTypes = new ArrayList<>();
 
         public ScheduleDay() {
         }
@@ -241,6 +242,12 @@ public final class CustomerMealStatsScheduleUtil {
                 if (!mealTypes.contains(value)) {
                     mealTypes.add(value);
                 }
+            }
+        }
+
+        public void addScheduledMealType(String mealType) {
+            if (StringUtils.isNotBlank(mealType) && !scheduledMealTypes.contains(mealType)) {
+                scheduledMealTypes.add(mealType);
             }
         }
     }

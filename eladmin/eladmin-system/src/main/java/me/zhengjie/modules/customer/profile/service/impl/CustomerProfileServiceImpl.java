@@ -22,6 +22,7 @@ import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsRowDto;
@@ -36,6 +37,7 @@ import me.zhengjie.modules.customer.numberpool.domain.NumberPoolConfig;
 import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
 import me.zhengjie.modules.meal.domain.Dish;
 import me.zhengjie.modules.meal.mapper.DishMapper;
+import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.PageUtil;
 import me.zhengjie.utils.SecurityUtils;
@@ -77,6 +79,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private final DishService dishService;
     private final CustomerOrderReplaceRuleMapper replaceRuleMapper;
     private final DishMapper dishMapper;
+    private final MealPlanCustomerMapper mealPlanCustomerMapper;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -125,6 +128,12 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
         List<Long> orderIds = activeOrders.stream().map(CustomerOrder::getId).collect(Collectors.toList());
         Map<Long, Map<String, Integer>> verifiedCountMap = buildVerifiedCountMap(orderIds);
+        LocalDate statsMonthStart = parseStatsMonthStart(criteria.getStatsMonth());
+        Map<Long, Map<String, List<String>>> scheduledMealMap = buildScheduledMealMap(
+                customerIds,
+                statsMonthStart,
+                statsMonthStart.plusMonths(1).minusDays(1)
+        );
 
         List<CustomerMealStatsRowDto> rows = new ArrayList<>();
         for (CustomerProfile profile : profiles) {
@@ -150,6 +159,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                         verifiedCountMap, "LUNCH_DINNER", criteria.getStatsMonth()));
             }
             List<CustomerMealStatsScheduleUtil.ScheduleDay> customerScheduleDays = mergeScheduleDays(customerRows);
+            applyScheduledMealTypes(customerScheduleDays, scheduledMealMap.get(profile.getId()));
             for (CustomerMealStatsRowDto row : customerRows) {
                 row.setCustomerScheduleDays(customerScheduleDays);
             }
@@ -200,6 +210,60 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             }
         }
         return new ArrayList<>(dayMap.values());
+    }
+
+    private void applyScheduledMealTypes(List<CustomerMealStatsScheduleUtil.ScheduleDay> scheduleDays,
+                                         Map<String, List<String>> scheduledMealsByDate) {
+        if (scheduleDays == null || scheduleDays.isEmpty() || scheduledMealsByDate == null || scheduledMealsByDate.isEmpty()) {
+            return;
+        }
+        for (CustomerMealStatsScheduleUtil.ScheduleDay day : scheduleDays) {
+            List<String> scheduledMealTypes = scheduledMealsByDate.get(day.getDate());
+            if (scheduledMealTypes == null || scheduledMealTypes.isEmpty()) {
+                continue;
+            }
+            for (String mealType : scheduledMealTypes) {
+                if (day.getMealTypes() != null && day.getMealTypes().contains(mealType)) {
+                    day.addScheduledMealType(mealType);
+                }
+            }
+        }
+    }
+
+    private Map<Long, Map<String, List<String>>> buildScheduledMealMap(List<Long> customerIds, LocalDate monthStart, LocalDate monthEnd) {
+        if (customerIds == null || customerIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<CustomerScheduledMealDto> scheduledMeals = mealPlanCustomerMapper.selectScheduledMealsByCustomerIdsAndDateRange(
+                customerIds, monthStart, monthEnd);
+        if (scheduledMeals == null || scheduledMeals.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, Map<String, List<String>>> result = new HashMap<>();
+        for (CustomerScheduledMealDto scheduledMeal : scheduledMeals) {
+            if (scheduledMeal == null || scheduledMeal.getCustomerId() == null
+                    || scheduledMeal.getRecordDate() == null || StringUtils.isBlank(scheduledMeal.getMealType())) {
+                continue;
+            }
+            result.computeIfAbsent(scheduledMeal.getCustomerId(), key -> new HashMap<>())
+                    .computeIfAbsent(scheduledMeal.getRecordDate().toString(), key -> new ArrayList<>());
+            List<String> mealTypes = result.get(scheduledMeal.getCustomerId()).get(scheduledMeal.getRecordDate().toString());
+            if (!mealTypes.contains(scheduledMeal.getMealType())) {
+                mealTypes.add(scheduledMeal.getMealType());
+            }
+        }
+        return result;
+    }
+
+    private LocalDate parseStatsMonthStart(String statsMonth) {
+        if (StringUtils.isBlank(statsMonth)) {
+            return LocalDate.now().withDayOfMonth(1);
+        }
+        try {
+            return LocalDate.parse(statsMonth + "-01", DATE_FORMATTER);
+        } catch (Exception e) {
+            throw new BadRequestException("统计月份格式错误，请使用 yyyy-MM 格式");
+        }
     }
 
     private LocalDate parseStatsMonthExclusiveEnd(String statsMonth) {
