@@ -16,19 +16,26 @@ import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplace
 import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
 import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
 import me.zhengjie.modules.meal.service.DishService;
+import me.zhengjie.modules.meal.service.MealPlanService;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.domain.SubPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
+import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdditionDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentRequest;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentResult;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsRowDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
+import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
+import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
@@ -57,7 +64,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /**
@@ -80,6 +89,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private final CustomerOrderReplaceRuleMapper replaceRuleMapper;
     private final DishMapper dishMapper;
     private final MealPlanCustomerMapper mealPlanCustomerMapper;
+    private final CustomerMealScheduleAdditionMapper customerMealScheduleAdditionMapper;
+    private final MealPlanService mealPlanService;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -180,6 +191,40 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         List<CustomerMealStatsRowDto> pageRows = new ArrayList<>(rows.subList(fromIndex, toIndex));
         resetRowGroupSpan(pageRows);
         return new PageResult<>(pageRows, rows.size());
+    }
+
+    /**
+     * 保存客户排餐日历调整，取消餐次写入排除日期，人工新增餐次写入订单级新增表。
+     *
+     * @param request 调整请求
+     * @return 调整结果
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CustomerMealScheduleAdjustmentResult saveMealScheduleAdjustments(CustomerMealScheduleAdjustmentRequest request) {
+        if (request == null || request.getCustomerId() == null) {
+            throw new BadRequestException("客户ID不能为空");
+        }
+        CustomerProfile profile = profileMapper.selectById(request.getCustomerId());
+        if (profile == null) {
+            throw new BadRequestException("客户不存在");
+        }
+        List<ExcludedDateDto> normalizedExcludedDates = normalizeExcludedDates(request.getExcludedDates());
+        int deletedPlanCount = deleteGeneratedMealsForNewExclusions(profile.getId(), profile.getExcludedDates(), normalizedExcludedDates);
+
+        profile.setExcludedDates(normalizedExcludedDates);
+        profile.setUpdateBy(getCurrentUsername());
+        profileMapper.updateById(profile);
+
+        List<Long> keepAdditionIds = saveManualAdditions(profile.getId(), request.getAdditions(), normalizedExcludedDates);
+        customerMealScheduleAdditionMapper.softDeleteMissingByCustomerId(profile.getId(), keepAdditionIds);
+
+        CustomerMealScheduleAdjustmentResult result = new CustomerMealScheduleAdjustmentResult();
+        result.setCustomerId(profile.getId());
+        result.setExcludedMealCount(countExcludedMeals(normalizedExcludedDates));
+        result.setAdditionMealCount(keepAdditionIds.size());
+        result.setDeletedUnverifiedPlanCount(deletedPlanCount);
+        return result;
     }
 
     private List<CustomerMealStatsScheduleUtil.ScheduleDay> mergeScheduleDays(List<CustomerMealStatsRowDto> rows) {
@@ -1082,6 +1127,189 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    /**
+     * 标准化排除日期，去除空日期、空餐次和重复餐次。
+     */
+    private List<ExcludedDateDto> normalizeExcludedDates(List<ExcludedDateDto> excludedDates) {
+        if (excludedDates == null || excludedDates.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<String, List<String>> map = new TreeMap<>();
+        for (ExcludedDateDto dto : excludedDates) {
+            if (dto == null || StringUtils.isBlank(dto.getDate()) || dto.getMealTypes() == null) {
+                continue;
+            }
+            parseLocalDate(dto.getDate(), "排除日期格式错误");
+            for (String mealType : dto.getMealTypes()) {
+                if (!isSupportedMealType(mealType)) {
+                    throw new BadRequestException("不支持的餐次：" + mealType);
+                }
+                List<String> values = map.computeIfAbsent(dto.getDate(), key -> new ArrayList<>());
+                if (!values.contains(mealType)) {
+                    values.add(mealType);
+                }
+            }
+        }
+        List<ExcludedDateDto> result = new ArrayList<>();
+        for (Map.Entry<String, List<String>> entry : map.entrySet()) {
+            ExcludedDateDto dto = new ExcludedDateDto();
+            dto.setDate(entry.getKey());
+            dto.setMealTypes(entry.getValue());
+            result.add(dto);
+        }
+        return result;
+    }
+
+    /**
+     * 对新增的排除餐次执行已生成排餐校验和未核销记录清理。
+     */
+    private int deleteGeneratedMealsForNewExclusions(Long customerId,
+                                                     List<ExcludedDateDto> oldExcludedDates,
+                                                     List<ExcludedDateDto> newExcludedDates) {
+        Set<String> oldKeys = buildExcludedKeys(oldExcludedDates);
+        Set<String> newKeys = buildExcludedKeys(newExcludedDates);
+        int deletedCount = 0;
+        for (String key : newKeys) {
+            if (oldKeys.contains(key)) {
+                continue;
+            }
+            String[] parts = key.split("#");
+            deletedCount += mealPlanService.deleteUnverifiedCustomerMealForCalendarAdjustment(customerId, parts[0], parts[1]);
+        }
+        return deletedCount;
+    }
+
+    /**
+     * 保存页面保留的人工新增餐次，返回有效记录ID。
+     */
+    private List<Long> saveManualAdditions(Long customerId,
+                                           List<CustomerMealScheduleAdditionDto> additions,
+                                           List<ExcludedDateDto> excludedDates) {
+        if (additions == null || additions.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<String> excludedKeys = buildExcludedKeys(excludedDates);
+        List<Long> keepIds = new ArrayList<>();
+        for (CustomerMealScheduleAdditionDto dto : additions) {
+            if (dto == null) {
+                continue;
+            }
+            if (!isSupportedMealType(dto.getMealType())) {
+                throw new BadRequestException("不支持的餐次：" + dto.getMealType());
+            }
+            LocalDate recordDate = parseLocalDate(dto.getDate(), "人工新增日期格式错误");
+            if (excludedKeys.contains(recordDate + "#" + dto.getMealType())) {
+                continue;
+            }
+            validateManualAdditionOrder(customerId, dto.getOrderId(), recordDate, dto.getMealType());
+            CustomerMealScheduleAddition existing = customerMealScheduleAdditionMapper
+                    .selectActiveByOrderDateMeal(dto.getOrderId(), recordDate, dto.getMealType());
+            if (existing == null) {
+                existing = new CustomerMealScheduleAddition();
+                existing.setCustomerId(customerId);
+                existing.setOrderId(dto.getOrderId());
+                existing.setRecordDate(recordDate);
+                existing.setMealType(dto.getMealType());
+                existing.setRemark(dto.getRemark());
+                existing.setDeleted(false);
+                existing.setCreateBy(getCurrentUsername());
+                customerMealScheduleAdditionMapper.insert(existing);
+            } else {
+                existing.setRemark(dto.getRemark());
+                existing.setUpdateBy(getCurrentUsername());
+                customerMealScheduleAdditionMapper.updateById(existing);
+            }
+            keepIds.add(existing.getId());
+        }
+        return keepIds;
+    }
+
+    /**
+     * 校验人工新增绑定订单是否属于当前客户且餐次类型可用。
+     */
+    private void validateManualAdditionOrder(Long customerId, Long orderId, LocalDate recordDate, String mealType) {
+        if (orderId == null) {
+            throw new BadRequestException("人工新增餐次必须选择订单");
+        }
+        CustomerOrder order = customerOrderMapper.selectById(orderId);
+        if (order == null || !Objects.equals(order.getCustomerId(), customerId)) {
+            throw new BadRequestException("人工新增餐次选择的订单不存在或不属于当前客户");
+        }
+        if (order.getStatus() == null || order.getStatus() != 1) {
+            throw new BadRequestException("人工新增餐次只能选择进行中的订单");
+        }
+        if (!customerOrderContainsMealType(order, mealType)) {
+            throw new BadRequestException("人工新增餐次与订单餐次类型不匹配");
+        }
+        String startMealType = OrderStartMealTypeUtil.normalizeStartMealType(order.getMealType(), order.getStartMealType());
+        if (!OrderStartMealTypeUtil.hasStartedForMeal(order.getStartDate(), startMealType, recordDate, mealType)) {
+            throw new BadRequestException("人工新增餐次早于订单开始餐次");
+        }
+    }
+
+    /**
+     * 判断订单是否包含指定餐次。
+     */
+    private boolean customerOrderContainsMealType(CustomerOrder order, String mealType) {
+        String orderMealType = OrderStartMealTypeUtil.normalizeOrderMealType(order.getMealType());
+        if ("BREAKFAST".equals(mealType)) {
+            return "ALL".equals(orderMealType) && safeInt(order.getBreakfastCount()) > 0;
+        }
+        if ("LUNCH".equals(mealType)) {
+            return ("ALL".equals(orderMealType) || "LUNCH_DINNER".equals(orderMealType) || "LUNCH".equals(orderMealType))
+                    && safeInt(order.getLunchDinnerCount()) > 0;
+        }
+        if ("DINNER".equals(mealType)) {
+            return ("ALL".equals(orderMealType) || "LUNCH_DINNER".equals(orderMealType) || "DINNER".equals(orderMealType))
+                    && safeInt(order.getLunchDinnerCount()) > 0;
+        }
+        return false;
+    }
+
+    /**
+     * 构造排除日期键集合。
+     */
+    private Set<String> buildExcludedKeys(List<ExcludedDateDto> excludedDates) {
+        Set<String> keys = new HashSet<>();
+        if (excludedDates == null) {
+            return keys;
+        }
+        for (ExcludedDateDto dto : excludedDates) {
+            if (dto == null || StringUtils.isBlank(dto.getDate()) || dto.getMealTypes() == null) {
+                continue;
+            }
+            for (String mealType : dto.getMealTypes()) {
+                keys.add(dto.getDate() + "#" + mealType);
+            }
+        }
+        return keys;
+    }
+
+    /**
+     * 统计排除日期餐次数。
+     */
+    private int countExcludedMeals(List<ExcludedDateDto> excludedDates) {
+        return buildExcludedKeys(excludedDates).size();
+    }
+
+    /**
+     * 校验餐次是否支持。
+     */
+    private boolean isSupportedMealType(String mealType) {
+        return "BREAKFAST".equals(mealType) || "LUNCH".equals(mealType) || "DINNER".equals(mealType);
+    }
+
+    /**
+     * 解析 yyyy-MM-dd 日期。
+     */
+    private LocalDate parseLocalDate(String value, String message) {
+        try {
+            return LocalDate.parse(value);
+        } catch (Exception e) {
+            throw new BadRequestException(message);
+        }
     }
 
     private String defaultString(String value) {
