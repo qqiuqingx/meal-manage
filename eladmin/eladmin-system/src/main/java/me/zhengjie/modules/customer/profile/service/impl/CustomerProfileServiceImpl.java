@@ -114,7 +114,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 new QueryWrapper<CustomerProfileAddress>().in("customer_id", customerIds).orderByAsc("address_type", "id")
         ).stream().collect(Collectors.groupingBy(CustomerProfileAddress::getCustomerId));
 
-        List<CustomerOrder> activeOrders = customerOrderMapper.findActiveOrdersByCustomerIds(customerIds);
+        LocalDate startedBeforeDate = parseStatsMonthExclusiveEnd(criteria.getStatsMonth());
+        List<CustomerOrder> activeOrders = customerOrderMapper.findActiveOrdersByCustomerIds(customerIds, startedBeforeDate);
         if (activeOrders == null || activeOrders.isEmpty()) {
             return new PageResult<>(Collections.emptyList(), 0L);
         }
@@ -164,6 +165,17 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         List<CustomerMealStatsRowDto> pageRows = new ArrayList<>(rows.subList(fromIndex, toIndex));
         resetRowGroupSpan(pageRows);
         return new PageResult<>(pageRows, rows.size());
+    }
+
+    private LocalDate parseStatsMonthExclusiveEnd(String statsMonth) {
+        if (StringUtils.isBlank(statsMonth)) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(statsMonth + "-01", DATE_FORMATTER).plusMonths(1);
+        } catch (Exception e) {
+            throw new BadRequestException("统计月份格式错误，请使用 yyyy-MM 格式");
+        }
     }
 
     @Override

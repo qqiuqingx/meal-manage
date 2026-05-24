@@ -48,7 +48,8 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
     /**
      * 批量查询客户的进行中订单
      */
-    List<CustomerOrder> findActiveOrdersByCustomerIds(@Param("customerIds") List<Long> customerIds);
+    List<CustomerOrder> findActiveOrdersByCustomerIds(@Param("customerIds") List<Long> customerIds,
+                                                      @Param("startedBeforeDate") LocalDate startedBeforeDate);
 
     /**
      * 统计同一客户在同一时间段内的订单数量
