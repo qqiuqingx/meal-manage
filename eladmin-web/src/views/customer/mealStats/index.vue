@@ -376,11 +376,14 @@ export default {
       return Array.isArray(day.scheduledMealTypes) && day.scheduledMealTypes.includes(mealType)
     },
     mealButtonClass(day, mealType) {
+      const excluded = this.isMealExcluded(day, mealType)
+      const scheduled = this.isMealScheduled(day, mealType)
       return {
         'readonly-calendar__meal-button--base': this.isBaseMeal(day, mealType),
-        'readonly-calendar__meal-button--excluded': this.isMealExcluded(day, mealType),
+        'readonly-calendar__meal-button--excluded': excluded,
         'readonly-calendar__meal-button--added': this.isMealAdded(day, mealType),
-        'readonly-calendar__meal-button--scheduled': this.isMealScheduled(day, mealType)
+        'readonly-calendar__meal-button--scheduled': scheduled,
+        'readonly-calendar__meal-button--scheduled-cancelled': scheduled && excluded
       }
     },
     isBaseMeal(day, mealType) {
@@ -613,6 +616,17 @@ export default {
   opacity: 0.82;
   transform: translate(-50%, -52%);
   z-index: 2;
+}
+
+.readonly-calendar__meal-button--scheduled-cancelled {
+  border-color: #c0c4cc;
+  background: #f5f7fa;
+  color: #909399;
+}
+
+.readonly-calendar__meal-button--scheduled-cancelled::before {
+  color: #909399;
+  opacity: 0.68;
 }
 
 .readonly-calendar__tag-label {
