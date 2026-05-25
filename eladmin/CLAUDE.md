@@ -192,6 +192,10 @@ conn.close()
 
 ### Java
 
+**方法注释：**
+
+- 新增方法或修改方法时，必须为方法补充或更新清晰的方法注释，说明用途、关键参数和返回含义。
+
 **文件头注释（License）：**
 
 ```java
@@ -221,6 +225,7 @@ conn.close()
 - 主键用 `@TableId(type = IdType.AUTO)`
 - 非数据库字段用 `@TableField(exist = false)`
 - 校验注解在字段上：`@NotBlank`、`@NotNull`、`@Email`
+- 新增数据库实体时，必须为实体字段添加字段注释，说明字段业务含义
 
 ```java
 @Getter @Setter
