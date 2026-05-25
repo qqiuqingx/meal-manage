@@ -28,6 +28,19 @@
         </encoder>
     </appender>
 
+    <!-- 客户排餐日历调整业务日志文件（每天一个文件，保留30天） -->
+    <appender name="MEAL_SCHEDULE_ADJUSTMENT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${log.path}/meal-schedule-adjustment.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${log.path}/meal-schedule-adjustment.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
     <!-- 核销服务日志文件（每天一个文件，保留30天） -->
     <appender name="MEAL_VERIFICATION_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${log.path}/meal-verification.log</file>
@@ -44,6 +57,12 @@
     <!-- 排餐计划服务日志单独写文件 -->
     <logger name="me.zhengjie.modules.meal.service.impl.MealPlanServiceImpl" level="info" additivity="false">
         <appender-ref ref="MEAL_PLAN_FILE" />
+        <appender-ref ref="console" />
+    </logger>
+
+    <!-- 客户排餐日历调整日志单独写文件 -->
+    <logger name="mealScheduleAdjustmentLogger" level="info" additivity="false">
+        <appender-ref ref="MEAL_SCHEDULE_ADJUSTMENT_FILE" />
         <appender-ref ref="console" />
     </logger>
 
