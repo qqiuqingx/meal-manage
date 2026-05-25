@@ -87,7 +87,22 @@
         </template>
       </el-table-column>
       <el-table-column label="餐数" prop="mealCount" width="80" align="center" />
-      <el-table-column label="剩余餐数" prop="remainingMealCount" width="100" align="center">
+      <el-table-column prop="remainingMealCount" width="110" align="center">
+        <template slot="header">
+          <span>剩余餐数</span>
+          <el-tooltip
+            effect="dark"
+            placement="top"
+            popper-class="meal-stats-remaining-tooltip"
+          >
+            <div slot="content">
+              <div>早餐行：早餐总数 - BREAKFAST 已核销数</div>
+              <div>午晚餐行：午晚餐总数 - LUNCH 已核销数 - DINNER 已核销数</div>
+              <div>结果小于 0 时按 0 展示</div>
+            </div>
+            <i class="el-icon-question remaining-count-help" />
+          </el-tooltip>
+        </template>
         <template slot-scope="{ row }">
           <span :class="{ 'danger-count': row.remainingMealCount < 3 }">
             {{ row.remainingMealCount }}
@@ -502,6 +517,14 @@ export default {
 .danger-count {
   color: #f56c6c;
   font-weight: 600;
+}
+
+.remaining-count-help {
+  margin-left: 4px;
+  color: #909399;
+  cursor: help;
+  font-size: 14px;
+  vertical-align: middle;
 }
 
 .schedule-calendar-meta {
