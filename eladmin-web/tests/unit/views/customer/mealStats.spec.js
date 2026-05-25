@@ -43,7 +43,7 @@ function removeExcludedMeal(ctx, date, mealType) {
 }
 
 function toggleMeal(ctx, day, mealType) {
-  if (!day.currentMonth || (Array.isArray(day.scheduledMealTypes) && day.scheduledMealTypes.includes(mealType))) {
+  if (!day.currentMonth) {
     return
   }
   if (hasExcludedMeal(ctx, day.date, mealType)) {
@@ -91,4 +91,18 @@ describe('CustomerMealStats editable calendar state', () => {
     toggleMeal(ctx, day, 'DINNER')
     expect(ctx.calendarAdditions).toEqual([])
   })
-}
+
+  test('allows scheduled base meal to be selected for cancellation', () => {
+    const ctx = { calendarExcludedDates: [], calendarAdditions: [], rows: [], selectedRow: { customerId: 1 }}
+    const day = {
+      date: '2026-05-25',
+      currentMonth: true,
+      baseMealTypes: ['LUNCH'],
+      scheduledMealTypes: ['LUNCH']
+    }
+
+    toggleMeal(ctx, day, 'LUNCH')
+
+    expect(ctx.calendarExcludedDates).toEqual([{ date: '2026-05-25', mealTypes: ['LUNCH'] }])
+  })
+})

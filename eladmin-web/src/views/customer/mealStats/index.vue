@@ -155,7 +155,7 @@
               type="button"
               class="readonly-calendar__meal-button"
               :class="mealButtonClass(day, mealType)"
-              :disabled="!day.currentMonth || isMealScheduled(day, mealType)"
+              :disabled="!day.currentMonth"
               @click="toggleMeal(day, mealType)"
             >
               <span class="readonly-calendar__tag-label">{{ mealTypeName(mealType) }}</span>
@@ -396,7 +396,7 @@ export default {
       return this.calendarExcludedDates.some(item => item.date === date && Array.isArray(item.mealTypes) && item.mealTypes.includes(mealType))
     },
     toggleMeal(day, mealType) {
-      if (!day.currentMonth || this.isMealScheduled(day, mealType)) {
+      if (!day.currentMonth) {
         return
       }
       if (this.hasExcludedMeal(day.date, mealType)) {
