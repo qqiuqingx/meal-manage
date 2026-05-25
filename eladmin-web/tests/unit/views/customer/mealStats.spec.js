@@ -64,6 +64,18 @@ function toggleMeal(ctx, day, mealType) {
   }
 }
 
+function mealButtonClass(ctx, day, mealType) {
+  const excluded = hasExcludedMeal(ctx, day.date, mealType)
+  const scheduled = Array.isArray(day.scheduledMealTypes) && day.scheduledMealTypes.includes(mealType)
+  return {
+    'readonly-calendar__meal-button--base': isBaseMeal(day, mealType),
+    'readonly-calendar__meal-button--excluded': excluded,
+    'readonly-calendar__meal-button--added': isMealAdded(ctx, day, mealType),
+    'readonly-calendar__meal-button--scheduled': scheduled,
+    'readonly-calendar__meal-button--scheduled-cancelled': scheduled && excluded
+  }
+}
+
 describe('CustomerMealStats editable calendar state', () => {
   test('toggles base meal into exclusion and restores it', () => {
     const ctx = { calendarExcludedDates: [], calendarAdditions: [], rows: [], selectedRow: { customerId: 1 }}
@@ -104,5 +116,24 @@ describe('CustomerMealStats editable calendar state', () => {
     toggleMeal(ctx, day, 'LUNCH')
 
     expect(ctx.calendarExcludedDates).toEqual([{ date: '2026-05-25', mealTypes: ['LUNCH'] }])
+  })
+
+  test('marks scheduled cancellation state for grey check rendering', () => {
+    const ctx = {
+      calendarExcludedDates: [{ date: '2026-05-25', mealTypes: ['LUNCH'] }],
+      calendarAdditions: []
+    }
+    const day = {
+      date: '2026-05-25',
+      currentMonth: true,
+      baseMealTypes: ['LUNCH'],
+      scheduledMealTypes: ['LUNCH']
+    }
+
+    expect(mealButtonClass(ctx, day, 'LUNCH')).toMatchObject({
+      'readonly-calendar__meal-button--scheduled': true,
+      'readonly-calendar__meal-button--excluded': true,
+      'readonly-calendar__meal-button--scheduled-cancelled': true
+    })
   })
 })
