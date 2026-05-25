@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
@@ -49,6 +48,8 @@ import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.PageUtil;
 import me.zhengjie.utils.SecurityUtils;
 import me.zhengjie.utils.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -72,7 +73,6 @@ import java.util.stream.Collectors;
 /**
  * 客户档案服务实现
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CustomerProfileServiceImpl implements CustomerProfileService {
@@ -95,6 +95,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final DateTimeFormatter DISPLAY_DATE_FORMATTER = DateTimeFormatter.ofPattern("M.d");
+    private static final Logger SCHEDULE_ADJUSTMENT_LOG = LoggerFactory.getLogger("mealScheduleAdjustmentLogger");
 
     @Override
     public PageResult<CustomerProfile> queryAll(CustomerProfileQueryCriteria criteria, Page<Object> page) {
@@ -211,42 +212,42 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     public CustomerMealScheduleAdjustmentResult saveMealScheduleAdjustments(CustomerMealScheduleAdjustmentRequest request) {
         long startTime = System.currentTimeMillis();
         if (request == null || request.getCustomerId() == null) {
-            log.warn("客户排餐日历调整失败 - 请求为空或客户ID为空");
+            SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整失败 - 请求为空或客户ID为空");
             throw new BadRequestException("客户ID不能为空");
         }
         int requestExcludedCount = request.getExcludedDates() == null ? 0 : request.getExcludedDates().size();
         int requestAdditionCount = request.getAdditions() == null ? 0 : request.getAdditions().size();
-        log.info("开始保存客户排餐日历调整 - 客户ID: {}, 请求排除日期项: {}, 请求人工新增项: {}",
+        SCHEDULE_ADJUSTMENT_LOG.info("开始保存客户排餐日历调整 - 客户ID: {}, 请求排除日期项: {}, 请求人工新增项: {}",
                 request.getCustomerId(), requestExcludedCount, requestAdditionCount);
 
         CustomerProfile profile = profileMapper.selectById(request.getCustomerId());
         if (profile == null) {
-            log.warn("客户排餐日历调整失败 - 客户不存在，客户ID: {}", request.getCustomerId());
+            SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整失败 - 客户不存在，客户ID: {}", request.getCustomerId());
             throw new BadRequestException("客户不存在");
         }
-        log.info("客户排餐日历调整客户信息 - 客户ID: {}, 客户编号: {}, 客户姓名: {}",
+        SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整客户信息 - 客户ID: {}, 客户编号: {}, 客户姓名: {}",
                 profile.getId(), profile.getCustomerCode(), profile.getCustomerName());
 
         Set<String> oldExcludedKeys = buildExcludedKeys(profile.getExcludedDates());
         List<ExcludedDateDto> normalizedExcludedDates = normalizeExcludedDates(request.getExcludedDates());
         Set<String> normalizedExcludedKeys = buildExcludedKeys(normalizedExcludedDates);
-        log.info("客户排餐日历调整排除日期标准化完成 - 客户ID: {}, 原排除餐次数: {}, 新排除餐次数: {}, 新增排除餐次: {}",
+        SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整排除日期标准化完成 - 客户ID: {}, 原排除餐次数: {}, 新排除餐次数: {}, 新增排除餐次: {}",
                 profile.getId(), oldExcludedKeys.size(), normalizedExcludedKeys.size(),
                 diffKeys(normalizedExcludedKeys, oldExcludedKeys));
 
         int deletedPlanCount = deleteGeneratedMealsForNewExclusions(profile.getId(), profile.getExcludedDates(), normalizedExcludedDates);
-        log.info("客户排餐日历调整已生成排餐清理完成 - 客户ID: {}, 删除未核销客户排餐数: {}",
+        SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整已生成排餐清理完成 - 客户ID: {}, 删除未核销客户排餐数: {}",
                 profile.getId(), deletedPlanCount);
 
         profile.setExcludedDates(normalizedExcludedDates);
         profile.setUpdateBy(getCurrentUsername());
         profileMapper.updateById(profile);
-        log.info("客户排餐日历调整排除日期保存完成 - 客户ID: {}, 排除餐次数: {}",
+        SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整排除日期保存完成 - 客户ID: {}, 排除餐次数: {}",
                 profile.getId(), normalizedExcludedKeys.size());
 
         List<Long> keepAdditionIds = saveManualAdditions(profile.getId(), request.getAdditions(), normalizedExcludedDates);
         int softDeletedAdditionCount = customerMealScheduleAdditionMapper.softDeleteMissingByCustomerId(profile.getId(), keepAdditionIds);
-        log.info("客户排餐日历调整人工新增同步完成 - 客户ID: {}, 保留人工新增数: {}, 软删除人工新增数: {}, 保留ID: {}",
+        SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增同步完成 - 客户ID: {}, 保留人工新增数: {}, 软删除人工新增数: {}, 保留ID: {}",
                 profile.getId(), keepAdditionIds.size(), softDeletedAdditionCount, keepAdditionIds);
 
         CustomerMealScheduleAdjustmentResult result = new CustomerMealScheduleAdjustmentResult();
@@ -254,7 +255,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         result.setExcludedMealCount(countExcludedMeals(normalizedExcludedDates));
         result.setAdditionMealCount(keepAdditionIds.size());
         result.setDeletedUnverifiedPlanCount(deletedPlanCount);
-        log.info("客户排餐日历调整保存完成 - 客户ID: {}, 客户编号: {}, 排除餐次数: {}, 人工新增餐次数: {}, 删除未核销排餐数: {}, 耗时: {}ms",
+        SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整保存完成 - 客户ID: {}, 客户编号: {}, 排除餐次数: {}, 人工新增餐次数: {}, 删除未核销排餐数: {}, 耗时: {}ms",
                 profile.getId(), profile.getCustomerCode(), result.getExcludedMealCount(), result.getAdditionMealCount(),
                 result.getDeletedUnverifiedPlanCount(), System.currentTimeMillis() - startTime);
         return result;
@@ -1263,7 +1264,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         Map<String, List<String>> map = new TreeMap<>();
         for (ExcludedDateDto dto : excludedDates) {
             if (dto == null || StringUtils.isBlank(dto.getDate()) || dto.getMealTypes() == null) {
-                log.debug("客户排餐日历调整排除日期标准化跳过空项 - item: {}", dto);
+                SCHEDULE_ADJUSTMENT_LOG.debug("客户排餐日历调整排除日期标准化跳过空项 - item: {}", dto);
                 continue;
             }
             parseLocalDate(dto.getDate(), "排除日期格式错误");
@@ -1275,7 +1276,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 if (!values.contains(mealType)) {
                     values.add(mealType);
                 } else {
-                    log.debug("客户排餐日历调整排除日期标准化跳过重复餐次 - 日期: {}, 餐次: {}",
+                    SCHEDULE_ADJUSTMENT_LOG.debug("客户排餐日历调整排除日期标准化跳过重复餐次 - 日期: {}, 餐次: {}",
                             dto.getDate(), mealType);
                 }
             }
@@ -1299,18 +1300,18 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         Set<String> oldKeys = buildExcludedKeys(oldExcludedDates);
         Set<String> newKeys = buildExcludedKeys(newExcludedDates);
         int deletedCount = 0;
-        log.info("客户排餐日历调整开始校验新增排除餐次 - 客户ID: {}, 原排除餐次: {}, 新排除餐次: {}",
+        SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整开始校验新增排除餐次 - 客户ID: {}, 原排除餐次: {}, 新排除餐次: {}",
                 customerId, oldKeys, newKeys);
         for (String key : newKeys) {
             if (oldKeys.contains(key)) {
-                log.debug("客户排餐日历调整跳过已存在排除餐次 - 客户ID: {}, key: {}", customerId, key);
+                SCHEDULE_ADJUSTMENT_LOG.debug("客户排餐日历调整跳过已存在排除餐次 - 客户ID: {}, key: {}", customerId, key);
                 continue;
             }
             String[] parts = key.split("#");
-            log.info("客户排餐日历调整新增排除餐次，开始清理已生成排餐 - 客户ID: {}, 日期: {}, 餐次: {}",
+            SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整新增排除餐次，开始清理已生成排餐 - 客户ID: {}, 日期: {}, 餐次: {}",
                     customerId, parts[0], parts[1]);
             int currentDeleted = mealPlanService.deleteUnverifiedCustomerMealForCalendarAdjustment(customerId, parts[0], parts[1]);
-            log.info("客户排餐日历调整新增排除餐次清理完成 - 客户ID: {}, 日期: {}, 餐次: {}, 删除未核销排餐数: {}",
+            SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整新增排除餐次清理完成 - 客户ID: {}, 日期: {}, 餐次: {}, 删除未核销排餐数: {}",
                     customerId, parts[0], parts[1], currentDeleted);
             deletedCount += currentDeleted;
         }
@@ -1324,30 +1325,30 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                                            List<CustomerMealScheduleAdditionDto> additions,
                                            List<ExcludedDateDto> excludedDates) {
         if (additions == null || additions.isEmpty()) {
-            log.info("客户排餐日历调整人工新增为空 - 客户ID: {}", customerId);
+            SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增为空 - 客户ID: {}", customerId);
             return Collections.emptyList();
         }
         Set<String> excludedKeys = buildExcludedKeys(excludedDates);
         List<Long> keepIds = new ArrayList<>();
-        log.info("客户排餐日历调整开始同步人工新增 - 客户ID: {}, 请求人工新增数: {}, 排除餐次: {}",
+        SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整开始同步人工新增 - 客户ID: {}, 请求人工新增数: {}, 排除餐次: {}",
                 customerId, additions.size(), excludedKeys);
         for (CustomerMealScheduleAdditionDto dto : additions) {
             if (dto == null) {
-                log.debug("客户排餐日历调整人工新增跳过空项 - 客户ID: {}", customerId);
+                SCHEDULE_ADJUSTMENT_LOG.debug("客户排餐日历调整人工新增跳过空项 - 客户ID: {}", customerId);
                 continue;
             }
             if (!isSupportedMealType(dto.getMealType())) {
-                log.warn("客户排餐日历调整人工新增餐次不支持 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}",
+                SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增餐次不支持 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}",
                         customerId, dto.getOrderId(), dto.getDate(), dto.getMealType());
                 throw new BadRequestException("不支持的餐次：" + dto.getMealType());
             }
             LocalDate recordDate = parseLocalDate(dto.getDate(), "人工新增日期格式错误");
             if (excludedKeys.contains(recordDate + "#" + dto.getMealType())) {
-                log.info("客户排餐日历调整人工新增被排除日期覆盖，跳过保存 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}",
+                SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增被排除日期覆盖，跳过保存 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}",
                         customerId, dto.getOrderId(), recordDate, dto.getMealType());
                 continue;
             }
-            log.info("客户排餐日历调整人工新增校验开始 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}",
+            SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增校验开始 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}",
                     customerId, dto.getOrderId(), recordDate, dto.getMealType());
             validateManualAdditionOrder(customerId, dto.getOrderId(), recordDate, dto.getMealType());
             CustomerMealScheduleAddition existing = customerMealScheduleAdditionMapper
@@ -1362,13 +1363,13 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 existing.setDeleted(false);
                 existing.setCreateBy(getCurrentUsername());
                 customerMealScheduleAdditionMapper.insert(existing);
-                log.info("客户排餐日历调整人工新增创建完成 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 新增ID: {}",
+                SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增创建完成 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 新增ID: {}",
                         customerId, dto.getOrderId(), recordDate, dto.getMealType(), existing.getId());
             } else {
                 existing.setRemark(dto.getRemark());
                 existing.setUpdateBy(getCurrentUsername());
                 customerMealScheduleAdditionMapper.updateById(existing);
-                log.info("客户排餐日历调整人工新增更新完成 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 记录ID: {}",
+                SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增更新完成 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 记录ID: {}",
                         customerId, dto.getOrderId(), recordDate, dto.getMealType(), existing.getId());
             }
             keepIds.add(existing.getId());
@@ -1381,33 +1382,33 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
      */
     private void validateManualAdditionOrder(Long customerId, Long orderId, LocalDate recordDate, String mealType) {
         if (orderId == null) {
-            log.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 日期: {}, 餐次: {}, 原因: 订单ID为空",
+            SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 日期: {}, 餐次: {}, 原因: 订单ID为空",
                     customerId, recordDate, mealType);
             throw new BadRequestException("人工新增餐次必须选择订单");
         }
         CustomerOrder order = customerOrderMapper.selectById(orderId);
         if (order == null || !Objects.equals(order.getCustomerId(), customerId)) {
-            log.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 原因: 订单不存在或不属于当前客户",
+            SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 原因: 订单不存在或不属于当前客户",
                     customerId, orderId, recordDate, mealType);
             throw new BadRequestException("人工新增餐次选择的订单不存在或不属于当前客户");
         }
         if (order.getStatus() == null || order.getStatus() != 1) {
-            log.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 订单状态: {}, 原因: 非进行中订单",
+            SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 订单状态: {}, 原因: 非进行中订单",
                     customerId, orderId, recordDate, mealType, order.getStatus());
             throw new BadRequestException("人工新增餐次只能选择进行中的订单");
         }
         if (!customerOrderContainsMealType(order, mealType)) {
-            log.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 订单餐次: {}, 早餐数: {}, 午晚餐数: {}, 原因: 餐次类型不匹配",
+            SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 订单餐次: {}, 早餐数: {}, 午晚餐数: {}, 原因: 餐次类型不匹配",
                     customerId, orderId, recordDate, mealType, order.getMealType(), order.getBreakfastCount(), order.getLunchDinnerCount());
             throw new BadRequestException("人工新增餐次与订单餐次类型不匹配");
         }
         String startMealType = OrderStartMealTypeUtil.normalizeStartMealType(order.getMealType(), order.getStartMealType());
         if (!OrderStartMealTypeUtil.hasStartedForMeal(order.getStartDate(), startMealType, recordDate, mealType)) {
-            log.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 开始日期: {}, 开始餐次: {}, 原因: 早于订单开始餐次",
+            SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 开始日期: {}, 开始餐次: {}, 原因: 早于订单开始餐次",
                     customerId, orderId, recordDate, mealType, order.getStartDate(), startMealType);
             throw new BadRequestException("人工新增餐次早于订单开始餐次");
         }
-        log.info("客户排餐日历调整人工新增校验通过 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 订单餐次: {}, 开始日期: {}, 开始餐次: {}",
+        SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增校验通过 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 订单餐次: {}, 开始日期: {}, 开始餐次: {}",
                 customerId, orderId, recordDate, mealType, order.getMealType(), order.getStartDate(), startMealType);
     }
 
