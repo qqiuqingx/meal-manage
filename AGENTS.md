@@ -118,6 +118,8 @@ Backend reads from:
 ## Important Patterns
 
 - **JSON Serialization**: Uses fastjson2, NOT Jackson. Custom serializers go in `eladmin-common` config.
+- **Method Comments**: 新增方法或修改方法时，必须为方法补充或更新清晰的方法注释，说明用途、关键参数和返回含义。
+- **Entity Field Comments**: 新增数据库实体时，必须为实体字段添加字段注释，说明字段业务含义。
 - **Security**: JWT + Spring Security. Token-based authentication.
 - **API Documentation**:
   - Knife4j (Swagger) available at `/doc.html` (runtime)
