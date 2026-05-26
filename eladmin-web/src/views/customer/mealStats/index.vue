@@ -53,9 +53,9 @@
       row-key="rowKey"
       class="meal-stats-table"
     >
-      <el-table-column label="编号" prop="customerCode" width="110" fixed="left" />
-      <el-table-column label="电话" prop="phone" width="130" fixed="left" />
-      <el-table-column label="地址" prop="addressText" min-width="260">
+      <el-table-column label="编号" prop="customerCode" width="50" fixed="left" />
+      <el-table-column label="电话" prop="phone" width="100" fixed="left" />
+      <el-table-column label="地址" prop="addressText" min-width="260" fixed="left">
         <template slot-scope="{ row }">
           <div class="multiline-cell">{{ row.addressText || '-' }}</div>
         </template>
