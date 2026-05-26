@@ -9,6 +9,9 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCri
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsRowDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
+import me.zhengjie.modules.customer.profile.domain.dto.intake.CustomerIntakeParseRequest;
+import me.zhengjie.modules.customer.profile.domain.dto.intake.CustomerIntakeParseResult;
+import me.zhengjie.modules.customer.profile.service.CustomerIntakeParseService;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.utils.PageResult;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -30,6 +33,9 @@ public class CustomerProfileController {
 
     @Autowired
     private CustomerProfileService profileService;
+
+    @Autowired
+    private CustomerIntakeParseService intakeParseService;
 
     /**
      * 分页查询客户档案
@@ -83,6 +89,15 @@ public class CustomerProfileController {
     public ResponseEntity<Void> create(@Validated @RequestBody CustomerProfileSaveDto dto) {
         profileService.create(dto);
         return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    /**
+     * 解析客户建档话术。
+     */
+    @PostMapping("/intake/parse")
+    @PreAuthorize("@el.check('customerProfile:add')")
+    public ResponseEntity<CustomerIntakeParseResult> parseIntakeText(@RequestBody CustomerIntakeParseRequest request) {
+        return ResponseEntity.ok(intakeParseService.parse(request));
     }
 
     /**
