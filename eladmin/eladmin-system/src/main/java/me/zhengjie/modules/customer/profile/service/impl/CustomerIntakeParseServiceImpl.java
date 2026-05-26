@@ -206,14 +206,10 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         List<String> specialSegments = new ArrayList<>();
         String cannotEat = firstNonBlank(rawFields, "不能吃的");
         String specialRequirement = firstNonBlank(rawFields, "特殊要求");
-        String lunchTime = firstNonBlank(rawFields, "午餐开始配送时间");
-        String dinnerTime = firstNonBlank(rawFields, "晚餐开始配送时间");
         String riceType = detectRiceType(cannotEat, specialRequirement);
 
         appendValueSegment(specialSegments, specialRequirement);
         appendValueSegment(specialSegments, cannotEat);
-        appendSegment(specialSegments, "午餐开始配送时间", lunchTime);
-        appendSegment(specialSegments, "晚餐开始配送时间", dinnerTime);
         if (!specialSegments.isEmpty()) {
             String specialRequirements = String.join("；", specialSegments);
             draft.setSpecialRequirements(specialRequirements);

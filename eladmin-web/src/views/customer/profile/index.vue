@@ -109,6 +109,16 @@
       width="800px"
       top="5vh"
     >
+      <div v-if="isCreateMode()" class="dialog-top-actions">
+        <el-button
+          type="primary"
+          icon="el-icon-document-copy"
+          size="small"
+          @click="openIntakeDialog"
+        >
+          文本解析建档
+        </el-button>
+      </div>
       <el-form ref="form" :model="form" :rules="rules" size="small" label-width="100px">
         <!-- 客户基本信息 -->
         <el-row :gutter="20">
@@ -277,17 +287,6 @@
         <!-- 首单信息（仅新增时显示） -->
         <template v-if="isCreateMode()">
           <el-divider content-position="left">首单信息</el-divider>
-          <div class="intake-toolbar">
-            <el-button
-              type="primary"
-              plain
-              icon="el-icon-document-copy"
-              size="small"
-              @click="openIntakeDialog"
-            >
-              文本解析
-            </el-button>
-          </div>
           <OrderForm
             ref="orderFormRef"
             v-model="form.orderInfo"
@@ -799,7 +798,9 @@ export default {
 .head-container .filter-item {
   margin-right: 10px;
 }
-.intake-toolbar {
+.dialog-top-actions {
+  display: flex;
+  justify-content: flex-end;
   margin-bottom: 12px;
 }
 .intake-issues {
