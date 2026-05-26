@@ -72,6 +72,16 @@ class CustomerIntakeParseServiceImplTest {
     }
 
     @Test
+    void parseDeliveryTimesShouldNotAppendToSpecialRequirements() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("特殊要求：不能要任何冻货\n午餐开始配送时间：11点整\n晚餐开始配送时间：17点整");
+
+        CustomerIntakeParseResult result = service.parse(request);
+
+        assertEquals("不能要任何冻货", result.getDraft().getSpecialRequirements());
+    }
+
+    @Test
     void parseAmbiguousPackageTextShouldAddError() {
         CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
         request.setText("餐别：孕期营养餐不含汤（两荤一素）");
