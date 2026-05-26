@@ -16,9 +16,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +38,19 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("^\\s*[【\\[]?([^：:\\]\\[]+?)[】\\]]?\\s*[：:]\\s*(.*)$");
     private static final Pattern DISH_CONFIG_PATTERN = Pattern.compile("(\\d+)\\s*主\\s*(\\d+)\\s*副\\s*(\\d+)\\s*素\\s*(\\d+)\\s*汤");
     private static final Pattern COUNT_PATTERN = Pattern.compile("(\\d+)");
+    private static final Pattern ORDER_DESCRIPTION_DAY_PATTERN = Pattern.compile("(\\d+)\\s*天");
+    private static final Pattern MONTH_DAY_PATTERN = Pattern.compile("(\\d{1,2})月(\\d{1,2})日");
     private static final Pattern PHONE_PATTERN = Pattern.compile("^1[3-9]\\d{9}$");
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final Map<String, String> CUSTOMER_SOURCE_MAPPING = new HashMap<>();
+
+    static {
+        CUSTOMER_SOURCE_MAPPING.put("抖音", "抖音");
+        CUSTOMER_SOURCE_MAPPING.put("小红书", "小红书");
+        CUSTOMER_SOURCE_MAPPING.put("客户介绍", "客户介绍");
+        CUSTOMER_SOURCE_MAPPING.put("门店咨询", "门店咨询");
+        CUSTOMER_SOURCE_MAPPING.put("其他", "其他");
+    }
     @Autowired(required = false)
     private ParentPackageMapper parentPackageMapper;
 
@@ -179,6 +194,12 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
             draft.setCustomerCode(customerCode);
             addParsedField(parsedFields, "客户编号", customerCode, "customerCode", customerCode);
         }
+
+        String productionDate = normalizeProductionDate(firstNonBlank(rawFields, "生产日期"));
+        if (StringUtils.isNotBlank(productionDate)) {
+            draft.setProductionDate(productionDate);
+            addParsedField(parsedFields, "生产日期", rawFields.get("生产日期"), "productionDate", productionDate);
+        }
     }
 
     /**
@@ -238,8 +259,11 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
 
         String source = firstNonBlank(rawFields, "来源", "客户来源", "销售渠道");
         if (StringUtils.isNotBlank(source)) {
-            orderInfo.setCustomerSource(source);
-            addParsedField(parsedFields, "来源", source, "orderInfo.customerSource", source);
+            String normalizedSource = normalizeCustomerSource(source);
+            orderInfo.setCustomerSource(normalizedSource);
+            addParsedField(parsedFields, "来源", source, "orderInfo.customerSource", normalizedSource);
+        } else {
+            orderInfo.setCustomerSource("其他");
         }
 
         String packageText = firstNonBlank(rawFields, "套餐", "父套餐");
@@ -256,6 +280,19 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         applyMealType(orderInfo, mealTypeText);
         if (StringUtils.isNotBlank(mealTypeText)) {
             addParsedField(parsedFields, "餐次", mealTypeText, "orderInfo.mealType", orderInfo.getMealType());
+        }
+
+        String orderDescription = firstNonBlank(rawFields, "订餐描述");
+        applyOrderDescription(orderInfo, orderDescription);
+        if (StringUtils.isNotBlank(orderDescription)) {
+            addParsedField(parsedFields, "订餐描述", orderDescription, "orderInfo.lunchDinnerCount",
+                    Arrays.asList(orderInfo.getScheduleMode(), orderInfo.getMealType(), orderInfo.getLunchDinnerCount()));
+        }
+
+        String startMealTypeText = firstNonBlank(rawFields, "开始餐次");
+        applyExplicitStartMealType(orderInfo, startMealTypeText);
+        if (StringUtils.isNotBlank(startMealTypeText)) {
+            addParsedField(parsedFields, "开始餐次", startMealTypeText, "orderInfo.startMealType", orderInfo.getStartMealType());
         }
 
         String deliveryModeText = firstNonBlank(rawFields, "配送日期", "排餐模式");
@@ -420,7 +457,10 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
             return;
         }
         String normalized = scheduleModeText.trim();
-        if ("默认等通知配送".equals(normalized) || normalized.contains("指定日期")) {
+        if ("等通知".equals(normalized)
+                || "默认等通知".equals(normalized)
+                || "默认等通知配送".equals(normalized)
+                || normalized.contains("指定日期")) {
             orderInfo.setScheduleMode("SCHEDULE");
             orderInfo.setDeliveryDates(null);
             return;
@@ -447,6 +487,77 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
     }
 
     /**
+     * 根据订餐描述推导排餐模式、餐次类型和餐数。
+     *
+     * @param orderInfo 首单草稿
+     * @param orderDescription 订餐描述，如“14天每天午餐和晚餐”
+     */
+    private void applyOrderDescription(CustomerProfileSaveDto.OrderInfoDto orderInfo, String orderDescription) {
+        if (StringUtils.isBlank(orderDescription)) {
+            return;
+        }
+        String normalized = orderDescription.trim();
+        Integer dayCount = extractDayCount(normalized);
+        if (normalized.contains("每天")) {
+            orderInfo.setScheduleMode("DAILY");
+        } else if (normalized.contains("工作日")) {
+            orderInfo.setScheduleMode("WEEKDAY");
+        } else if (normalized.contains("周末")) {
+            orderInfo.setScheduleMode("WEEKEND");
+        }
+        if (normalized.contains("午餐和晚餐") || normalized.contains("午餐+晚餐") || normalized.contains("午晚")) {
+            orderInfo.setMealType("LUNCH_DINNER");
+            orderInfo.setStartMealType("LUNCH");
+            if (dayCount != null) {
+                orderInfo.setLunchDinnerCount(dayCount * 2);
+                recalculateTotalCount(orderInfo);
+            }
+            return;
+        }
+        if (normalized.contains("午餐")) {
+            orderInfo.setMealType("LUNCH");
+            orderInfo.setStartMealType("LUNCH");
+            if (dayCount != null) {
+                orderInfo.setLunchDinnerCount(dayCount);
+                recalculateTotalCount(orderInfo);
+            }
+            return;
+        }
+        if (normalized.contains("晚餐")) {
+            orderInfo.setMealType("DINNER");
+            orderInfo.setStartMealType("DINNER");
+            if (dayCount != null) {
+                orderInfo.setLunchDinnerCount(dayCount);
+                recalculateTotalCount(orderInfo);
+            }
+        }
+    }
+
+    /**
+     * 根据显式开始餐次字段覆盖开始餐次默认值。
+     *
+     * @param orderInfo 首单草稿
+     * @param startMealTypeText 开始餐次文本
+     */
+    private void applyExplicitStartMealType(CustomerProfileSaveDto.OrderInfoDto orderInfo, String startMealTypeText) {
+        if (StringUtils.isBlank(startMealTypeText)) {
+            return;
+        }
+        String normalized = startMealTypeText.trim();
+        if (normalized.contains("早餐")) {
+            orderInfo.setStartMealType("BREAKFAST");
+            return;
+        }
+        if (normalized.contains("午餐")) {
+            orderInfo.setStartMealType("LUNCH");
+            return;
+        }
+        if (normalized.contains("晚餐")) {
+            orderInfo.setStartMealType("DINNER");
+        }
+    }
+
+    /**
      * 从“不能吃的/特殊要求”文本中识别米饭类型偏好。
      *
      * @param cannotEat 不能吃的原文
@@ -460,7 +571,7 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
                 continue;
             }
             if (candidate.contains("糙米")) {
-                return "糙米";
+                return "三色糙米";
             }
             if (candidate.contains("黑米")) {
                 return "黑米饭";
@@ -506,6 +617,73 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         } catch (NumberFormatException e) {
             return defaultValue;
         }
+    }
+
+    /**
+     * 将客户来源归一化为系统当前支持的销售渠道值。
+     *
+     * @param source 原始来源文本
+     * @return 归一化后的来源，未识别时返回“其他”
+     */
+    private String normalizeCustomerSource(String source) {
+        if (StringUtils.isBlank(source)) {
+            return null;
+        }
+        String normalized = source.trim();
+        for (Map.Entry<String, String> entry : CUSTOMER_SOURCE_MAPPING.entrySet()) {
+            if (normalized.contains(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return "其他";
+    }
+
+    /**
+     * 从订餐描述中提取天数。
+     *
+     * @param orderDescription 订餐描述
+     * @return 解析出的天数，无法识别时返回 null
+     */
+    private Integer extractDayCount(String orderDescription) {
+        if (StringUtils.isBlank(orderDescription)) {
+            return null;
+        }
+        Matcher matcher = ORDER_DESCRIPTION_DAY_PATTERN.matcher(orderDescription);
+        if (!matcher.find()) {
+            return null;
+        }
+        return parseInteger(matcher.group(1), null);
+    }
+
+    /**
+     * 归一化生产日期，支持 yyyy-MM-dd、yyyy/MM/dd、M月d日。
+     *
+     * @param productionDateText 原始生产日期文本
+     * @return 标准化后的生产日期，无法识别时返回 null
+     */
+    private String normalizeProductionDate(String productionDateText) {
+        if (StringUtils.isBlank(productionDateText)) {
+            return null;
+        }
+        String normalized = productionDateText.trim();
+        try {
+            if (normalized.matches("\\d{4}-\\d{2}-\\d{2}")) {
+                return LocalDate.parse(normalized, DATE_FORMATTER).format(DATE_FORMATTER);
+            }
+            if (normalized.matches("\\d{4}/\\d{2}/\\d{2}")) {
+                return LocalDate.parse(normalized.replace('/', '-'), DATE_FORMATTER).format(DATE_FORMATTER);
+            }
+            Matcher matcher = MONTH_DAY_PATTERN.matcher(normalized);
+            if (matcher.matches()) {
+                int month = parseInteger(matcher.group(1), 0);
+                int day = parseInteger(matcher.group(2), 0);
+                LocalDate date = LocalDate.of(currentDateSupplier.get().getYear(), month, day);
+                return date.format(DATE_FORMATTER);
+            }
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+        return null;
     }
 
     /**
