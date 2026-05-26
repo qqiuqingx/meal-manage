@@ -39,6 +39,14 @@ export function generateCode(parentPackageId) {
   })
 }
 
+export function parseIntakeText(data) {
+  return axios({
+    url: '/api/customerProfile/intake/parse',
+    method: 'post',
+    data
+  })
+}
+
 export function add(data) {
   return axios({
     url: '/api/customerProfile',
@@ -63,4 +71,4 @@ export function del(ids) {
   })
 }
 
-export default { getProfiles, getMealStats, getProfile, generateCode, add, edit, del, saveMealScheduleAdjustments }
+export default { getProfiles, getMealStats, getProfile, generateCode, parseIntakeText, add, edit, del, saveMealScheduleAdjustments }
