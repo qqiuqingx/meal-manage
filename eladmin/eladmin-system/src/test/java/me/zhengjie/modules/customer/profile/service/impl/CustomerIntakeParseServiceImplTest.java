@@ -43,6 +43,16 @@ class CustomerIntakeParseServiceImplTest {
     }
 
     @Test
+    void parseUnknownCustomerSourceShouldFallbackToOther() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("来源：微信");
+
+        CustomerIntakeParseResult result = service.parse(request);
+
+        assertEquals("其他", result.getDraft().getOrderInfo().getCustomerSource());
+    }
+
+    @Test
     void parseDefaultsShouldUseTodayScheduleModeAndWhiteRice() {
         CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
         request.setText("配送日期：默认等通知配送\n餐数：30\n汤数：0");
@@ -79,6 +89,102 @@ class CustomerIntakeParseServiceImplTest {
         CustomerIntakeParseResult result = service.parse(request);
 
         assertEquals("不能要任何冻货", result.getDraft().getSpecialRequirements());
+    }
+
+    @Test
+    void parseBrownRicePreferenceShouldMapToExistingRiceType() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("不能吃的：米换成糙米，不吃面食");
+
+        CustomerIntakeParseResult result = service.parse(request);
+
+        assertEquals("三色糙米", result.getDraft().getOrderInfo().getRiceType());
+    }
+
+    @Test
+    void parseOrderDescriptionShouldInferDailyLunchDinnerAndCount() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("订餐描述：14天每天午餐和晚餐");
+
+        CustomerIntakeParseResult result = service.parse(request);
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = result.getDraft().getOrderInfo();
+
+        assertEquals("DAILY", orderInfo.getScheduleMode());
+        assertEquals("LUNCH_DINNER", orderInfo.getMealType());
+        assertEquals("LUNCH", orderInfo.getStartMealType());
+        assertEquals(Integer.valueOf(28), orderInfo.getLunchDinnerCount());
+    }
+
+    @Test
+    void parseOrderDescriptionShouldInferWeekdayLunchAndCount() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("订餐描述：11天工作日午餐");
+
+        CustomerIntakeParseResult result = service.parse(request);
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = result.getDraft().getOrderInfo();
+
+        assertEquals("WEEKDAY", orderInfo.getScheduleMode());
+        assertEquals("LUNCH", orderInfo.getMealType());
+        assertEquals("LUNCH", orderInfo.getStartMealType());
+        assertEquals(Integer.valueOf(11), orderInfo.getLunchDinnerCount());
+    }
+
+    @Test
+    void parseExplicitStartMealTypeShouldOverrideDefault() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("开始餐次：晚餐");
+
+        CustomerIntakeParseResult result = service.parse(request);
+
+        assertEquals("DINNER", result.getDraft().getOrderInfo().getStartMealType());
+    }
+
+    @Test
+    void parseExplicitStartMealTypeShouldOverrideOrderDescriptionInference() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("订餐描述：14天每天午餐和晚餐\n开始餐次：晚餐");
+
+        CustomerIntakeParseResult result = service.parse(request);
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = result.getDraft().getOrderInfo();
+
+        assertEquals("LUNCH_DINNER", orderInfo.getMealType());
+        assertEquals(Integer.valueOf(28), orderInfo.getLunchDinnerCount());
+        assertEquals("DINNER", orderInfo.getStartMealType());
+    }
+
+    @Test
+    void parseProductionDateShouldSupportMultipleFormats() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("生产日期：5月2日");
+
+        CustomerIntakeParseResult result = service.parse(request);
+
+        assertEquals("2026-05-02", result.getDraft().getProductionDate());
+    }
+
+    @Test
+    void parseDeliveryDateShouldOverrideOrderDescriptionScheduleMode() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("订餐描述：11天工作日午餐\n配送日期：默认等通知配送");
+
+        CustomerIntakeParseResult result = service.parse(request);
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = result.getDraft().getOrderInfo();
+
+        assertEquals("SCHEDULE", orderInfo.getScheduleMode());
+        assertEquals("LUNCH", orderInfo.getMealType());
+        assertEquals(Integer.valueOf(11), orderInfo.getLunchDinnerCount());
+    }
+
+    @Test
+    void parseDeliveryDateWaitingNoticeShouldUseScheduleMode() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("配送日期：等通知");
+
+        CustomerIntakeParseResult result = service.parse(request);
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = result.getDraft().getOrderInfo();
+
+        assertEquals("SCHEDULE", orderInfo.getScheduleMode());
+        assertNull(orderInfo.getDeliveryDates());
     }
 
     @Test

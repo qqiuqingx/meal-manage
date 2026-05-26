@@ -323,6 +323,33 @@
       width="760px"
       append-to-body
     >
+      <div class="intake-guide">
+        <div class="intake-guide__section">
+          <div class="intake-guide__title">必填字段</div>
+          <div class="intake-guide__text">
+            联系人、电话、地址、套餐、合计/订餐描述、菜品配置
+          </div>
+        </div>
+        <div class="intake-guide__section">
+          <div class="intake-guide__title">解析规则</div>
+          <div class="intake-guide__text intake-guide__list">
+            <div>套餐只识别系统父套餐名称或编码。</div>
+            <div>餐别只作参考，不当成套餐。</div>
+            <div>排餐模式优先识别“配送日期”或“排餐模式”字段；“等通知”“默认等通知”“默认等通知配送”都会按指定日期送处理；订餐描述里出现“每天”“工作日”“周末”时也会自动推导；如果两边同时有值，以“配送日期/排餐模式”为准。</div>
+            <div>销售渠道优先识别“来源”“客户来源”“销售渠道”字段，支持抖音、小红书、客户介绍、门店咨询，未识别时自动设为“其他”。</div>
+            <div>“米换成糙米”会映射为“三色糙米”。</div>
+            <div>订餐描述支持“14天每天午餐和晚餐”这类写法，自动推导餐次、开始餐次和餐数。</div>
+            <div>如显式填写“开始餐次：晚餐”，则以显式值为准。</div>
+            <div>生产日期支持“2026-05-02”“2026/05/02”“5月2日”这类写法。</div>
+          </div>
+        </div>
+        <div class="intake-guide__section">
+          <div class="intake-guide__title">默认值</div>
+          <div class="intake-guide__text">
+            未写开始日期默认当天；“默认等通知配送”按指定日期送处理；未写米饭类型默认白米饭。
+          </div>
+        </div>
+      </div>
       <el-input
         v-model="intakeText"
         type="textarea"
@@ -808,5 +835,29 @@ export default {
 }
 .intake-alert {
   margin-bottom: 8px;
+}
+.intake-guide {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #e6edf5;
+  border-radius: 4px;
+}
+.intake-guide__section + .intake-guide__section {
+  margin-top: 8px;
+}
+.intake-guide__title {
+  margin-bottom: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+.intake-guide__text {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #606266;
+}
+.intake-guide__list > div + div {
+  margin-top: 2px;
 }
 </style>
