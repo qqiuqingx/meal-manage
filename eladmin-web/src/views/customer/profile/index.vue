@@ -277,6 +277,17 @@
         <!-- 首单信息（仅新增时显示） -->
         <template v-if="isCreateMode()">
           <el-divider content-position="left">首单信息</el-divider>
+          <div class="intake-toolbar">
+            <el-button
+              type="primary"
+              plain
+              icon="el-icon-document-copy"
+              size="small"
+              @click="openIntakeDialog"
+            >
+              文本解析
+            </el-button>
+          </div>
           <OrderForm
             ref="orderFormRef"
             v-model="form.orderInfo"
@@ -306,6 +317,43 @@
       @edit-customer="handleEdit"
       @view-all-orders="handleViewAllOrders"
     />
+
+    <el-dialog
+      title="客户话术解析"
+      :visible.sync="intakeDialogVisible"
+      width="760px"
+      append-to-body
+    >
+      <el-input
+        v-model="intakeText"
+        type="textarea"
+        :rows="14"
+        placeholder="粘贴客户信息文本"
+      />
+      <div v-if="intakeResult && intakeResult.issues && intakeResult.issues.length" class="intake-issues">
+        <el-alert
+          v-for="(issue, index) in intakeResult.issues"
+          :key="index"
+          :title="issue.message"
+          :description="issue.sourceValue ? ('原文：' + issue.sourceValue) : ''"
+          :type="issue.level === 'ERROR' ? 'error' : 'warning'"
+          :closable="false"
+          show-icon
+          class="intake-alert"
+        />
+      </div>
+      <div slot="footer">
+        <el-button @click="intakeDialogVisible = false">取消</el-button>
+        <el-button :loading="intakeParsing" type="primary" @click="handleParseIntakeText">解析</el-button>
+        <el-button
+          :disabled="!intakeResult || !intakeResult.draft"
+          type="success"
+          @click="applyIntakeDraft"
+        >
+          应用草稿
+        </el-button>
+      </div>
+    </el-dialog>
 
   </div>
 </template>
@@ -401,7 +449,11 @@ export default {
       excludedDishLoading: false,
       editRequestId: 0,
       detailDialogVisible: false,
-      currentCustomer: null
+      currentCustomer: null,
+      intakeDialogVisible: false,
+      intakeText: '',
+      intakeParsing: false,
+      intakeResult: null
     }
   },
   computed: {
@@ -522,6 +574,54 @@ export default {
     cancelDialog() {
       this.crud.cancelCU()
     },
+    openIntakeDialog() {
+      this.intakeDialogVisible = true
+      this.intakeResult = null
+    },
+    async handleParseIntakeText() {
+      if (!this.intakeText || !this.intakeText.trim()) {
+        this.$message.warning('请先粘贴客户信息文本')
+        return
+      }
+      try {
+        this.intakeParsing = true
+        const res = await profileApi.parseIntakeText({ text: this.intakeText })
+        this.intakeResult = res.data || res
+      } catch (e) {
+        console.error('parseIntakeText error', e)
+        this.$message.error('解析失败：' + (e.message || '未知错误'))
+      } finally {
+        this.intakeParsing = false
+      }
+    },
+    applyIntakeDraft() {
+      if (!this.intakeResult || !this.intakeResult.draft) {
+        return
+      }
+      const draft = this.intakeResult.draft
+      const mergedForm = JSON.parse(JSON.stringify(defaultForm))
+
+      Object.keys(draft).forEach(key => {
+        this.$set(mergedForm, key, draft[key])
+      })
+
+      if (!mergedForm.addresses || !mergedForm.addresses.length) {
+        mergedForm.addresses = createDefaultAddresses()
+      } else {
+        mergedForm.addresses = this.createAddressesFromForm(mergedForm)
+      }
+
+      if (!mergedForm.orderInfo) {
+        mergedForm.orderInfo = createFirstOrderDefaultForm()
+      } else {
+        mergedForm.orderInfo = Object.assign(createFirstOrderDefaultForm(), mergedForm.orderInfo)
+      }
+
+      Object.assign(this.form, mergedForm)
+      this.excludeDatesExpanded = false
+      this.intakeDialogVisible = false
+      this.$message.success('已应用解析草稿，请确认后保存')
+    },
     async submitForm() {
       // 基础字段校验
       const basicValid = await new Promise(resolve => {
@@ -556,6 +656,9 @@ export default {
     },
     [CRUD.HOOK.beforeToAdd]() {
       Object.assign(this.form, JSON.parse(JSON.stringify(defaultForm)))
+      this.intakeText = ''
+      this.intakeResult = null
+      this.intakeDialogVisible = false
       return true
     },
     [CRUD.HOOK.beforeToCU]() {
@@ -695,5 +798,14 @@ export default {
 }
 .head-container .filter-item {
   margin-right: 10px;
+}
+.intake-toolbar {
+  margin-bottom: 12px;
+}
+.intake-issues {
+  margin-top: 12px;
+}
+.intake-alert {
+  margin-bottom: 8px;
 }
 </style>
