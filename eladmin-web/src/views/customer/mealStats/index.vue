@@ -490,6 +490,7 @@ export default {
       this.calendarSaving = true
       saveMealScheduleAdjustments({
         customerId: this.selectedRow.customerId,
+        statsMonth: this.query.statsMonth,
         excludedDates: this.calendarExcludedDates,
         additions: this.calendarAdditions
       }).then(() => {

@@ -34,11 +34,23 @@
         limit 1
     </select>
 
-    <update id="softDeleteMissingByCustomerId">
+    <select id="selectAnyByOrderDateMeal" resultType="me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition">
+        select id, customer_id, order_id, record_date, meal_type, remark, deleted, create_by, update_by, create_time, update_time
+        from customer_meal_schedule_addition
+        where order_id = #{orderId}
+          and record_date = #{recordDate}
+          and meal_type = #{mealType}
+        order by deleted asc, id desc
+        limit 1
+    </select>
+
+    <update id="softDeleteMissingByCustomerIdAndDateRange">
         update customer_meal_schedule_addition
         set deleted = 1, update_time = now()
         where deleted = 0
           and customer_id = #{customerId}
+          and record_date &gt;= #{startDate}
+          and record_date &lt;= #{endDate}
         <if test="keepIds != null and keepIds.size() &gt; 0">
           and id not in
           <foreach collection="keepIds" item="id" open="(" separator="," close=")">
