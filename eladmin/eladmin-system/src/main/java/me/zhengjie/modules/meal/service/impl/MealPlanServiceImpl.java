@@ -461,6 +461,11 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     /**
      * 加载指定日期餐次的人工新增订单，并合并进候选订单列表。
+     *
+     * @param candidateOrders 常规规则过滤后的候选订单
+     * @param targetDate 排餐日期
+     * @param mealType 餐次
+     * @return 合并人工新增后的候选订单列表
      */
     private List<CustomerOrder> mergeManualAdditionOrders(List<CustomerOrder> candidateOrders,
                                                           LocalDate targetDate,
@@ -470,21 +475,83 @@ public class MealPlanServiceImpl implements MealPlanService {
         if (additions == null || additions.isEmpty()) {
             return candidateOrders;
         }
+        Map<Long, CustomerOrder> additionOrderMap = new LinkedHashMap<>();
+        List<String> additionCustomerDetails = new ArrayList<>();
+        for (CustomerMealScheduleAddition addition : additions) {
+            if (addition == null || addition.getOrderId() == null) {
+                additionCustomerDetails.add(formatManualAdditionCustomer(null, addition));
+                continue;
+            }
+            CustomerOrder order = customerOrderMapper.selectById(addition.getOrderId());
+            additionOrderMap.put(addition.getOrderId(), order);
+            additionCustomerDetails.add(formatManualAdditionCustomer(order, addition));
+        }
+        log.info("人工新增排餐记录查询完成 - 日期: {}, 餐次: {}, 记录数: {}, 客户明细: {}",
+                targetDate, mealType, additions.size(), additionCustomerDetails);
+
         Set<Long> existingOrderIds = candidateOrders.stream()
                 .map(CustomerOrder::getId)
                 .collect(Collectors.toSet());
         List<CustomerOrder> merged = new ArrayList<>(candidateOrders);
+        int duplicateCount = 0;
+        int invalidCount = 0;
+        int mergedCount = 0;
         for (CustomerMealScheduleAddition addition : additions) {
-            if (addition == null || existingOrderIds.contains(addition.getOrderId())) {
+            if (addition == null || addition.getOrderId() == null) {
+                invalidCount++;
                 continue;
             }
-            CustomerOrder order = customerOrderMapper.selectById(addition.getOrderId());
-            if (order != null && order.getStatus() != null && order.getStatus() == 1) {
+            if (existingOrderIds.contains(addition.getOrderId())) {
+                duplicateCount++;
+                continue;
+            }
+            CustomerOrder order = additionOrderMap.get(addition.getOrderId());
+            if (isManualAdditionOrderAvailable(order, targetDate)) {
                 merged.add(order);
                 existingOrderIds.add(order.getId());
+                mergedCount++;
+            } else {
+                invalidCount++;
             }
         }
+        log.info("人工新增排餐记录合并完成 - 日期: {}, 餐次: {}, 查询记录数: {}, 新增并入订单数: {}, 跳过重复订单数: {}, 跳过无效订单数: {}",
+                targetDate, mealType, additions.size(), mergedCount, duplicateCount, invalidCount);
         return merged;
+    }
+
+    /**
+     * 格式化人工新增记录对应的客户日志信息，便于排查具体客户和绑定订单。
+     *
+     * @param order 人工新增绑定订单
+     * @param addition 人工新增记录
+     * @return 客户日志展示文本
+     */
+    private String formatManualAdditionCustomer(CustomerOrder order, CustomerMealScheduleAddition addition) {
+        Long customerId = addition != null ? addition.getCustomerId() : null;
+        Long orderId = addition != null ? addition.getOrderId() : null;
+        if (order == null) {
+            return String.format("customerId=%s, orderId=%s, customer=未知客户", customerId, orderId);
+        }
+        String customerName = StringUtils.isBlank(order.getCustomerName()) ? "未知客户" : order.getCustomerName();
+        String customerCode = StringUtils.isBlank(order.getCustomerCode()) ? "-" : order.getCustomerCode();
+        return String.format("customerId=%s, orderId=%s, customer=%s-%s",
+                customerId, orderId, customerName, customerCode);
+    }
+
+    /**
+     * 判断人工新增记录绑定的订单在生成日期仍可用。
+     */
+    private boolean isManualAdditionOrderAvailable(CustomerOrder order, LocalDate targetDate) {
+        if (order == null || order.getStatus() == null || order.getStatus() != 1) {
+            return false;
+        }
+        if (order.getRemainingCount() == null || order.getRemainingCount() <= 0) {
+            return false;
+        }
+        if (order.getStartDate() != null && targetDate.isBefore(order.getStartDate())) {
+            return false;
+        }
+        return order.getEndDate() == null || !targetDate.isAfter(order.getEndDate());
     }
 
     /**

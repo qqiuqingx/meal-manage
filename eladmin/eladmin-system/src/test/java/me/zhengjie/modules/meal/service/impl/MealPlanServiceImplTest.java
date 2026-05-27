@@ -1,10 +1,14 @@
 package me.zhengjie.modules.meal.service.impl;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
+import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
@@ -34,6 +38,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
 import java.time.LocalDate;
@@ -79,6 +84,8 @@ class MealPlanServiceImplTest {
     private DishIngredientCategoryService dishIngredientCategoryService;
     @Mock
     private CustomerMealScheduleAdditionMapper customerMealScheduleAdditionMapper;
+    @Mock
+    private CustomerOrderReplaceRuleMapper replaceRuleMapper;
 
     @InjectMocks
     private MealPlanServiceImpl mealPlanService;
@@ -159,6 +166,93 @@ class MealPlanServiceImplTest {
         verify(mealPlanCustomerItemMapper).softDeleteByCustomerPlanIds(Collections.singletonList(20L));
         verify(mealPlanCustomerMapper).softDeleteByIds(Collections.singletonList(20L));
         verify(mealPlanMapper).softDeletePlanById(10L);
+    }
+
+    @Test
+    void shouldIgnoreManualAdditionOrderOutsideDateRangeWhenGeneratingMealPlan() throws Exception {
+        CustomerMealScheduleAddition addition = new CustomerMealScheduleAddition();
+        addition.setOrderId(10L);
+        addition.setCustomerId(1L);
+        addition.setRecordDate(LocalDate.of(2026, 5, 25));
+        addition.setMealType("LUNCH");
+
+        CustomerOrder expiredOrder = buildOrder();
+        expiredOrder.setId(10L);
+        expiredOrder.setStatus(1);
+        expiredOrder.setRemainingCount(5);
+        expiredOrder.setStartDate(LocalDate.of(2026, 4, 1));
+        expiredOrder.setEndDate(LocalDate.of(2026, 4, 30));
+
+        when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(LocalDate.of(2026, 5, 25), "LUNCH"))
+                .thenReturn(Collections.singletonList(addition));
+        when(customerOrderMapper.selectById(10L)).thenReturn(expiredOrder);
+
+        Method method = MealPlanServiceImpl.class.getDeclaredMethod(
+                "mergeManualAdditionOrders", List.class, LocalDate.class, String.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<CustomerOrder> result = (List<CustomerOrder>) method.invoke(
+                mealPlanService, Collections.emptyList(), LocalDate.of(2026, 5, 25), "LUNCH");
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void shouldLogManualAdditionCountAndCustomersWhenMergingOrders() throws Exception {
+        CustomerMealScheduleAddition additionA = new CustomerMealScheduleAddition();
+        additionA.setOrderId(10L);
+        additionA.setCustomerId(1L);
+        additionA.setRecordDate(LocalDate.of(2026, 4, 1));
+        additionA.setMealType("LUNCH");
+
+        CustomerMealScheduleAddition additionB = new CustomerMealScheduleAddition();
+        additionB.setOrderId(11L);
+        additionB.setCustomerId(2L);
+        additionB.setRecordDate(LocalDate.of(2026, 4, 1));
+        additionB.setMealType("LUNCH");
+
+        CustomerOrder orderA = buildOrder();
+        orderA.setId(10L);
+        orderA.setCustomerId(1L);
+        orderA.setCustomerName("张三");
+        orderA.setCustomerCode("C001");
+
+        CustomerOrder orderB = buildOrder();
+        orderB.setId(11L);
+        orderB.setCustomerId(2L);
+        orderB.setCustomerName("李四");
+        orderB.setCustomerCode("C002");
+
+        when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Arrays.asList(additionA, additionB));
+        when(customerOrderMapper.selectById(10L)).thenReturn(orderA);
+        when(customerOrderMapper.selectById(11L)).thenReturn(orderB);
+
+        Logger logger = (Logger) LoggerFactory.getLogger(MealPlanServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            Method method = MealPlanServiceImpl.class.getDeclaredMethod(
+                    "mergeManualAdditionOrders", List.class, LocalDate.class, String.class);
+            method.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            List<CustomerOrder> result = (List<CustomerOrder>) method.invoke(
+                    mealPlanService, Collections.emptyList(), LocalDate.of(2026, 4, 1), "LUNCH");
+
+            assertEquals(2, result.size());
+            String logOutput = appender.list.stream()
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .reduce((left, right) -> left + "\n" + right)
+                    .orElse("");
+            assertTrue(logOutput.contains("人工新增排餐记录查询完成"));
+            assertTrue(logOutput.contains("记录数: 2"));
+            assertTrue(logOutput.contains("张三-C001"));
+            assertTrue(logOutput.contains("李四-C002"));
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
     }
 
     @Test
