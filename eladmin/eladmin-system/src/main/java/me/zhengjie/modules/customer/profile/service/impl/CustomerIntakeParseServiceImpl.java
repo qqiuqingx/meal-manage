@@ -490,7 +490,7 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
      * 根据订餐描述推导排餐模式、餐次类型和餐数。
      *
      * @param orderInfo 首单草稿
-     * @param orderDescription 订餐描述，如“14天每天午餐和晚餐”
+     * @param orderDescription 订餐描述，如“14天每天午餐和晚餐”“14天每天早中晚”
      */
     private void applyOrderDescription(CustomerProfileSaveDto.OrderInfoDto orderInfo, String orderDescription) {
         if (StringUtils.isBlank(orderDescription)) {
@@ -505,31 +505,72 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         } else if (normalized.contains("周末")) {
             orderInfo.setScheduleMode("WEEKEND");
         }
-        if (normalized.contains("午餐和晚餐") || normalized.contains("午餐+晚餐") || normalized.contains("午晚")) {
+        MealTypeSelection mealTypes = parseOrderDescriptionMealTypes(normalized);
+        if (!mealTypes.hasAny()) {
+            return;
+        }
+        if (mealTypes.breakfast) {
+            orderInfo.setMealType("ALL");
+            orderInfo.setStartMealType("BREAKFAST");
+        } else if (mealTypes.lunch && mealTypes.dinner) {
             orderInfo.setMealType("LUNCH_DINNER");
             orderInfo.setStartMealType("LUNCH");
-            if (dayCount != null) {
-                orderInfo.setLunchDinnerCount(dayCount * 2);
-                recalculateTotalCount(orderInfo);
-            }
-            return;
-        }
-        if (normalized.contains("午餐")) {
+        } else if (mealTypes.lunch) {
             orderInfo.setMealType("LUNCH");
             orderInfo.setStartMealType("LUNCH");
-            if (dayCount != null) {
-                orderInfo.setLunchDinnerCount(dayCount);
-                recalculateTotalCount(orderInfo);
-            }
-            return;
-        }
-        if (normalized.contains("晚餐")) {
+        } else {
             orderInfo.setMealType("DINNER");
             orderInfo.setStartMealType("DINNER");
-            if (dayCount != null) {
-                orderInfo.setLunchDinnerCount(dayCount);
-                recalculateTotalCount(orderInfo);
-            }
+        }
+        if (dayCount != null) {
+            orderInfo.setBreakfastCount(mealTypes.breakfast ? dayCount : 0);
+            int lunchDinnerCount = (mealTypes.lunch ? dayCount : 0) + (mealTypes.dinner ? dayCount : 0);
+            orderInfo.setLunchDinnerCount(lunchDinnerCount);
+            recalculateTotalCount(orderInfo);
+        }
+    }
+
+    /**
+     * 从订餐描述中归一化识别早餐、午餐、晚餐，支持“早中晚”“早午晚”“中晚”等短写。
+     *
+     * @param orderDescription 订餐描述
+     * @return 餐次识别结果
+     */
+    private MealTypeSelection parseOrderDescriptionMealTypes(String orderDescription) {
+        String normalized = orderDescription
+                .replace(" ", "")
+                .replace("，", "")
+                .replace(",", "")
+                .replace("、", "")
+                .replace("+", "")
+                .replace("和", "")
+                .replace("与", "");
+        MealTypeSelection selection = new MealTypeSelection();
+        selection.breakfast = normalized.contains("早餐")
+                || normalized.contains("早饭")
+                || normalized.contains("早");
+        selection.lunch = normalized.contains("午餐")
+                || normalized.contains("午饭")
+                || normalized.contains("中餐")
+                || normalized.contains("中饭")
+                || normalized.contains("午")
+                || normalized.contains("中");
+        selection.dinner = normalized.contains("晚餐")
+                || normalized.contains("晚饭")
+                || normalized.contains("晚");
+        return selection;
+    }
+
+    /**
+     * 订餐描述中的餐次识别结果。
+     */
+    private static class MealTypeSelection {
+        private boolean breakfast;
+        private boolean lunch;
+        private boolean dinner;
+
+        private boolean hasAny() {
+            return breakfast || lunch || dinner;
         }
     }
 
