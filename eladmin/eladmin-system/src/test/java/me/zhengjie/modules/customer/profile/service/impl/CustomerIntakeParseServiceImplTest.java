@@ -130,6 +130,51 @@ class CustomerIntakeParseServiceImplTest {
     }
 
     @Test
+    void parseOrderDescriptionShouldSupportShortBreakfastLunchDinnerAlias() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("订餐描述：14天每天早中晚");
+
+        CustomerIntakeParseResult result = service.parse(request);
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = result.getDraft().getOrderInfo();
+
+        assertEquals("DAILY", orderInfo.getScheduleMode());
+        assertEquals("ALL", orderInfo.getMealType());
+        assertEquals("BREAKFAST", orderInfo.getStartMealType());
+        assertEquals(Integer.valueOf(14), orderInfo.getBreakfastCount());
+        assertEquals(Integer.valueOf(28), orderInfo.getLunchDinnerCount());
+        assertEquals(Integer.valueOf(42), orderInfo.getTotalCount());
+    }
+
+    @Test
+    void parseOrderDescriptionShouldSupportShortBreakfastNoonDinnerAlias() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("订餐描述：14天每天早午晚");
+
+        CustomerIntakeParseResult result = service.parse(request);
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = result.getDraft().getOrderInfo();
+
+        assertEquals("ALL", orderInfo.getMealType());
+        assertEquals("BREAKFAST", orderInfo.getStartMealType());
+        assertEquals(Integer.valueOf(14), orderInfo.getBreakfastCount());
+        assertEquals(Integer.valueOf(28), orderInfo.getLunchDinnerCount());
+    }
+
+    @Test
+    void parseOrderDescriptionShouldSupportShortLunchDinnerAlias() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("订餐描述：14天每天中晚");
+
+        CustomerIntakeParseResult result = service.parse(request);
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = result.getDraft().getOrderInfo();
+
+        assertEquals("DAILY", orderInfo.getScheduleMode());
+        assertEquals("LUNCH_DINNER", orderInfo.getMealType());
+        assertEquals("LUNCH", orderInfo.getStartMealType());
+        assertEquals(Integer.valueOf(0), orderInfo.getBreakfastCount());
+        assertEquals(Integer.valueOf(28), orderInfo.getLunchDinnerCount());
+    }
+
+    @Test
     void parseExplicitStartMealTypeShouldOverrideDefault() {
         CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
         request.setText("开始餐次：晚餐");
