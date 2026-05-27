@@ -56,6 +56,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -245,8 +246,12 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整排除日期保存完成 - 客户ID: {}, 排除餐次数: {}",
                 profile.getId(), normalizedExcludedKeys.size());
 
-        List<Long> keepAdditionIds = saveManualAdditions(profile.getId(), request.getAdditions(), normalizedExcludedDates);
-        int softDeletedAdditionCount = customerMealScheduleAdditionMapper.softDeleteMissingByCustomerId(profile.getId(), keepAdditionIds);
+        YearMonth adjustmentMonth = resolveAdjustmentMonth(request);
+        LocalDate monthStart = adjustmentMonth.atDay(1);
+        LocalDate monthEnd = adjustmentMonth.atEndOfMonth();
+        List<Long> keepAdditionIds = saveManualAdditions(profile.getId(), request.getAdditions(), normalizedExcludedDates, monthStart, monthEnd);
+        int softDeletedAdditionCount = customerMealScheduleAdditionMapper.softDeleteMissingByCustomerIdAndDateRange(
+                profile.getId(), monthStart, monthEnd, keepAdditionIds);
         SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增同步完成 - 客户ID: {}, 保留人工新增数: {}, 软删除人工新增数: {}, 保留ID: {}",
                 profile.getId(), keepAdditionIds.size(), softDeletedAdditionCount, keepAdditionIds);
 
@@ -1323,7 +1328,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
      */
     private List<Long> saveManualAdditions(Long customerId,
                                            List<CustomerMealScheduleAdditionDto> additions,
-                                           List<ExcludedDateDto> excludedDates) {
+                                           List<ExcludedDateDto> excludedDates,
+                                           LocalDate monthStart,
+                                           LocalDate monthEnd) {
         if (additions == null || additions.isEmpty()) {
             SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增为空 - 客户ID: {}", customerId);
             return Collections.emptyList();
@@ -1343,6 +1350,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 throw new BadRequestException("不支持的餐次：" + dto.getMealType());
             }
             LocalDate recordDate = parseLocalDate(dto.getDate(), "人工新增日期格式错误");
+            if (recordDate.isBefore(monthStart) || recordDate.isAfter(monthEnd)) {
+                SCHEDULE_ADJUSTMENT_LOG.debug("客户排餐日历调整人工新增跳过非当前月份项 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 当前月份范围: {}~{}",
+                        customerId, dto.getOrderId(), recordDate, dto.getMealType(), monthStart, monthEnd);
+                continue;
+            }
             if (excludedKeys.contains(recordDate + "#" + dto.getMealType())) {
                 SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增被排除日期覆盖，跳过保存 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}",
                         customerId, dto.getOrderId(), recordDate, dto.getMealType());
@@ -1350,27 +1362,44 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             }
             SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增校验开始 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}",
                     customerId, dto.getOrderId(), recordDate, dto.getMealType());
-            validateManualAdditionOrder(customerId, dto.getOrderId(), recordDate, dto.getMealType());
+            CustomerOrder manualOrder = resolveManualAdditionOrder(customerId, dto.getOrderId(), recordDate, dto.getMealType());
+            Long orderId = manualOrder.getId();
             CustomerMealScheduleAddition existing = customerMealScheduleAdditionMapper
-                    .selectActiveByOrderDateMeal(dto.getOrderId(), recordDate, dto.getMealType());
+                    .selectActiveByOrderDateMeal(orderId, recordDate, dto.getMealType());
             if (existing == null) {
-                existing = new CustomerMealScheduleAddition();
-                existing.setCustomerId(customerId);
-                existing.setOrderId(dto.getOrderId());
-                existing.setRecordDate(recordDate);
-                existing.setMealType(dto.getMealType());
-                existing.setRemark(dto.getRemark());
-                existing.setDeleted(false);
-                existing.setCreateBy(getCurrentUsername());
-                customerMealScheduleAdditionMapper.insert(existing);
-                SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增创建完成 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 新增ID: {}",
-                        customerId, dto.getOrderId(), recordDate, dto.getMealType(), existing.getId());
+                CustomerMealScheduleAddition deleted = customerMealScheduleAdditionMapper
+                        .selectAnyByOrderDateMeal(orderId, recordDate, dto.getMealType());
+                if (deleted != null) {
+                    existing = deleted;
+                    existing.setCustomerId(customerId);
+                    existing.setOrderId(orderId);
+                    existing.setRecordDate(recordDate);
+                    existing.setMealType(dto.getMealType());
+                    existing.setRemark(dto.getRemark());
+                    existing.setDeleted(false);
+                    existing.setUpdateBy(getCurrentUsername());
+                    customerMealScheduleAdditionMapper.updateById(existing);
+                    SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增恢复完成 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 记录ID: {}",
+                            customerId, orderId, recordDate, dto.getMealType(), existing.getId());
+                } else {
+                    existing = new CustomerMealScheduleAddition();
+                    existing.setCustomerId(customerId);
+                    existing.setOrderId(orderId);
+                    existing.setRecordDate(recordDate);
+                    existing.setMealType(dto.getMealType());
+                    existing.setRemark(dto.getRemark());
+                    existing.setDeleted(false);
+                    existing.setCreateBy(getCurrentUsername());
+                    customerMealScheduleAdditionMapper.insert(existing);
+                    SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增创建完成 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 新增ID: {}",
+                            customerId, orderId, recordDate, dto.getMealType(), existing.getId());
+                }
             } else {
                 existing.setRemark(dto.getRemark());
                 existing.setUpdateBy(getCurrentUsername());
                 customerMealScheduleAdditionMapper.updateById(existing);
                 SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增更新完成 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 记录ID: {}",
-                        customerId, dto.getOrderId(), recordDate, dto.getMealType(), existing.getId());
+                        customerId, orderId, recordDate, dto.getMealType(), existing.getId());
             }
             keepIds.add(existing.getId());
         }
@@ -1378,38 +1407,119 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     }
 
     /**
-     * 校验人工新增绑定订单是否属于当前客户且餐次类型可用。
+     * 解析人工新增应绑定的订单，优先使用前端传入订单，若该订单不覆盖目标日期则选择同客户同餐次可用订单。
      */
-    private void validateManualAdditionOrder(Long customerId, Long orderId, LocalDate recordDate, String mealType) {
-        if (orderId == null) {
-            SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 日期: {}, 餐次: {}, 原因: 订单ID为空",
-                    customerId, recordDate, mealType);
-            throw new BadRequestException("人工新增餐次必须选择订单");
+    private CustomerOrder resolveManualAdditionOrder(Long customerId, Long preferredOrderId, LocalDate recordDate, String mealType) {
+        CustomerOrder preferredOrder = null;
+        if (preferredOrderId != null) {
+            preferredOrder = customerOrderMapper.selectById(preferredOrderId);
+            if (isManualAdditionOrderUsable(preferredOrder, customerId, recordDate, mealType)) {
+                return preferredOrder;
+            }
         }
-        CustomerOrder order = customerOrderMapper.selectById(orderId);
-        if (order == null || !Objects.equals(order.getCustomerId(), customerId)) {
-            SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 原因: 订单不存在或不属于当前客户",
-                    customerId, orderId, recordDate, mealType);
+        List<CustomerOrder> activeOrders = customerOrderMapper.findActiveOrdersByCustomerId(customerId);
+        if (activeOrders != null) {
+            for (CustomerOrder order : activeOrders) {
+                if (isManualAdditionOrderUsable(order, customerId, recordDate, mealType)) {
+                    SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增自动改绑订单 - 客户ID: {}, 原订单ID: {}, 新订单ID: {}, 日期: {}, 餐次: {}",
+                            customerId, preferredOrderId, order.getId(), recordDate, mealType);
+                    return order;
+                }
+            }
+        }
+        if (preferredOrder == null || !Objects.equals(preferredOrder.getCustomerId(), customerId)) {
             throw new BadRequestException("人工新增餐次选择的订单不存在或不属于当前客户");
         }
+        if (!isOrderDateCovered(preferredOrder, recordDate)) {
+            throw new BadRequestException("人工新增餐次日期不在订单有效期内");
+        }
+        validateManualAdditionOrder(customerId, preferredOrder, recordDate, mealType);
+        return preferredOrder;
+    }
+
+    /**
+     * 判断订单是否可用于指定人工新增餐次。
+     */
+    private boolean isManualAdditionOrderUsable(CustomerOrder order, Long customerId, LocalDate recordDate, String mealType) {
+        if (order == null || !Objects.equals(order.getCustomerId(), customerId)) {
+            return false;
+        }
+        try {
+            validateManualAdditionOrder(customerId, order, recordDate, mealType);
+            return true;
+        } catch (BadRequestException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 校验人工新增绑定订单是否属于当前客户且餐次类型可用。
+     */
+    private void validateManualAdditionOrder(Long customerId, CustomerOrder order, LocalDate recordDate, String mealType) {
         if (order.getStatus() == null || order.getStatus() != 1) {
             SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 订单状态: {}, 原因: 非进行中订单",
-                    customerId, orderId, recordDate, mealType, order.getStatus());
+                    customerId, order.getId(), recordDate, mealType, order.getStatus());
             throw new BadRequestException("人工新增餐次只能选择进行中的订单");
+        }
+        if (!isOrderDateCovered(order, recordDate)) {
+            SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 开始日期: {}, 结束日期: {}, 原因: 日期不在订单有效期内",
+                    customerId, order.getId(), recordDate, mealType, order.getStartDate(), order.getEndDate());
+            throw new BadRequestException("人工新增餐次日期不在订单有效期内");
         }
         if (!customerOrderContainsMealType(order, mealType)) {
             SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 订单餐次: {}, 早餐数: {}, 午晚餐数: {}, 原因: 餐次类型不匹配",
-                    customerId, orderId, recordDate, mealType, order.getMealType(), order.getBreakfastCount(), order.getLunchDinnerCount());
+                    customerId, order.getId(), recordDate, mealType, order.getMealType(), order.getBreakfastCount(), order.getLunchDinnerCount());
             throw new BadRequestException("人工新增餐次与订单餐次类型不匹配");
         }
         String startMealType = OrderStartMealTypeUtil.normalizeStartMealType(order.getMealType(), order.getStartMealType());
         if (!OrderStartMealTypeUtil.hasStartedForMeal(order.getStartDate(), startMealType, recordDate, mealType)) {
             SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 开始日期: {}, 开始餐次: {}, 原因: 早于订单开始餐次",
-                    customerId, orderId, recordDate, mealType, order.getStartDate(), startMealType);
+                    customerId, order.getId(), recordDate, mealType, order.getStartDate(), startMealType);
             throw new BadRequestException("人工新增餐次早于订单开始餐次");
         }
         SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增校验通过 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 订单餐次: {}, 开始日期: {}, 开始餐次: {}",
-                customerId, orderId, recordDate, mealType, order.getMealType(), order.getStartDate(), startMealType);
+                customerId, order.getId(), recordDate, mealType, order.getMealType(), order.getStartDate(), startMealType);
+    }
+
+    /**
+     * 判断日期是否落在订单有效期内。
+     */
+    private boolean isOrderDateCovered(CustomerOrder order, LocalDate recordDate) {
+        if (order == null || recordDate == null) {
+            return false;
+        }
+        if (order.getStartDate() != null && recordDate.isBefore(order.getStartDate())) {
+            return false;
+        }
+        return order.getEndDate() == null || !recordDate.isAfter(order.getEndDate());
+    }
+
+    /**
+     * 解析日历调整所属月份，优先使用请求月份，缺省时从请求日期推断。
+     */
+    private YearMonth resolveAdjustmentMonth(CustomerMealScheduleAdjustmentRequest request) {
+        if (request != null && StringUtils.isNotBlank(request.getStatsMonth())) {
+            try {
+                return YearMonth.parse(request.getStatsMonth());
+            } catch (Exception e) {
+                throw new BadRequestException("统计月份格式错误，请使用 yyyy-MM 格式");
+            }
+        }
+        if (request != null && request.getExcludedDates() != null) {
+            for (ExcludedDateDto excludedDate : request.getExcludedDates()) {
+                if (excludedDate != null && StringUtils.isNotBlank(excludedDate.getDate())) {
+                    return YearMonth.from(parseLocalDate(excludedDate.getDate(), "排除日期格式错误"));
+                }
+            }
+        }
+        if (request != null && request.getAdditions() != null) {
+            for (CustomerMealScheduleAdditionDto addition : request.getAdditions()) {
+                if (addition != null && StringUtils.isNotBlank(addition.getDate())) {
+                    return YearMonth.from(parseLocalDate(addition.getDate(), "人工新增日期格式错误"));
+                }
+            }
+        }
+        return YearMonth.now();
     }
 
     /**
