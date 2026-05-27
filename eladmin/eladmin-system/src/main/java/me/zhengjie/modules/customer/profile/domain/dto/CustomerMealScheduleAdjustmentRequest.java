@@ -22,6 +22,11 @@ public class CustomerMealScheduleAdjustmentRequest implements Serializable {
     private Long customerId;
 
     /**
+     * 当前编辑的统计月份，格式 yyyy-MM。用于限定人工新增同步范围，避免保存单月日历时影响其他月份。
+     */
+    private String statsMonth;
+
+    /**
      * 页面保存后的排除日期完整列表
      */
     private List<ExcludedDateDto> excludedDates = new ArrayList<>();
