@@ -22,6 +22,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import cn.hutool.json.JSONUtil;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
@@ -2427,36 +2428,53 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     /**
      * 查询指定日期排餐后将耗尽餐数的客户订单列表。
-     * 遍历所有有效订单，筛选剩余餐数 <= 1 的订单，并统计目标日期的排餐情况。
+     * 遍历所有有效订单，按早餐、午晚餐两个餐数池分别统计剩余餐数和目标日期排餐情况。
      * 用于提醒运营人员关注即将用完餐数的客户，主动跟进续费。
      */
     @Override
     public List<MealDepletionWarningDto> getDepletionWarnings(LocalDate targetDate) {
-        // 查询剩余餐数 <= 1 的有效订单（status=1, 0 < remainingCount <= 1, startDate<=targetDate）
-        List<CustomerOrder> lowRemainingOrders = customerOrderMapper.selectList(
+        // 查询仍有合计剩余餐数的有效订单，再按早餐/午晚餐餐数池分别判断是否需要预警。
+        List<CustomerOrder> activeOrders = customerOrderMapper.selectList(
             new QueryWrapper<CustomerOrder>()
                 .eq("status", 1)
                 .gt("COALESCE(remaining_count, 0)", 0)
-                .le("COALESCE(remaining_count, 0)", 1)
                 .le("start_date", targetDate)
         );
-        if (lowRemainingOrders.isEmpty()) {
+        if (activeOrders.isEmpty()) {
             return Collections.emptyList();
         }
 
-        // 统计目标日期各订单的有效排餐总数（所有餐次合计）
-        List<Long> orderIds = lowRemainingOrders.stream()
+        List<Long> orderIds = activeOrders.stream()
             .map(CustomerOrder::getId)
             .collect(Collectors.toList());
+
+        // 统计目标日期各订单各餐次的有效排餐数。
         List<OrderScheduledCountDto> scheduledCounts =
             mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(orderIds, targetDate);
-        Map<Long, Integer> scheduledCountMap = new HashMap<>();
+        Map<Long, Map<String, Integer>> scheduledCountMap = new HashMap<>();
         for (OrderScheduledCountDto dto : scheduledCounts) {
-            scheduledCountMap.put(dto.getOrderId(), dto.getScheduledCount());
+            if (dto.getOrderId() == null || dto.getMealType() == null) {
+                continue;
+            }
+            scheduledCountMap
+                    .computeIfAbsent(dto.getOrderId(), k -> new HashMap<>())
+                    .put(dto.getMealType(), dto.getScheduledCount() != null ? dto.getScheduledCount() : 0);
+        }
+
+        // 统计各订单各餐次已核销数，用于按餐数池计算真实剩余餐数。
+        List<OrderMealVerifiedCountDto> verifiedCounts = customerOrderMapper.sumVerifiedCountByOrderIds(orderIds);
+        Map<Long, Map<String, Integer>> verifiedCountMap = new HashMap<>();
+        for (OrderMealVerifiedCountDto dto : verifiedCounts) {
+            if (dto.getOrderId() == null || dto.getMealType() == null) {
+                continue;
+            }
+            verifiedCountMap
+                    .computeIfAbsent(dto.getOrderId(), k -> new HashMap<>())
+                    .put(dto.getMealType(), dto.getVerifiedCount() != null ? dto.getVerifiedCount() : 0);
         }
 
         // 加载客户档案信息
-        Set<Long> customerIds = lowRemainingOrders.stream()
+        Set<Long> customerIds = activeOrders.stream()
             .map(CustomerOrder::getCustomerId)
             .filter(Objects::nonNull)
             .collect(Collectors.toSet());
@@ -2470,20 +2488,89 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         // 构建预警结果
         List<MealDepletionWarningDto> warnings = new ArrayList<>();
-        for (CustomerOrder order : lowRemainingOrders) {
-            int remaining = order.getRemainingCount();
-            int scheduled = scheduledCountMap.getOrDefault(order.getId(), 0);
+        for (CustomerOrder order : activeOrders) {
             CustomerProfile cp = customerMap.get(order.getCustomerId());
-            MealDepletionWarningDto dto = new MealDepletionWarningDto();
-            dto.setOrderId(order.getId());
-            dto.setCustomerId(order.getCustomerId());
-            dto.setCustomerCode(cp != null ? cp.getCustomerCode() : order.getCustomerCode());
-            dto.setCustomerName(cp != null ? cp.getCustomerName() : "");
-            dto.setRemainingCount(remaining);
-            dto.setTomorrowScheduledCount(scheduled);
-            warnings.add(dto);
+            appendDepletionWarningIfNeeded(warnings, order, cp, MEAL_TYPE_BREAKFAST,
+                    calculateBreakfastRemaining(order, verifiedCountMap.get(order.getId())),
+                    getScheduledCount(scheduledCountMap.get(order.getId()), MEAL_TYPE_BREAKFAST));
+            appendDepletionWarningIfNeeded(warnings, order, cp, "LUNCH_DINNER",
+                    calculateLunchDinnerRemaining(order, verifiedCountMap.get(order.getId())),
+                    getScheduledCount(scheduledCountMap.get(order.getId()), MEAL_TYPE_LUNCH)
+                            + getScheduledCount(scheduledCountMap.get(order.getId()), MEAL_TYPE_DINNER));
         }
 
         return warnings;
+    }
+
+    /**
+     * 按餐数池判断是否需要加入耗尽预警。
+     *
+     * @param warnings 预警结果列表
+     * @param order 客户订单
+     * @param cp 客户档案，可能为空
+     * @param mealType 餐数池类型，BREAKFAST 或 LUNCH_DINNER
+     * @param remaining 当前餐数池剩余餐数
+     * @param scheduledCount 目标日期该餐数池排餐数
+     */
+    private void appendDepletionWarningIfNeeded(List<MealDepletionWarningDto> warnings,
+                                                CustomerOrder order,
+                                                CustomerProfile cp,
+                                                String mealType,
+                                                int remaining,
+                                                int scheduledCount) {
+        if (remaining <= 0 || (remaining > 1 && scheduledCount < remaining)) {
+            return;
+        }
+        MealDepletionWarningDto dto = new MealDepletionWarningDto();
+        dto.setOrderId(order.getId());
+        dto.setCustomerId(order.getCustomerId());
+        dto.setCustomerCode(cp != null ? cp.getCustomerCode() : order.getCustomerCode());
+        dto.setCustomerName(cp != null ? cp.getCustomerName() : "");
+        dto.setMealType(mealType);
+        dto.setMealTypeName(MEAL_TYPE_BREAKFAST.equals(mealType) ? "早餐" : "午晚餐");
+        dto.setRemainingCount(remaining);
+        dto.setTomorrowScheduledCount(scheduledCount);
+        warnings.add(dto);
+    }
+
+    /**
+     * 计算早餐餐数池剩余餐数。
+     *
+     * @param order 客户订单
+     * @param verifiedByMealType 订单各餐次已核销数
+     * @return 早餐剩余餐数，最小为0
+     */
+    private int calculateBreakfastRemaining(CustomerOrder order, Map<String, Integer> verifiedByMealType) {
+        int breakfastCount = order.getBreakfastCount() != null ? order.getBreakfastCount() : 0;
+        return Math.max(breakfastCount - getScheduledCount(verifiedByMealType, MEAL_TYPE_BREAKFAST), 0);
+    }
+
+    /**
+     * 计算午晚餐共享餐数池剩余餐数。
+     *
+     * @param order 客户订单
+     * @param verifiedByMealType 订单各餐次已核销数
+     * @return 午晚餐剩余餐数，最小为0
+     */
+    private int calculateLunchDinnerRemaining(CustomerOrder order, Map<String, Integer> verifiedByMealType) {
+        int lunchDinnerCount = order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0;
+        int verified = getScheduledCount(verifiedByMealType, MEAL_TYPE_LUNCH)
+                + getScheduledCount(verifiedByMealType, MEAL_TYPE_DINNER);
+        return Math.max(lunchDinnerCount - verified, 0);
+    }
+
+    /**
+     * 从餐次统计映射中读取数量。
+     *
+     * @param countMap 餐次到数量的映射，可能为空
+     * @param mealType 餐次类型
+     * @return 数量，空值按0处理
+     */
+    private int getScheduledCount(Map<String, Integer> countMap, String mealType) {
+        if (countMap == null) {
+            return 0;
+        }
+        Integer count = countMap.get(mealType);
+        return count != null ? count : 0;
     }
 }

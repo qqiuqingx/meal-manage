@@ -41,11 +41,19 @@ public class MealDepletionWarningDto {
      */
     private String customerName;
     /**
-     * 订单当前剩余餐数
+     * 预警餐数池：BREAKFAST=早餐，LUNCH_DINNER=午晚餐
+     */
+    private String mealType;
+    /**
+     * 预警餐数池名称
+     */
+    private String mealTypeName;
+    /**
+     * 当前餐数池剩余餐数
      */
     private Integer remainingCount;
     /**
-     * 目标日期排餐总数（所有餐次合计）
+     * 目标日期该餐数池排餐总数
      */
     private Integer tomorrowScheduledCount;
 }
