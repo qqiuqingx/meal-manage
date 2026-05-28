@@ -757,7 +757,7 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
     }
 
     /**
-     * 将逗号分隔文本拆分为字符串列表。
+     * 将逗号、中文逗号或顿号分隔文本拆分为字符串列表。
      *
      * @param text 原始文本
      * @return 去空白后的值列表

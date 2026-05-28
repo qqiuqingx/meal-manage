@@ -102,6 +102,20 @@ class CustomerIntakeParseServiceImplTest {
     }
 
     @Test
+    void parseAllergyTagsShouldSplitCommaAndEnumerationComma() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("过敏食物：牛肉,猪肉，羊肉、葱花");
+
+        CustomerIntakeParseResult result = service.parse(request);
+
+        assertEquals(4, result.getDraft().getAllergyTags().size());
+        assertEquals("牛肉", result.getDraft().getAllergyTags().get(0));
+        assertEquals("猪肉", result.getDraft().getAllergyTags().get(1));
+        assertEquals("羊肉", result.getDraft().getAllergyTags().get(2));
+        assertEquals("葱花", result.getDraft().getAllergyTags().get(3));
+    }
+
+    @Test
     void parseOrderDescriptionShouldInferDailyLunchDinnerAndCount() {
         CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
         request.setText("订餐描述：14天每天午餐和晚餐");

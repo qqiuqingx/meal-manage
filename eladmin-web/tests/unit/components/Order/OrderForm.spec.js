@@ -1,10 +1,14 @@
 /* eslint-env jest */
 /* eslint-disable no-console */
 jest.mock('@/api/customer/profile', () => ({}))
+jest.mock('@/api/customer/order', () => ({}))
 jest.mock('@/api/customer/package', () => ({}))
 jest.mock('@/api/system/dictDetail', () => ({}))
 jest.mock('@/api/dish', () => ({
   queryDishes: jest.fn()
+}))
+jest.mock('@/api/dishIngredient', () => ({
+  queryIngredients: jest.fn()
 }))
 
 import * as dishApi from '@/api/dish'
@@ -12,6 +16,8 @@ import OrderForm, {
   createFirstOrderDefaultForm,
   DEFAULT_RICE_TYPE_OPTION_VALUE
 } from '@/components/Order/OrderForm.vue'
+import fs from 'fs'
+import path from 'path'
 
 const originalLog = console.log
 
@@ -34,6 +40,11 @@ function createContext(overrides = {}) {
     hydratingForm: false,
     hydrationTimer: null,
     riceTypeOptions: [],
+    startMealTypeOptions: [
+      { label: '早餐开始', value: 'BREAKFAST' },
+      { label: '午餐开始', value: 'LUNCH' },
+      { label: '晚餐开始', value: 'DINNER' }
+    ],
     $set(target, key, value) {
       target[key] = value
     },
@@ -46,6 +57,9 @@ function createContext(overrides = {}) {
   ctx.syncSerializedDeliveryDates = OrderForm.methods.syncSerializedDeliveryDates.bind(ctx)
   ctx.ensureRiceTypeOption = OrderForm.methods.ensureRiceTypeOption.bind(ctx)
   ctx.ensureRiceTypeValue = OrderForm.methods.ensureRiceTypeValue.bind(ctx)
+  ctx.syncStartMealType = OrderForm.methods.syncStartMealType.bind(ctx)
+  ctx.ensureTrialOrderOption = OrderForm.methods.ensureTrialOrderOption.bind(ctx)
+  ctx.initReplaceRuleOptions = OrderForm.methods.initReplaceRuleOptions.bind(ctx)
 
   return ctx
 }
@@ -129,5 +143,12 @@ describe('OrderForm delivery date sync', () => {
       { label: '白米饭', value: '白米饭' },
       { label: '三色糙米', value: '三色糙米' }
     ])
+  })
+
+  test('handles allergy Enter before Element UI creates a combined tag', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../../../../src/components/Order/OrderForm.vue'), 'utf8')
+
+    expect(source).toContain('@keydown.native.capture="handleAllergyKeydown"')
+    expect(source).not.toContain('@keydown.native="handleAllergyKeydown"')
   })
 })
