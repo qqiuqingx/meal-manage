@@ -56,10 +56,10 @@
           <div v-for="item in depletionWarnings" :key="item.orderId" style="padding: 2px 0; font-size: 13px;">
             <span style="font-weight: 600; margin-right: 8px;">{{ item.customerName }}（{{ item.customerCode }}）</span>
             <span v-if="item.tomorrowScheduledCount > 0" style="color: #909399;">
-              剩余 {{ item.remainingCount }} 餐，明日排餐 {{ item.tomorrowScheduledCount }} 餐后将耗尽
+              {{ item.mealTypeName || '餐数' }}剩余 {{ item.remainingCount }} 餐，明日排餐 {{ item.tomorrowScheduledCount }} 餐后将耗尽
             </span>
             <span v-else style="color: #909399;">
-              剩余 {{ item.remainingCount }} 餐（明日未排餐）
+              {{ item.mealTypeName || '餐数' }}剩余 {{ item.remainingCount }} 餐（明日未排餐）
             </span>
           </div>
         </div>
