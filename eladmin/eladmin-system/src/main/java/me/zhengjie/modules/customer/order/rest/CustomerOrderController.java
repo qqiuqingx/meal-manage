@@ -15,6 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -44,6 +45,14 @@ public class CustomerOrderController {
             @RequestParam(name = "page", defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size) {
         return ResponseEntity.ok(orderService.getOrdersByCustomerId(customerId, current, size));
+    }
+
+    @ApiOperation("查询可关联试餐订单")
+    @GetMapping("/trial-options")
+    @PreAuthorize("@el.check('customerOrder:list')")
+    public ResponseEntity<List<?>> getTrialOrderOptions(@RequestParam(required = false) String keyword,
+                                                        @RequestParam(required = false) Long excludeId) {
+        return ResponseEntity.ok(orderService.getTrialOrderOptions(keyword, excludeId));
     }
 
     @ApiOperation("获取订单详情")

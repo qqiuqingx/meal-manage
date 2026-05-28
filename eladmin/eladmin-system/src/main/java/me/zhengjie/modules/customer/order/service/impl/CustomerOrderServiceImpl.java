@@ -240,6 +240,14 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         return query(criteria, current, size);
     }
 
+    @Override
+    public List<?> getTrialOrderOptions(String keyword, Long excludeId) {
+        int limit = 20;
+        List<CustomerOrder> orders = orderMapper.findTrialOrders(keyword, excludeId, limit);
+        fillOrderCountFields(orders);
+        return orders;
+    }
+
     /**
      * 生成订单编号: ORD + yyyyMMdd + 3位序号
      */
@@ -343,6 +351,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         if (dto.getVerifiedAmount() == null) dto.setVerifiedAmount(BigDecimal.ZERO);
         if (dto.getVerifiedCount() == null) dto.setVerifiedCount(0);
 
+        validateTrialConversion(dto);
+
         // 状态默认值
         if (dto.getStatus() == null) {
             dto.setStatus(1);
@@ -387,6 +397,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
                 : dto.getDeliveryDates());
         order.setRemark(dto.getRemark());
         order.setCustomerSource(dto.getCustomerSource());
+        order.setTrialConverted(Boolean.TRUE.equals(dto.getTrialConverted()));
+        order.setTrialOrderId(Boolean.TRUE.equals(dto.getTrialConverted()) ? dto.getTrialOrderId() : null);
         order.setMainDishCount(dto.getMainDishCount());
         order.setSideDishCount(dto.getSideDishCount());
         order.setVegCount(dto.getVegCount());
@@ -502,6 +514,9 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setDeliveryDates(order.getDeliveryDates());
         dto.setRemark(order.getRemark());
         dto.setCustomerSource(order.getCustomerSource());
+        dto.setTrialConverted(Boolean.TRUE.equals(order.getTrialConverted()));
+        dto.setTrialOrderId(order.getTrialOrderId());
+        dto.setTrialOrderCode(resolveTrialOrderCode(order.getTrialOrderId()));
         dto.setMainDishCount(order.getMainDishCount());
         dto.setSideDishCount(order.getSideDishCount());
         dto.setVegCount(order.getVegCount());
@@ -512,6 +527,43 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setUpdateTime(order.getUpdateTime());
         dto.setReplaceRules(loadReplaceRules(order.getId()));
         return dto;
+    }
+
+    private String resolveTrialOrderCode(Long trialOrderId) {
+        if (trialOrderId == null) {
+            return null;
+        }
+        CustomerOrder trialOrder = orderMapper.selectById(trialOrderId);
+        return trialOrder != null ? trialOrder.getOrderCode() : null;
+    }
+
+    /**
+     * 校验试餐成单标记与关联试餐订单，确保关联订单来自父套餐名称包含“试餐”的订单。
+     */
+    private void validateTrialConversion(CustomerOrderSaveDto dto) {
+        if (!Boolean.TRUE.equals(dto.getTrialConverted())) {
+            dto.setTrialConverted(false);
+            dto.setTrialOrderId(null);
+            return;
+        }
+        if (dto.getTrialOrderId() == null) {
+            throw new BadRequestException("请选择关联试餐订单");
+        }
+        if (dto.getId() != null && dto.getId().equals(dto.getTrialOrderId())) {
+            throw new BadRequestException("关联试餐订单不能选择当前订单");
+        }
+        CustomerOrder trialOrder = orderMapper.selectById(dto.getTrialOrderId());
+        if (trialOrder == null) {
+            throw new BadRequestException("关联试餐订单不存在");
+        }
+        ParentPackage parentPackage = null;
+        if (trialOrder.getParentPackageId() != null) {
+            parentPackage = parentPackageMapper.selectById(trialOrder.getParentPackageId());
+        }
+        if (parentPackage == null || StringUtils.isBlank(parentPackage.getPackageName())
+                || !parentPackage.getPackageName().contains("试餐")) {
+            throw new BadRequestException("关联订单必须是父套餐名称包含“试餐”的订单");
+        }
     }
 
     private int getTotalCount(CustomerOrderSaveDto dto) {
