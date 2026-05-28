@@ -190,9 +190,9 @@ public class MealPlanTask {
             } else {
                 log.warn("餐数耗尽预警：明日({})有 {} 个订单餐数将耗尽", targetDate, warnings.size());
                 for (MealDepletionWarningDto w : warnings) {
-                    log.warn("  - 客户: {}({}), 订单ID: {}, 剩余: {}, 明日排餐: {}",
+                    log.warn("  - 客户: {}({}), 订单ID: {}, 餐数池: {}, 剩余: {}, 明日排餐: {}",
                         w.getCustomerName(), w.getCustomerCode(),
-                        w.getOrderId(), w.getRemainingCount(), w.getTomorrowScheduledCount());
+                        w.getOrderId(), w.getMealTypeName(), w.getRemainingCount(), w.getTomorrowScheduledCount());
                 }
             }
         } catch (Exception e) {

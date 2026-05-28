@@ -29,6 +29,10 @@ public class OrderScheduledCountDto {
      */
     private Long orderId;
     /**
+     * 餐次类型
+     */
+    private String mealType;
+    /**
      * 已排餐数量（未核销的排餐记录数）
      */
     private Integer scheduledCount;
