@@ -160,7 +160,7 @@
                 :loading="allergyLoading"
                 placeholder="输入配料名称，支持逗号/顿号批量输入"
                 style="width: 100%;"
-                @keydown.native="handleAllergyKeydown"
+                @keydown.native.capture="handleAllergyKeydown"
                 @paste.native="handleAllergyPaste"
               >
                 <el-option v-for="item in allergyOptions" :key="item.id" :label="item.name" :value="item.name" />
