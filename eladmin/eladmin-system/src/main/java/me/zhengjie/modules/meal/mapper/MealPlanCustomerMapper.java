@@ -139,4 +139,13 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
      * @return 首次成功排餐的客户计划ID列表
      */
     List<Long> selectFirstSuccessfulCustomerPlanIds(@Param("customerPlanIds") List<Long> customerPlanIds);
+
+    /**
+     * 批量查询各订单在指定日期的有效排餐总数（所有餐次合计，状态为成功且未删除）。
+     * @param orderIds 订单ID列表
+     * @param recordDate 排餐日期
+     * @return 订单ID -> 排餐数量 的映射
+     */
+    List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countSuccessfulScheduledByOrderIdsAndDate(@Param("orderIds") List<Long> orderIds,
+                                                                                                               @Param("recordDate") LocalDate recordDate);
 }

@@ -42,6 +42,30 @@
       <el-button size="small" icon="el-icon-refresh-right" @click="resetQuery">重置</el-button>
     </div>
 
+    <!-- 餐数耗尽预警 -->
+    <el-alert
+      v-if="depletionWarnings.length > 0"
+      :title="'以下 ' + depletionWarnings.length + ' 个订单剩余餐数即将耗尽'"
+      type="warning"
+      show-icon
+      :closable="false"
+      style="margin-bottom: 12px;"
+    >
+      <template slot>
+        <div style="max-height: 120px; overflow-y: auto;">
+          <div v-for="item in depletionWarnings" :key="item.orderId" style="padding: 2px 0; font-size: 13px;">
+            <span style="font-weight: 600; margin-right: 8px;">{{ item.customerName }}（{{ item.customerCode }}）</span>
+            <span v-if="item.tomorrowScheduledCount > 0" style="color: #909399;">
+              剩余 {{ item.remainingCount }} 餐，明日排餐 {{ item.tomorrowScheduledCount }} 餐后将耗尽
+            </span>
+            <span v-else style="color: #909399;">
+              剩余 {{ item.remainingCount }} 餐（明日未排餐）
+            </span>
+          </div>
+        </div>
+      </template>
+    </el-alert>
+
     <el-table
       ref="mealStatsTable"
       v-loading="loading"
@@ -191,6 +215,7 @@
 
 <script>
 import { getMealStats, saveMealScheduleAdjustments } from '@/api/customer/profile'
+import { getDepletionWarnings } from '@/api/mealPlan'
 
 const defaultQuery = () => ({
   customerCode: '',
@@ -225,7 +250,8 @@ export default {
       calendarExcludedDates: [],
       calendarAdditions: [],
       mealTypes: ['BREAKFAST', 'LUNCH', 'DINNER'],
-      weekdays: ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+      weekdays: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'],
+      depletionWarnings: []
     }
   },
   computed: {
@@ -295,6 +321,7 @@ export default {
   },
   created() {
     this.loadData()
+    this.loadDepletionWarnings()
   },
   mounted() {
     this.$nextTick(() => {
@@ -321,6 +348,11 @@ export default {
       }).finally(() => {
         this.loading = false
       })
+    },
+    loadDepletionWarnings() {
+      getDepletionWarnings().then(res => {
+        this.depletionWarnings = res || []
+      }).catch(() => {})
     },
     handleQuery() {
       this.page.current = 1

@@ -339,4 +339,20 @@
           )
     </select>
 
+    <!-- 批量查询各订单在指定日期的有效排餐总数（所有餐次合计，状态为成功且未删除） -->
+    <select id="countSuccessfulScheduledByOrderIdsAndDate" resultType="me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto">
+        select mpc.order_id as orderId, count(*) as scheduledCount
+        from meal_plan_customer mpc
+        join meal_plan mp on mpc.meal_plan_id = mp.id
+        where mpc.deleted = 0
+          and mp.deleted = 0
+          and mpc.status = 1
+          and mp.record_date = #{recordDate}
+          and mpc.order_id in
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+        group by mpc.order_id
+    </select>
+
 </mapper>

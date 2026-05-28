@@ -17,6 +17,7 @@ package me.zhengjie.modules.meal.service;
 
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.meal.domain.dto.MealDepletionWarningDto;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
@@ -27,6 +28,7 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanListDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
 import me.zhengjie.utils.PageResult;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -164,4 +166,13 @@ public interface MealPlanService {
      * @return 客户配送地址列表
      */
     List<MealPlanCustomerAddressVO> queryCustomerAddresses(Long mealPlanId);
+
+    /**
+     * 查询指定日期排餐后将耗尽餐数的客户订单列表。
+     * 用于在排餐计划生成后，提醒运营人员关注即将用完餐数的客户，主动跟进续费。
+     *
+     * @param targetDate 目标日期（通常传入明天的日期）
+     * @return 即将耗尽餐数的客户订单列表
+     */
+    List<MealDepletionWarningDto> getDepletionWarnings(LocalDate targetDate);
 }
