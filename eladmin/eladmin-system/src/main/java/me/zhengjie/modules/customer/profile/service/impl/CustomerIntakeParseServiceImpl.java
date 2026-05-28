@@ -766,7 +766,7 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         if (StringUtils.isBlank(text)) {
             return Collections.emptyList();
         }
-        String[] parts = text.split("[,，]");
+        String[] parts = text.split("[,，、]");
         List<String> result = new ArrayList<>();
         for (String part : parts) {
             if (StringUtils.isNotBlank(part)) {
