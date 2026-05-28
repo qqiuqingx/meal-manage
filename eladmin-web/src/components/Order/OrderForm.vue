@@ -533,6 +533,7 @@
           <el-col :span="24">
             <el-form-item label="过敏食物">
               <el-select
+                ref="allergySelect"
                 v-model="form.allergyTags"
                 multiple
                 filterable
@@ -542,8 +543,10 @@
                 :disabled="readonly"
                 :remote-method="searchAllergy"
                 :loading="allergyLoading"
-                placeholder="输入配料名称搜索"
+                placeholder="输入配料名称，支持逗号/顿号批量输入"
                 style="width: 100%;"
+                @keydown.native="handleAllergyKeydown"
+                @paste.native="handleAllergyPaste"
               >
                 <el-option v-for="item in allergyOptions" :key="item.id" :label="item.name" :value="item.name" />
               </el-select>
@@ -988,6 +991,46 @@ export default {
       } finally {
         this.customerLoading = false
       }
+    },
+    handleAllergyKeydown(e) {
+      if (e.key !== 'Enter') return
+      const input = e.target
+      if (!input || !input.value) return
+      const raw = input.value.trim()
+      if (!raw) return
+      const parts = raw.split(/[,，、]/).map(s => s.trim()).filter(Boolean)
+      if (parts.length <= 1) return
+      e.preventDefault()
+      e.stopPropagation()
+      this.addAllergyTags(parts, input)
+    },
+    handleAllergyPaste(e) {
+      const text = (e.clipboardData || window.clipboardData).getData('text')
+      if (!text) return
+      const parts = text.split(/[,，、]/).map(s => s.trim()).filter(Boolean)
+      if (parts.length <= 1) return
+      e.preventDefault()
+      const input = e.target
+      this.addAllergyTags(parts, input)
+    },
+    addAllergyTags(tags, input) {
+      const existing = Array.isArray(this.form.allergyTags) ? this.form.allergyTags : []
+      const merged = [...existing]
+      tags.forEach(tag => {
+        if (!merged.includes(tag)) {
+          merged.push(tag)
+        }
+      })
+      this.$set(this.form, 'allergyTags', merged)
+      this.$nextTick(() => {
+        if (input) {
+          input.value = ''
+          const selectRef = this.$refs.allergySelect
+          if (selectRef && selectRef.$refs.input) {
+            selectRef.$refs.input.value = ''
+          }
+        }
+      })
     },
     // 远程搜索过敏食物（配料）
     async searchAllergy(query) {
