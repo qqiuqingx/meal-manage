@@ -22,8 +22,10 @@ import lombok.RequiredArgsConstructor;
 import me.zhengjie.annotation.Limit;
 import me.zhengjie.annotation.Log;
 import me.zhengjie.aspect.LimitType;
+import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.meal.domain.dto.MealDepletionWarningDto;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
@@ -35,6 +37,7 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanListDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
 import me.zhengjie.modules.meal.service.MealPlanService;
 import me.zhengjie.utils.PageResult;
+import me.zhengjie.utils.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -48,6 +51,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -218,5 +223,28 @@ public class MealPlanController {
     public ResponseEntity<Void> deleteMealPlanCustomers(@RequestBody List<Long> customerPlanIds) {
         mealPlanService.deleteMealPlanCustomers(customerPlanIds);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    }
+
+    /**
+     * 查询指定日期排餐后将耗尽餐数的客户订单列表。
+     * 用于排餐计划生成后提醒运营人员关注即将用完餐数的客户。
+     */
+    @Log("查询餐数耗尽预警")
+    @ApiOperation("查询餐数耗尽预警")
+    @GetMapping("/depletion-warnings")
+    @PreAuthorize("@el.check('mealPlan:list')")
+    public ResponseEntity<List<MealDepletionWarningDto>> getDepletionWarnings(
+            @ApiParam(value = "目标日期，格式 yyyy-MM-dd，默认明天") @RequestParam(required = false) String date) {
+        LocalDate targetDate;
+        if (StringUtils.isNotBlank(date)) {
+            try {
+                targetDate = LocalDate.parse(date, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            } catch (Exception e) {
+                throw new BadRequestException("日期格式不正确，请使用 yyyy-MM-dd 格式");
+            }
+        } else {
+            targetDate = LocalDate.now().plusDays(1);
+        }
+        return new ResponseEntity<>(mealPlanService.getDepletionWarnings(targetDate), HttpStatus.OK);
     }
 }

@@ -16,6 +16,7 @@
 package me.zhengjie.modules.meal.service.impl;
 
 import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import cn.hutool.json.JSONUtil;
@@ -38,6 +39,7 @@ import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.MealPlanCustomerItem;
 import me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto;
 import me.zhengjie.modules.meal.domain.dto.DishQueryCriteria;
+import me.zhengjie.modules.meal.domain.dto.MealDepletionWarningDto;
 import me.zhengjie.modules.meal.domain.enums.DishTypeEnum;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
@@ -2421,5 +2423,67 @@ public class MealPlanServiceImpl implements MealPlanService {
     @Override
     public List<MealPlanCustomerAddressVO> queryCustomerAddresses(Long mealPlanId) {
         return mealPlanCustomerMapper.selectCustomerAddresses(mealPlanId);
+    }
+
+    /**
+     * 查询指定日期排餐后将耗尽餐数的客户订单列表。
+     * 遍历所有有效订单，筛选剩余餐数 <= 1 的订单，并统计目标日期的排餐情况。
+     * 用于提醒运营人员关注即将用完餐数的客户，主动跟进续费。
+     */
+    @Override
+    public List<MealDepletionWarningDto> getDepletionWarnings(LocalDate targetDate) {
+        // 查询剩余餐数 <= 1 的有效订单（status=1, 0 < remainingCount <= 1, startDate<=targetDate）
+        List<CustomerOrder> lowRemainingOrders = customerOrderMapper.selectList(
+            new QueryWrapper<CustomerOrder>()
+                .eq("status", 1)
+                .gt("COALESCE(remaining_count, 0)", 0)
+                .le("COALESCE(remaining_count, 0)", 1)
+                .le("start_date", targetDate)
+        );
+        if (lowRemainingOrders.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 统计目标日期各订单的有效排餐总数（所有餐次合计）
+        List<Long> orderIds = lowRemainingOrders.stream()
+            .map(CustomerOrder::getId)
+            .collect(Collectors.toList());
+        List<OrderScheduledCountDto> scheduledCounts =
+            mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(orderIds, targetDate);
+        Map<Long, Integer> scheduledCountMap = new HashMap<>();
+        for (OrderScheduledCountDto dto : scheduledCounts) {
+            scheduledCountMap.put(dto.getOrderId(), dto.getScheduledCount());
+        }
+
+        // 加载客户档案信息
+        Set<Long> customerIds = lowRemainingOrders.stream()
+            .map(CustomerOrder::getCustomerId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+        Map<Long, CustomerProfile> customerMap = new HashMap<>();
+        if (!customerIds.isEmpty()) {
+            List<CustomerProfile> profiles = customerProfileMapper.selectBatchIds(customerIds);
+            for (CustomerProfile cp : profiles) {
+                customerMap.put(cp.getId(), cp);
+            }
+        }
+
+        // 构建预警结果
+        List<MealDepletionWarningDto> warnings = new ArrayList<>();
+        for (CustomerOrder order : lowRemainingOrders) {
+            int remaining = order.getRemainingCount();
+            int scheduled = scheduledCountMap.getOrDefault(order.getId(), 0);
+            CustomerProfile cp = customerMap.get(order.getCustomerId());
+            MealDepletionWarningDto dto = new MealDepletionWarningDto();
+            dto.setOrderId(order.getId());
+            dto.setCustomerId(order.getCustomerId());
+            dto.setCustomerCode(cp != null ? cp.getCustomerCode() : order.getCustomerCode());
+            dto.setCustomerName(cp != null ? cp.getCustomerName() : "");
+            dto.setRemainingCount(remaining);
+            dto.setTomorrowScheduledCount(scheduled);
+            warnings.add(dto);
+        }
+
+        return warnings;
     }
 }

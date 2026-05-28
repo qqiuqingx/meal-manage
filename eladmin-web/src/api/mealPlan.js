@@ -56,3 +56,11 @@ export function getMealPackageStatistics(params) {
     params
   })
 }
+
+export function getDepletionWarnings(params) {
+  return request({
+    url: '/api/meal-plan/depletion-warnings',
+    method: 'get',
+    params
+  })
+}

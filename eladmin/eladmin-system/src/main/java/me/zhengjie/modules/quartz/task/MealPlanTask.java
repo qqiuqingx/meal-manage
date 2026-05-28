@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.meal.domain.dto.MealDepletionWarningDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
 import me.zhengjie.modules.meal.domain.dto.MealVerificationDto;
 import me.zhengjie.modules.meal.domain.dto.MealVerificationResultDto;
@@ -104,6 +105,9 @@ public class MealPlanTask {
                 result.getSuccessCount(),
                 result.getFailCount());
 
+            // 晚餐排餐完成后检查并记录餐数耗尽预警
+            logDepletionWarnings(tomorrow);
+
         } catch (Exception e) {
             log.error("生成明日晚餐排餐计划失败", e);
         }
@@ -172,5 +176,27 @@ public class MealPlanTask {
 
         log.info("定时核销任务完成 - 日期: {}, 餐次: {}, 成功: {}, 失败: {}",
             recordDate, mealType, result.getSuccessCount(), result.getFailCount());
+    }
+
+    /**
+     * 查询并记录明日排餐后将耗尽餐数的客户订单。
+     * 仅用于日志提醒，不影响排餐流程。
+     */
+    private void logDepletionWarnings(LocalDate targetDate) {
+        try {
+            List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
+            if (warnings.isEmpty()) {
+                log.info("餐数耗尽预警：明日({})无订单即将耗尽", targetDate);
+            } else {
+                log.warn("餐数耗尽预警：明日({})有 {} 个订单餐数将耗尽", targetDate, warnings.size());
+                for (MealDepletionWarningDto w : warnings) {
+                    log.warn("  - 客户: {}({}), 订单ID: {}, 剩余: {}, 明日排餐: {}",
+                        w.getCustomerName(), w.getCustomerCode(),
+                        w.getOrderId(), w.getRemainingCount(), w.getTomorrowScheduledCount());
+                }
+            }
+        } catch (Exception e) {
+            log.error("查询餐数耗尽预警失败", e);
+        }
     }
 }
