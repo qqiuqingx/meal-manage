@@ -5,6 +5,7 @@ import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
 import me.zhengjie.utils.PageResult;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -41,6 +42,15 @@ public interface CustomerOrderService {
      * 根据客户ID分页查询订单
      */
     PageResult<?> getOrdersByCustomerId(Long customerId, Integer current, Integer size);
+
+    /**
+     * 查询可关联的试餐订单。
+     *
+     * @param keyword 订单编号、客户姓名、手机号或客户编号关键字
+     * @param excludeId 需要排除的当前订单ID
+     * @return 父套餐名称包含“试餐”的订单列表
+     */
+    List<?> getTrialOrderOptions(String keyword, Long excludeId);
 
     /**
      * 校验订单是否与现有订单冲突

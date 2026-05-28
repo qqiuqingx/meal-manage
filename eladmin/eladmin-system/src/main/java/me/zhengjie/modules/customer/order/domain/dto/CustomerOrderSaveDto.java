@@ -173,6 +173,16 @@ public class CustomerOrderSaveDto implements Serializable {
     private String customerSource;
 
     /**
+     * 是否试餐成单
+     */
+    private Boolean trialConverted;
+
+    /**
+     * 关联试餐订单ID
+     */
+    private Long trialOrderId;
+
+    /**
      * 每餐主菜/荤菜数量
      */
     @NotNull(message = "主菜数量不能为空")

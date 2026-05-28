@@ -465,7 +465,17 @@ export default {
           { required: true, message: '请输入手机号', trigger: 'blur' },
           { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确', trigger: 'blur' }
         ],
-        'orderInfo.startDate': [{ required: true, message: '请选择开始日期', trigger: 'change' }]
+        'orderInfo.startDate': [{ required: true, message: '请选择开始日期', trigger: 'change' }],
+        'orderInfo.trialOrderId': [{
+          validator: (rule, value, callback) => {
+            if (this.form.orderInfo && this.form.orderInfo.trialConverted && !value) {
+              callback(new Error('请选择关联试餐订单'))
+              return
+            }
+            callback()
+          },
+          trigger: 'change'
+        }]
       },
       submitLoading: false,
       excludeDatesExpanded: false,
@@ -584,6 +594,8 @@ export default {
           startMealType: orderInfo.startMealType || 'BREAKFAST',
           mealType: orderInfo.mealType || 'ALL',
           customerSource: orderInfo.customerSource || null,
+          trialConverted: !!orderInfo.trialConverted,
+          trialOrderId: orderInfo.trialConverted ? orderInfo.trialOrderId : null,
           deliveryDates: this.serializeDeliveryDates(deliveryDatesSource),
           mainDishCount: orderInfo.mainDishCount || 0,
           sideDishCount: orderInfo.sideDishCount || 0,
@@ -659,6 +671,10 @@ export default {
       if (this.isCreateMode() && this.$refs.orderFormRef) {
         const orderValid = await this.$refs.orderFormRef.validate().catch(() => false)
         if (!orderValid) return
+        if (this.form.orderInfo && this.form.orderInfo.trialConverted && !this.form.orderInfo.trialOrderId) {
+          this.$message.warning('请选择关联试餐订单')
+          return
+        }
       }
 
       try {

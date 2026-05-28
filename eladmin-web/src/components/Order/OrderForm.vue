@@ -65,6 +65,40 @@
         </el-col>
       </el-row>
 
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="试餐成单" prop="trialConverted">
+            <el-radio-group v-model="form.trialConverted" :disabled="readonly" @change="onTrialConvertedChange">
+              <el-radio :label="false">否</el-radio>
+              <el-radio :label="true">是</el-radio>
+            </el-radio-group>
+          </el-form-item>
+        </el-col>
+        <el-col v-if="form.trialConverted" :span="16">
+          <el-form-item label="关联试餐订单" prop="trialOrderId">
+            <el-select
+              v-model="form.trialOrderId"
+              filterable
+              remote
+              clearable
+              :disabled="readonly"
+              placeholder="输入订单编号、客户姓名或手机号搜索"
+              :remote-method="searchTrialOrders"
+              :loading="trialOrderLoading"
+              style="width: 100%;"
+              @change="onTrialOrderChange"
+            >
+              <el-option
+                v-for="item in trialOrderOptions"
+                :key="item.id"
+                :label="formatTrialOrderLabel(item)"
+                :value="item.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
+
       <!-- 指定日期送时显示送餐日期选择 -->
       <el-row v-if="form.scheduleMode === 'SCHEDULE'" :gutter="20">
         <el-col :span="24">
@@ -537,6 +571,7 @@
 
 <script>
 import * as profileApi from '@/api/customer/profile'
+import * as orderApi from '@/api/customer/order'
 import * as packageApi from '@/api/customer/package'
 import * as dictDetailApi from '@/api/system/dictDetail'
 import * as dishApi from '@/api/dish'
@@ -618,6 +653,9 @@ export function createOrderDefaultForm() {
     riceCount: 1,
     riceType: DEFAULT_RICE_TYPE_OPTION_VALUE,
     soupCount: 0,
+    trialConverted: false,
+    trialOrderId: null,
+    trialOrderCode: null,
     replaceRules: [],
     allergyTags: [],
     specialRequirements: null
@@ -650,6 +688,9 @@ export function createFirstOrderDefaultForm() {
     riceCount: 1,
     riceType: DEFAULT_RICE_TYPE_OPTION_VALUE,
     soupCount: 0,
+    trialConverted: false,
+    trialOrderId: null,
+    trialOrderCode: null,
     replaceRules: []
   }
 }
@@ -702,6 +743,8 @@ export default {
       riceTypeOptions: [],
       allergyOptions: [],
       allergyLoading: false,
+      trialOrderOptions: [],
+      trialOrderLoading: false,
       availableDates: [],
       hydratingForm: false,
       hydrationTimer: null
@@ -743,6 +786,7 @@ export default {
         this.ensureRiceTypeValue(val)
         this.ensureRiceTypeOption(val && val.riceType)
         this.syncStartMealType()
+        this.ensureTrialOrderOption(val)
         // 当外部 value 变化时（如编辑时加载数据），同步子套餐列表和日历数据
         if (val.parentPackageId) {
           this.loadChildPackages(val.parentPackageId)
@@ -761,6 +805,12 @@ export default {
     },
     'form.mealType'() {
       this.syncStartMealType()
+    },
+    'form.trialConverted'(val) {
+      if (!val) {
+        this.$set(this.form, 'trialOrderId', null)
+        this.$set(this.form, 'trialOrderCode', null)
+      }
     }
   },
   created() {
@@ -874,6 +924,21 @@ export default {
         this.$set(this.form, 'startMealType', getDefaultStartMealType(this.form.mealType))
       }
     },
+    ensureTrialOrderOption(formValue) {
+      if (!formValue || !formValue.trialOrderId) {
+        return
+      }
+      const exists = this.trialOrderOptions.some(item => item.id === formValue.trialOrderId)
+      if (!exists) {
+        this.trialOrderOptions = this.trialOrderOptions.concat([{
+          id: formValue.trialOrderId,
+          orderCode: formValue.trialOrderCode || ('订单ID ' + formValue.trialOrderId),
+          customerName: formValue.customerName,
+          phone: formValue.phone,
+          parentPackageName: '试餐订单'
+        }])
+      }
+    },
     async loadRiceTypeOptions() {
       try {
         const res = await dishApi.queryDishes({ dishType: 'RICE_TYPE', enabled: true, page: 0, size: 200 })
@@ -939,6 +1004,43 @@ export default {
       } finally {
         this.allergyLoading = false
       }
+    },
+    async searchTrialOrders(query) {
+      if (!query) {
+        this.trialOrderOptions = []
+        this.ensureTrialOrderOption(this.form)
+        return
+      }
+      this.trialOrderLoading = true
+      try {
+        const res = await orderApi.getTrialOrderOptions({ keyword: query, excludeId: this.form.id })
+        this.trialOrderOptions = res.data || res || []
+        this.ensureTrialOrderOption(this.form)
+      } catch (e) {
+        console.error('searchTrialOrders error', e)
+      } finally {
+        this.trialOrderLoading = false
+      }
+    },
+    formatTrialOrderLabel(item) {
+      if (!item) return ''
+      const parts = [
+        item.orderCode || ('订单ID ' + item.id),
+        item.customerName,
+        item.phone,
+        item.parentPackageName
+      ].filter(Boolean)
+      return parts.join(' / ')
+    },
+    onTrialConvertedChange(val) {
+      if (!val) {
+        this.$set(this.form, 'trialOrderId', null)
+        this.$set(this.form, 'trialOrderCode', null)
+      }
+    },
+    onTrialOrderChange(orderId) {
+      const order = this.trialOrderOptions.find(item => item.id === orderId)
+      this.$set(this.form, 'trialOrderCode', order ? order.orderCode : null)
     },
     // 客户选择变更
     onCustomerChange(customerId) {
