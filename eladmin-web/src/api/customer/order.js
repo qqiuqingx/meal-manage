@@ -55,4 +55,12 @@ export function validateOrder(data) {
   })
 }
 
-export default { getOrders, getOrder, add, edit, del, getOrdersByCustomer, validateOrder }
+export function getTrialOrderOptions(params) {
+  return axios({
+    url: '/api/customer/order/trial-options',
+    method: 'get',
+    params
+  })
+}
+
+export default { getOrders, getOrder, add, edit, del, getOrdersByCustomer, validateOrder, getTrialOrderOptions }

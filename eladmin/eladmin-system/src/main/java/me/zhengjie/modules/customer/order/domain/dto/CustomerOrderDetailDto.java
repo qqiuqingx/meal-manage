@@ -89,6 +89,12 @@ public class CustomerOrderDetailDto implements Serializable {
 
     private String customerSource;
 
+    private Boolean trialConverted;
+
+    private Long trialOrderId;
+
+    private String trialOrderCode;
+
     private Integer mainDishCount;
 
     private Integer sideDishCount;

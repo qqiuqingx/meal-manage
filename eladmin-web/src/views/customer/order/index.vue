@@ -284,7 +284,17 @@ export default {
         customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
         totalAmount: [{ required: true, message: '请输入总金额', trigger: 'blur' }],
         finalAmount: [{ required: true, message: '请输入成交金额', trigger: 'blur' }],
-        status: [{ required: true, message: '请选择订单状态', trigger: 'change' }]
+        status: [{ required: true, message: '请选择订单状态', trigger: 'change' }],
+        trialOrderId: [{
+          validator: (rule, value, callback) => {
+            if (this.form.trialConverted && !value) {
+              callback(new Error('请选择关联试餐订单'))
+              return
+            }
+            callback()
+          },
+          trigger: 'change'
+        }]
       }
     }
   },
@@ -362,6 +372,10 @@ export default {
     async submitForm() {
       const valid = await this.$refs.orderFormRef.validate().catch(() => false)
       if (!valid) return
+      if (this.form.trialConverted && !this.form.trialOrderId) {
+        this.$message.warning('请选择关联试餐订单')
+        return
+      }
 
       // 前端校验换菜规则：原菜不能重复
       const rules = this.form.replaceRules

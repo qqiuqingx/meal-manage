@@ -848,6 +848,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         if (!OrderStartMealTypeUtil.isStartMealTypeAllowed(orderInfo.getMealType(), orderInfo.getStartMealType())) {
             throw new BadRequestException("首单开始餐次与订单餐次类型不匹配");
         }
+        validateTrialConversion(orderInfo);
         orderInfo.setMainDishCount(orderInfo.getMainDishCount() != null ? orderInfo.getMainDishCount() : 0);
         orderInfo.setSideDishCount(orderInfo.getSideDishCount() != null ? orderInfo.getSideDishCount() : 0);
         orderInfo.setVegCount(orderInfo.getVegCount() != null ? orderInfo.getVegCount() : 0);
@@ -924,6 +925,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         order.setScheduleMode(orderInfo.getScheduleMode() != null ? orderInfo.getScheduleMode() : "SCHEDULE");
         order.setMealType(orderInfo.getMealType() != null ? orderInfo.getMealType() : "ALL");
         order.setCustomerSource(orderInfo.getCustomerSource());
+        order.setTrialConverted(Boolean.TRUE.equals(orderInfo.getTrialConverted()));
+        order.setTrialOrderId(Boolean.TRUE.equals(orderInfo.getTrialConverted()) ? orderInfo.getTrialOrderId() : null);
         order.setDeliveryDates(orderInfo.getDeliveryDates());
         order.setMainDishCount(orderInfo.getMainDishCount() != null ? orderInfo.getMainDishCount() : 0);
         order.setSideDishCount(orderInfo.getSideDishCount() != null ? orderInfo.getSideDishCount() : 0);
@@ -935,6 +938,34 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         order.setCreateBy(getCurrentUsername());
         customerOrderMapper.insert(order);
         saveReplaceRules(order.getId(), orderInfo.getReplaceRules());
+    }
+
+    /**
+     * 校验客户建档首单的试餐成单关联订单。
+     *
+     * @param orderInfo 首单信息
+     */
+    private void validateTrialConversion(CustomerProfileSaveDto.OrderInfoDto orderInfo) {
+        if (!Boolean.TRUE.equals(orderInfo.getTrialConverted())) {
+            orderInfo.setTrialConverted(false);
+            orderInfo.setTrialOrderId(null);
+            return;
+        }
+        if (orderInfo.getTrialOrderId() == null) {
+            throw new BadRequestException("请选择关联试餐订单");
+        }
+        CustomerOrder trialOrder = customerOrderMapper.selectById(orderInfo.getTrialOrderId());
+        if (trialOrder == null) {
+            throw new BadRequestException("关联试餐订单不存在");
+        }
+        ParentPackage parentPackage = null;
+        if (trialOrder.getParentPackageId() != null) {
+            parentPackage = parentPackageMapper.selectById(trialOrder.getParentPackageId());
+        }
+        if (parentPackage == null || StringUtils.isBlank(parentPackage.getPackageName())
+                || !parentPackage.getPackageName().contains("试餐")) {
+            throw new BadRequestException("关联订单必须是父套餐名称包含“试餐”的订单");
+        }
     }
 
     private void saveReplaceRules(Long orderId, List<CustomerOrderReplaceRuleDto> rules) {

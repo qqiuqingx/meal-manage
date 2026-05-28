@@ -160,6 +160,16 @@ public class CustomerOrder implements Serializable {
     private String customerSource;
 
     /**
+     * 是否试餐成单
+     */
+    private Boolean trialConverted;
+
+    /**
+     * 关联试餐订单ID
+     */
+    private Long trialOrderId;
+
+    /**
      * 创建人
      */
     private String createBy;
@@ -234,6 +244,12 @@ public class CustomerOrder implements Serializable {
      */
     @TableField(exist = false)
     private List<AddressInfo> addresses;
+
+    /**
+     * 关联试餐订单编号(查询时填充)
+     */
+    @TableField(exist = false)
+    private String trialOrderCode;
 
     @Data
     public static class AddressInfo implements Serializable {

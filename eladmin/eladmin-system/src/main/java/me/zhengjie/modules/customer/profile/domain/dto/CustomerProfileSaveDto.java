@@ -90,6 +90,8 @@ public class CustomerProfileSaveDto implements Serializable {
         private String endDate;
         private String mealType;
         private String customerSource;
+        private Boolean trialConverted;
+        private Long trialOrderId;
         private String deliveryDates;
         private Integer mainDishCount;
         private Integer sideDishCount;

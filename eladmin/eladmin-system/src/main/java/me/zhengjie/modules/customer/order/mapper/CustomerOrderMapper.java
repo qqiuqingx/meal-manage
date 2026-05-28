@@ -34,6 +34,18 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
     String findTodayMaxOrderCode(@Param("datePrefix") String datePrefix);
 
     /**
+     * 查询可关联的试餐订单，父套餐名称必须包含“试餐”。
+     *
+     * @param keyword 订单编号、客户姓名、手机号或客户编号关键字
+     * @param excludeId 需要排除的当前订单ID
+     * @param limit 最大返回条数
+     * @return 可选试餐订单列表
+     */
+    List<CustomerOrder> findTrialOrders(@Param("keyword") String keyword,
+                                        @Param("excludeId") Long excludeId,
+                                        @Param("limit") Integer limit);
+
+    /**
      * 根据客户ID查询最新订单（按成交时间倒序）
      */
     CustomerOrder findLatestByCustomerId(@Param("customerId") Long customerId);
