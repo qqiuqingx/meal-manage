@@ -1,4 +1,6 @@
 /* eslint-env jest */
+const fs = require('fs')
+const path = require('path')
 
 // Extract methods under test from the component logic
 function createDefaultOrderInfo() {
@@ -383,6 +385,13 @@ describe('CustomerProfile payload building', () => {
     expect(profileApi.getProfile).toHaveBeenCalledWith(1)
     expect(toEdit).toHaveBeenCalledWith(detail)
     expect(ctx.$message.error).not.toHaveBeenCalled()
+  })
+
+  test('handles allergy Enter before Element UI creates a combined tag', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../../../../../src/views/customer/profile/index.vue'), 'utf8')
+
+    expect(source).toContain('@keydown.native.capture="handleAllergyKeydown"')
+    expect(source).not.toContain('@keydown.native="handleAllergyKeydown"')
   })
 })
 
