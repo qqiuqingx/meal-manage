@@ -2333,6 +2333,7 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     /**
      * 删除客户指定日期餐次的未核销排餐记录；若存在已核销记录则拒绝日历取消操作。
+     * 异常信息会带上具体日期和餐次，方便前端提示用户。
      *
      * @param customerId 客户ID
      * @param recordDate 排餐日期，格式 yyyy-MM-dd
@@ -2350,7 +2351,8 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
         for (CustomerGeneratedMealPlanDto record : generatedRecords) {
             if (Boolean.TRUE.equals(record.getVerified())) {
-                throw new BadRequestException("该日期餐次已核销，不能取消排餐");
+                throw new BadRequestException(String.format("%s %s已核销，不能取消排餐",
+                        targetDate, OrderStartMealTypeUtil.mealTypeDesc(mealType)));
             }
         }
         List<Long> customerPlanIds = generatedRecords.stream()
