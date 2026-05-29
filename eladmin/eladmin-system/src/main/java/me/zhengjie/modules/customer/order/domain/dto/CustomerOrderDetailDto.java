@@ -107,6 +107,11 @@ public class CustomerOrderDetailDto implements Serializable {
 
     private Integer soupCount;
 
+    /**
+     * 自定义菜单图片地址，用于客户换菜参考
+     */
+    private String customMenuImage;
+
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;

@@ -405,6 +405,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         order.setRiceCount(dto.getRiceCount() != null ? dto.getRiceCount() : 1);
         order.setRiceType(dto.getRiceType() != null ? dto.getRiceType() : "白米饭");
         order.setSoupCount(dto.getSoupCount());
+        order.setCustomMenuImage(dto.getCustomMenuImage());
     }
 
     /**
@@ -523,6 +524,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setRiceCount(order.getRiceCount());
         dto.setRiceType(order.getRiceType());
         dto.setSoupCount(order.getSoupCount());
+        dto.setCustomMenuImage(order.getCustomMenuImage());
         dto.setCreateTime(order.getCreateTime());
         dto.setUpdateTime(order.getUpdateTime());
         dto.setReplaceRules(loadReplaceRules(order.getId()));
