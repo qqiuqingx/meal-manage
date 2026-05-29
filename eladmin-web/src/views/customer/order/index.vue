@@ -70,6 +70,18 @@
           {{ scope.row.specialRequirements || '-' }}
         </template>
       </el-table-column>
+      <el-table-column label="自定义菜单" width="100" align="center">
+        <template slot-scope="scope">
+          <el-image
+            v-if="scope.row.customMenuImage"
+            :src="getCustomMenuImageUrl(scope.row.customMenuImage)"
+            :preview-src-list="[getCustomMenuImageUrl(scope.row.customMenuImage)]"
+            fit="contain"
+            style="width: 40px; height: 40px; cursor: pointer;"
+          />
+          <span v-else style="color: #c0c4cc;">-</span>
+        </template>
+      </el-table-column>
       <el-table-column label="过敏" width="150">
         <template slot-scope="scope">
           <span v-if="!scope.row.allergyTags || scope.row.allergyTags.length === 0">-</span>
@@ -237,6 +249,7 @@ import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
 import OrderForm from '@/components/Order/OrderForm.vue'
 import { parseTime } from '@/utils/index'
+import { mapGetters } from 'vuex'
 
 function cleanReplaceRules(rules) {
   if (!rules || !rules.length) return []
@@ -299,6 +312,7 @@ export default {
     }
   },
   computed: {
+    ...mapGetters(['baseApi']),
     dialogVisible: {
       get() {
         return this.crud.status.cu > 0
@@ -329,6 +343,14 @@ export default {
       if (!value) return '-'
       const item = this.customerSourceOptions.find(o => o.value === value)
       return item ? item.label : value
+    },
+    /**
+     * 获取自定义菜单图片完整访问地址
+     */
+    getCustomMenuImageUrl(path) {
+      if (!path) return ''
+      if (path.startsWith('http://') || path.startsWith('https://')) return path
+      return this.baseApi + path
     },
     [CRUD.HOOK.beforeToCU]() {
       const currentForm = { ...this.form }
