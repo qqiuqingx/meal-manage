@@ -34,6 +34,9 @@ public class MealPlanDetailVO {
     @ApiModelProperty(value = "客户排餐列表")
     private List<CustomerPlanDetail> customers;
 
+    @ApiModelProperty(value = "手工换菜关系列表")
+    private List<MealPlanManualReplaceVO> manualReplaces;
+
     @ApiModelProperty(value = "客户总数")
     private Integer totalCustomers;
 

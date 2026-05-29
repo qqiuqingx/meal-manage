@@ -34,7 +34,10 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateRequest;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
 import me.zhengjie.modules.meal.domain.dto.MealPlanListDetailVO;
+import me.zhengjie.modules.meal.domain.dto.MealPlanManualReplaceSaveRequest;
+import me.zhengjie.modules.meal.domain.dto.MealPlanManualReplaceVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
+import me.zhengjie.modules.meal.service.MealPlanManualReplaceService;
 import me.zhengjie.modules.meal.service.MealPlanService;
 import me.zhengjie.utils.PageResult;
 import me.zhengjie.utils.StringUtils;
@@ -46,6 +49,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -67,6 +71,7 @@ import java.util.List;
 public class MealPlanController {
 
     private final MealPlanService mealPlanService;
+    private final MealPlanManualReplaceService mealPlanManualReplaceService;
 
     /**
      * 生成指定日期、指定餐次（BREAKFAST/LUNCH/DINNER）的排餐计划。
@@ -246,5 +251,32 @@ public class MealPlanController {
             targetDate = LocalDate.now().plusDays(1);
         }
         return new ResponseEntity<>(mealPlanService.getDepletionWarnings(targetDate), HttpStatus.OK);
+    }
+
+    /**
+     * 查询指定排餐计划的手工换菜关系列表。
+     */
+    @Log("查询手工换菜关系")
+    @ApiOperation("查询手工换菜关系")
+    @GetMapping("/{mealPlanId}/manual-replaces")
+    @PreAuthorize("@el.check('mealPlan:list')")
+    public ResponseEntity<List<MealPlanManualReplaceVO>> queryManualReplaces(
+            @ApiParam(value = "排餐计划ID", required = true) @PathVariable Long mealPlanId) {
+        return new ResponseEntity<>(mealPlanManualReplaceService.queryByMealPlanId(mealPlanId), HttpStatus.OK);
+    }
+
+    /**
+     * 全量保存指定排餐计划的手工换菜关系。
+     * 采用覆盖式写入：先软删旧关系，再插入新关系。
+     */
+    @Log("保存手工换菜关系")
+    @ApiOperation("保存手工换菜关系")
+    @PutMapping("/{mealPlanId}/manual-replaces")
+    @PreAuthorize("@el.check('mealPlan:edit')")
+    public ResponseEntity<Void> saveManualReplaces(
+            @ApiParam(value = "排餐计划ID", required = true) @PathVariable Long mealPlanId,
+            @Validated @RequestBody MealPlanManualReplaceSaveRequest request) {
+        mealPlanManualReplaceService.saveManualReplaces(mealPlanId, request);
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 }

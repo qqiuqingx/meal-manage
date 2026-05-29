@@ -64,3 +64,18 @@ export function getDepletionWarnings(params) {
     params
   })
 }
+
+export function getManualReplaces(mealPlanId) {
+  return request({
+    url: `/api/meal-plan/${mealPlanId}/manual-replaces`,
+    method: 'get'
+  })
+}
+
+export function saveManualReplaces(mealPlanId, data) {
+  return request({
+    url: `/api/meal-plan/${mealPlanId}/manual-replaces`,
+    method: 'put',
+    data
+  })
+}

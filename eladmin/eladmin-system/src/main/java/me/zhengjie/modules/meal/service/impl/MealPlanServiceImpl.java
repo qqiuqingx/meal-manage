@@ -38,6 +38,7 @@ import me.zhengjie.modules.meal.domain.DishIngredientRelation;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.MealPlanCustomerItem;
+import me.zhengjie.modules.meal.domain.MealPlanManualReplace;
 import me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto;
 import me.zhengjie.modules.meal.domain.dto.DishQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealDepletionWarningDto;
@@ -50,6 +51,7 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
 import me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
 import me.zhengjie.modules.meal.domain.dto.MealPlanListDetailVO;
+import me.zhengjie.modules.meal.domain.dto.MealPlanManualReplaceVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.meal.mapper.DishMapper;
@@ -58,6 +60,7 @@ import me.zhengjie.modules.meal.service.DishIngredientCategoryService;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerItemMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
+import me.zhengjie.modules.meal.mapper.MealPlanManualReplaceMapper;
 import me.zhengjie.modules.meal.service.MealPlanService;
 import me.zhengjie.modules.meal.util.ScheduleKeyUtil;
 import me.zhengjie.utils.PageResult;
@@ -121,6 +124,7 @@ public class MealPlanServiceImpl implements MealPlanService {
     private final DishIngredientCategoryService dishIngredientCategoryService;
     private final CustomerOrderReplaceRuleMapper replaceRuleMapper;
     private final CustomerMealScheduleAdditionMapper customerMealScheduleAdditionMapper;
+    private final MealPlanManualReplaceMapper mealPlanManualReplaceMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -2408,6 +2412,23 @@ public class MealPlanServiceImpl implements MealPlanService {
         result.setTotalCustomers(customerDetails.size());
         result.setSuccessCount((int) customerDetails.stream().filter(c -> c.getStatus() != null && c.getStatus() == 1).count());
         result.setFailCount((int) customerDetails.stream().filter(c -> c.getStatus() != null && c.getStatus() == 0).count());
+
+        // 查询手工换菜关系
+        List<MealPlanManualReplace> manualReplaceRecords = mealPlanManualReplaceMapper.selectByMealPlanId(mealPlanId);
+        List<MealPlanManualReplaceVO> manualReplaceVOs = manualReplaceRecords.stream().map(entity -> {
+            MealPlanManualReplaceVO vo = new MealPlanManualReplaceVO();
+            vo.setId(entity.getId());
+            vo.setMealPlanId(entity.getMealPlanId());
+            vo.setCustomerPlanId(entity.getCustomerPlanId());
+            vo.setCustomerId(entity.getCustomerId());
+            vo.setCustomerCode(entity.getCustomerCode());
+            vo.setCustomerName(entity.getCustomerName());
+            vo.setDishId(entity.getDishId());
+            vo.setDishName(entity.getDishName());
+            vo.setDishType(entity.getDishType());
+            return vo;
+        }).collect(Collectors.toList());
+        result.setManualReplaces(manualReplaceVOs);
 
         log.info("查询排餐计划完整详情完成 - 计划ID: {}, 客户数: {}", mealPlanId, customerDetails.size());
         return result;
