@@ -360,77 +360,85 @@
       </template>
 
       <!-- ===== 金额信息 ===== -->
-      <el-divider content-position="left">金额信息</el-divider>
-      <el-row :gutter="20">
-        <el-col :span="8">
-          <el-form-item label="总金额(元)" prop="totalAmount">
-            <el-input-number
-              v-model="form.totalAmount"
-              :min="0"
-              :precision="2"
-              :disabled="readonly || mode === 'firstOrder'"
-              controls-position="right"
-              style="width: 100%;"
-              @change="calcBalance"
-            />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="成交金额(元)" prop="finalAmount">
-            <el-input-number
-              v-model="form.finalAmount"
-              :min="0"
-              :precision="2"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-              @change="calcBalance"
-            />
-          </el-form-item>
-        </el-col>
-        <!-- 定金：两种模式均显示，去除重复 -->
-        <el-col :span="8">
-          <el-form-item label="定金(元)">
-            <el-input-number
-              v-model="form.depositAmount"
-              :min="0"
-              :precision="2"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-            />
-          </el-form-item>
-        </el-col>
-      </el-row>
+      <el-collapse v-model="amountInfoActiveNames" class="order-form-collapse">
+        <el-collapse-item name="amountInfo">
+          <template slot="title">
+            <span class="order-form-collapse__title">
+              <span class="order-form-collapse__title-text">金额信息</span>
+            </span>
+          </template>
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <el-form-item label="总金额(元)" prop="totalAmount">
+                <el-input-number
+                  v-model="form.totalAmount"
+                  :min="0"
+                  :precision="2"
+                  :disabled="readonly || mode === 'firstOrder'"
+                  controls-position="right"
+                  style="width: 100%;"
+                  @change="calcBalance"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="成交金额(元)" prop="finalAmount">
+                <el-input-number
+                  v-model="form.finalAmount"
+                  :min="0"
+                  :precision="2"
+                  :disabled="readonly"
+                  controls-position="right"
+                  style="width: 100%;"
+                  @change="calcBalance"
+                />
+              </el-form-item>
+            </el-col>
+            <!-- 定金：两种模式均显示，去除重复 -->
+            <el-col :span="8">
+              <el-form-item label="定金(元)">
+                <el-input-number
+                  v-model="form.depositAmount"
+                  :min="0"
+                  :precision="2"
+                  :disabled="readonly"
+                  controls-position="right"
+                  style="width: 100%;"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
 
-      <el-row :gutter="20">
-        <el-col :span="8">
-          <el-form-item label="早餐单价(元)">
-            <el-input-number
-              v-model="form.breakfastPrice"
-              :min="0"
-              :precision="2"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-              @change="calcTotalAmount"
-            />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="午餐晚餐单价(元)">
-            <el-input-number
-              v-model="form.lunchDinnerPrice"
-              :min="0"
-              :precision="2"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-              @change="calcTotalAmount"
-            />
-          </el-form-item>
-        </el-col>
-      </el-row>
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <el-form-item label="早餐单价(元)">
+                <el-input-number
+                  v-model="form.breakfastPrice"
+                  :min="0"
+                  :precision="2"
+                  :disabled="readonly"
+                  controls-position="right"
+                  style="width: 100%;"
+                  @change="calcTotalAmount"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="午餐晚餐单价(元)">
+                <el-input-number
+                  v-model="form.lunchDinnerPrice"
+                  :min="0"
+                  :precision="2"
+                  :disabled="readonly"
+                  controls-position="right"
+                  style="width: 100%;"
+                  @change="calcTotalAmount"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </el-collapse-item>
+      </el-collapse>
 
       <!-- ===== 餐数信息 ===== -->
       <el-divider content-position="left">餐数信息</el-divider>
@@ -795,7 +803,8 @@ export default {
       trialOrderLoading: false,
       availableDates: [],
       hydratingForm: false,
-      hydrationTimer: null
+      hydrationTimer: null,
+      amountInfoActiveNames: []
     }
   },
   computed: {
@@ -837,6 +846,7 @@ export default {
     value: {
       handler(val) {
         console.log('[OrderForm] watch.value triggered, deliveryDates:', val && val.deliveryDates)
+        this.amountInfoActiveNames = []
         this.beginFormHydration()
         this.normalizeFormNumbers()
         this.ensureRiceTypeValue(val)
@@ -1415,6 +1425,48 @@ export default {
 <style scoped>
 .order-form {
   width: 100%;
+}
+.order-form-collapse {
+  margin: 18px 0;
+  border-top: 0;
+  border-bottom: 0;
+}
+.order-form-collapse__title {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-right: 12px;
+}
+.order-form-collapse__title::before,
+.order-form-collapse__title::after {
+  content: '';
+  border-top: 1px solid #dcdfe6;
+}
+.order-form-collapse__title::before {
+  width: 24px;
+  margin-right: 24px;
+}
+.order-form-collapse__title::after {
+  flex: 1;
+  margin-left: 24px;
+}
+.order-form-collapse__title-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+}
+.order-form-collapse >>> .el-collapse-item__arrow {
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+  margin-right: 0;
+  border: 1px solid #b3d8ff;
+  border-radius: 50%;
+  background: #ecf5ff;
+  color: #409eff;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
 }
 .replace-rules-section {
   margin-bottom: 10px;

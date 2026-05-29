@@ -1,6 +1,8 @@
 /* eslint-env jest */
 import { shallowMount } from '@vue/test-utils'
 import ScheduleRecord from '@/views/meal/scheduleRecord/index.vue'
+import fs from 'fs'
+import path from 'path'
 
 jest.mock('@/api/mealPlan', () => ({
   getMealPlanList: jest.fn(),
@@ -8,11 +10,17 @@ jest.mock('@/api/mealPlan', () => ({
   generateMealPlan: jest.fn(),
   delMealPlan: jest.fn(),
   delMealPlanCustomers: jest.fn(),
-  getMealPlanCustomerAddresses: jest.fn()
+  getMealPlanCustomerAddresses: jest.fn(),
+  getManualReplaces: jest.fn(),
+  saveManualReplaces: jest.fn()
 }))
 
 jest.mock('@/api/customer/profile', () => ({
   getProfiles: jest.fn()
+}))
+
+jest.mock('@/api/dish', () => ({
+  queryDishes: jest.fn()
 }))
 
 jest.mock('@/api/mealVerification', () => ({
@@ -62,6 +70,13 @@ function buildWrapper() {
 }
 
 describe('scheduleRecord special requirements display', () => {
+  test('customer management dialog uses customer code for the customer column', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../../../../src/views/meal/scheduleRecord/index.vue'), 'utf8')
+
+    expect(source).toContain('<el-table-column label="客户编号" prop="customerCode" align="center" min-width="120">')
+    expect(source).not.toContain('<el-table-column label="客户" prop="customerName" align="center" min-width="120"')
+  })
+
   test('special requirements are provided by tooltip instead of rendering below the customer code', () => {
     const wrapper = buildWrapper()
 
