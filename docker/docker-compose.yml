@@ -34,7 +34,8 @@ services:
     expose:
       - "8000"
     volumes:
-      - backend_files:/home/eladmin
+      - ${MEAL_FILE_STORAGE_DIR:-/data/meals/uploads/file}:/home/eladmin/file
+      - ${MEAL_AVATAR_STORAGE_DIR:-/data/meals/uploads/avatar}:/home/eladmin/avatar
       - /data/logs:/app/logs
     networks:
       - eladmin-net
@@ -86,6 +87,7 @@ networks:
 # ------------------------------
 # Volumes (persistent data)
 # ------------------------------
-volumes:
-  backend_files:
-    driver: local
+# 上传文件和头像使用 bind mount 挂载到宿主机目录，方便备份和迁移
+# 部署前需在宿主机创建目录：
+#   mkdir -p /data/meals/uploads/file /data/meals/uploads/avatar
+# ------------------------------

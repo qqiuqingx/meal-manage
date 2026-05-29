@@ -286,4 +286,9 @@ public class CustomerOrder implements Serializable {
      * 每餐汤数量
      */
     private Integer soupCount;
+
+    /**
+     * 自定义菜单图片地址，用于客户换菜参考
+     */
+    private String customMenuImage;
 }

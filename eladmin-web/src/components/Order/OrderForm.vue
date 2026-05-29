@@ -271,6 +271,45 @@
         </el-button>
       </div>
 
+      <!-- ===== 自定义菜单图片 ===== -->
+      <el-divider content-position="left">自定义菜单</el-divider>
+      <el-form-item label="菜单图片">
+        <div v-if="form.customMenuImage" class="custom-menu-image-preview">
+          <el-image
+            :src="getCustomMenuImageUrl(form.customMenuImage)"
+            :preview-src-list="[getCustomMenuImageUrl(form.customMenuImage)]"
+            fit="contain"
+            style="width: 150px; height: 150px; border: 1px solid #dcdfe6; border-radius: 4px;"
+          />
+          <div v-if="!readonly" style="margin-top: 8px;">
+            <el-upload
+              :action="imagesUploadApi"
+              :headers="uploadHeaders"
+              :show-file-list="false"
+              :before-upload="beforeCustomMenuImageUpload"
+              :on-success="handleCustomMenuImageSuccess"
+              accept="image/*"
+            >
+              <el-button size="small" type="primary" plain>替换</el-button>
+            </el-upload>
+            <el-button size="small" type="danger" plain style="margin-left: 8px;" @click="removeCustomMenuImage">删除</el-button>
+          </div>
+        </div>
+        <el-upload
+          v-else-if="!readonly"
+          :action="imagesUploadApi"
+          :headers="uploadHeaders"
+          :show-file-list="false"
+          :before-upload="beforeCustomMenuImageUpload"
+          :on-success="handleCustomMenuImageSuccess"
+          accept="image/*"
+        >
+          <el-button size="small" type="primary" plain>上传菜单图片</el-button>
+          <div slot="tip" class="el-upload__tip">只能上传图片文件，且不超过 5MB</div>
+        </el-upload>
+        <span v-else style="color: #909399;">暂无菜单图片</span>
+      </el-form-item>
+
       <!-- ===== 客户饮食信息（仅订单模式） ===== -->
       <template v-if="mode === 'order'">
         <el-divider content-position="left">客户饮食信息</el-divider>
@@ -581,6 +620,8 @@ import * as dishApi from '@/api/dish'
 import { queryIngredients } from '@/api/dishIngredient'
 import MealScheduleCalendar from '@/components/Calendar/MealScheduleCalendar.vue'
 import { normalizeDeliveryDates } from '@/utils/calendar'
+import { getToken } from '@/utils/auth'
+import { mapGetters } from 'vuex'
 
 export const DEFAULT_RICE_TYPE_OPTION_VALUE = '默认'
 export const START_MEAL_TYPE_OPTIONS = {
@@ -661,6 +702,7 @@ export function createOrderDefaultForm() {
     trialOrderId: null,
     trialOrderCode: null,
     replaceRules: [],
+    customMenuImage: null,
     allergyTags: [],
     specialRequirements: null
   }
@@ -696,7 +738,8 @@ export function createFirstOrderDefaultForm() {
     trialConverted: false,
     trialOrderId: null,
     trialOrderCode: null,
-    replaceRules: []
+    replaceRules: [],
+    customMenuImage: null
   }
 }
 
@@ -756,6 +799,14 @@ export default {
     }
   },
   computed: {
+    ...mapGetters(['baseApi', 'imagesUploadApi']),
+    /**
+     * 获取图片上传请求头，确保 el-upload 调用受保护接口时携带登录令牌。
+     */
+    uploadHeaders() {
+      const token = getToken()
+      return token ? { Authorization: token } : {}
+    },
     form: {
       get() {
         return this.value
@@ -1259,6 +1310,50 @@ export default {
       }
     },
 
+    // ========== 自定义菜单图片 ==========
+
+    /**
+     * 获取自定义菜单图片完整访问地址
+     */
+    getCustomMenuImageUrl(path) {
+      if (!path) return ''
+      if (path.startsWith('http://') || path.startsWith('https://')) return path
+      return this.baseApi + path
+    },
+
+    /**
+     * 上传前校验文件类型和大小
+     */
+    beforeCustomMenuImageUpload(file) {
+      const isImage = file.type.startsWith('image/')
+      if (!isImage) {
+        this.$message.error('只能上传图片文件')
+        return false
+      }
+      const isLt5M = file.size / 1024 / 1024 < 5
+      if (!isLt5M) {
+        this.$message.error('图片大小不能超过 5MB')
+        return false
+      }
+      return true
+    },
+
+    /**
+     * 图片上传成功回调，组装访问路径并写入表单
+     */
+    handleCustomMenuImageSuccess(response, file) {
+      const data = response || {}
+      this.$set(this.form, 'customMenuImage', '/file/' + data.type + '/' + data.realName)
+      this.$message.success('图片上传成功')
+    },
+
+    /**
+     * 删除自定义菜单图片（只清空订单字段，不删除物理文件）
+     */
+    removeCustomMenuImage() {
+      this.$set(this.form, 'customMenuImage', null)
+    },
+
     /**
      * 格式化客户下拉展示文本，优先显示客户编号，避免编辑时只回显主键 ID。
      */
@@ -1330,5 +1425,10 @@ export default {
 .replace-rules-tip {
   color: #909399;
   font-size: 12px;
+}
+.custom-menu-image-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 </style>

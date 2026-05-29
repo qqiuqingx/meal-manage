@@ -36,6 +36,7 @@
         <result column="rice_count" property="riceCount"/>
         <result column="rice_type" property="riceType"/>
         <result column="soup_count" property="soupCount"/>
+        <result column="custom_menu_image" property="customMenuImage"/>
         <result column="customer_source" property="customerSource"/>
         <result column="trial_converted" property="trialConverted"/>
         <result column="trial_order_id" property="trialOrderId"/>

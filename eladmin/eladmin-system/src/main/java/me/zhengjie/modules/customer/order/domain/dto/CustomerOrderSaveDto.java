@@ -221,6 +221,11 @@ public class CustomerOrderSaveDto implements Serializable {
     private Integer soupCount;
 
     /**
+     * 自定义菜单图片地址，用于客户换菜参考
+     */
+    private String customMenuImage;
+
+    /**
      * 换菜规则列表
      */
     private List<CustomerOrderReplaceRuleDto> replaceRules;
