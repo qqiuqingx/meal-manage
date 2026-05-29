@@ -183,7 +183,7 @@
           mode="order"
           :readonly="false"
           :customer-disabled="!!form.id"
-          :current-customer="{ id: form.customerId, customerName: form.customerName, phone: form.phone }"
+          :current-customer="{ id: form.customerId, customerCode: form.customerCode, customerName: form.customerName, phone: form.phone }"
           :rules="rules"
           @customer-change="onCustomerChange"
           @calc-change="onCalcChange"
@@ -361,6 +361,8 @@ export default {
           return
         }
         const detail = res.data || res
+        // 订单详情接口不返回客户编号，这里沿用列表行数据，确保编辑态客户回显使用客户编号。
+        detail.customerCode = row.customerCode || detail.customerCode
         this.crud.toEdit(detail)
       } catch (e) {
         if (requestId !== this.editRequestId) {
