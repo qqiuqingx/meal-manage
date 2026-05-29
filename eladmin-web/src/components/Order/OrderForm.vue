@@ -271,6 +271,55 @@
         </el-button>
       </div>
 
+      <!-- ===== 客户饮食信息（仅订单模式） ===== -->
+      <template v-if="mode === 'order'">
+        <el-divider content-position="left">客户饮食信息</el-divider>
+        <el-alert
+          title="修改后会同步更新客户档案，影响该客户后续全部订单的排餐"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 15px;"
+        />
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="过敏食物">
+              <el-select
+                ref="allergySelect"
+                v-model="form.allergyTags"
+                multiple
+                filterable
+                remote
+                allow-create
+                default-first-option
+                :disabled="readonly"
+                :remote-method="searchAllergy"
+                :loading="allergyLoading"
+                placeholder="输入配料名称，支持逗号/顿号批量输入"
+                style="width: 100%;"
+                @keydown.native.capture="handleAllergyKeydown"
+                @paste.native="handleAllergyPaste"
+              >
+                <el-option v-for="item in allergyOptions" :key="item.id" :label="item.name" :value="item.name" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="特殊要求">
+              <el-input
+                v-model="form.specialRequirements"
+                type="textarea"
+                :rows="3"
+                :disabled="readonly"
+                placeholder="客户特殊要求"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </template>
+
       <!-- ===== 金额信息 ===== -->
       <el-divider content-position="left">金额信息</el-divider>
       <el-row :gutter="20">
@@ -518,55 +567,6 @@
           </el-form-item>
         </el-col>
       </el-row>
-
-      <!-- ===== 客户饮食信息（仅订单模式） ===== -->
-      <template v-if="mode === 'order'">
-        <el-divider content-position="left">客户饮食信息</el-divider>
-        <el-alert
-          title="修改后会同步更新客户档案，影响该客户后续全部订单的排餐"
-          type="info"
-          :closable="false"
-          show-icon
-          style="margin-bottom: 15px;"
-        />
-        <el-row :gutter="20">
-          <el-col :span="24">
-            <el-form-item label="过敏食物">
-              <el-select
-                ref="allergySelect"
-                v-model="form.allergyTags"
-                multiple
-                filterable
-                remote
-                allow-create
-                default-first-option
-                :disabled="readonly"
-                :remote-method="searchAllergy"
-                :loading="allergyLoading"
-                placeholder="输入配料名称，支持逗号/顿号批量输入"
-                style="width: 100%;"
-                @keydown.native.capture="handleAllergyKeydown"
-                @paste.native="handleAllergyPaste"
-              >
-                <el-option v-for="item in allergyOptions" :key="item.id" :label="item.name" :value="item.name" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="20">
-          <el-col :span="24">
-            <el-form-item label="特殊要求">
-              <el-input
-                v-model="form.specialRequirements"
-                type="textarea"
-                :rows="3"
-                :disabled="readonly"
-                placeholder="客户特殊要求"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </template>
 
     </el-form>
   </div>
