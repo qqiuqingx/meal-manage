@@ -18,7 +18,7 @@
                 style="width: 100%;"
                 @change="onCustomerChange"
               >
-                <el-option v-for="item in customers" :key="item.id" :label="item.customerName + ' - ' + item.phone" :value="item.id" />
+                <el-option v-for="item in customers" :key="item.id" :label="formatCustomerLabel(item)" :value="item.id" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -625,6 +625,7 @@ export function createOrderDefaultForm() {
   return {
     id: null,
     customerId: null,
+    customerCode: null,
     orderCode: null,
     parentPackageId: null,
     childPackageId: null,
@@ -670,6 +671,7 @@ export function createFirstOrderDefaultForm() {
   return {
     parentPackageId: null,
     childPackageId: null,
+    customerCode: null,
     breakfastCount: 0,
     lunchDinnerCount: 0,
     totalCount: 0,
@@ -814,6 +816,13 @@ export default {
         this.$set(this.form, 'trialOrderId', null)
         this.$set(this.form, 'trialOrderCode', null)
       }
+    },
+    currentCustomer: {
+      handler(val) {
+        this.syncCurrentCustomerOption(val)
+      },
+      immediate: true,
+      deep: true
     }
   },
   created() {
@@ -821,14 +830,7 @@ export default {
     this.loadRiceTypeOptions()
     this.loadParentPackages()
     this.initAvailableDates()
-    // 编辑时：如果传入了当前客户数据，填充下拉列表
-    if (this.mode === 'order' && this.currentCustomer && this.currentCustomer.id) {
-      this.customers = [{
-        id: this.currentCustomer.id,
-        customerName: this.currentCustomer.customerName || this.currentCustomer.name,
-        phone: this.currentCustomer.phone
-      }]
-    }
+    this.syncCurrentCustomerOption(this.currentCustomer)
   },
   beforeDestroy() {
     if (this.hydrationTimer) {
@@ -1089,6 +1091,7 @@ export default {
     onCustomerChange(customerId) {
       const customer = this.customers.find(c => c.id === customerId)
       if (customer) {
+        this.form.customerCode = customer.customerCode || null
         this.form.customerName = customer.customerName
         this.form.phone = customer.phone
       }
@@ -1253,6 +1256,38 @@ export default {
       if (dish) {
         this.$set(rule, field + 'DishName', dish.name)
         this.$set(rule, field + 'DishType', dish.dishType)
+      }
+    },
+
+    /**
+     * 格式化客户下拉展示文本，优先显示客户编号，避免编辑时只回显主键 ID。
+     */
+    formatCustomerLabel(customer) {
+      if (!customer) return ''
+      return customer.customerCode || String(customer.id || '')
+    },
+
+    /**
+     * 将当前编辑客户同步进下拉选项，确保禁用态也能正确回显客户编号。
+     */
+    syncCurrentCustomerOption(currentCustomer) {
+      if (this.mode !== 'order' || !currentCustomer || !currentCustomer.id) {
+        return
+      }
+      const option = {
+        id: currentCustomer.id,
+        customerCode: currentCustomer.customerCode || currentCustomer.customerName || currentCustomer.name || String(currentCustomer.id),
+        customerName: currentCustomer.customerName || currentCustomer.name,
+        phone: currentCustomer.phone
+      }
+      const exists = this.customers.find(item => item.id === option.id)
+      if (exists) {
+        Object.assign(exists, option)
+      } else {
+        this.customers = [option].concat(this.customers)
+      }
+      if (this.form.customerCode !== option.customerCode) {
+        this.$set(this.form, 'customerCode', option.customerCode)
       }
     },
 
