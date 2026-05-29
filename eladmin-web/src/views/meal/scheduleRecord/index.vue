@@ -455,7 +455,11 @@
         @selection-change="handleCustomerSelectionChange"
       >
         <el-table-column type="selection" width="55" align="center" />
-        <el-table-column label="客户" prop="customerName" align="center" min-width="120" />
+        <el-table-column label="客户编号" prop="customerCode" align="center" min-width="120">
+          <template slot-scope="scope">
+            {{ scope.row.customerCode || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="核销状态" prop="isVerified" align="center" width="100">
           <template slot-scope="scope">
             <el-tag v-if="scope.row.isVerified != null && scope.row.isVerified === 1" type="success" size="mini">已核销</el-tag>

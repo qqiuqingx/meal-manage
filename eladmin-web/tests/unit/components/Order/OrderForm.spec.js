@@ -80,6 +80,15 @@ describe('OrderForm delivery date sync', () => {
     expect(ctx.form.deliveryDatesWithMealTypes).toEqual(selected)
   })
 
+  test('collapses amount info when a new form value is loaded', () => {
+    const ctx = createContext()
+    ctx.amountInfoActiveNames = ['amountInfo']
+
+    OrderForm.watch.value.handler.call(ctx, ctx.form)
+
+    expect(ctx.amountInfoActiveNames).toEqual([])
+  })
+
   test('serializes calendar selections back to deliveryDates payload', () => {
     const selected = [{ date: '2026-04-24', mealTypes: ['BREAKFAST', 'DINNER'] }]
     const ctx = createContext()
