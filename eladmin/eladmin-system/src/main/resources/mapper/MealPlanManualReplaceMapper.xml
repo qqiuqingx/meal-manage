@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="me.zhengjie.modules.meal.mapper.MealPlanManualReplaceMapper">
+
+    <select id="selectByMealPlanId" resultType="me.zhengjie.modules.meal.domain.MealPlanManualReplace">
+        select * from meal_plan_manual_replace
+        where meal_plan_id = #{mealPlanId} and deleted = 0
+        order by dish_type, dish_id, customer_code
+    </select>
+
+    <update id="softDeleteByMealPlanId">
+        update meal_plan_manual_replace set deleted = 1
+        where meal_plan_id = #{mealPlanId} and deleted = 0
+    </update>
+
+    <delete id="deleteHistoryByMealPlanId">
+        delete from meal_plan_manual_replace
+        where meal_plan_id = #{mealPlanId} and deleted = 1
+    </delete>
+
+    <select id="selectByCustomerPlanIds" resultType="me.zhengjie.modules.meal.domain.MealPlanManualReplace">
+        <if test="customerPlanIds != null and customerPlanIds.size() > 0">
+            select * from meal_plan_manual_replace
+            where deleted = 0
+            and customer_plan_id in
+            <foreach collection="customerPlanIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+        </if>
+    </select>
+
+</mapper>
