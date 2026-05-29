@@ -55,8 +55,22 @@
           :disabled="!planData"
           @click="openAddressDialog"
         >配送地址</el-button>
+        <el-button
+          size="small"
+          type="primary"
+          plain
+          icon="el-icon-notebook-2"
+          @click="rulesDialogVisible = true"
+        >展示规则</el-button>
         <!-- 打印 -->
         <el-button size="small" icon="el-icon-printer" @click="handlePrint">打印预览</el-button>
+        <el-button
+          v-if="planData"
+          size="small"
+          type="warning"
+          icon="el-icon-s-operation"
+          @click="openReplaceDialog"
+        >换菜管理</el-button>
       </div>
     </div>
 
@@ -163,7 +177,10 @@
                   </td>
                   <td class="col-name">{{ dish.dishName }}</td>
                   <td class="col-count">{{ dish.count }}</td>
-                  <td class="col-codes">{{ dish.codeSnippet }}</td>
+                  <td class="col-codes">
+                    <span class="codes-screen">{{ dish.codeSnippet }}</span>
+                    <span class="codes-print">{{ dish.printCodeSnippet }}</span>
+                  </td>
                 </tr>
                 <tr v-if="regularDishes.length === 0">
                   <td colspan="4" class="empty-row">暂无常规排餐</td>
@@ -186,15 +203,32 @@
                 </tr>
               </thead>
               <tbody>
-                <template v-if="replacedDishes.length > 0">
-                  <tr v-for="(dish, idx) in replacedDishes" :key="`rep-${idx}`">
-                    <td v-if="idx === 0" class="col-category" :rowspan="replacedDishes.length">明细</td>
+                <template v-if="manualReplaceDishes.length > 0">
+                  <tr v-for="(dish, idx) in manualReplaceDishes" :key="`mrep-${idx}`">
+                    <td class="col-category">
+                      <span class="dish-type-tag" :class="`dish-type-tag--${dish.dishType.toLowerCase()}`">
+                        {{ dishTypeMap[dish.dishType] || dish.dishType }}
+                      </span>
+                    </td>
                     <td class="col-name">{{ dish.dishName }}</td>
                     <td class="col-count">{{ dish.count }}</td>
                     <td class="col-codes">{{ dish.codeSnippet }}</td>
                   </tr>
                 </template>
-                <tr v-else>
+                <template v-if="replacedDishes.length > 0">
+                  <tr v-for="(dish, idx) in replacedDishes" :key="`rep-${idx}`">
+                    <td class="col-category">
+                      <span v-if="dish.dishType" class="dish-type-tag" :class="`dish-type-tag--${dish.dishType.toLowerCase()}`">
+                        {{ dishTypeMap[dish.dishType] || dish.dishType }}
+                      </span>
+                      <span v-else class="replace-tag replace-tag--auto">自动</span>
+                    </td>
+                    <td class="col-name">{{ dish.dishName }}</td>
+                    <td class="col-count">{{ dish.count }}</td>
+                    <td class="col-codes">{{ dish.codeSnippet }}</td>
+                  </tr>
+                </template>
+                <tr v-if="manualReplaceDishes.length === 0 && replacedDishes.length === 0">
                   <td colspan="4" class="empty-row">暂无换菜记录</td>
                 </tr>
               </tbody>
@@ -302,6 +336,97 @@
         <el-button @click="generateDialog.visible = false">取 消</el-button>
         <el-button type="primary" :loading="generateDialog.loading" @click="handleGenerate">确认生成</el-button>
       </div>
+    </el-dialog>
+
+    <el-dialog
+      title="排餐生产单展示规则"
+      :visible.sync="rulesDialogVisible"
+      width="880px"
+      top="5vh"
+    >
+      <div class="rules-dialog-body">
+        <div v-for="(section, index) in pageRuleSections" :key="`rule-${index}`" class="rules-section">
+          <h3 class="rules-section__title">{{ section.title }}</h3>
+          <p v-if="section.desc" class="rules-section__desc">{{ section.desc }}</p>
+          <ul v-if="section.items && section.items.length > 0" class="rules-list">
+            <li v-for="(item, itemIndex) in section.items" :key="`rule-item-${index}-${itemIndex}`">{{ item }}</li>
+          </ul>
+          <div v-if="section.examples && section.examples.length > 0" class="rules-example">
+            <p v-for="(example, exampleIndex) in section.examples" :key="`rule-example-${index}-${exampleIndex}`">{{ example }}</p>
+          </div>
+        </div>
+      </div>
+      <span slot="footer" class="dialog-footer">
+        <el-button size="small" type="primary" @click="rulesDialogVisible = false">我知道了</el-button>
+      </span>
+    </el-dialog>
+
+    <el-dialog
+      title="换菜管理"
+      :visible.sync="replaceDialogVisible"
+      width="860px"
+      :close-on-click-modal="false"
+      top="5vh"
+    >
+      <div class="replace-dialog-body">
+        <div class="replace-toolbar">
+          <el-select
+            v-model="replaceSelectedDishes"
+            multiple
+            filterable
+            remote
+            reserve-keyword
+            placeholder="搜索菜品名称..."
+            :remote-method="searchDishes"
+            :loading="dishSearchLoading"
+            style="width: 400px;"
+            size="small"
+            @change="onDishSelected"
+          >
+            <el-option
+              v-for="dish in dishOptions"
+              :key="dish.id"
+              :label="`${dish.name}（${dishTypeMap[dish.dishType] || dish.dishType}）`"
+              :value="dish.id"
+            />
+          </el-select>
+          <el-button size="small" type="primary" icon="el-icon-plus" @click="addReplaceItem">添加换菜项</el-button>
+        </div>
+
+        <div v-if="replaceForm.length === 0" class="replace-empty">暂无换菜项，请搜索菜品并添加</div>
+
+        <div v-for="(item, idx) in replaceForm" :key="`rf-${idx}`" class="replace-item-card">
+          <div class="replace-item-header">
+            <span class="replace-item-dish">
+              <span class="dish-type-tag" :class="`dish-type-tag--${item.dishType.toLowerCase()}`">
+                {{ dishTypeMap[item.dishType] || item.dishType }}
+              </span>
+              {{ item.dishName }}
+            </span>
+            <el-button type="text" icon="el-icon-delete" class="replace-item-del" @click="removeReplaceItem(idx)" />
+          </div>
+          <el-select
+            v-model="item.customerPlanIds"
+            multiple
+            filterable
+            placeholder="选择客户编号..."
+            size="small"
+            style="width: 100%;"
+          >
+            <el-option
+              v-for="customer in planData.customers"
+              :key="customer.id"
+              :label="`${customer.customerCode || customer.customerName}（${customer.customerName}）`"
+              :value="customer.id"
+            />
+          </el-select>
+        </div>
+      </div>
+
+      <span slot="footer" class="dialog-footer">
+        <el-button size="small" @click="replaceDialogVisible = false">取消</el-button>
+        <el-button size="small" type="primary" :loading="replaceSaving" @click="handleSaveReplaces">保存</el-button>
+      </span>
     </el-dialog>
 
     <!-- 客户排餐管理对话框 -->
@@ -419,8 +544,9 @@
 </template>
 
 <script>
-import { getMealPlanList, getMealPlanFullDetail, generateMealPlan, delMealPlan, delMealPlanCustomers, getMealPlanCustomerAddresses } from '@/api/mealPlan'
+import { getMealPlanList, getMealPlanFullDetail, generateMealPlan, delMealPlan, delMealPlanCustomers, getMealPlanCustomerAddresses, getManualReplaces, saveManualReplaces } from '@/api/mealPlan'
 import { getProfiles } from '@/api/customer/profile'
+import { queryDishes } from '@/api/dish'
 import { verifyMeal } from '@/api/mealVerification'
 import { MealTypeName } from '@/utils/calendar'
 
@@ -503,11 +629,64 @@ export default {
         loading: false,
         list: []
       },
+      rulesDialogVisible: false,
+      manualReplaces: [],
+      replaceDialogVisible: false,
+      replaceForm: [],
+      dishOptions: [],
+      dishSearchLoading: false,
+      replaceSelectedDishes: [],
+      replaceSaving: false,
       addressTypeMap: {
         DEFAULT: '默认地址',
         WORKDAY: '工作日地址',
         WEEKEND: '周末地址'
-      }
+      },
+      pageRuleSections: [
+        {
+          title: '编号区',
+          items: [
+            '首餐客户优先展示，普通客户排在后面。',
+            '客户缺汤时，客户编号显示红色胶囊圈。',
+            '客户是首餐时，编号右上角显示绿色“首”标记。',
+            '黄色标签表示加菜或补充数量，如“加主菜×1”“加副菜×99”。',
+            '浅红标签表示缺少某类菜品，如“无副菜”“无素菜”“无米饭”。',
+            '特殊要求中能解析出主菜、副菜、素菜、米饭增减要求时，也会显示在编号区标签中。'
+          ]
+        },
+        {
+          title: '右上今日菜单汇总',
+          items: [
+            '按“类目 + 菜名”聚合展示汤品、主菜、副菜、蔬菜、米饭。',
+            '人数表示当前实际吃该菜的客户数量。',
+            '屏幕上的编号明细允许带运营说明信息。',
+            '普通菜会汇总过敏过滤、自动换菜、缺菜、特殊要求和手工换菜提示。',
+            '汤品额外包含缺汤客户编号。',
+            '米饭会合并缺米饭、米饭替换、特殊要求以及米饭相关替换说明。'
+          ]
+        },
+        {
+          title: '右下换菜明细',
+          items: [
+            '分为手工换菜和自动换菜两部分。',
+            '每一行按菜品类目和替换后的菜名聚合展示。',
+            '第一列展示菜品类目，第二列展示替换后的菜名，第三列展示人数，第四列展示目标客户编号。',
+            '米饭自动替换会在这里单独展示一行，不再只体现在右上编号明细中。'
+          ]
+        },
+        {
+          title: '打印规则',
+          items: [
+            '打印时隐藏操作栏、导航栏、标签栏等非打印内容。',
+            '右上编号明细切换为打印专用编号列表。',
+            '打印只显示客户编号，不显示“无素菜”“无副菜”“白米饭”“换菜:”等说明文字。',
+            '打印编号会自动去重。'
+          ],
+          examples: [
+            '示例：屏幕显示 “A002, B3301, A171, B2200, B2201 | 换菜: A002” 时，打印为 “A002, B3301, A171, B2200, B2201”。'
+          ]
+        }
+      ]
     }
   },
   computed: {
@@ -652,10 +831,15 @@ export default {
             : g.dishType === 'RICE'
               ? this.mergeRiceCodeDetails(Array.from(new Set([...excludedCodes, ...missingCodes, ...riceChangedCodes, ...specialRequirementCodes])))
               : Array.from(new Set([...excludedCodes, ...replacedCodes, ...missingCodes, ...specialRequirementCodes]))
+          const detailText = detailCodes.length > 0 ? this.buildFullCodeText(detailCodes) : '-'
+          const manualCodes = this.manualCodesByDishType[g.dishType] || []
+          const manualText = manualCodes.length > 0 ? `换菜: ${this.buildFullCodeText(manualCodes)}` : ''
+          const printCodes = this.buildPrintCodeList(detailCodes, manualCodes)
           return {
             ...g,
             count: g.eatCodes.length,
-            codeSnippet: detailCodes.length > 0 ? this.buildFullCodeText(detailCodes) : '-'
+            codeSnippet: manualText ? (detailText === '-' ? manualText : `${detailText} | ${manualText}`) : detailText,
+            printCodeSnippet: printCodes.length > 0 ? this.buildFullCodeText(printCodes) : '-'
           }
         })
     },
@@ -664,10 +848,16 @@ export default {
       const groups = {}
       ;(this.planData.customers || []).forEach(customer => {
         const code = customer.customerCode || customer.customerName || ''
-        ;(customer.items || []).filter(item => item.isReplaced && item.dishType !== 'RICE').forEach(item => {
+        ;(customer.items || []).filter(item => item.isReplaced).forEach(item => {
           const key = item.dishName
           if (!groups[key]) {
-            groups[key] = { dishName: item.dishName, originalDishName: item.originalDishName, replaceReason: item.replaceReason, codes: [] }
+            groups[key] = {
+              dishType: item.dishType,
+              dishName: item.dishName,
+              originalDishName: item.originalDishName,
+              replaceReason: item.replaceReason,
+              codes: []
+            }
           }
           if (!groups[key].codes.includes(code)) {
             groups[key].codes.push(code)
@@ -679,6 +869,43 @@ export default {
         count: g.codes.length,
         codeSnippet: this.buildFullCodeText(g.codes)
       }))
+    },
+    manualCodesByDishType() {
+      const map = {}
+      this.manualReplaces.forEach(item => {
+        if (!item.dishType || !item.customerCode) return
+        if (!map[item.dishType]) {
+          map[item.dishType] = new Set()
+        }
+        map[item.dishType].add(item.customerCode)
+      })
+      return Object.keys(map).reduce((result, type) => {
+        result[type] = Array.from(map[type])
+        return result
+      }, {})
+    },
+    manualReplaceDishes() {
+      const groups = {}
+      this.manualReplaces.forEach(item => {
+        const key = `${item.dishType}__${item.dishName}`
+        if (!groups[key]) {
+          groups[key] = {
+            dishType: item.dishType,
+            dishName: item.dishName,
+            codes: []
+          }
+        }
+        if (item.customerCode && !groups[key].codes.includes(item.customerCode)) {
+          groups[key].codes.push(item.customerCode)
+        }
+      })
+      return Object.values(groups)
+        .sort((a, b) => (this.dishTypeOrder[a.dishType] || 99) - (this.dishTypeOrder[b.dishType] || 99))
+        .map(item => ({
+          ...item,
+          count: item.codes.length,
+          codeSnippet: this.buildFullCodeText(item.codes)
+        }))
     }
   },
   created() {
@@ -709,9 +936,11 @@ export default {
           this.queryDate = res.mealPlan.recordDate
           this.queryMealType = res.mealPlan.mealType
         }
+        this.loadManualReplaces()
       }).catch(() => {
         if (requestId !== this.latestLoadRequestId) return
         this.$message.error('加载排餐数据失败')
+        this.manualReplaces = []
       }).finally(() => {
         if (requestId !== this.latestLoadRequestId) return
         this.loading = false
@@ -731,6 +960,7 @@ export default {
         const list = res.content || []
         if (list.length === 0) {
           this.$message.warning('未找到该日期和餐次的排餐计划')
+          this.manualReplaces = []
           return null
         }
         this.currentRecord = list[0]
@@ -738,9 +968,11 @@ export default {
       }).then(res => {
         if (requestId !== this.latestLoadRequestId || !res) return
         this.planData = res
+        this.loadManualReplaces()
       }).catch(() => {
         if (requestId !== this.latestLoadRequestId) return
         this.$message.error('加载排餐数据失败')
+        this.manualReplaces = []
       }).finally(() => {
         if (requestId !== this.latestLoadRequestId) return
         this.loading = false
@@ -950,6 +1182,99 @@ export default {
         this.addressDialog.loading = false
       })
     },
+    loadManualReplaces() {
+      if (!this.planData || !this.planData.mealPlan) {
+        this.manualReplaces = []
+        return
+      }
+      getManualReplaces(this.planData.mealPlan.id).then(res => {
+        this.manualReplaces = res || []
+      }).catch(() => {
+        this.manualReplaces = []
+      })
+    },
+    openReplaceDialog() {
+      const grouped = {}
+      this.manualReplaces.forEach(item => {
+        const key = `${item.dishId}__${item.dishType}`
+        if (!grouped[key]) {
+          grouped[key] = {
+            dishId: item.dishId,
+            dishName: item.dishName,
+            dishType: item.dishType,
+            customerPlanIds: []
+          }
+        }
+        grouped[key].customerPlanIds.push(item.customerPlanId)
+      })
+      this.replaceForm = Object.values(grouped)
+      this.replaceSelectedDishes = this.replaceForm.map(item => item.dishId)
+      this.dishOptions = this.replaceForm.map(item => ({
+        id: item.dishId,
+        name: item.dishName,
+        dishType: item.dishType
+      }))
+      this.replaceDialogVisible = true
+    },
+    searchDishes(query) {
+      if (!query) {
+        this.dishOptions = []
+        return
+      }
+      this.dishSearchLoading = true
+      queryDishes({ name: query, enabled: true, page: 0, size: 20 }).then(res => {
+        this.dishOptions = res.content || []
+      }).catch(() => {
+        this.dishOptions = []
+      }).finally(() => {
+        this.dishSearchLoading = false
+      })
+    },
+    onDishSelected(selectedIds) {
+      const existingIds = new Set(this.replaceForm.map(item => item.dishId))
+      selectedIds.forEach(id => {
+        if (existingIds.has(id)) return
+        const dish = this.dishOptions.find(option => option.id === id)
+        if (!dish) return
+        this.replaceForm.push({
+          dishId: dish.id,
+          dishName: dish.name,
+          dishType: dish.dishType,
+          customerPlanIds: []
+        })
+      })
+      this.replaceForm = this.replaceForm.filter(item => selectedIds.includes(item.dishId))
+    },
+    addReplaceItem() {
+      if (this.replaceSelectedDishes.length === 0) {
+        this.$message.warning('请先搜索并选择菜品')
+      }
+    },
+    removeReplaceItem(index) {
+      const removed = this.replaceForm.splice(index, 1)[0]
+      if (!removed) return
+      this.replaceSelectedDishes = this.replaceSelectedDishes.filter(id => id !== removed.dishId)
+    },
+    handleSaveReplaces() {
+      if (!this.planData || !this.planData.mealPlan) return
+      const items = this.replaceForm
+        .filter(item => Array.isArray(item.customerPlanIds) && item.customerPlanIds.length > 0)
+        .map(item => ({
+          dishId: item.dishId,
+          dishType: item.dishType,
+          customerPlanIds: item.customerPlanIds
+        }))
+      this.replaceSaving = true
+      saveManualReplaces(this.planData.mealPlan.id, { items }).then(() => {
+        this.$message.success('保存成功')
+        this.replaceDialogVisible = false
+        this.loadManualReplaces()
+      }).catch(() => {
+        this.$message.error('保存失败')
+      }).finally(() => {
+        this.replaceSaving = false
+      })
+    },
 
     // ─── 工具方法 ─────────────────────────────────
     isSoupMissing(customer) {
@@ -1037,6 +1362,24 @@ export default {
     buildFullCodeText(codes) {
       if (!codes || codes.length === 0) return '-'
       return codes.join(', ')
+    },
+    buildPrintCodeList(detailCodes, manualCodes) {
+      const ordered = []
+      const seen = new Set()
+      ;[...(detailCodes || []), ...(manualCodes || [])].forEach(entry => {
+        const code = this.extractCustomerCode(entry)
+        if (!code || seen.has(code)) return
+        seen.add(code)
+        ordered.push(code)
+      })
+      return ordered
+    },
+    extractCustomerCode(entry) {
+      if (!entry) return ''
+      const text = String(entry).trim()
+      if (!text) return ''
+      const match = text.match(/^[^,(|，\s]+/)
+      return match ? match[0] : ''
     },
     buildRiceChangedCodeEntries(detailGroups) {
       if (!detailGroups || detailGroups.length === 0) return []
@@ -1426,6 +1769,9 @@ export default {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+.codes-print {
+  display: none;
+}
 .empty-row { text-align: center; color: #c0c4cc; font-style: italic; padding: 20px 0; }
 
 /* 菜品类型标签 */
@@ -1441,6 +1787,102 @@ export default {
 .dish-type-tag--side      { background: #fef3c7; color: #92400e; }
 .dish-type-tag--vegetable { background: #dcfce7; color: #166534; }
 .dish-type-tag--rice      { background: #f3f4f6; color: #374151; }
+.replace-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.replace-tag--manual { background: #fef3c7; color: #92400e; }
+.replace-tag--auto { background: #fee2e2; color: #991b1b; }
+
+/* 换菜管理弹窗 */
+.replace-dialog-body {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.replace-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.replace-empty {
+  text-align: center;
+  color: #c0c4cc;
+  padding: 40px 0;
+  font-style: italic;
+}
+.replace-item-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  background: #fafbfc;
+}
+.replace-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.replace-item-dish {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #1e293b;
+}
+.replace-item-del {
+  color: #f56c6c;
+}
+
+.rules-dialog-body {
+  max-height: 68vh;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+.rules-section + .rules-section {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #ebeef5;
+}
+.rules-section__title {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.rules-section__desc {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #475569;
+}
+.rules-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.rules-list li + li {
+  margin-top: 4px;
+}
+.rules-example {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.rules-example p {
+  margin: 0;
+}
 
 /* 页脚 */
 .sheet-footer {
@@ -1494,6 +1936,8 @@ export default {
   .dish-table tr:hover td { background: initial; }
   .dish-table tr:nth-child(even) td { background: rgba(0,0,0,0.02); }
   body { font-size: 12px; }
+  .codes-screen { display: none !important; }
+  .codes-print { display: inline !important; }
   .ellipsis {
     display: inline-block;
     max-width: 100%;

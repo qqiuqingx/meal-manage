@@ -29,6 +29,7 @@
         <el-button size="small" icon="el-icon-search" type="primary" @click="loadByDateAndMeal">查询</el-button>
         <el-divider direction="vertical" />
         <el-button size="small" icon="el-icon-printer" @click="handlePrint">打印预览</el-button>
+        <el-button v-if="planData" size="small" icon="el-icon-s-operation" type="warning" @click="openReplaceDialog">换菜管理</el-button>
       </div>
     </div>
 
@@ -73,7 +74,8 @@
               :key="customer.id"
               class="code-cell"
               :class="{
-                'code-cell--replaced': customer.hasReplaced
+                'code-cell--replaced': customer.hasAutoReplaced,
+                'code-cell--manual-replaced': customer.hasManualReplaced
               }"
             >
               <div class="code-main">
@@ -130,15 +132,30 @@
                 </tr>
               </thead>
               <tbody>
-                <template v-if="replacedDishes.length > 0">
-                  <tr v-for="(dish, idx) in replacedDishes" :key="`rep-${idx}`">
-                    <td v-if="idx === 0" class="col-category" :rowspan="replacedDishes.length">明细</td>
+                <!-- 手工换菜 -->
+                <template v-if="manualReplaceDishes.length > 0">
+                  <tr v-for="(dish, idx) in manualReplaceDishes" :key="`mrep-${idx}`">
+                    <td v-if="idx === 0" class="col-category" :rowspan="manualReplaceDishes.length">
+                      <span class="replace-tag replace-tag--manual">手工</span>
+                    </td>
                     <td class="col-name">{{ dish.dishName }}</td>
                     <td class="col-count">{{ dish.count }}</td>
                     <td class="col-codes">{{ dish.codeSnippet }}</td>
                   </tr>
                 </template>
-                <tr v-else>
+                <!-- 自动换菜（过敏/订单规则等） -->
+                <template v-if="replacedDishes.length > 0">
+                  <tr v-for="(dish, idx) in replacedDishes" :key="`rep-${idx}`">
+                    <td v-if="idx === 0 && manualReplaceDishes.length === 0" class="col-category" :rowspan="replacedDishes.length">明细</td>
+                    <td v-else-if="idx === 0 && manualReplaceDishes.length > 0" class="col-category" :rowspan="replacedDishes.length">
+                      <span class="replace-tag replace-tag--auto">自动</span>
+                    </td>
+                    <td class="col-name">{{ dish.dishName }}</td>
+                    <td class="col-count">{{ dish.count }}</td>
+                    <td class="col-codes">{{ dish.codeSnippet }}</td>
+                  </tr>
+                </template>
+                <tr v-if="manualReplaceDishes.length === 0 && replacedDishes.length === 0">
                   <td colspan="4" class="empty-row">暂无换菜记录</td>
                 </tr>
               </tbody>
@@ -168,11 +185,81 @@
         </div>
       </div>
     </div>
+
+    <!-- 手工换菜管理弹窗 -->
+    <el-dialog
+      title="换菜管理"
+      :visible.sync="replaceDialogVisible"
+      width="860px"
+      :close-on-click-modal="false"
+      top="5vh"
+    >
+      <div class="replace-dialog-body">
+        <div class="replace-toolbar">
+          <el-select
+            v-model="replaceSelectedDishes"
+            multiple
+            filterable
+            remote
+            reserve-keyword
+            placeholder="搜索菜品名称..."
+            :remote-method="searchDishes"
+            :loading="dishSearchLoading"
+            style="width: 400px;"
+            size="small"
+            @change="onDishSelected"
+          >
+            <el-option
+              v-for="d in dishOptions"
+              :key="d.id"
+              :label="`${d.name}（${dishTypeMap[d.dishType] || d.dishType}）`"
+              :value="d.id"
+            />
+          </el-select>
+          <el-button size="small" type="primary" icon="el-icon-plus" @click="addReplaceItem">添加换菜项</el-button>
+        </div>
+
+        <div v-if="replaceForm.length === 0" class="replace-empty">暂无换菜项，请搜索菜品并添加</div>
+
+        <div v-for="(item, idx) in replaceForm" :key="`rf-${idx}`" class="replace-item-card">
+          <div class="replace-item-header">
+            <span class="replace-item-dish">
+              <span class="dish-type-tag" :class="`dish-type-tag--${item.dishType.toLowerCase()}`">
+                {{ dishTypeMap[item.dishType] || item.dishType }}
+              </span>
+              {{ item.dishName }}
+            </span>
+            <el-button type="text" icon="el-icon-delete" class="replace-item-del" @click="removeReplaceItem(idx)" />
+          </div>
+          <el-select
+            v-model="item.customerPlanIds"
+            multiple
+            filterable
+            placeholder="选择客户编号..."
+            size="small"
+            style="width: 100%;"
+          >
+            <el-option
+              v-for="c in planData.customers"
+              :key="c.id"
+              :label="`${c.customerCode || c.customerName}（${c.customerName}）`"
+              :value="c.id"
+            />
+          </el-select>
+        </div>
+      </div>
+
+      <span slot="footer" class="dialog-footer">
+        <el-button size="small" @click="replaceDialogVisible = false">取消</el-button>
+        <el-button size="small" type="primary" :loading="replaceSaving" @click="handleSaveReplaces">保存</el-button>
+      </span>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { getMealPlanList, getMealPlanFullDetail } from '@/api/mealPlan'
+import { getMealPlanList, getMealPlanFullDetail, getManualReplaces, saveManualReplaces } from '@/api/mealPlan'
+import { queryDishes } from '@/api/dish'
 import { MealTypeName } from '@/utils/calendar'
 
 export default {
@@ -201,7 +288,15 @@ export default {
         SUCCESS: 'success',
         FAILED: 'danger',
         GENERATING: 'info'
-      }
+      },
+      // 手工换菜相关
+      manualReplaces: [],
+      replaceDialogVisible: false,
+      replaceForm: [],
+      dishOptions: [],
+      dishSearchLoading: false,
+      replaceSelectedDishes: [],
+      replaceSaving: false
     }
   },
   computed: {
@@ -212,9 +307,12 @@ export default {
     // 所有客户列表（含是否有换菜标记）
     allCustomers() {
       if (!this.planData) return []
+      const manualCodes = new Set(this.manualReplaces.map(r => r.customerCode).filter(Boolean))
       const decorated = (this.planData.customers || []).map(c => ({
         ...c,
-        hasReplaced: (c.items || []).some(i => i.isReplaced)
+        hasAutoReplaced: (c.items || []).some(i => i.isReplaced),
+        hasManualReplaced: manualCodes.has(c.customerCode),
+        hasReplaced: (c.items || []).some(i => i.isReplaced) || manualCodes.has(c.customerCode)
       }))
       const firstCustomers = decorated.filter(item => item.firstMealOfOrder)
       const normalCustomers = decorated.filter(item => !item.firstMealOfOrder)
@@ -265,10 +363,17 @@ export default {
           // 编号明细 = 原本应吃这道菜但被换掉的客户编号
           const excludedSet = replacedCodesByOriginalName[g.dishName]
           const excludedCodes = excludedSet ? Array.from(excludedSet) : []
+          // 手工换菜的客户编号（按类目关联）
+          const manualCodes = this.manualCodesByDishType[g.dishType] || []
+          let codeSnippet = excludedCodes.length > 0 ? this.buildCodeSnippet(excludedCodes) : '-'
+          if (manualCodes.length > 0) {
+            const manualPart = '换菜: ' + this.buildCodeSnippet(manualCodes)
+            codeSnippet = codeSnippet === '-' ? manualPart : codeSnippet + ' | ' + manualPart
+          }
           return {
             ...g,
             count: g.eatCodes.length,
-            codeSnippet: excludedCodes.length > 0 ? this.buildCodeSnippet(excludedCodes) : '-'
+            codeSnippet
           }
         })
     },
@@ -299,6 +404,44 @@ export default {
         count: g.codes.length,
         codeSnippet: this.buildCodeSnippet(g.codes)
       }))
+    },
+    // 按类目汇总手工换菜客户编号（用于右上角菜单汇总展示）
+    manualCodesByDishType() {
+      const map = {}
+      this.manualReplaces.forEach(r => {
+        if (!r.dishType || !r.customerCode) return
+        if (!map[r.dishType]) map[r.dishType] = new Set()
+        map[r.dishType].add(r.customerCode)
+      })
+      const result = {}
+      Object.keys(map).forEach(type => {
+        result[type] = Array.from(map[type])
+      })
+      return result
+    },
+    // 手工换菜明细，按菜品聚合
+    manualReplaceDishes() {
+      const groups = {}
+      this.manualReplaces.forEach(r => {
+        const key = `${r.dishType}__${r.dishName}`
+        if (!groups[key]) {
+          groups[key] = {
+            dishType: r.dishType,
+            dishName: r.dishName,
+            codes: []
+          }
+        }
+        if (r.customerCode && !groups[key].codes.includes(r.customerCode)) {
+          groups[key].codes.push(r.customerCode)
+        }
+      })
+      return Object.values(groups)
+        .sort((a, b) => (this.dishTypeOrder[a.dishType] || 99) - (this.dishTypeOrder[b.dishType] || 99))
+        .map(g => ({
+          ...g,
+          count: g.codes.length,
+          codeSnippet: this.buildCodeSnippet(g.codes)
+        }))
     }
   },
   created() {
@@ -325,6 +468,7 @@ export default {
           this.queryDate = res.mealPlan.recordDate
           this.queryMealType = res.mealPlan.mealType
         }
+        this.loadManualReplaces()
       }).catch(() => {
         if (requestId !== this.latestLoadRequestId) return
         this.$message.error('加载排餐数据失败')
@@ -353,6 +497,7 @@ export default {
       }).then(res => {
         if (requestId !== this.latestLoadRequestId || !res) return
         this.planData = res
+        this.loadManualReplaces()
       }).catch(() => {
         if (requestId !== this.latestLoadRequestId) return
         this.$message.error('加载排餐数据失败')
@@ -381,6 +526,107 @@ export default {
     },
     handlePrint() {
       window.print()
+    },
+    // 加载手工换菜数据
+    loadManualReplaces() {
+      if (!this.planData || !this.planData.mealPlan) return
+      getManualReplaces(this.planData.mealPlan.id).then(res => {
+        this.manualReplaces = res || []
+      }).catch(() => {
+        this.manualReplaces = []
+      })
+    },
+    // 打开换菜管理弹窗
+    openReplaceDialog() {
+      // 从已保存的 manualReplaces 构建 replaceForm
+      const grouped = {}
+      this.manualReplaces.forEach(r => {
+        const key = `${r.dishId}__${r.dishType}`
+        if (!grouped[key]) {
+          grouped[key] = {
+            dishId: r.dishId,
+            dishName: r.dishName,
+            dishType: r.dishType,
+            customerPlanIds: []
+          }
+        }
+        grouped[key].customerPlanIds.push(r.customerPlanId)
+      })
+      this.replaceForm = Object.values(grouped)
+      this.replaceSelectedDishes = this.replaceForm.map(i => i.dishId)
+      // 预加载已选菜品到 dishOptions
+      this.dishOptions = this.replaceForm.map(i => ({ id: i.dishId, name: i.dishName, dishType: i.dishType }))
+      this.replaceDialogVisible = true
+    },
+    // 远程搜索菜品
+    searchDishes(query) {
+      if (!query) {
+        this.dishOptions = []
+        return
+      }
+      this.dishSearchLoading = true
+      queryDishes({ name: query, enabled: true, page: 0, size: 20 }).then(res => {
+        this.dishOptions = res.content || []
+      }).catch(() => {
+        this.dishOptions = []
+      }).finally(() => {
+        this.dishSearchLoading = false
+      })
+    },
+    // 选中菜品后自动添加到表单
+    onDishSelected(selectedIds) {
+      // 找出新增的菜品ID
+      const existingIds = new Set(this.replaceForm.map(i => i.dishId))
+      selectedIds.forEach(id => {
+        if (!existingIds.has(id)) {
+          const dish = this.dishOptions.find(d => d.id === id)
+          if (dish) {
+            this.replaceForm.push({
+              dishId: dish.id,
+              dishName: dish.name,
+              dishType: dish.dishType,
+              customerPlanIds: []
+            })
+          }
+        }
+      })
+      // 移除取消选中的
+      this.replaceForm = this.replaceForm.filter(i => selectedIds.includes(i.dishId))
+    },
+    // 手动添加换菜项
+    addReplaceItem() {
+      // 如果有选中的菜品但还没在表单中，提示先搜索
+      if (this.replaceSelectedDishes.length === 0) {
+        this.$message.warning('请先搜索并选择菜品')
+        return
+      }
+    },
+    // 移除换菜项
+    removeReplaceItem(idx) {
+      const removed = this.replaceForm.splice(idx, 1)[0]
+      this.replaceSelectedDishes = this.replaceSelectedDishes.filter(id => id !== removed.dishId)
+    },
+    // 保存手工换菜
+    handleSaveReplaces() {
+      const mealPlanId = this.planData.mealPlan.id
+      const items = this.replaceForm
+        .filter(i => i.customerPlanIds.length > 0)
+        .map(i => ({
+          dishId: i.dishId,
+          dishType: i.dishType,
+          customerPlanIds: i.customerPlanIds
+        }))
+
+      this.replaceSaving = true
+      saveManualReplaces(mealPlanId, { items }).then(() => {
+        this.$message.success('保存成功')
+        this.replaceDialogVisible = false
+        this.loadManualReplaces()
+      }).catch(() => {
+        this.$message.error('保存失败')
+      }).finally(() => {
+        this.replaceSaving = false
+      })
     }
   }
 }
@@ -586,7 +832,7 @@ export default {
   font-weight: 800;
   line-height: 1;
 }
-/* 红框：有换菜的客户 */
+/* 红框：有自动换菜的客户 */
 .code-cell--replaced .code-text {
   display: inline-block;
   border: 2px solid rgba(186, 26, 26, 0.35);
@@ -594,6 +840,21 @@ export default {
   color: #ba1a1a;
   padding: 2px 6px;
   border-radius: 4px;
+}
+/* 橙框：有手工换菜的客户 */
+.code-cell--manual-replaced .code-text {
+  display: inline-block;
+  border: 2px solid rgba(217, 119, 6, 0.4);
+  background: rgba(254, 243, 199, 0.5);
+  color: #92400e;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+/* 同时有自动和手工换菜时，红框优先 */
+.code-cell--replaced.code-cell--manual-replaced .code-text {
+  border-color: rgba(186, 26, 26, 0.35);
+  background: rgba(186, 26, 26, 0.05);
+  color: #ba1a1a;
 }
 
 /* ════ 右栏 ════ */
@@ -693,6 +954,61 @@ export default {
 .dish-type-tag--side { background: #fef3c7; color: #92400e; }
 .dish-type-tag--vegetable { background: #dcfce7; color: #166534; }
 .dish-type-tag--rice { background: #f3f4f6; color: #374151; }
+
+/* 换菜类型标签 */
+.replace-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.replace-tag--manual { background: #fef3c7; color: #92400e; }
+.replace-tag--auto { background: #fee2e2; color: #991b1b; }
+
+/* ──────────────────────────────────────────
+   换菜管理弹窗
+────────────────────────────────────────── */
+.replace-dialog-body {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.replace-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.replace-empty {
+  text-align: center;
+  color: #c0c4cc;
+  padding: 40px 0;
+  font-style: italic;
+}
+.replace-item-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  background: #fafbfc;
+}
+.replace-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.replace-item-dish {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #1e293b;
+}
+.replace-item-del {
+  color: #f56c6c;
+}
 
 /* ──────────────────────────────────────────
    页脚
