@@ -31,7 +31,7 @@ import java.util.List;
 @Data
 public class MealPlanManualReplaceSaveRequest {
 
-    @NotEmpty(message = "换菜项不能为空")
+    @NotNull(message = "换菜项不能为空")
     @Valid
     @ApiModelProperty(value = "换菜项列表")
     private List<ReplaceItem> items;
