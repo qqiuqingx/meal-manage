@@ -75,7 +75,7 @@ public class FileUtil extends cn.hutool.core.io.FileUtil {
      */
     private static final DecimalFormat DF = new DecimalFormat("0.00");
 
-    public static final String IMAGE = "图片";
+    public static final String IMAGE = "image";
     public static final String TXT = "文档";
     public static final String MUSIC = "音乐";
     public static final String VIDEO = "视频";
