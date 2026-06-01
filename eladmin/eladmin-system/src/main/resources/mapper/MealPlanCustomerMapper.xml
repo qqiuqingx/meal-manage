@@ -247,6 +247,20 @@
         group by mpc.order_id
     </select>
 
+    <!-- 批量查询各订单全部有效排餐数量 -->
+    <select id="countAllScheduledByOrderIds" resultType="me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto">
+        select mpc.order_id as orderId, count(*) as scheduledCount
+        from meal_plan_customer mpc
+        join meal_plan mp on mpc.meal_plan_id = mp.id
+        where mpc.deleted = 0
+          and mp.deleted = 0
+          and mpc.order_id in
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+        group by mpc.order_id
+    </select>
+
     <!-- 批量查询各订单今天已排餐但未核销的数量 -->
     <select id="countTodayUnverifiedScheduledByOrderIds" resultType="me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto">
         select mpc.order_id as orderId, count(*) as scheduledCount

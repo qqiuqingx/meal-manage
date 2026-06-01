@@ -105,17 +105,54 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         if (list == null || list.isEmpty()) {
             return;
         }
+        Map<Long, Integer> scheduledCountMap = buildScheduledCountMap(list);
         Map<Long, Integer> todayUnverifiedCountMap = buildTodayUnverifiedCountMap(list);
         for (CustomerOrder order : list) {
             int breakfast = order.getBreakfastCount() != null ? order.getBreakfastCount() : 0;
             int lunchDinner = order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0;
             order.setTotalCount(breakfast + lunchDinner);
+            order.setScheduledCount(scheduledCountMap.getOrDefault(order.getId(), 0));
             int remaining = order.getRemainingCount() != null ? order.getRemainingCount() : 0;
             int todayUnverified = todayUnverifiedCountMap.getOrDefault(order.getId(), 0);
             order.setEstimatedRemainingCount(Math.max(remaining - todayUnverified, 0));
         }
     }
 
+    /**
+     * 统计订单当前全部有效排餐数量。
+     * 统计口径为有效排餐记录总数，不区分是否已核销。
+     *
+     * @param list 当前页订单列表
+     * @return 订单ID -> 已排餐总数
+     */
+    private Map<Long, Integer> buildScheduledCountMap(List<CustomerOrder> list) {
+        List<Long> orderIds = list.stream()
+                .map(CustomerOrder::getId)
+                .filter(id -> id != null)
+                .collect(Collectors.toList());
+        if (orderIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<OrderScheduledCountDto> scheduledCounts = mealPlanCustomerMapper.countAllScheduledByOrderIds(orderIds);
+        if (scheduledCounts == null || scheduledCounts.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, Integer> result = new HashMap<>();
+        for (OrderScheduledCountDto item : scheduledCounts) {
+            if (item.getOrderId() != null) {
+                result.put(item.getOrderId(), item.getScheduledCount() != null ? item.getScheduledCount() : 0);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 统计订单今日已排餐但未核销的数量。
+     * 用于计算订单列表页的预计剩余餐数。
+     *
+     * @param list 当前页订单列表
+     * @return 订单ID -> 今日已排未核销数量
+     */
     private Map<Long, Integer> buildTodayUnverifiedCountMap(List<CustomerOrder> list) {
         List<Long> orderIds = list.stream()
                 .map(CustomerOrder::getId)
