@@ -2,6 +2,8 @@
 !.dockerignore
 !docker/
 !docker/**
+!.deploy/
+!.deploy/**
 !eladmin/
 !eladmin/**
 !eladmin-web/

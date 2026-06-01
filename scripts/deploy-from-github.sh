@@ -16,6 +16,14 @@ COMPOSE_FILE_REL="${COMPOSE_FILE_REL:-docker/docker-compose.yml}"
 KEEP_IMAGE_COUNT="${KEEP_IMAGE_COUNT:-3}"
 # Docker 构建前要求的最小可用磁盘空间（MB）
 MIN_FREE_DISK_MB="${MIN_FREE_DISK_MB:-4096}"
+# Docker 构建缓存清理策略：auto / always / never
+DOCKER_BUILD_CACHE_PRUNE="${DOCKER_BUILD_CACHE_PRUNE:-auto}"
+DOCKER_DISK_PATH="${DOCKER_DISK_PATH:-/var/lib/docker}"
+DEPLOY_PARENT_DIR="$(dirname "$DEPLOY_BASE_DIR")"
+MAVEN_IMAGE="${MAVEN_IMAGE:-maven:3.8.8-eclipse-temurin-8}"
+HOST_MAVEN_REPO="${HOST_MAVEN_REPO:-$DEPLOY_PARENT_DIR/.m2/repository}"
+BACKEND_ARTIFACT_DIR="${BACKEND_ARTIFACT_DIR:-$DEPLOY_BASE_DIR/.deploy/mealserver}"
+BACKEND_JAR_NAME="${BACKEND_JAR_NAME:-eladmin-system-1.1.jar}"
 
 # 校验 KEEP_IMAGE_COUNT 必须为正整数，且至少为 2（保证回退脚本始终有镜像可选）
 if ! [[ "$KEEP_IMAGE_COUNT" =~ ^[1-9][0-9]*$ ]]; then
@@ -35,32 +43,63 @@ log() {
   printf '[%s] %s\n' "$(timestamp)" "$*"
 }
 
-cleanup_builder_cache() {
-  log "cleaning unused Docker build cache before rebuild"
+get_free_disk_mb() {
+  df -Pm "$DOCKER_DISK_PATH" 2>/dev/null | awk 'NR==2 {print $4}'
+}
+
+prune_build_cache() {
+  log "cleaning Docker build cache"
   docker builder prune -af >/dev/null 2>&1 || log "warning: docker builder prune failed"
+}
+
+cleanup_docker_space() {
+  local available_mb
+
+  log "cleaning unused Docker containers and dangling images before rebuild"
   docker container prune -f >/dev/null 2>&1 || log "warning: docker container prune failed"
   docker image prune -f >/dev/null 2>&1 || log "warning: docker image prune failed"
+
+  case "$DOCKER_BUILD_CACHE_PRUNE" in
+    always)
+      prune_build_cache
+      ;;
+    never)
+      log "skipping Docker build cache cleanup (DOCKER_BUILD_CACHE_PRUNE=never)"
+      ;;
+    auto)
+      available_mb=$(get_free_disk_mb || true)
+      if [[ -z "$available_mb" ]]; then
+        log "warning: unable to read free disk space for $DOCKER_DISK_PATH, preserving Docker build cache"
+      elif (( available_mb < MIN_FREE_DISK_MB )); then
+        log "free disk space is low (${available_mb}MB), cleaning Docker build cache"
+        prune_build_cache
+      else
+        log "preserving Docker build cache (${available_mb}MB free) to speed up Maven and Node builds"
+      fi
+      ;;
+    *)
+      log "DOCKER_BUILD_CACHE_PRUNE must be auto, always, or never (got: $DOCKER_BUILD_CACHE_PRUNE)"
+      exit 1
+      ;;
+  esac
 }
 
 check_disk_space() {
-  local check_path="/var/lib/docker"
-  local required_kb=$((MIN_FREE_DISK_MB * 1024))
-  local available_kb
+  local available_mb
 
-  available_kb=$(df -Pk "$check_path" 2>/dev/null | awk 'NR==2 {print $4}')
-  if [[ -z "$available_kb" ]]; then
-    log "warning: unable to read free disk space for $check_path"
+  available_mb=$(get_free_disk_mb || true)
+  if [[ -z "$available_mb" ]]; then
+    log "warning: unable to read free disk space for $DOCKER_DISK_PATH"
     return 0
   fi
 
-  if (( available_kb < required_kb )); then
-    local available_mb=$((available_kb / 1024))
-    log "insufficient free disk space for Docker build: ${available_mb}MB available on $check_path, require at least ${MIN_FREE_DISK_MB}MB"
+  if (( available_mb < MIN_FREE_DISK_MB )); then
+    log "insufficient free disk space for Docker build: ${available_mb}MB available on $DOCKER_DISK_PATH, require at least ${MIN_FREE_DISK_MB}MB"
     log "hint: run 'docker system df' and clean /var/lib/docker or host logs before retrying"
     exit 1
   fi
 
-  log "free disk space check passed: $((available_kb / 1024))MB available on $check_path"
+  log "free disk space check passed: ${available_mb}MB available on $DOCKER_DISK_PATH"
 }
 
 require_cmd() {
@@ -209,6 +248,27 @@ retry_until_success() {
   return 1
 }
 
+build_backend_artifacts() {
+  log "building backend artifacts with host Maven repository: $HOST_MAVEN_REPO"
+  mkdir -p "$HOST_MAVEN_REPO" "$BACKEND_ARTIFACT_DIR/lib"
+  rm -f "$BACKEND_ARTIFACT_DIR/app.jar"
+  rm -rf "$BACKEND_ARTIFACT_DIR/lib"
+  mkdir -p "$BACKEND_ARTIFACT_DIR/lib"
+
+  docker run --rm \
+    -v "$DEPLOY_BASE_DIR/eladmin:/workspace" \
+    -v "$DEPLOY_BASE_DIR/docker/mealserver/settings.xml:/tmp/settings.xml:ro" \
+    -v "$HOST_MAVEN_REPO:/root/.m2/repository" \
+    -v "$BACKEND_ARTIFACT_DIR:/output" \
+    -w /workspace \
+    "$MAVEN_IMAGE" \
+    sh -c "mvn -s /tmp/settings.xml -pl eladmin-system -am clean install -Dmaven.test.skip=true -Dspring-boot.repackage.skip=true && \
+      mvn -s /tmp/settings.xml -pl eladmin-system dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=/output/lib && \
+      cp eladmin-system/target/$BACKEND_JAR_NAME /output/app.jar"
+
+  require_file "$BACKEND_ARTIFACT_DIR/app.jar"
+}
+
 deploy_compose() {
   local previous_commit="$1"
   local compose_file="$DEPLOY_BASE_DIR/$COMPOSE_FILE_REL"
@@ -241,11 +301,15 @@ deploy_compose() {
     cd "$DEPLOY_BASE_DIR"
     # 停止所有容器，释放内存（4GB 服务器构建时不能有其他容器跑着）
     docker compose -f "$compose_file" --env-file "$ENV_FILE" down || true
-    cleanup_builder_cache
+    cleanup_docker_space
     check_disk_space
 
     # 先预拉取所有基础镜像（国内访问 Docker Hub 不稳定，提前拉取减少构建失败）
     log "pre-pulling base images..."
+    if [[ "$rebuild_backend" == "true" ]]; then
+      retry_until_success 3 "pulling $MAVEN_IMAGE" \
+        docker pull "$MAVEN_IMAGE" || true
+    fi
     retry_until_success 3 "pulling node:16" \
       docker pull node:16 || true
     retry_until_success 3 "pulling nginx:1.25-alpine" \
@@ -253,6 +317,7 @@ deploy_compose() {
 
     # 根据变更情况条件化构建
     if [[ "$rebuild_backend" == "true" ]]; then
+      build_backend_artifacts
       log "building backend..."
       DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build backend
     else
