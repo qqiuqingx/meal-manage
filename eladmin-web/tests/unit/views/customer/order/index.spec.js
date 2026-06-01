@@ -1,4 +1,6 @@
 /* eslint-env jest */
+const fs = require('fs')
+const path = require('path')
 
 const orderApi = {
   getOrder: jest.fn()
@@ -120,5 +122,11 @@ describe('CustomerOrder edit flow', () => {
     expect(ctx.form.startMealType).toBe('BREAKFAST')
     expect(ctx.form.deliveryDatesWithMealTypes).toEqual([])
     expect(ctx.form.deliveryDates).toBe('[{\"date\":\"2026-04-24\",\"mealTypes\":[\"LUNCH\",\"DINNER\"]}]')
+  })
+
+  test('order list shows scheduled count column', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../../../../../src/views/customer/order/index.vue'), 'utf8')
+
+    expect(source).toContain('<el-table-column label="已排餐" prop="scheduledCount" width="80" align="center" />')
   })
 })

@@ -99,6 +99,15 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
     List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countScheduledByOrderIds(@Param("orderIds") List<Long> orderIds, @Param("mealType") String mealType);
 
     /**
+     * 批量查询各订单全部有效排餐数量。
+     * 统计口径：meal_plan_customer.deleted=0 且 meal_plan.deleted=0。
+     *
+     * @param orderIds 订单ID列表
+     * @return 订单ID -> 已排餐总数 的映射
+     */
+    List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countAllScheduledByOrderIds(@Param("orderIds") List<Long> orderIds);
+
+    /**
      * 批量查询各订单今天已排餐但未核销的数量。
      * @param orderIds 订单ID列表
      * @param recordDate 统计日期
