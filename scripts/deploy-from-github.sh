@@ -33,6 +33,12 @@ log() {
   printf '[%s] %s\n' "$(timestamp)" "$*"
 }
 
+cleanup_builder_cache() {
+  log "cleaning unused Docker build cache before rebuild"
+  docker builder prune -f >/dev/null 2>&1 || log "warning: docker builder prune failed"
+  docker image prune -f >/dev/null 2>&1 || log "warning: docker image prune failed"
+}
+
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     log "missing required command: $1"
@@ -211,6 +217,7 @@ deploy_compose() {
     cd "$DEPLOY_BASE_DIR"
     # 停止所有容器，释放内存（4GB 服务器构建时不能有其他容器跑着）
     docker compose -f "$compose_file" --env-file "$ENV_FILE" down || true
+    cleanup_builder_cache
 
     # 先预拉取所有基础镜像（国内访问 Docker Hub 不稳定，提前拉取减少构建失败）
     log "pre-pulling base images..."
