@@ -47,14 +47,14 @@
           @click="handleDeleteCurrent"
         >删除排餐记录</el-button>
         <el-divider direction="vertical" />
-        <!-- 查询客户配送地址 -->
+        <!-- 查询客户详情 -->
         <el-button
           size="small"
           type="info"
-          icon="el-icon-location"
+          icon="el-icon-user"
           :disabled="!planData"
           @click="openAddressDialog"
-        >配送地址</el-button>
+        >客户详情</el-button>
         <el-button
           size="small"
           type="primary"
@@ -504,8 +504,8 @@
       </div>
     </el-dialog>
 
-    <!-- 客户配送地址对话框 -->
-    <el-dialog title="客户配送地址" :visible.sync="addressDialog.visible" width="800px">
+    <!-- 客户详情对话框 -->
+    <el-dialog title="客户详情" :visible.sync="addressDialog.visible" width="980px">
       <el-table
         v-loading="addressDialog.loading"
         :data="addressDialog.list"
@@ -518,6 +518,18 @@
         <el-table-column label="配送地址" prop="addressDetail" align="center" min-width="160">
           <template slot-scope="scope">
             {{ scope.row.addressDetail || '暂无地址' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="自定义菜单" align="center" width="100">
+          <template slot-scope="scope">
+            <el-image
+              v-if="scope.row.customMenuImage"
+              :src="getCustomMenuImageUrl(scope.row.customMenuImage)"
+              :preview-src-list="[getCustomMenuImageUrl(scope.row.customMenuImage)]"
+              fit="contain"
+              style="width: 40px; height: 40px; cursor: pointer;"
+            />
+            <span v-else style="color: #c0c4cc;">-</span>
           </template>
         </el-table-column>
         <el-table-column label="过敏信息" align="center" width="140">
@@ -563,6 +575,7 @@ export default {
       // 当前查询的 mealPlan 原始记录（用于删除）
       currentRecord: null,
       latestLoadRequestId: 0,
+      baseApi: process.env.VUE_APP_BASE_API,
 
       queryDate: (() => {
         const d = new Date()
@@ -627,7 +640,7 @@ export default {
         loading: false,
         records: []
       },
-      // 客户配送地址弹窗
+      // 客户详情弹窗
       addressDialog: {
         visible: false,
         loading: false,
@@ -1172,7 +1185,18 @@ export default {
         })
     },
 
-    // ─── 配送地址查询 ──────────────────────────────
+    /**
+     * 获取自定义菜单图片完整访问地址。
+     *
+     * @param {string} path 图片相对路径或绝对地址
+     * @returns {string} 可直接访问的图片地址
+     */
+    getCustomMenuImageUrl(path) {
+      if (!path) return ''
+      if (path.startsWith('http://') || path.startsWith('https://')) return path
+      return this.baseApi + path
+    },
+    // ─── 客户详情查询 ──────────────────────────────
     openAddressDialog() {
       if (!this.planData || !this.planData.mealPlan) return
       this.addressDialog.visible = true
@@ -1181,7 +1205,7 @@ export default {
       getMealPlanCustomerAddresses(this.planData.mealPlan.id).then(res => {
         this.addressDialog.list = res || []
       }).catch(() => {
-        this.$message.error('获取配送地址失败')
+        this.$message.error('获取客户详情失败')
       }).finally(() => {
         this.addressDialog.loading = false
       })
