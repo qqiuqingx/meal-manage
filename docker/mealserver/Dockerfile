@@ -27,7 +27,12 @@ COPY eladmin /build/eladmin
 
 WORKDIR /build/eladmin
 RUN --mount=type=cache,target=/root/.m2/repository \
-    mvn -s /root/.m2/settings.xml -pl eladmin-system -am clean package -Dmaven.test.skip=true
+    mvn -s /root/.m2/settings.xml -pl eladmin-system -am clean package \
+      -Dmaven.test.skip=true \
+      -Dspring-boot.repackage.skip=true && \
+    mvn -s /root/.m2/settings.xml -pl eladmin-system -am dependency:copy-dependencies \
+      -DincludeScope=runtime \
+      -DoutputDirectory=/build/runtime-libs
 
 # =============================================================================
 # Stage 2: Runtime image
@@ -45,8 +50,9 @@ WORKDIR /app
 RUN mkdir -p /home/eladmin/file /home/eladmin/avatar /app/logs && \
     chown -R ubuntu:ubuntu /home/eladmin /app
 
-# Copy built JAR from the builder stage
+# Copy built JAR and runtime dependencies from the builder stage
 COPY --from=builder --chown=ubuntu:ubuntu /build/eladmin/eladmin-system/target/eladmin-system-1.1.jar /app/app.jar
+COPY --from=builder --chown=ubuntu:ubuntu /build/runtime-libs /app/lib
 
 # Copy startup script
 COPY --chown=ubuntu:ubuntu docker/mealserver/entrypoint.sh /app/entrypoint.sh
