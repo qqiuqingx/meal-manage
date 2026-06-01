@@ -248,6 +248,24 @@ retry_until_success() {
   return 1
 }
 
+get_container_image_tag() {
+  local container_name="$1"
+  local repository="$2"
+  local image
+
+  image=$(docker inspect "$container_name" --format '{{.Config.Image}}' 2>/dev/null || true)
+  if [[ "$image" == "$repository:"* ]]; then
+    printf '%s\n' "${image#"$repository:"}"
+  fi
+}
+
+image_tag_exists() {
+  local repository="$1"
+  local tag="$2"
+
+  docker image inspect "$repository:$tag" >/dev/null 2>&1
+}
+
 build_backend_artifacts() {
   log "building backend artifacts with host Maven repository: $HOST_MAVEN_REPO"
   mkdir -p "$HOST_MAVEN_REPO" "$BACKEND_ARTIFACT_DIR/lib"
@@ -276,10 +294,6 @@ deploy_compose() {
   require_file "$compose_file"
   require_file "$ENV_FILE"
 
-  # 生成镜像 tag，精确到秒（避免同分钟多次部署标签冲突）
-  export IMAGE_TAG
-  IMAGE_TAG=$(date '+%Y%m%d%H%M%S')
-
   # 检测并分类变更
   local changed_files
   local build_targets
@@ -291,6 +305,35 @@ deploy_compose() {
   local rebuild_frontend
   rebuild_backend=$(echo "$build_targets" | grep -oP 'backend=\K(true|false)' || echo "false")
   rebuild_frontend=$(echo "$build_targets" | grep -oP 'frontend=\K(true|false)' || echo "false")
+
+  # docker-compose.yml uses a single IMAGE_TAG for both services. Keep the pair aligned.
+  export IMAGE_TAG
+  if [[ "$rebuild_backend" == "false" && "$rebuild_frontend" == "false" ]]; then
+    local backend_current_tag
+    local frontend_current_tag
+    backend_current_tag=$(get_container_image_tag mealserver mealserver)
+    frontend_current_tag=$(get_container_image_tag mealweb mealweb)
+
+    if [[ -n "$backend_current_tag" && "$backend_current_tag" == "$frontend_current_tag" ]] && \
+       image_tag_exists mealserver "$backend_current_tag" && \
+       image_tag_exists mealweb "$frontend_current_tag"; then
+      IMAGE_TAG="$backend_current_tag"
+      log "no rebuild needed, reusing existing image tag: $IMAGE_TAG"
+    else
+      log "no reusable paired image tag found, forcing full rebuild"
+      rebuild_backend=true
+      rebuild_frontend=true
+      IMAGE_TAG=$(date '+%Y%m%d%H%M%S')
+    fi
+  else
+    if [[ "$rebuild_backend" != "$rebuild_frontend" ]]; then
+      log "partial rebuild requested, rebuilding both services to keep image tags aligned"
+      rebuild_backend=true
+      rebuild_frontend=true
+    fi
+    # 生成镜像 tag，精确到秒（避免同分钟多次部署标签冲突）
+    IMAGE_TAG=$(date '+%Y%m%d%H%M%S')
+  fi
 
   log "change analysis complete:"
   log "  - rebuild backend: $rebuild_backend"
