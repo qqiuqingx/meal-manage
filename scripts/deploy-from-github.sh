@@ -14,6 +14,8 @@ ENV_FILE="${ENV_FILE:-/data/meals/.env}"
 COMPOSE_FILE_REL="${COMPOSE_FILE_REL:-docker/docker-compose.yml}"
 # 保留最近 N 个版本的 Docker 镜像
 KEEP_IMAGE_COUNT="${KEEP_IMAGE_COUNT:-3}"
+# Docker 构建前要求的最小可用磁盘空间（MB）
+MIN_FREE_DISK_MB="${MIN_FREE_DISK_MB:-4096}"
 
 # 校验 KEEP_IMAGE_COUNT 必须为正整数，且至少为 2（保证回退脚本始终有镜像可选）
 if ! [[ "$KEEP_IMAGE_COUNT" =~ ^[1-9][0-9]*$ ]]; then
@@ -35,8 +37,30 @@ log() {
 
 cleanup_builder_cache() {
   log "cleaning unused Docker build cache before rebuild"
-  docker builder prune -f >/dev/null 2>&1 || log "warning: docker builder prune failed"
+  docker builder prune -af >/dev/null 2>&1 || log "warning: docker builder prune failed"
+  docker container prune -f >/dev/null 2>&1 || log "warning: docker container prune failed"
   docker image prune -f >/dev/null 2>&1 || log "warning: docker image prune failed"
+}
+
+check_disk_space() {
+  local check_path="/var/lib/docker"
+  local required_kb=$((MIN_FREE_DISK_MB * 1024))
+  local available_kb
+
+  available_kb=$(df -Pk "$check_path" 2>/dev/null | awk 'NR==2 {print $4}')
+  if [[ -z "$available_kb" ]]; then
+    log "warning: unable to read free disk space for $check_path"
+    return 0
+  fi
+
+  if (( available_kb < required_kb )); then
+    local available_mb=$((available_kb / 1024))
+    log "insufficient free disk space for Docker build: ${available_mb}MB available on $check_path, require at least ${MIN_FREE_DISK_MB}MB"
+    log "hint: run 'docker system df' and clean /var/lib/docker or host logs before retrying"
+    exit 1
+  fi
+
+  log "free disk space check passed: $((available_kb / 1024))MB available on $check_path"
 }
 
 require_cmd() {
@@ -218,6 +242,7 @@ deploy_compose() {
     # 停止所有容器，释放内存（4GB 服务器构建时不能有其他容器跑着）
     docker compose -f "$compose_file" --env-file "$ENV_FILE" down || true
     cleanup_builder_cache
+    check_disk_space
 
     # 先预拉取所有基础镜像（国内访问 Docker Hub 不稳定，提前拉取减少构建失败）
     log "pre-pulling base images..."
