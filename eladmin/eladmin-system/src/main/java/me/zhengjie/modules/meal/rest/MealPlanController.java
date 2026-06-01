@@ -163,9 +163,11 @@ public class MealPlanController {
     @ApiOperation("查询排餐计划客户详情")
     @GetMapping("/{mealPlanId}/customer-addresses")
     @PreAuthorize("@el.check('mealPlan:list')")
-    public ResponseEntity<List<MealPlanCustomerAddressVO>> queryCustomerAddresses(
-            @ApiParam(value = "排餐计划ID", required = true) @PathVariable Long mealPlanId) {
-        return new ResponseEntity<>(mealPlanService.queryCustomerAddresses(mealPlanId), HttpStatus.OK);
+    public ResponseEntity<PageResult<MealPlanCustomerAddressVO>> queryCustomerAddresses(
+            @ApiParam(value = "排餐计划ID", required = true) @PathVariable Long mealPlanId,
+            MealPlanCustomerQueryCriteria criteria) {
+        criteria.setMealPlanId(mealPlanId);
+        return new ResponseEntity<>(mealPlanService.queryCustomerAddresses(criteria), HttpStatus.OK);
     }
 
     /**

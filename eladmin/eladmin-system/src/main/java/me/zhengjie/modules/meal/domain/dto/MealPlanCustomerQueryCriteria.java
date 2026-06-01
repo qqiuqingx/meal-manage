@@ -38,8 +38,8 @@ public class MealPlanCustomerQueryCriteria {
     @ApiModelProperty(value = "状态（0失败/1成功）")
     private Integer status;
 
-    @ApiModelProperty(value = "页码")
-    private Integer page = 0;
+    @ApiModelProperty(value = "页码，从1开始")
+    private Integer page = 1;
 
     @ApiModelProperty(value = "每页数量")
     private Integer size = 10;
