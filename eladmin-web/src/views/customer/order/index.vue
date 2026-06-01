@@ -94,6 +94,7 @@
       <el-table-column label="午晚" prop="lunchDinnerCount" width="60" align="center" />
       <el-table-column label="合计" prop="totalCount" width="60" align="center" />
       <el-table-column label="核销" prop="verifiedCount" width="60" align="center" />
+      <el-table-column label="已排餐" prop="scheduledCount" width="80" align="center" />
       <el-table-column prop="remainingCount" width="70" align="center">
         <template slot="header">
           <span class="column-help">

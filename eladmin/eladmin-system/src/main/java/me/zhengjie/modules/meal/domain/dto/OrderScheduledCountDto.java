@@ -33,7 +33,7 @@ public class OrderScheduledCountDto {
      */
     private String mealType;
     /**
-     * 已排餐数量（未核销的排餐记录数）
+     * 统计数量
      */
     private Integer scheduledCount;
 }
