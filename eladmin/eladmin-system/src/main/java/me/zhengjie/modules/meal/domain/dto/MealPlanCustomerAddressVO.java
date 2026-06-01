@@ -22,7 +22,7 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
- * 排餐计划客户配送地址VO
+ * 排餐计划客户详情弹窗VO
  * @author qqx
  * @date 2026-04-13
  **/
@@ -51,4 +51,7 @@ public class MealPlanCustomerAddressVO implements Serializable {
 
     @ApiModelProperty(value = "特殊要求")
     private String specialRequirements;
+
+    @ApiModelProperty(value = "自定义菜单图片地址")
+    private String customMenuImage;
 }

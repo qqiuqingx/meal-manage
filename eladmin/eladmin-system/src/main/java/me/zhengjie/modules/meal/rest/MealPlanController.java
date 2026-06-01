@@ -157,10 +157,10 @@ public class MealPlanController {
     }
 
     /**
-     * 根据排餐计划ID查询客户配送地址信息。
+     * 根据排餐计划ID查询客户详情弹窗信息。
      */
-    @Log("查询排餐计划客户配送地址")
-    @ApiOperation("查询排餐计划客户配送地址")
+    @Log("查询排餐计划客户详情")
+    @ApiOperation("查询排餐计划客户详情")
     @GetMapping("/{mealPlanId}/customer-addresses")
     @PreAuthorize("@el.check('mealPlan:list')")
     public ResponseEntity<List<MealPlanCustomerAddressVO>> queryCustomerAddresses(

@@ -61,6 +61,7 @@ function buildWrapper() {
       'el-table': true,
       'el-table-column': true,
       'el-tag': true,
+      'el-image': true,
       'el-tooltip': {
         template: '<div class="el-tooltip" :data-content="content"><slot /></div>',
         props: ['content', 'placement', 'effect']
@@ -75,6 +76,14 @@ describe('scheduleRecord special requirements display', () => {
 
     expect(source).toContain('<el-table-column label="客户编号" prop="customerCode" align="center" min-width="120">')
     expect(source).not.toContain('<el-table-column label="客户" prop="customerName" align="center" min-width="120"')
+  })
+
+  test('customer detail button and custom menu column are present in the dialog', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../../../../src/views/meal/scheduleRecord/index.vue'), 'utf8')
+
+    expect(source).toContain('>客户详情</el-button>')
+    expect(source).toContain('<el-dialog title="客户详情" :visible.sync="addressDialog.visible" width="980px">')
+    expect(source).toContain('<el-table-column label="自定义菜单" align="center" width="100">')
   })
 
   test('special requirements are provided by tooltip instead of rendering below the customer code', () => {
@@ -509,6 +518,20 @@ describe('scheduleRecord special requirements display', () => {
     expect(wrapper.findAll('.code-first-badge').at(0).text()).toBe('首')
     expect(wrapper.findAll('.code-cell').at(0).classes()).not.toContain('code-cell--first')
     expect(wrapper.findAll('.code-text').at(1).classes()).toContain('code-text--soup-missing')
+
+    wrapper.destroy()
+  })
+
+  test('custom menu image url uses baseApi for relative paths', () => {
+    const wrapper = buildWrapper()
+
+    wrapper.setData({
+      baseApi: '/prod-api'
+    })
+
+    expect(wrapper.vm.getCustomMenuImageUrl('/file/picture/menu.png')).toBe('/prod-api/file/picture/menu.png')
+    expect(wrapper.vm.getCustomMenuImageUrl('https://cdn.example.com/menu.png')).toBe('https://cdn.example.com/menu.png')
+    expect(wrapper.vm.getCustomMenuImageUrl('')).toBe('')
 
     wrapper.destroy()
   })

@@ -188,6 +188,7 @@
         <result column="allergy_tags" property="allergyTags"
                 typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
         <result column="special_requirements" property="specialRequirements"/>
+        <result column="custom_menu_image" property="customMenuImage"/>
     </resultMap>
 
     <select id="selectCustomerAddresses" resultMap="MealPlanCustomerAddressVOMap">
@@ -217,10 +218,12 @@
                 ELSE NULL
             END AS address_type,
             cp.allergy_tags,
-            cp.special_requirements
+            cp.special_requirements,
+            co.custom_menu_image
         FROM meal_plan_customer mpc
         JOIN meal_plan mp ON mpc.meal_plan_id = mp.id
         LEFT JOIN customer_profile cp ON mpc.customer_id = cp.id
+        LEFT JOIN customer_order co ON mpc.order_id = co.id
         WHERE mpc.meal_plan_id = #{mealPlanId}
           AND mpc.deleted = 0
         ORDER BY mpc.id ASC
