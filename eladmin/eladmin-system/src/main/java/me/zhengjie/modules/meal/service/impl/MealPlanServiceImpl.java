@@ -2063,9 +2063,8 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     @Override
     public PageResult<MealPlanCustomer> queryCustomers(MealPlanCustomerQueryCriteria criteria) {
-        Page<MealPlanCustomer> page = new Page<>(criteria.getPage() , criteria.getSize());
-        Page<MealPlanCustomer> result = mealPlanCustomerMapper.selectPageByCriteria(criteria, page);
-        return new PageResult<>(result.getRecords(), result.getTotal());
+        List<MealPlanCustomer> customers = mealPlanCustomerMapper.selectByMealPlanId(criteria.getMealPlanId());
+        return paginateList(customers, criteria.getPage(), criteria.getSize());
     }
 
     @Override
@@ -2445,8 +2444,28 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     @Override
-    public List<MealPlanCustomerAddressVO> queryCustomerAddresses(Long mealPlanId) {
-        return mealPlanCustomerMapper.selectCustomerAddresses(mealPlanId);
+    public PageResult<MealPlanCustomerAddressVO> queryCustomerAddresses(MealPlanCustomerQueryCriteria criteria) {
+        List<MealPlanCustomerAddressVO> customers = mealPlanCustomerMapper.selectCustomerAddresses(criteria.getMealPlanId());
+        return paginateList(customers, criteria.getPage(), criteria.getSize());
+    }
+
+    /**
+     * 对结果列表做内存分页，确保弹窗接口在复杂 SQL 下也能稳定返回总数和当前页数据。
+     *
+     * @param records 原始结果列表
+     * @param pageNo 页码，从 1 开始
+     * @param pageSize 每页数量
+     * @param <T> 数据类型
+     * @return 分页结果
+     */
+    private <T> PageResult<T> paginateList(List<T> records, Integer pageNo, Integer pageSize) {
+        List<T> safeRecords = records == null ? Collections.emptyList() : records;
+        int safePage = pageNo == null || pageNo < 1 ? 1 : pageNo;
+        int safeSize = pageSize == null || pageSize < 1 ? 10 : pageSize;
+        int total = safeRecords.size();
+        int fromIndex = Math.min((safePage - 1) * safeSize, total);
+        int toIndex = Math.min(fromIndex + safeSize, total);
+        return new PageResult<>(safeRecords.subList(fromIndex, toIndex), total);
     }
 
     /**

@@ -1,12 +1,14 @@
 /* eslint-env jest */
 import { shallowMount } from '@vue/test-utils'
 import ScheduleRecord from '@/views/meal/scheduleRecord/index.vue'
+import { getMealPlanCustomers, getMealPlanCustomerAddresses } from '@/api/mealPlan'
 import fs from 'fs'
 import path from 'path'
 
 jest.mock('@/api/mealPlan', () => ({
   getMealPlanList: jest.fn(),
   getMealPlanFullDetail: jest.fn(),
+  getMealPlanCustomers: jest.fn(),
   generateMealPlan: jest.fn(),
   delMealPlan: jest.fn(),
   delMealPlanCustomers: jest.fn(),
@@ -62,6 +64,7 @@ function buildWrapper() {
       'el-table-column': true,
       'el-tag': true,
       'el-image': true,
+      'el-pagination': true,
       'el-tooltip': {
         template: '<div class="el-tooltip" :data-content="content"><slot /></div>',
         props: ['content', 'placement', 'effect']
@@ -71,6 +74,10 @@ function buildWrapper() {
 }
 
 describe('scheduleRecord special requirements display', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
   test('customer management dialog uses customer code for the customer column', () => {
     const source = fs.readFileSync(path.resolve(__dirname, '../../../../src/views/meal/scheduleRecord/index.vue'), 'utf8')
 
@@ -84,6 +91,60 @@ describe('scheduleRecord special requirements display', () => {
     expect(source).toContain('>客户详情</el-button>')
     expect(source).toContain('<el-dialog title="客户详情" :visible.sync="addressDialog.visible" width="980px">')
     expect(source).toContain('<el-table-column label="自定义菜单" align="center" width="100">')
+    expect(source).toContain('@current-change="handleCustomerDialogPageChange"')
+    expect(source).toContain('@current-change="handleAddressDialogPageChange"')
+  })
+
+  test('customer management dialog fetches paged records', async() => {
+    getMealPlanCustomers.mockResolvedValueOnce({
+      content: [{ id: 101, customerCode: 'A001' }],
+      totalElements: 50
+    })
+
+    const wrapper = buildWrapper()
+    wrapper.setData({
+      customerDialog: {
+        ...wrapper.vm.customerDialog,
+        currentRecord: { id: 88 },
+        page: 2,
+        size: 20
+      }
+    })
+
+    await wrapper.vm.fetchCustomerList()
+
+    expect(getMealPlanCustomers).toHaveBeenCalledWith(88, { page: 2, size: 20 })
+    expect(wrapper.vm.customerDialog.list).toEqual([{ id: 101, customerCode: 'A001' }])
+    expect(wrapper.vm.customerDialog.total).toBe(50)
+
+    wrapper.destroy()
+  })
+
+  test('customer detail dialog fetches paged records', async() => {
+    getMealPlanCustomerAddresses.mockResolvedValueOnce({
+      content: [{ customerId: 1, customerCode: 'A001' }],
+      totalElements: 25
+    })
+
+    const wrapper = buildWrapper()
+    wrapper.setData({
+      planData: {
+        mealPlan: { id: 66 }
+      },
+      addressDialog: {
+        ...wrapper.vm.addressDialog,
+        page: 3,
+        size: 10
+      }
+    })
+
+    await wrapper.vm.fetchAddressDialogList()
+
+    expect(getMealPlanCustomerAddresses).toHaveBeenCalledWith(66, { page: 3, size: 10 })
+    expect(wrapper.vm.addressDialog.list).toEqual([{ customerId: 1, customerCode: 'A001' }])
+    expect(wrapper.vm.addressDialog.total).toBe(25)
+
+    wrapper.destroy()
   })
 
   test('special requirements are provided by tooltip instead of rendering below the customer code', () => {

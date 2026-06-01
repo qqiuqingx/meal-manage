@@ -160,13 +160,13 @@ public interface MealPlanService {
     List<MealPackageStatDto> statByDate(String date);
 
     /**
-     * 根据排餐计划ID查询客户详情弹窗信息。
+     * 分页查询排餐计划客户详情弹窗信息。
      * 返回配送地址、过敏标签、特殊要求以及当前订单自定义菜单图片。
      *
-     * @param mealPlanId 排餐计划ID
-     * @return 客户详情弹窗列表
+     * @param criteria 查询条件
+     * @return 客户详情弹窗分页列表
      */
-    List<MealPlanCustomerAddressVO> queryCustomerAddresses(Long mealPlanId);
+    PageResult<MealPlanCustomerAddressVO> queryCustomerAddresses(MealPlanCustomerQueryCriteria criteria);
 
     /**
      * 查询指定日期排餐后将耗尽餐数的客户订单列表。

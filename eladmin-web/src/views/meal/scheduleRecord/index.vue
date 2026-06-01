@@ -448,6 +448,7 @@
         >批量删除</el-button>
       </div>
       <el-table
+        ref="customerDialogTable"
         v-loading="customerDialog.loading"
         :data="customerDialog.list"
         border
@@ -484,6 +485,17 @@
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination
+        v-if="customerDialog.total > 0"
+        :current-page="customerDialog.page"
+        :page-sizes="[10, 20, 50, 100]"
+        :page-size="customerDialog.size"
+        :total="customerDialog.total"
+        layout="total, sizes, prev, pager, next, jumper"
+        style="margin-top: 15px; text-align: right;"
+        @size-change="handleCustomerDialogSizeChange"
+        @current-change="handleCustomerDialogPageChange"
+      />
     </el-dialog>
 
     <!-- 核销确认对话框 -->
@@ -555,12 +567,23 @@
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination
+        v-if="addressDialog.total > 0"
+        :current-page="addressDialog.page"
+        :page-sizes="[10, 20, 50, 100]"
+        :page-size="addressDialog.size"
+        :total="addressDialog.total"
+        layout="total, sizes, prev, pager, next, jumper"
+        style="margin-top: 15px; text-align: right;"
+        @size-change="handleAddressDialogSizeChange"
+        @current-change="handleAddressDialogPageChange"
+      />
     </el-dialog>
   </div>
 </template>
 
 <script>
-import { getMealPlanList, getMealPlanFullDetail, generateMealPlan, delMealPlan, delMealPlanCustomers, getMealPlanCustomerAddresses, getManualReplaces, saveManualReplaces } from '@/api/mealPlan'
+import { getMealPlanList, getMealPlanFullDetail, getMealPlanCustomers, generateMealPlan, delMealPlan, delMealPlanCustomers, getMealPlanCustomerAddresses, getManualReplaces, saveManualReplaces } from '@/api/mealPlan'
 import { getProfiles } from '@/api/customer/profile'
 import { queryDishes } from '@/api/dish'
 import { verifyMeal } from '@/api/mealVerification'
@@ -631,7 +654,10 @@ export default {
         loading: false,
         list: [],
         selections: [],
-        currentRecord: null
+        currentRecord: null,
+        page: 1,
+        size: 10,
+        total: 0
       },
 
       // 核销确认弹窗
@@ -644,7 +670,10 @@ export default {
       addressDialog: {
         visible: false,
         loading: false,
-        list: []
+        list: [],
+        page: 1,
+        size: 10,
+        total: 0
       },
       rulesDialogVisible: false,
       manualReplaces: [],
@@ -1076,17 +1105,58 @@ export default {
     openCustomerDialogForCurrent() {
       if (!this.planData || !this.planData.mealPlan) return
       this.customerDialog.currentRecord = { id: this.planData.mealPlan.id, ...this.planData.mealPlan }
+      this.customerDialog.page = 1
       this.customerDialog.visible = true
       this.fetchCustomerList()
     },
+    /**
+     * 分页加载客户排餐管理弹窗列表。
+     */
     fetchCustomerList() {
+      if (!this.customerDialog.currentRecord || !this.customerDialog.currentRecord.id) return
       this.customerDialog.loading = true
-      getMealPlanFullDetail(this.customerDialog.currentRecord.id).then(res => {
-        this.customerDialog.list = res.customers || []
-        this.customerDialog.loading = false
+      getMealPlanCustomers(this.customerDialog.currentRecord.id, {
+        page: this.customerDialog.page,
+        size: this.customerDialog.size
+      }).then(res => {
+        const total = res.totalElements || 0
+        const maxPage = Math.max(Math.ceil(total / this.customerDialog.size), 1)
+        if (total > 0 && this.customerDialog.page > maxPage) {
+          this.customerDialog.page = maxPage
+          this.fetchCustomerList()
+          return
+        }
+        this.customerDialog.list = res.content || []
+        this.customerDialog.total = total
+        this.customerDialog.selections = []
+        this.$nextTick(() => {
+          this.$refs.customerDialogTable && this.$refs.customerDialogTable.clearSelection && this.$refs.customerDialogTable.clearSelection()
+        })
       }).catch(() => {
+        this.customerDialog.list = []
+        this.customerDialog.total = 0
+      }).finally(() => {
         this.customerDialog.loading = false
       })
+    },
+    /**
+     * 处理客户排餐管理弹窗分页大小变化。
+     *
+     * @param {number} size 每页条数
+     */
+    handleCustomerDialogSizeChange(size) {
+      this.customerDialog.size = size
+      this.customerDialog.page = 1
+      this.fetchCustomerList()
+    },
+    /**
+     * 处理客户排餐管理弹窗页码变化。
+     *
+     * @param {number} page 当前页码
+     */
+    handleCustomerDialogPageChange(page) {
+      this.customerDialog.page = page
+      this.fetchCustomerList()
     },
     handleCustomerSelectionChange(val) {
       this.customerDialog.selections = val
@@ -1140,6 +1210,9 @@ export default {
       this.customerDialog.list = []
       this.customerDialog.selections = []
       this.customerDialog.currentRecord = null
+      this.customerDialog.page = 1
+      this.customerDialog.size = 10
+      this.customerDialog.total = 0
     },
     hasUnverifiedSelections() {
       return this.customerDialog.selections.some(item => item.isVerified !== 1)
@@ -1196,19 +1269,53 @@ export default {
       if (path.startsWith('http://') || path.startsWith('https://')) return path
       return this.baseApi + path
     },
-    // ─── 客户详情查询 ──────────────────────────────
-    openAddressDialog() {
+    /**
+     * 分页加载客户详情弹窗列表。
+     */
+    fetchAddressDialogList() {
       if (!this.planData || !this.planData.mealPlan) return
-      this.addressDialog.visible = true
       this.addressDialog.loading = true
-      this.addressDialog.list = []
-      getMealPlanCustomerAddresses(this.planData.mealPlan.id).then(res => {
-        this.addressDialog.list = res || []
+      getMealPlanCustomerAddresses(this.planData.mealPlan.id, {
+        page: this.addressDialog.page,
+        size: this.addressDialog.size
+      }).then(res => {
+        this.addressDialog.list = res.content || []
+        this.addressDialog.total = res.totalElements || 0
       }).catch(() => {
+        this.addressDialog.list = []
+        this.addressDialog.total = 0
         this.$message.error('获取客户详情失败')
       }).finally(() => {
         this.addressDialog.loading = false
       })
+    },
+    /**
+     * 处理客户详情弹窗分页大小变化。
+     *
+     * @param {number} size 每页条数
+     */
+    handleAddressDialogSizeChange(size) {
+      this.addressDialog.size = size
+      this.addressDialog.page = 1
+      this.fetchAddressDialogList()
+    },
+    /**
+     * 处理客户详情弹窗页码变化。
+     *
+     * @param {number} page 当前页码
+     */
+    handleAddressDialogPageChange(page) {
+      this.addressDialog.page = page
+      this.fetchAddressDialogList()
+    },
+    // ─── 客户详情查询 ──────────────────────────────
+    openAddressDialog() {
+      if (!this.planData || !this.planData.mealPlan) return
+      this.addressDialog.visible = true
+      this.addressDialog.page = 1
+      this.addressDialog.list = []
+      this.addressDialog.total = 0
+      this.fetchAddressDialogList()
     },
     loadManualReplaces() {
       if (!this.planData || !this.planData.mealPlan) {

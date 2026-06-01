@@ -41,29 +41,32 @@
     </resultMap>
 
     <select id="selectPageByCriteria" resultMap="BaseResultMap">
-        select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
-               status, is_verified, verification_time, verification_operator, fail_reason,
-               meat_required_count, veg_required_count, include_soup, include_rice,
-               supplementary_main_count, supplementary_side_count, supplementary_veg_count,
-               supplementary_rice_count, supplementary_soup_count,
-               create_by, update_by, deleted, create_time, update_time
-        from meal_plan_customer
+        select mpc.id, mpc.meal_plan_id, mpc.customer_id, mpc.customer_name, mpc.phone,
+               cp.customer_code, mpc.order_id, mpc.parent_package_id, mpc.child_package_id,
+               mpc.status, mpc.is_verified, mpc.verification_time, mpc.verification_operator, mpc.fail_reason,
+               mpc.meat_required_count, mpc.veg_required_count, mpc.include_soup, mpc.include_rice,
+               mpc.supplementary_main_count, mpc.supplementary_side_count, mpc.supplementary_veg_count,
+               mpc.supplementary_rice_count, mpc.supplementary_soup_count,
+               cp.special_requirements,
+               mpc.create_by, mpc.update_by, mpc.deleted, mpc.create_time, mpc.update_time
+        from meal_plan_customer mpc
+        left join customer_profile cp on mpc.customer_id = cp.id
         <where>
-            deleted = 0
+            mpc.deleted = 0
             <if test="criteria.mealPlanId != null">
-                and meal_plan_id = #{criteria.mealPlanId}
+                and mpc.meal_plan_id = #{criteria.mealPlanId}
             </if>
             <if test="criteria.customerName != null and criteria.customerName != ''">
-                and customer_name like concat('%', #{criteria.customerName}, '%')
+                and mpc.customer_name like concat('%', #{criteria.customerName}, '%')
             </if>
             <if test="criteria.phone != null and criteria.phone != ''">
-                and phone like concat('%', #{criteria.phone}, '%')
+                and mpc.phone like concat('%', #{criteria.phone}, '%')
             </if>
             <if test="criteria.status != null">
-                and status = #{criteria.status}
+                and mpc.status = #{criteria.status}
             </if>
         </where>
-        order by id asc
+        order by mpc.id asc
     </select>
 
     <select id="selectById" resultMap="BaseResultMap">
