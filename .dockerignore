@@ -1,0 +1,35 @@
+**
+!.dockerignore
+!docker/
+!docker/**
+!eladmin/
+!eladmin/**
+!eladmin-web/
+!eladmin-web/**
+
+# Backend build outputs and logs are not needed in image context.
+eladmin/**/target/
+eladmin/logs/
+eladmin/**/logs/
+eladmin/**/*.log
+eladmin/spy.log
+eladmin/eladmin-system/spy.log
+
+# Frontend dependencies and build artifacts are regenerated in Docker.
+eladmin-web/node_modules/
+eladmin-web/dist/
+eladmin-web/coverage/
+eladmin-web/.cache/
+
+# Local tooling and VCS metadata should stay outside the build context.
+eladmin-web/tests/
+.git/
+.claude/
+.codex/
+.cursor/
+.planning/
+.superpowers/
+agent-service/
+docs/
+doc/
+*.mov
