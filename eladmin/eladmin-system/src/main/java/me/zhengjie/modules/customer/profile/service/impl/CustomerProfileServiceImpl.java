@@ -635,7 +635,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
      * 前端传入时校验：
      * 1. 必须以父套餐 poolPrefix 开头
      * 2. 前缀后的数字必须在 [poolStart, poolEnd] 范围内
-     * 3. 零填充宽度必须与 resolveCodeWidth() 一致（自动生成时保持一致）
+     * 3. 数字部分不限制位数，由编号池范围决定是否可用
      * 4. 编号必须在数据库中唯一
      *
      * @param manualCode 前端传入手动编号（可能为 null 或 blank）
@@ -656,25 +656,23 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             int poolStart = parent.getPoolStart();
             int poolEnd = parent.getPoolEnd();
             int codeWidth = resolveCodeWidth(poolStart, poolEnd);
+            String exampleCode = poolPrefix + String.format("%0" + codeWidth + "d", poolStart);
 
             // 校验 1：必须以 poolPrefix 开头
             if (!manualCode.startsWith(poolPrefix)) {
                 throw new BadRequestException("客户编号必须以「" + poolPrefix + "」开头，当前编号格式不符合");
             }
 
-            // 校验 2：截取数字部分，校验范围
+            // 校验 2：截取数字部分，校验纯数字和范围；手动编号不限制数字位数。
             String numPart = manualCode.substring(poolPrefix.length());
-            if (numPart.length() != codeWidth) {
-                throw new BadRequestException("客户编号数字部分必须为" + codeWidth + "位，如「" + poolPrefix + String.format("%0" + codeWidth + "d", poolStart) + "」");
-            }
             int seq;
             try {
                 seq = Integer.parseInt(numPart);
             } catch (NumberFormatException e) {
-                throw new BadRequestException("客户编号数字部分必须为纯数字，如「" + poolPrefix + String.format("%0" + codeWidth + "d", poolStart) + "」");
+                throw new BadRequestException("客户编号数字部分必须为纯数字，如「" + exampleCode + "」");
             }
             if (seq < poolStart || seq > poolEnd) {
-                throw new BadRequestException("客户编号必须在「" + poolPrefix + String.format("%0" + codeWidth + "d", poolStart) + "」～「" + poolPrefix + String.format("%0" + codeWidth + "d", poolEnd) + "」范围内");
+                throw new BadRequestException("客户编号必须在「" + exampleCode + "」～「" + poolPrefix + String.format("%0" + codeWidth + "d", poolEnd) + "」范围内");
             }
 
             // 校验 3：唯一性
