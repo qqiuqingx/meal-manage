@@ -232,14 +232,21 @@
         ORDER BY mpc.id ASC
     </select>
 
-<!-- 批量查询各订单指定餐次的已排餐数量 -->
+    <!--
+      批量查询各订单当前餐数池的已排餐数量。
+      早餐按 BREAKFAST 单独统计；午餐/晚餐按共享餐池合并统计 LUNCH + DINNER。
+    -->
     <select id="countScheduledByOrderIds" resultType="me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto">
         select mpc.order_id as orderId, count(*) as scheduledCount
         from meal_plan_customer mpc
         join meal_plan mp on mpc.meal_plan_id = mp.id
         where mpc.deleted = 0
           and mp.deleted = 0
-          and mp.meal_type = #{mealType}
+          and (
+              (#{mealType} = 'BREAKFAST' and mp.meal_type = 'BREAKFAST')
+              or
+              (#{mealType} in ('LUNCH', 'DINNER') and mp.meal_type in ('LUNCH', 'DINNER'))
+          )
           and mpc.order_id in
         <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
             #{orderId}
