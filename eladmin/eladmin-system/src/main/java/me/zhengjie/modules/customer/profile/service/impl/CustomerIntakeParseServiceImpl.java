@@ -39,7 +39,8 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
     private static final Pattern DISH_CONFIG_PATTERN = Pattern.compile("(\\d+)\\s*主\\s*(\\d+)\\s*副\\s*(\\d+)\\s*素\\s*(\\d+)\\s*汤");
     private static final Pattern COUNT_PATTERN = Pattern.compile("(\\d+)");
     private static final Pattern ORDER_DESCRIPTION_DAY_PATTERN = Pattern.compile("(\\d+)\\s*天");
-    private static final Pattern MONTH_DAY_PATTERN = Pattern.compile("(\\d{1,2})月(\\d{1,2})日");
+    private static final Pattern MONTH_DAY_PATTERN = Pattern.compile("(\\d{1,2})\\s*月\\s*(\\d{1,2})\\s*日");
+    private static final Pattern ISO_DATE_PATTERN = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})");
     private static final Pattern PHONE_PATTERN = Pattern.compile("^1[3-9]\\d{9}$");
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final Map<String, String> CUSTOMER_SOURCE_MAPPING = new HashMap<>();
@@ -447,7 +448,7 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
     }
 
     /**
-     * 根据配送描述推导排餐模式和送餐日期。
+     * 根据配送描述推导排餐模式、开始日期和餐次。
      *
      * @param orderInfo 首单草稿
      * @param scheduleModeText 话术中的配送模式描述
@@ -463,26 +464,63 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
                 || normalized.contains("指定日期")) {
             orderInfo.setScheduleMode("SCHEDULE");
             orderInfo.setDeliveryDates(null);
-            return;
         }
-        if (normalized.contains("每天送")) {
+        if (normalized.contains("每天送")
+                || normalized.contains("每天配送")
+                || normalized.contains("每日送")
+                || normalized.contains("每日配送")
+                || normalized.contains("默认每天")) {
             orderInfo.setScheduleMode("DAILY");
             orderInfo.setDeliveryDates(null);
-            return;
-        }
-        if (normalized.contains("工作日")) {
+        } else if (normalized.contains("工作日")) {
             orderInfo.setScheduleMode("WEEKDAY");
             orderInfo.setDeliveryDates(null);
-            return;
-        }
-        if (normalized.contains("周末")) {
+        } else if (normalized.contains("周末")) {
             orderInfo.setScheduleMode("WEEKEND");
             orderInfo.setDeliveryDates(null);
-            return;
-        }
-        if (normalized.matches("\\d{4}-\\d{2}-\\d{2}(\\s*,\\s*\\d{4}-\\d{2}-\\d{2})*")) {
+        } else if (normalized.matches("\\d{4}-\\d{2}-\\d{2}(\\s*[,，、]\\s*\\d{4}-\\d{2}-\\d{2})*")) {
             orderInfo.setScheduleMode("SCHEDULE");
             orderInfo.setDeliveryDates(JSON.toJSONString(splitCsvValues(normalized)));
+        }
+        applyMealTypeFromDeliveryText(orderInfo, normalized);
+
+        String startDate = extractDateFromText(normalized);
+        if (StringUtils.isNotBlank(startDate)) {
+            orderInfo.setStartDate(startDate);
+        }
+    }
+
+    /**
+     * 从配送日期话术中识别餐次和开始餐次，例如“晚餐开始、默认每天配送晚餐”。
+     *
+     * @param orderInfo 首单草稿
+     * @param deliveryText 配送日期字段原文
+     */
+    private void applyMealTypeFromDeliveryText(CustomerProfileSaveDto.OrderInfoDto orderInfo, String deliveryText) {
+        MealTypeSelection mealTypes = parseOrderDescriptionMealTypes(deliveryText);
+        if (!mealTypes.hasAny()) {
+            return;
+        }
+        if (mealTypes.breakfast) {
+            orderInfo.setMealType("ALL");
+            orderInfo.setStartMealType("BREAKFAST");
+        } else if (mealTypes.lunch && mealTypes.dinner) {
+            orderInfo.setMealType("LUNCH_DINNER");
+            orderInfo.setStartMealType("LUNCH");
+        } else if (mealTypes.lunch) {
+            orderInfo.setMealType("LUNCH");
+            orderInfo.setStartMealType("LUNCH");
+        } else {
+            orderInfo.setMealType("DINNER");
+            orderInfo.setStartMealType("DINNER");
+        }
+
+        if (deliveryText.contains("早餐开始") || deliveryText.contains("早饭开始")) {
+            orderInfo.setStartMealType("BREAKFAST");
+        } else if (deliveryText.contains("午餐开始") || deliveryText.contains("午饭开始")) {
+            orderInfo.setStartMealType("LUNCH");
+        } else if (deliveryText.contains("晚餐开始") || deliveryText.contains("晚饭开始")) {
+            orderInfo.setStartMealType("DINNER");
         }
     }
 
@@ -697,6 +735,33 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
     }
 
     /**
+     * 从任意话术文本中提取日期，支持 yyyy-MM-dd 和 M月d日。
+     *
+     * @param text 原始文本
+     * @return 标准化后的日期，无法识别时返回 null
+     */
+    private String extractDateFromText(String text) {
+        if (StringUtils.isBlank(text)) {
+            return null;
+        }
+        Matcher isoMatcher = ISO_DATE_PATTERN.matcher(text);
+        if (isoMatcher.find()) {
+            return isoMatcher.group(1);
+        }
+        Matcher monthDayMatcher = MONTH_DAY_PATTERN.matcher(text);
+        if (monthDayMatcher.find()) {
+            try {
+                int month = parseInteger(monthDayMatcher.group(1), 0);
+                int day = parseInteger(monthDayMatcher.group(2), 0);
+                return LocalDate.of(currentDateSupplier.get().getYear(), month, day).format(DATE_FORMATTER);
+            } catch (RuntimeException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
      * 归一化生产日期，支持 yyyy-MM-dd、yyyy/MM/dd、M月d日。
      *
      * @param productionDateText 原始生产日期文本
@@ -714,12 +779,9 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
             if (normalized.matches("\\d{4}/\\d{2}/\\d{2}")) {
                 return LocalDate.parse(normalized.replace('/', '-'), DATE_FORMATTER).format(DATE_FORMATTER);
             }
-            Matcher matcher = MONTH_DAY_PATTERN.matcher(normalized);
-            if (matcher.matches()) {
-                int month = parseInteger(matcher.group(1), 0);
-                int day = parseInteger(matcher.group(2), 0);
-                LocalDate date = LocalDate.of(currentDateSupplier.get().getYear(), month, day);
-                return date.format(DATE_FORMATTER);
+            String date = extractDateFromText(normalized);
+            if (StringUtils.isNotBlank(date)) {
+                return date;
             }
         } catch (RuntimeException ignored) {
             return null;
