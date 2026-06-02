@@ -1,5 +1,8 @@
 package me.zhengjie.modules.customer.profile.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
+import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
 import me.zhengjie.modules.customer.profile.domain.dto.intake.CustomerIntakeParseRequest;
 import me.zhengjie.modules.customer.profile.domain.dto.intake.CustomerIntakeParseResult;
@@ -7,11 +10,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * 客户话术解析服务单元测试。
@@ -53,6 +60,14 @@ class CustomerIntakeParseServiceImplTest {
     }
 
     @Test
+    void parseCustomerSourceShouldIgnoreOptionTextAndUseActualSelection() {
+        assertCustomerSource("来源：（小红书or抖音or推荐）抖音个人搜索", "抖音");
+        assertCustomerSource("来源：抖音", "抖音");
+        assertCustomerSource("来源：（小红书·抖音·推荐）", "其他");
+        assertCustomerSource("来源：（小红书or抖音or推荐）抖音", "抖音");
+    }
+
+    @Test
     void parseDefaultsShouldUseTodayScheduleModeAndWhiteRice() {
         CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
         request.setText("配送日期：默认等通知配送\n餐数：30\n汤数：0");
@@ -65,6 +80,15 @@ class CustomerIntakeParseServiceImplTest {
         assertNull(orderInfo.getDeliveryDates());
         assertEquals("白米饭", orderInfo.getRiceType());
         assertEquals(Integer.valueOf(0), orderInfo.getSoupCount());
+    }
+
+    private void assertCustomerSource(String text, String expectedSource) {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText(text);
+
+        CustomerIntakeParseResult result = service.parse(request);
+
+        assertEquals(expectedSource, result.getDraft().getOrderInfo().getCustomerSource());
     }
 
     @Test
@@ -113,6 +137,17 @@ class CustomerIntakeParseServiceImplTest {
         assertEquals("猪肉", result.getDraft().getAllergyTags().get(1));
         assertEquals("羊肉", result.getDraft().getAllergyTags().get(2));
         assertEquals("葱花", result.getDraft().getAllergyTags().get(3));
+    }
+
+    @Test
+    void parseNoneAllergyAndCannotEatShouldIgnoreEmptyMeaningText() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("过敏食物：无\n不能吃的:无");
+
+        CustomerIntakeParseResult result = service.parse(request);
+
+        assertTrue(result.getDraft().getAllergyTags().isEmpty());
+        assertNull(result.getDraft().getSpecialRequirements());
     }
 
     @Test
@@ -272,5 +307,26 @@ class CustomerIntakeParseServiceImplTest {
         assertTrue(result.getIssues().stream().anyMatch(issue ->
                 "orderInfo.parentPackageId".equals(issue.getField())
                         && issue.getMessage().contains("套餐必须使用系统父套餐名称")));
+    }
+
+    @Test
+    void parseMealCategoryShouldFallbackToParentPackageContainedInText() {
+        ParentPackage parentPackage = new ParentPackage();
+        parentPackage.setId(7L);
+        parentPackage.setPackageName("小月子餐");
+        parentPackage.setPackageCode("XMONTH");
+
+        ParentPackageMapper parentPackageMapper = mock(ParentPackageMapper.class);
+        when(parentPackageMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
+        when(parentPackageMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(parentPackage));
+        service.setParentPackageMapper(parentPackageMapper);
+
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("餐别：小月子餐、两荤一素一汤");
+
+        CustomerIntakeParseResult result = service.parse(request);
+
+        assertEquals(7L, result.getDraft().getOrderInfo().getParentPackageId());
+        assertTrue(result.getIssues().stream().noneMatch(issue -> "orderInfo.parentPackageId".equals(issue.getField())));
     }
 }

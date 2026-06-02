@@ -21,7 +21,6 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,7 +42,7 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
     private static final Pattern ISO_DATE_PATTERN = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})");
     private static final Pattern PHONE_PATTERN = Pattern.compile("^1[3-9]\\d{9}$");
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private static final Map<String, String> CUSTOMER_SOURCE_MAPPING = new HashMap<>();
+    private static final Map<String, String> CUSTOMER_SOURCE_MAPPING = new LinkedHashMap<>();
 
     static {
         CUSTOMER_SOURCE_MAPPING.put("抖音", "抖音");
@@ -53,6 +52,7 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         CUSTOMER_SOURCE_MAPPING.put("其他", "其他");
     }
     @Autowired(required = false)
+    @Setter
     private ParentPackageMapper parentPackageMapper;
 
     @Setter
@@ -230,8 +230,8 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         String specialRequirement = firstNonBlank(rawFields, "特殊要求");
         String riceType = detectRiceType(cannotEat, specialRequirement);
 
-        appendValueSegment(specialSegments, specialRequirement);
-        appendValueSegment(specialSegments, cannotEat);
+        appendValueSegment(specialSegments, normalizeOptionalText(specialRequirement));
+        appendValueSegment(specialSegments, normalizeOptionalText(cannotEat));
         if (!specialSegments.isEmpty()) {
             String specialRequirements = String.join("；", specialSegments);
             draft.setSpecialRequirements(specialRequirements);
@@ -268,13 +268,26 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         }
 
         String packageText = firstNonBlank(rawFields, "套餐", "父套餐");
+        String mealCategory = firstNonBlank(rawFields, "餐别");
+        ParentPackage matchedPackage = null;
+        String matchedSourceLabel = "套餐";
+        String matchedSourceValue = packageText;
         if (StringUtils.isNotBlank(packageText)) {
-            ParentPackage matched = matchParentPackage(packageText);
-            if (matched != null) {
-                orderInfo.setParentPackageId(matched.getId());
+            matchedPackage = matchParentPackage(packageText);
+        }
+        if (matchedPackage == null && StringUtils.isNotBlank(mealCategory)) {
+            ParentPackage categoryMatched = matchParentPackage(mealCategory);
+            if (categoryMatched != null) {
+                matchedPackage = categoryMatched;
+                matchedSourceLabel = "餐别";
+                matchedSourceValue = mealCategory;
             }
-            addParsedField(parsedFields, "套餐", packageText, "orderInfo.parentPackageId",
-                    matched == null ? packageText : matched.getId());
+        }
+        if (matchedPackage != null) {
+            orderInfo.setParentPackageId(matchedPackage.getId());
+            addParsedField(parsedFields, matchedSourceLabel, matchedSourceValue, "orderInfo.parentPackageId", matchedPackage.getId());
+        } else if (StringUtils.isNotBlank(packageText)) {
+            addParsedField(parsedFields, "套餐", packageText, "orderInfo.parentPackageId", packageText);
         }
 
         String mealTypeText = firstNonBlank(rawFields, "餐次");
@@ -344,7 +357,7 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
 
         String allergyTags = firstNonBlank(rawFields, "过敏食物");
         if (StringUtils.isNotBlank(allergyTags)) {
-            List<String> tagList = splitCsvValues(allergyTags);
+            List<String> tagList = isNoneText(allergyTags) ? Collections.emptyList() : splitCsvValues(allergyTags);
             draft.setAllergyTags(tagList);
             addParsedField(parsedFields, "过敏食物", allergyTags, "allergyTags", tagList);
         }
@@ -356,8 +369,7 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
             addParsedField(parsedFields, "排除菜品", excludedDishNames, "excludedDishIds", excludedDishes);
         }
 
-        String mealCategory = firstNonBlank(rawFields, "餐别");
-        if (StringUtils.isNotBlank(mealCategory) && StringUtils.isBlank(packageText)) {
+        if (StringUtils.isNotBlank(mealCategory) && StringUtils.isBlank(packageText) && matchedPackage == null) {
             addIssue(issues, "ERROR", "orderInfo.parentPackageId", "套餐必须使用系统父套餐名称或编码，请填写“套餐”字段", mealCategory);
         }
     }
@@ -412,7 +424,29 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         queryWrapper.eq("status", 1)
                 .and(wrapper -> wrapper.eq("package_name", packageText).or().eq("package_code", packageText))
                 .last("limit 1");
-        return parentPackageMapper.selectOne(queryWrapper);
+        ParentPackage exactMatched = parentPackageMapper.selectOne(queryWrapper);
+        if (exactMatched != null) {
+            return exactMatched;
+        }
+        List<ParentPackage> enabledPackages = parentPackageMapper.selectList(new QueryWrapper<ParentPackage>().eq("status", 1));
+        if (enabledPackages == null || enabledPackages.isEmpty()) {
+            return null;
+        }
+        ParentPackage bestMatched = null;
+        int bestLength = 0;
+        for (ParentPackage parentPackage : enabledPackages) {
+            String packageName = parentPackage.getPackageName();
+            String packageCode = parentPackage.getPackageCode();
+            if (StringUtils.isNotBlank(packageName) && packageText.contains(packageName) && packageName.length() > bestLength) {
+                bestMatched = parentPackage;
+                bestLength = packageName.length();
+            }
+            if (StringUtils.isNotBlank(packageCode) && packageText.contains(packageCode) && packageCode.length() > bestLength) {
+                bestMatched = parentPackage;
+                bestLength = packageCode.length();
+            }
+        }
+        return bestMatched;
     }
 
     /**
@@ -708,13 +742,32 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         if (StringUtils.isBlank(source)) {
             return null;
         }
-        String normalized = source.trim();
+        String normalized = normalizeCustomerSourceCandidate(source);
         for (Map.Entry<String, String> entry : CUSTOMER_SOURCE_MAPPING.entrySet()) {
             if (normalized.contains(entry.getKey())) {
                 return entry.getValue();
             }
         }
         return "其他";
+    }
+
+    /**
+     * 归一化客户来源文本，忽略“（小红书or抖音or推荐）”这类候选项说明，只保留客服实际选择内容。
+     *
+     * @param source 原始来源文本
+     * @return 可用于渠道匹配的文本
+     */
+    private String normalizeCustomerSourceCandidate(String source) {
+        String trimmed = source == null ? "" : source.trim();
+        boolean hasOptionText = trimmed.matches(".*[（(【\\[].*[）)】\\]].*");
+        String withoutOptions = trimmed
+                .replaceAll("[（(][^）)]*[）)]", "")
+                .replaceAll("[【\\[][^】\\]]*[】\\]]", "")
+                .trim();
+        if (StringUtils.isNotBlank(withoutOptions)) {
+            return withoutOptions;
+        }
+        return hasOptionText ? "" : trimmed;
     }
 
     /**
@@ -856,6 +909,38 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
             }
         }
         return null;
+    }
+
+    /**
+     * 归一化可选文本，客服填写“无/没有/无过敏”等空值表达时按空处理。
+     *
+     * @param text 原始文本
+     * @return 有业务含义的文本；空值表达返回 null
+     */
+    private String normalizeOptionalText(String text) {
+        return isNoneText(text) ? null : text;
+    }
+
+    /**
+     * 判断文本是否表示“无内容”，用于避免把“无”写入过敏标签或特殊要求。
+     *
+     * @param text 原始文本
+     * @return true 表示该文本等价于空值
+     */
+    private boolean isNoneText(String text) {
+        if (StringUtils.isBlank(text)) {
+            return false;
+        }
+        String normalized = text.trim().replaceAll("[\\s,，、。；;：:]+", "");
+        return "无".equals(normalized)
+                || "没有".equals(normalized)
+                || "暂无".equals(normalized)
+                || "无过敏".equals(normalized)
+                || "没有过敏".equals(normalized)
+                || "无过敏食物".equals(normalized)
+                || "没有过敏食物".equals(normalized)
+                || "无忌口".equals(normalized)
+                || "没有忌口".equals(normalized);
     }
 
     /**
