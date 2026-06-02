@@ -160,6 +160,12 @@ class CustomerProfileServiceImplTest {
         method.invoke(customerProfileService, profile);
     }
 
+    private String invokeResolveCustomerCode(String manualCode, Long parentPackageId) throws Exception {
+        Method method = CustomerProfileServiceImpl.class.getDeclaredMethod("resolveCustomerCode", String.class, Long.class);
+        method.setAccessible(true);
+        return (String) method.invoke(customerProfileService, manualCode, parentPackageId);
+    }
+
     @Test
     void testFillDefaultAddress_WithMultipleAddresses() throws Exception {
         List<CustomerProfileAddress> addresses = Arrays.asList(address1, address2, address3);
@@ -357,6 +363,22 @@ class CustomerProfileServiceImplTest {
         ArgumentCaptor<CustomerMealScheduleAddition> captor = ArgumentCaptor.forClass(CustomerMealScheduleAddition.class);
         verify(customerMealScheduleAdditionMapper).insert(captor.capture());
         assertEquals(11L, captor.getValue().getOrderId());
+    }
+
+    @Test
+    void shouldAllowManualCustomerCodeWithVariableDigitLengthWhenSequenceInPoolRange() throws Exception {
+        ParentPackage parentPackage = new ParentPackage();
+        parentPackage.setId(1L);
+        parentPackage.setPoolPrefix("F");
+        parentPackage.setPoolStart(800);
+        parentPackage.setPoolEnd(999);
+
+        when(parentPackageMapper.selectById(1L)).thenReturn(parentPackage);
+        when(profileMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
+
+        String customerCode = invokeResolveCustomerCode("F0800", 1L);
+
+        assertEquals("F0800", customerCode);
     }
 
     // ========== excludedDates 校验测试 ==========

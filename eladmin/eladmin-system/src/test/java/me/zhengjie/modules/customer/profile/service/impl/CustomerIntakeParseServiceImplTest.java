@@ -247,6 +247,21 @@ class CustomerIntakeParseServiceImplTest {
     }
 
     @Test
+    void parseDeliveryDateShouldSupportOperationalDailyDinnerText() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("配送日期：6 月 1 日、晚餐开始、默认每天配送晚餐");
+
+        CustomerIntakeParseResult result = service.parse(request);
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = result.getDraft().getOrderInfo();
+
+        assertEquals("2026-06-01", orderInfo.getStartDate());
+        assertEquals("DAILY", orderInfo.getScheduleMode());
+        assertNull(orderInfo.getDeliveryDates());
+        assertEquals("DINNER", orderInfo.getMealType());
+        assertEquals("DINNER", orderInfo.getStartMealType());
+    }
+
+    @Test
     void parseAmbiguousPackageTextShouldAddError() {
         CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
         request.setText("餐别：孕期营养餐不含汤（两荤一素）");
