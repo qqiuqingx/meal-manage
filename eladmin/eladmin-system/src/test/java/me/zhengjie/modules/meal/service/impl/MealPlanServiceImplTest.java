@@ -31,6 +31,7 @@ import me.zhengjie.modules.meal.mapper.MealSchedulePlanMapper;
 import me.zhengjie.modules.meal.service.DishIngredientCategoryService;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerItemMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
+import me.zhengjie.modules.meal.mapper.MealPlanManualReplaceMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -70,6 +71,8 @@ class MealPlanServiceImplTest {
     @Mock
     private MealPlanCustomerMapper mealPlanCustomerMapper;
     @Mock
+    private MealPlanManualReplaceMapper mealPlanManualReplaceMapper;
+    @Mock
     private MealPlanCustomerItemMapper mealPlanCustomerItemMapper;
     @Mock
     private CustomerOrderMapper customerOrderMapper;
@@ -96,6 +99,7 @@ class MealPlanServiceImplTest {
     @BeforeEach
     void setUp() {
         lenient().when(dishIngredientCategoryService.getCategoryIngredientMapping()).thenReturn(Collections.emptyMap());
+        lenient().when(mealPlanManualReplaceMapper.selectByMealPlanId(anyLong())).thenReturn(Collections.emptyList());
     }
 
     @Test
@@ -153,7 +157,7 @@ class MealPlanServiceImplTest {
                         buildScheduledCount(101L, "LUNCH", 1),
                         buildScheduledCount(101L, "DINNER", 1)
                 ));
-        when(customerProfileMapper.selectBatchIds(anyList())).thenReturn(Collections.singletonList(customer));
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(customer));
 
         List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
 
@@ -184,7 +188,7 @@ class MealPlanServiceImplTest {
                 .thenReturn(Collections.singletonList(buildVerifiedCount(102L, "LUNCH", 9)));
         when(mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(Collections.singletonList(102L), targetDate))
                 .thenReturn(Collections.emptyList());
-        when(customerProfileMapper.selectBatchIds(anyList())).thenReturn(Collections.singletonList(customer));
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(customer));
 
         List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
 
@@ -192,6 +196,109 @@ class MealPlanServiceImplTest {
         assertEquals("LUNCH_DINNER", warnings.get(0).getMealType());
         assertEquals(Integer.valueOf(1), warnings.get(0).getRemainingCount());
         assertEquals(Integer.valueOf(0), warnings.get(0).getTomorrowScheduledCount());
+    }
+
+    @Test
+    void shouldWarnWhenTargetDateScheduleWillDepleteBreakfastPool() {
+        LocalDate targetDate = LocalDate.of(2026, 6, 1);
+        CustomerOrder order = buildOrder();
+        order.setId(103L);
+        order.setCustomerId(203L);
+        order.setCustomerCode("C203");
+        order.setBreakfastCount(3);
+        order.setLunchDinnerCount(10);
+        order.setRemainingCount(11);
+
+        CustomerProfile customer = buildCustomer();
+        customer.setId(203L);
+        customer.setCustomerCode("C203");
+        customer.setCustomerName("赵六");
+
+        when(customerOrderMapper.selectList(any())).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(103L)))
+                .thenReturn(Collections.singletonList(buildVerifiedCount(103L, "BREAKFAST", 2)));
+        when(mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(Collections.singletonList(103L), targetDate))
+                .thenReturn(Collections.singletonList(buildScheduledCount(103L, "BREAKFAST", 1)));
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(customer));
+
+        List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
+
+        assertEquals(1, warnings.size());
+        assertEquals("BREAKFAST", warnings.get(0).getMealType());
+        assertEquals("早餐", warnings.get(0).getMealTypeName());
+        assertEquals(Integer.valueOf(1), warnings.get(0).getRemainingCount());
+        assertEquals(Integer.valueOf(1), warnings.get(0).getTomorrowScheduledCount());
+    }
+
+    @Test
+    void shouldNotWarnWhenMealPoolAlreadyHasNoRemainingCount() {
+        LocalDate targetDate = LocalDate.of(2026, 6, 1);
+        CustomerOrder order = buildOrder();
+        order.setId(104L);
+        order.setCustomerId(204L);
+        order.setCustomerCode("C204");
+        order.setBreakfastCount(2);
+        order.setLunchDinnerCount(0);
+        order.setRemainingCount(1);
+
+        when(customerOrderMapper.selectList(any())).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(104L)))
+                .thenReturn(Collections.singletonList(buildVerifiedCount(104L, "BREAKFAST", 2)));
+        when(mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(Collections.singletonList(104L), targetDate))
+                .thenReturn(Collections.singletonList(buildScheduledCount(104L, "BREAKFAST", 1)));
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.emptyList());
+
+        List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
+
+        assertEquals(0, warnings.size());
+    }
+
+    @Test
+    void shouldNotWarnWhenTargetDateScheduleDoesNotConsumeAllRemainingCount() {
+        LocalDate targetDate = LocalDate.of(2026, 6, 1);
+        CustomerOrder order = buildOrder();
+        order.setId(105L);
+        order.setCustomerId(205L);
+        order.setCustomerCode("C205");
+        order.setBreakfastCount(5);
+        order.setLunchDinnerCount(0);
+        order.setRemainingCount(3);
+
+        when(customerOrderMapper.selectList(any())).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(105L)))
+                .thenReturn(Collections.singletonList(buildVerifiedCount(105L, "BREAKFAST", 2)));
+        when(mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(Collections.singletonList(105L), targetDate))
+                .thenReturn(Collections.singletonList(buildScheduledCount(105L, "BREAKFAST", 1)));
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.emptyList());
+
+        List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
+
+        assertEquals(0, warnings.size());
+    }
+
+    @Test
+    void shouldUseOrderCustomerCodeWhenProfileIsMissingForDepletionWarning() {
+        LocalDate targetDate = LocalDate.of(2026, 6, 1);
+        CustomerOrder order = buildOrder();
+        order.setId(106L);
+        order.setCustomerId(206L);
+        order.setCustomerCode("ORDER-CODE");
+        order.setBreakfastCount(1);
+        order.setLunchDinnerCount(0);
+        order.setRemainingCount(1);
+
+        when(customerOrderMapper.selectList(any())).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(106L)))
+                .thenReturn(Collections.emptyList());
+        when(mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(Collections.singletonList(106L), targetDate))
+                .thenReturn(Collections.singletonList(buildScheduledCount(106L, "BREAKFAST", 1)));
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.emptyList());
+
+        List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
+
+        assertEquals(1, warnings.size());
+        assertEquals("ORDER-CODE", warnings.get(0).getCustomerCode());
+        assertEquals("", warnings.get(0).getCustomerName());
     }
 
     @Test
@@ -264,6 +371,41 @@ class MealPlanServiceImplTest {
         @SuppressWarnings("unchecked")
         List<CustomerOrder> result = (List<CustomerOrder>) method.invoke(
                 mealPlanService, Collections.emptyList(), LocalDate.of(2026, 5, 25), "LUNCH");
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void shouldTreatLunchAndDinnerAsSharedSchedulePoolWhenFilteringValidOrders() throws Exception {
+        CustomerOrder order = buildOrder();
+        order.setId(10L);
+        order.setCustomerId(1L);
+        order.setCustomerName("A009");
+        order.setCustomerCode("A009");
+        order.setLunchDinnerCount(1);
+        order.setMealType("LUNCH_DINNER");
+        order.setStartDate(LocalDate.of(2026, 4, 1));
+        order.setEndDate(LocalDate.of(2026, 4, 30));
+
+        CustomerProfile customer = buildCustomer();
+        customer.setId(1L);
+        customer.setCustomerCode("A009");
+        customer.setCustomerName("A009");
+
+        when(customerOrderMapper.findByDateRangeAndMealType(LocalDate.of(2026, 4, 2), "DINNER"))
+                .thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 2), "DINNER"))
+                .thenReturn(Collections.singletonList(order));
+        when(mealPlanCustomerMapper.countScheduledByOrderIds(Collections.singletonList(10L), "DINNER"))
+                .thenReturn(Collections.singletonList(buildScheduledCount(10L, "LUNCH", 1)));
+        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+
+        Method method = MealPlanServiceImpl.class.getDeclaredMethod(
+                "loadValidOrders", LocalDate.class, String.class, Long.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<CustomerOrder> result = (List<CustomerOrder>) method.invoke(
+                mealPlanService, LocalDate.of(2026, 4, 2), "DINNER", null);
 
         assertTrue(result.isEmpty());
     }
