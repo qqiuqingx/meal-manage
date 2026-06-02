@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -103,6 +104,23 @@ class CustomerIntakeParseServiceImplTest {
         assertEquals(Integer.valueOf(1), orderInfo.getSideDishCount());
         assertEquals(Integer.valueOf(1), orderInfo.getVegCount());
         assertEquals(Integer.valueOf(0), orderInfo.getSoupCount());
+    }
+
+    @Test
+    void parseDishConfigShouldSupportMealCountPrefix() {
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("菜品配置：7 餐、1主0副1素1汤");
+
+        CustomerIntakeParseResult result = service.parse(request);
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = result.getDraft().getOrderInfo();
+
+        assertEquals(Integer.valueOf(7), orderInfo.getLunchDinnerCount());
+        assertEquals(Integer.valueOf(7), orderInfo.getTotalCount());
+        assertEquals(Integer.valueOf(1), orderInfo.getMainDishCount());
+        assertEquals(Integer.valueOf(0), orderInfo.getSideDishCount());
+        assertEquals(Integer.valueOf(1), orderInfo.getVegCount());
+        assertEquals(Integer.valueOf(1), orderInfo.getSoupCount());
+        assertTrue(result.getIssues().stream().noneMatch(issue -> "orderInfo.lunchDinnerCount".equals(issue.getField())));
     }
 
     @Test
@@ -310,15 +328,19 @@ class CustomerIntakeParseServiceImplTest {
     }
 
     @Test
-    void parseMealCategoryShouldFallbackToParentPackageContainedInText() {
-        ParentPackage parentPackage = new ParentPackage();
-        parentPackage.setId(7L);
-        parentPackage.setPackageName("小月子餐");
-        parentPackage.setPackageCode("XMONTH");
+    void parseMealCategoryShouldFallbackToExactParentPackageSegment() {
+        ParentPackage yueziPackage = new ParentPackage();
+        yueziPackage.setId(6L);
+        yueziPackage.setPackageName("月子餐");
+
+        ParentPackage smallYueziPackage = new ParentPackage();
+        smallYueziPackage.setId(7L);
+        smallYueziPackage.setPackageName("小月子餐 ");
+        smallYueziPackage.setPackageCode("XMONTH");
 
         ParentPackageMapper parentPackageMapper = mock(ParentPackageMapper.class);
         when(parentPackageMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
-        when(parentPackageMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(parentPackage));
+        when(parentPackageMapper.selectList(any(QueryWrapper.class))).thenReturn(Arrays.asList(yueziPackage, smallYueziPackage));
         service.setParentPackageMapper(parentPackageMapper);
 
         CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
@@ -328,5 +350,25 @@ class CustomerIntakeParseServiceImplTest {
 
         assertEquals(7L, result.getDraft().getOrderInfo().getParentPackageId());
         assertTrue(result.getIssues().stream().noneMatch(issue -> "orderInfo.parentPackageId".equals(issue.getField())));
+    }
+
+    @Test
+    void parseMealCategoryShouldNotMatchParentPackageInsideAnotherWord() {
+        ParentPackage yueziPackage = new ParentPackage();
+        yueziPackage.setId(6L);
+        yueziPackage.setPackageName("月子餐");
+
+        ParentPackageMapper parentPackageMapper = mock(ParentPackageMapper.class);
+        when(parentPackageMapper.selectOne(any(QueryWrapper.class))).thenReturn(null);
+        when(parentPackageMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(yueziPackage));
+        service.setParentPackageMapper(parentPackageMapper);
+
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("餐别：小月子餐、两荤一素一汤");
+
+        CustomerIntakeParseResult result = service.parse(request);
+
+        assertNull(result.getDraft().getOrderInfo().getParentPackageId());
+        assertTrue(result.getIssues().stream().anyMatch(issue -> "orderInfo.parentPackageId".equals(issue.getField())));
     }
 }

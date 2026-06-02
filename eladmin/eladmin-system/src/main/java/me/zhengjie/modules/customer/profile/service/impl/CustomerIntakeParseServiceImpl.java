@@ -321,11 +321,17 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
             addParsedField(parsedFields, "开始日期", startDateText, "orderInfo.startDate", startDateText);
         }
 
-        Integer lunchDinnerCount = parseCount(firstNonBlank(rawFields, "餐数", "合计"));
+        String dishConfig = firstNonBlank(rawFields, "菜品配置");
+        String lunchDinnerCountSource = firstNonBlank(rawFields, "餐数", "合计");
+        Integer lunchDinnerCount = parseCount(lunchDinnerCountSource);
+        if (lunchDinnerCount == null) {
+            lunchDinnerCount = parseMealCountFromDishConfig(dishConfig);
+            lunchDinnerCountSource = dishConfig;
+        }
         if (lunchDinnerCount != null) {
             orderInfo.setLunchDinnerCount(lunchDinnerCount);
             recalculateTotalCount(orderInfo);
-            addParsedField(parsedFields, "餐数", String.valueOf(lunchDinnerCount), "orderInfo.lunchDinnerCount", lunchDinnerCount);
+            addParsedField(parsedFields, "餐数", lunchDinnerCountSource, "orderInfo.lunchDinnerCount", lunchDinnerCount);
         }
 
         Integer breakfastCount = parseCount(firstNonBlank(rawFields, "早餐数"));
@@ -341,7 +347,6 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
             addParsedField(parsedFields, "汤数", String.valueOf(soupCount), "orderInfo.soupCount", soupCount);
         }
 
-        String dishConfig = firstNonBlank(rawFields, "菜品配置");
         if (StringUtils.isNotBlank(dishConfig)) {
             Matcher matcher = DISH_CONFIG_PATTERN.matcher(dishConfig.replace("（", "(").replace("）", ")"));
             if (matcher.find()) {
@@ -433,20 +438,41 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
             return null;
         }
         ParentPackage bestMatched = null;
-        int bestLength = 0;
+        int bestScore = 0;
         for (ParentPackage parentPackage : enabledPackages) {
-            String packageName = parentPackage.getPackageName();
-            String packageCode = parentPackage.getPackageCode();
-            if (StringUtils.isNotBlank(packageName) && packageText.contains(packageName) && packageName.length() > bestLength) {
+            int packageNameScore = calculatePackageMatchScore(packageText, parentPackage.getPackageName());
+            int packageCodeScore = calculatePackageMatchScore(packageText, parentPackage.getPackageCode());
+            int currentScore = Math.max(packageNameScore, packageCodeScore);
+            if (currentScore > bestScore) {
                 bestMatched = parentPackage;
-                bestLength = packageName.length();
-            }
-            if (StringUtils.isNotBlank(packageCode) && packageText.contains(packageCode) && packageCode.length() > bestLength) {
-                bestMatched = parentPackage;
-                bestLength = packageCode.length();
+                bestScore = currentScore;
             }
         }
         return bestMatched;
+    }
+
+    /**
+     * 计算套餐文本与候选套餐名称/编码的匹配分值，仅允许完整片段匹配，避免“小月子餐”误命中“月子餐”。
+     *
+     * @param packageText 话术中的套餐或餐别文本
+     * @param candidate 父套餐名称或编码
+     * @return 匹配分值，0 表示未匹配
+     */
+    private int calculatePackageMatchScore(String packageText, String candidate) {
+        if (StringUtils.isBlank(packageText) || StringUtils.isBlank(candidate)) {
+            return 0;
+        }
+        String normalizedCandidate = candidate.trim();
+        if (StringUtils.isBlank(normalizedCandidate)) {
+            return 0;
+        }
+        String[] segments = packageText.split("[,，、/／;；\\s]+");
+        for (String segment : segments) {
+            if (normalizedCandidate.equals(segment.trim())) {
+                return normalizedCandidate.length();
+            }
+        }
+        return 0;
     }
 
     /**
@@ -708,6 +734,23 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
             return 0;
         }
         Matcher matcher = COUNT_PATTERN.matcher(normalized);
+        if (matcher.find()) {
+            return parseInteger(matcher.group(1), null);
+        }
+        return null;
+    }
+
+    /**
+     * 从菜品配置文本中提取餐数，兼容“7 餐、1主0副1素1汤”这类混合写法。
+     *
+     * @param dishConfig 菜品配置原文
+     * @return 餐数，无法识别时返回 null
+     */
+    private Integer parseMealCountFromDishConfig(String dishConfig) {
+        if (StringUtils.isBlank(dishConfig)) {
+            return null;
+        }
+        Matcher matcher = Pattern.compile("(\\d+)\\s*餐").matcher(dishConfig);
         if (matcher.find()) {
             return parseInteger(matcher.group(1), null);
         }
