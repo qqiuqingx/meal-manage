@@ -16,6 +16,7 @@
 package me.zhengjie.config.webConfig;
 
 import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.filter.ValueFilter;
 import com.alibaba.fastjson2.support.config.FastJsonConfig;
 import com.alibaba.fastjson2.support.spring.http.converter.FastJsonHttpMessageConverter;
 import me.zhengjie.config.properties.FileProperties;
@@ -31,7 +32,10 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import java.nio.charset.StandardCharsets;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -43,6 +47,9 @@ import java.util.List;
 @Configuration
 @EnableWebMvc
 public class ConfigurerAdapter implements WebMvcConfigurer {
+
+    private static final ZoneId DEFAULT_ZONE_ID = ZoneId.of("Asia/Shanghai");
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     /** 文件配置 */
     private final FileProperties properties;
@@ -83,6 +90,12 @@ public class ConfigurerAdapter implements WebMvcConfigurer {
         supportMediaTypeList.add(MediaType.APPLICATION_JSON);
         FastJsonConfig config = new FastJsonConfig();
         config.setDateFormat("yyyy-MM-dd HH:mm:ss");
+        config.setWriterFilters((ValueFilter) (object, name, value) -> {
+            if (value instanceof Date) {
+                return DATE_TIME_FORMATTER.format(((Date) value).toInstant().atZone(DEFAULT_ZONE_ID));
+            }
+            return value;
+        });
         // 开启引用检测，枚举支持
         config.setWriterFeatures(
                 JSONWriter.Feature.WriteEnumUsingToString,

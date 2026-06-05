@@ -17,7 +17,6 @@ package me.zhengjie.domain;
 
 import com.alibaba.fastjson2.annotation.JSONField;
 import com.baomidou.mybatisplus.annotation.*;
-import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -71,7 +70,6 @@ public class SysLog  implements Serializable {
 
     @TableField(fill = FieldFill.INSERT)
     @ApiModelProperty(value = "创建日期：yyyy-MM-dd HH:mm:ss")
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private Timestamp createTime;
 
     public SysLog(String logType, Long time) {
