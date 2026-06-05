@@ -56,6 +56,25 @@ mvn test -DskipTests=false
 - Swagger/Knife4j docs at `/doc.html`
 - Default profile: `dev`
 
+### Local Backend Startup
+
+Validated local backend startup from repository root:
+
+```bash
+cd eladmin/eladmin-system
+JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home \
+PATH=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/bin:/Users/qqx/job/maven/apache-maven-3.5.2-bin/apache-maven-3.5.2/bin:$PATH \
+mvn -q spring-boot:run -DskipTests
+```
+
+Runtime URLs:
+- Backend: `http://localhost:8000`
+- Swagger/Knife4j: `http://localhost:8000/doc.html`
+
+Notes:
+- The `dev` profile connects to remote MySQL/Redis from `eladmin-system/src/main/resources/config/application-dev.yml`; sandboxed runs may fail with `Operation not permitted (connect failed)`.
+- The frontend development server is in `../eladmin-web` and normally proxies API calls to `http://localhost:8000`.
+
 ## Key Patterns
 
 ### JSON Serialization

@@ -57,6 +57,40 @@ mvn test -DskipTests=false
 
 **Important**: Tests are skipped by default in `pom.xml` (`maven-surefire-plugin` with `<skip>true</skip>`).
 
+### Local Backend/Frontend Startup
+
+Validated local development startup:
+
+```bash
+# Backend: run from the main application module
+cd eladmin/eladmin-system
+JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home \
+PATH=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/bin:/Users/qqx/job/maven/apache-maven-3.5.2-bin/apache-maven-3.5.2/bin:$PATH \
+mvn -q spring-boot:run -DskipTests
+```
+
+```bash
+# Frontend: run from eladmin-web
+cd eladmin-web
+NODE_OPTIONS=--openssl-legacy-provider BROWSER=none ./node_modules/.bin/vue-cli-service serve --port 8013 --open false
+```
+
+Access URLs:
+- Backend: `http://localhost:8000`
+- Swagger/Knife4j: `http://localhost:8000/doc.html`
+- Frontend: `http://localhost:8013`
+- Logs page: `http://localhost:8013/#/monitor/logs`
+
+Local login:
+- Username: `admin`
+- Password: `REDACTED_PASSWORD`
+- Dev captcha bypass: `REDACTED_CODE`
+
+Notes:
+- Backend `dev` profile connects to remote MySQL/Redis from `application-dev.yml`; sandboxed runs may fail with `Operation not permitted (connect failed)`. Run with network permission when starting locally through an agent.
+- Start backend before frontend, because `.env.development` points `VUE_APP_BASE_API` to `http://localhost:8000`.
+- If port `8000` or `8013` is already occupied, identify the owning process before changing ports.
+
 ### 单元测试数据清理
 
 单元测试执行过程中产生的测试数据，必须在测试结束后清理：
