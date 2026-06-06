@@ -24,6 +24,8 @@ MAVEN_IMAGE="${MAVEN_IMAGE:-maven:3.8.8-eclipse-temurin-8}"
 HOST_MAVEN_REPO="${HOST_MAVEN_REPO:-$DEPLOY_PARENT_DIR/.m2/repository}"
 BACKEND_ARTIFACT_DIR="${BACKEND_ARTIFACT_DIR:-$DEPLOY_BASE_DIR/.deploy/mealserver}"
 BACKEND_JAR_NAME="${BACKEND_JAR_NAME:-eladmin-system-1.1.jar}"
+SKIP_REPO_UPDATE="${SKIP_REPO_UPDATE:-false}"
+PREVIOUS_COMMIT="${PREVIOUS_COMMIT:-}"
 
 # 校验 KEEP_IMAGE_COUNT 必须为正整数，且至少为 2（保证回退脚本始终有镜像可选）
 if ! [[ "$KEEP_IMAGE_COUNT" =~ ^[1-9][0-9]*$ ]]; then
@@ -40,7 +42,7 @@ timestamp() {
 }
 
 log() {
-  printf '[%s] %s\n' "$(timestamp)" "$*"
+  printf '[%s] %s\n' "$(timestamp)" "$*" >&2
 }
 
 get_free_disk_mb() {
@@ -450,7 +452,13 @@ main() {
   fi
 
   local previous_commit
-  previous_commit=$(prepare_repo)
+  if [[ "$SKIP_REPO_UPDATE" == "true" ]]; then
+    previous_commit="$PREVIOUS_COMMIT"
+    log "repository update skipped by bootstrap script"
+  else
+    previous_commit=$(prepare_repo)
+  fi
+
   deploy_compose "$previous_commit"
   cleanup_old_images
   print_summary
