@@ -402,14 +402,11 @@ cleanup_old_images() {
   if [[ -n "$old_mealserver_images" ]]; then
     while IFS=$'\t' read -r image_name image_id image_created; do
       log "  删除旧后端镜像: $image_name (创建时间: $image_created)"
-      # 仅忽略"镜像不存在"错误（exit 1），其他错误（如被占用、认证失败）打印警告
-      if docker rmi "$image_id" 2>/dev/null; then
+      # 按 tag 删除，避免同一 IMAGE ID 被多个版本 tag 引用时删除失败
+      if remove_output=$(docker rmi "$image_name" 2>&1); then
         ((cleaned_count++)) || true
       else
-        exit_code=$?
-        if (( exit_code != 1 )); then
-          log "  警告: 无法删除镜像 $image_name，exit $exit_code"
-        fi
+        log "  警告: 无法删除镜像 $image_name: $remove_output"
       fi
     done <<< "$old_mealserver_images"
   fi
@@ -424,13 +421,10 @@ cleanup_old_images() {
   if [[ -n "$old_mealweb_images" ]]; then
     while IFS=$'\t' read -r image_name image_id image_created; do
       log "  删除旧前端镜像: $image_name (创建时间: $image_created)"
-      if docker rmi "$image_id" 2>/dev/null; then
+      if remove_output=$(docker rmi "$image_name" 2>&1); then
         ((cleaned_count++)) || true
       else
-        exit_code=$?
-        if (( exit_code != 1 )); then
-          log "  警告: 无法删除镜像 $image_name，exit $exit_code"
-        fi
+        log "  警告: 无法删除镜像 $image_name: $remove_output"
       fi
     done <<< "$old_mealweb_images"
   fi
