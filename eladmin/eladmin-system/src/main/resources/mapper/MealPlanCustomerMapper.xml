@@ -27,6 +27,7 @@
         <result column="supplementary_rice_count" property="supplementaryRiceCount"/>
         <result column="supplementary_soup_count" property="supplementarySoupCount"/>
         <result column="special_requirements" property="specialRequirements"/>
+        <result column="production_date" property="productionDate"/>
         <result column="create_by" property="createBy"/>
         <result column="update_by" property="updateBy"/>
         <result column="deleted" property="deleted"/>
@@ -47,7 +48,7 @@
                mpc.meat_required_count, mpc.veg_required_count, mpc.include_soup, mpc.include_rice,
                mpc.supplementary_main_count, mpc.supplementary_side_count, mpc.supplementary_veg_count,
                mpc.supplementary_rice_count, mpc.supplementary_soup_count,
-               cp.special_requirements,
+               cp.special_requirements, cp.production_date,
                mpc.create_by, mpc.update_by, mpc.deleted, mpc.create_time, mpc.update_time
         from meal_plan_customer mpc
         left join customer_profile cp on mpc.customer_id = cp.id
@@ -114,7 +115,7 @@
                mpc.include_soup, mpc.include_rice, mpc.supplementary_main_count,
                mpc.supplementary_side_count, mpc.supplementary_veg_count,
                mpc.supplementary_rice_count, mpc.supplementary_soup_count,
-               cp.special_requirements,
+               cp.special_requirements, cp.production_date,
                mpc.create_by, mpc.update_by,
                mpc.deleted, mpc.create_time, mpc.update_time
         from meal_plan_customer mpc
@@ -132,7 +133,7 @@
                mpc.include_soup, mpc.include_rice, mpc.supplementary_main_count,
                mpc.supplementary_side_count, mpc.supplementary_veg_count,
                mpc.supplementary_rice_count, mpc.supplementary_soup_count,
-               cp.special_requirements,
+               cp.special_requirements, cp.production_date,
                mpc.create_by, mpc.update_by,
                mpc.deleted, mpc.create_time, mpc.update_time
         from meal_plan_customer mpc

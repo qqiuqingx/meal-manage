@@ -184,6 +184,51 @@ describe('scheduleRecord special requirements display', () => {
     })
   })
 
+  test('production date badge is shown together with first meal badge', async() => {
+    const wrapper = buildWrapper()
+
+    wrapper.setData({
+      planData: {
+        mealPlan: {
+          id: 1,
+          mealType: 'LUNCH',
+          recordDate: '2026-05-02',
+          generateTime: '2026-05-02 12:00:00',
+          status: 'SUCCESS'
+        },
+        totalCustomers: 1,
+        successCount: 1,
+        failCount: 0,
+        customers: [{
+          id: 101,
+          customerCode: 'C001',
+          customerName: '张三',
+          firstMealOfOrder: true,
+          nearProductionDate: true,
+          productionDateDiffDays: 2,
+          items: []
+        }]
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('.code-first-badge').text()).toBe('首')
+    expect(wrapper.find('.code-production-badge').text()).toBe('产')
+    expect(wrapper.findAll('.el-tooltip').at(0).attributes('data-content')).toBe('生产后第2天')
+
+    wrapper.destroy()
+  })
+
+  test('production date badge tooltip shows production day for same-day records', () => {
+    const wrapper = buildWrapper()
+
+    expect(wrapper.vm.getProductionDateBadgeTip({ productionDateDiffDays: 0 })).toBe('生产当天')
+    expect(wrapper.vm.getProductionDateBadgeTip({ productionDateDiffDays: 3 })).toBe('生产后第3天')
+
+    wrapper.destroy()
+  })
+
   test('soup row code details include customers without soup', () => {
     const wrapper = buildWrapper()
 

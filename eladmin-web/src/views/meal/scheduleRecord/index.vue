@@ -115,26 +115,34 @@
               :key="customer.id"
               class="code-cell"
             >
-              <el-tooltip
-                v-if="customer.specialRequirements"
-                effect="dark"
-                placement="top"
-                :content="customer.specialRequirements"
-              >
-                <div class="code-main">
+              <div class="code-main">
+                <el-tooltip
+                  v-if="customer.specialRequirements"
+                  effect="dark"
+                  placement="top"
+                  :content="customer.specialRequirements"
+                >
                   <span
                     class="code-text code-text--tooltip"
                     :class="{ 'code-text--soup-missing': customer.isSoupMissing }"
                   >{{ customer.customerCode || customer.customerName }}</span>
-                  <span v-if="customer.firstMealOfOrder" class="code-first-badge">首</span>
-                </div>
-              </el-tooltip>
-              <div v-else class="code-main">
+                </el-tooltip>
                 <span
+                  v-else
                   class="code-text"
                   :class="{ 'code-text--soup-missing': customer.isSoupMissing }"
                 >{{ customer.customerCode || customer.customerName }}</span>
-                <span v-if="customer.firstMealOfOrder" class="code-first-badge">首</span>
+                <div v-if="customer.firstMealOfOrder || customer.nearProductionDate" class="code-badges">
+                  <span v-if="customer.firstMealOfOrder" class="code-first-badge">首</span>
+                  <el-tooltip
+                    v-if="customer.nearProductionDate"
+                    effect="dark"
+                    placement="top"
+                    :content="getProductionDateBadgeTip(customer)"
+                  >
+                    <span class="code-production-badge">产</span>
+                  </el-tooltip>
+                </div>
               </div>
               <div v-if="customer.specialRequirementTags && customer.specialRequirementTags.length > 0" class="special-requirement-tags">
                 <span
@@ -1416,6 +1424,22 @@ export default {
       const dishTypes = (customer.items || []).map(item => item.dishType)
       return !dishTypes.includes('SOUP') && customer.includeSoup !== 1
     },
+    /**
+     * 生成生产日期标记的悬浮提示文案。
+     *
+     * @param {Object} customer 客户排餐信息
+     * @returns {string} 标记提示文案
+     */
+    getProductionDateBadgeTip(customer) {
+      const days = Number(customer.productionDateDiffDays)
+      if (days === 0) {
+        return '生产当天'
+      }
+      if (days > 0) {
+        return `生产后第${days}天`
+      }
+      return '临近生产日期'
+    },
     getRiceRequirement(customer) {
       const tags = this.getSpecialRequirementTags(customer)
       return tags.find(tag => this.getSpecialRequirementDishType(tag) === 'RICE' && tag.startsWith('加')) || ''
@@ -1789,10 +1813,15 @@ export default {
   justify-content: flex-start;
   gap: 6px;
 }
-.code-first-badge {
+.code-badges {
   position: absolute;
   top: 10px;
   right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.code-first-badge {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1803,6 +1832,21 @@ export default {
   border: 1px solid #86efac;
   background: #dcfce7;
   color: #166534;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+.code-production-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid #fdba74;
+  background: #ffedd5;
+  color: #9a3412;
   font-size: 12px;
   font-weight: 800;
   line-height: 1;

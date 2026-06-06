@@ -24,6 +24,8 @@ import lombok.Getter;
 import lombok.Setter;
 import me.zhengjie.base.BaseEntity;
 
+import java.time.LocalDate;
+
 /**
  * 排餐计划客户结果
  * @author qqx
@@ -135,4 +137,11 @@ public class MealPlanCustomer extends BaseEntity {
     @TableField(exist = false)
     @ApiModelProperty(value = "特殊要求")
     private String specialRequirements;
+
+    /**
+     * 客户生产日期（关联 customer_profile 查询填充）
+     */
+    @TableField(exist = false)
+    @ApiModelProperty(value = "客户生产日期")
+    private LocalDate productionDate;
 }
