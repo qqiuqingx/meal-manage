@@ -143,5 +143,14 @@ public class MealPlanDetailVO {
 
         @ApiModelProperty(value = "特殊要求")
         private String specialRequirements;
+
+        @ApiModelProperty(value = "客户生产日期，格式 yyyy-MM-dd")
+        private String productionDate;
+
+        @ApiModelProperty(value = "是否处于生产当天至生产后3天内")
+        private Boolean nearProductionDate;
+
+        @ApiModelProperty(value = "排餐日期距离生产日期的天数，生产当天为0")
+        private Integer productionDateDiffDays;
     }
 }
