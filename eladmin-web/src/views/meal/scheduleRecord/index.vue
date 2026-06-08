@@ -2039,6 +2039,8 @@ export default {
 .replace-compact-line {
   min-height: 22px;
   line-height: 22px;
+  font-size: 11px;
+  font-weight: 500;
 }
 .replace-compact-line + .replace-compact-line {
   padding-top: 6px;
