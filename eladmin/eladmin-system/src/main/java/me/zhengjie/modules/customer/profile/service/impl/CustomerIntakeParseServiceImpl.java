@@ -42,6 +42,7 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
     private static final Pattern ISO_DATE_PATTERN = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})");
     private static final Pattern PHONE_PATTERN = Pattern.compile("^1[3-9]\\d{9}$");
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final String DEFAULT_RICE_TYPE = "普通杂粮米饭";
     private static final Map<String, String> CUSTOMER_SOURCE_MAPPING = new LinkedHashMap<>();
 
     static {
@@ -106,7 +107,7 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         orderInfo.setStartMealType("LUNCH");
         orderInfo.setMealType("LUNCH_DINNER");
         orderInfo.setRiceCount(1);
-        orderInfo.setRiceType("白米饭");
+        orderInfo.setRiceType(DEFAULT_RICE_TYPE);
         orderInfo.setSoupCount(0);
         orderInfo.setMainDishCount(0);
         orderInfo.setSideDishCount(0);

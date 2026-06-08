@@ -96,6 +96,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final DateTimeFormatter DISPLAY_DATE_FORMATTER = DateTimeFormatter.ofPattern("M.d");
+    private static final String DEFAULT_RICE_TYPE = "普通杂粮米饭";
     private static final Logger SCHEDULE_ADJUSTMENT_LOG = LoggerFactory.getLogger("mealScheduleAdjustmentLogger");
 
     @Override
@@ -930,7 +931,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         order.setSideDishCount(orderInfo.getSideDishCount() != null ? orderInfo.getSideDishCount() : 0);
         order.setVegCount(orderInfo.getVegCount() != null ? orderInfo.getVegCount() : 0);
         order.setRiceCount(orderInfo.getRiceCount() != null ? orderInfo.getRiceCount() : 1);
-        order.setRiceType(orderInfo.getRiceType() != null ? orderInfo.getRiceType() : "白米饭");
+        order.setRiceType(orderInfo.getRiceType() != null ? orderInfo.getRiceType() : DEFAULT_RICE_TYPE);
         order.setSoupCount(orderInfo.getSoupCount() != null ? orderInfo.getSoupCount() : 0);
         order.setRemark(profile.getRemark());
         order.setCreateBy(getCurrentUsername());

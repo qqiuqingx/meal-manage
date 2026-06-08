@@ -69,7 +69,7 @@ class CustomerIntakeParseServiceImplTest {
     }
 
     @Test
-    void parseDefaultsShouldUseTodayScheduleModeAndWhiteRice() {
+    void parseDefaultsShouldUseTodayScheduleModeAndDefaultGrainRice() {
         CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
         request.setText("配送日期：默认等通知配送\n餐数：30\n汤数：0");
 
@@ -79,7 +79,7 @@ class CustomerIntakeParseServiceImplTest {
         assertEquals("2026-05-25", orderInfo.getStartDate());
         assertEquals("SCHEDULE", orderInfo.getScheduleMode());
         assertNull(orderInfo.getDeliveryDates());
-        assertEquals("白米饭", orderInfo.getRiceType());
+        assertEquals("普通杂粮米饭", orderInfo.getRiceType());
         assertEquals(Integer.valueOf(0), orderInfo.getSoupCount());
     }
 
