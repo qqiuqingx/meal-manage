@@ -361,7 +361,7 @@ describe('scheduleRecord special requirements display', () => {
     })
   })
 
-  test('replaced rice items are not shown in the replacement section', () => {
+  test('replaced rice items are shown in the replacement section', () => {
     const wrapper = buildWrapper()
 
     wrapper.setData({
@@ -403,8 +403,82 @@ describe('scheduleRecord special requirements display', () => {
     })
 
     return wrapper.vm.$nextTick().then(() => {
-      expect(wrapper.vm.replacedDishes).toHaveLength(1)
-      expect(wrapper.vm.replacedDishes[0].dishName).toBe('秋葵虾滑')
+      expect(wrapper.vm.replacedDishes).toHaveLength(2)
+      expect(wrapper.vm.replacedDishes.map(item => item.dishName)).toEqual(['白米饭', '秋葵虾滑'])
+
+      wrapper.destroy()
+    })
+  })
+
+  test('multiple replaced rice rows are compacted into one display row', () => {
+    const wrapper = buildWrapper()
+
+    wrapper.setData({
+      planData: {
+        mealPlan: {
+          id: 1,
+          mealType: 'LUNCH',
+          recordDate: '2026-05-02',
+          generateTime: '2026-05-02 12:00:00',
+          status: 'SUCCESS'
+        },
+        totalCustomers: 4,
+        successCount: 4,
+        failCount: 0,
+        customers: [{
+          id: 101,
+          customerCode: 'A008',
+          customerName: '张三',
+          items: [{
+            dishType: 'RICE',
+            dishName: '普通杂粮米饭',
+            originalDishName: '山姆有机杂粮米6',
+            isReplaced: true,
+            isAllergyFiltered: false
+          }]
+        }, {
+          id: 102,
+          customerCode: 'B325',
+          customerName: '李四',
+          items: [{
+            dishType: 'RICE',
+            dishName: '三色糙米',
+            originalDishName: '山姆有机杂粮米6',
+            isReplaced: true,
+            isAllergyFiltered: false
+          }]
+        }, {
+          id: 103,
+          customerCode: 'F877',
+          customerName: '王五',
+          items: [{
+            dishType: 'RICE',
+            dishName: '白米饭',
+            originalDishName: '山姆有机杂粮米6',
+            isReplaced: true,
+            isAllergyFiltered: false
+          }]
+        }, {
+          id: 104,
+          customerCode: 'A170',
+          customerName: '赵六',
+          items: [{
+            dishType: 'SIDE',
+            dishName: '秋葵虾滑',
+            originalDishName: '青椒炒蛋',
+            isReplaced: true,
+            isAllergyFiltered: false
+          }]
+        }]
+      }
+    })
+
+    return wrapper.vm.$nextTick().then(() => {
+      expect(wrapper.vm.autoReplaceRows).toHaveLength(2)
+      const riceRow = wrapper.vm.autoReplaceRows.find(item => item.compactGroup)
+      expect(riceRow.dishType).toBe('RICE')
+      expect(riceRow.items.map(item => item.dishName)).toEqual(['普通杂粮米饭', '三色糙米', '白米饭'])
+      expect(riceRow.items.map(item => item.codeSnippet)).toEqual(['A008', 'B325', 'F877'])
 
       wrapper.destroy()
     })
