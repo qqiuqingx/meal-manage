@@ -223,20 +223,45 @@
                     <td class="col-codes">{{ dish.codeSnippet }}</td>
                   </tr>
                 </template>
-                <template v-if="replacedDishes.length > 0">
-                  <tr v-for="(dish, idx) in replacedDishes" :key="`rep-${idx}`">
+                <template v-if="autoReplaceRows.length > 0">
+                  <tr v-for="(dish, idx) in autoReplaceRows" :key="`rep-${idx}`" :class="{ 'replace-compact-row': dish.compactGroup }">
                     <td class="col-category">
                       <span v-if="dish.dishType" class="dish-type-tag" :class="`dish-type-tag--${dish.dishType.toLowerCase()}`">
                         {{ dishTypeMap[dish.dishType] || dish.dishType }}
                       </span>
                       <span v-else class="replace-tag replace-tag--auto">自动</span>
                     </td>
-                    <td class="col-name">{{ dish.dishName }}</td>
-                    <td class="col-count">{{ dish.count }}</td>
-                    <td class="col-codes">{{ dish.codeSnippet }}</td>
+                    <template v-if="dish.compactGroup">
+                      <td class="col-name col-name--compact">
+                        <div class="replace-compact-list">
+                          <div v-for="item in dish.items" :key="item.dishName" class="replace-compact-line">
+                            {{ item.dishName }}
+                          </div>
+                        </div>
+                      </td>
+                      <td class="col-count col-count--compact">
+                        <div class="replace-compact-list">
+                          <div v-for="item in dish.items" :key="item.dishName" class="replace-compact-line">
+                            {{ item.count }}
+                          </div>
+                        </div>
+                      </td>
+                      <td class="col-codes col-codes--compact">
+                        <div class="replace-compact-list">
+                          <div v-for="item in dish.items" :key="item.dishName" class="replace-compact-line">
+                            {{ item.codeSnippet }}
+                          </div>
+                        </div>
+                      </td>
+                    </template>
+                    <template v-else>
+                      <td class="col-name">{{ dish.dishName }}</td>
+                      <td class="col-count">{{ dish.count }}</td>
+                      <td class="col-codes">{{ dish.codeSnippet }}</td>
+                    </template>
                   </tr>
                 </template>
-                <tr v-if="manualReplaceDishes.length === 0 && replacedDishes.length === 0">
+                <tr v-if="manualReplaceDishes.length === 0 && autoReplaceRows.length === 0">
                   <td colspan="4" class="empty-row">暂无换菜记录</td>
                 </tr>
               </tbody>
@@ -725,7 +750,7 @@ export default {
             '分为手工换菜和自动换菜两部分。',
             '每一行按菜品类目和替换后的菜名聚合展示。',
             '第一列展示菜品类目，第二列展示替换后的菜名，第三列展示人数，第四列展示目标客户编号。',
-            '米饭自动替换会在这里单独展示一行，不再只体现在右上编号明细中。'
+            '米饭自动替换超过一种时只占一条米饭行，替换项目、人数和目标编号列内分别按行展示明细。'
           ]
         },
         {
@@ -923,6 +948,23 @@ export default {
         count: g.codes.length,
         codeSnippet: this.buildFullCodeText(g.codes)
       }))
+    },
+    autoReplaceRows() {
+      const riceRows = this.replacedDishes.filter(item => item.dishType === 'RICE')
+      const otherRows = this.replacedDishes.filter(item => item.dishType !== 'RICE')
+      if (riceRows.length <= 1) {
+        return this.replacedDishes
+      }
+      return [
+        ...otherRows,
+        {
+          compactGroup: true,
+          dishType: 'RICE',
+          dishName: '米饭换菜',
+          count: riceRows.reduce((sum, item) => sum + item.count, 0),
+          items: riceRows
+        }
+      ]
     },
     manualCodesByDishType() {
       const map = {}
@@ -1975,6 +2017,36 @@ export default {
 }
 .replace-tag--manual { background: #fef3c7; color: #92400e; }
 .replace-tag--auto { background: #fee2e2; color: #991b1b; }
+.dish-table tr.replace-compact-row td {
+  vertical-align: top;
+}
+.col-name--compact {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.col-count--compact,
+.col-codes--compact {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.replace-compact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.replace-compact-line {
+  min-height: 22px;
+  line-height: 22px;
+}
+.replace-compact-line + .replace-compact-line {
+  padding-top: 6px;
+  border-top: 1px solid #e2e8f0;
+}
+.col-codes--compact .replace-compact-line {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
 /* 换菜管理弹窗 */
 .replace-dialog-body {
