@@ -46,12 +46,15 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -164,6 +167,12 @@ class CustomerProfileServiceImplTest {
         Method method = CustomerProfileServiceImpl.class.getDeclaredMethod("resolveCustomerCode", String.class, Long.class);
         method.setAccessible(true);
         return (String) method.invoke(customerProfileService, manualCode, parentPackageId);
+    }
+
+    private CustomerProfileSaveDto.OrderInfoDto invokeNormalizeAndValidate(CustomerProfileSaveDto dto, boolean createMode) throws Exception {
+        Method method = CustomerProfileServiceImpl.class.getDeclaredMethod("normalizeAndValidate", CustomerProfileSaveDto.class, boolean.class);
+        method.setAccessible(true);
+        return (CustomerProfileSaveDto.OrderInfoDto) method.invoke(customerProfileService, dto, createMode);
     }
 
     @Test
@@ -379,6 +388,159 @@ class CustomerProfileServiceImplTest {
         String customerCode = invokeResolveCustomerCode("F0800", 1L);
 
         assertEquals("F0800", customerCode);
+    }
+
+    @Test
+    void shouldApplyTrialDefaultsWhenCreatingTrialCustomer() throws Exception {
+        ParentPackage parentPackage = new ParentPackage();
+        parentPackage.setId(1L);
+        parentPackage.setStatus(true);
+        parentPackage.setPackageName("午晚试餐套餐");
+
+        when(parentPackageMapper.selectById(1L)).thenReturn(parentPackage);
+
+        CustomerProfileSaveDto dto = new CustomerProfileSaveDto();
+        dto.setPhone("13800001234");
+        dto.setAddresses(Collections.singletonList(buildAddressDto("DEFAULT", "成都市高新区天府大道1号")));
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = new CustomerProfileSaveDto.OrderInfoDto();
+        orderInfo.setParentPackageId(1L);
+        dto.setOrderInfo(orderInfo);
+
+        CustomerProfileSaveDto.OrderInfoDto validated = invokeNormalizeAndValidate(dto, true);
+
+        assertEquals("试餐客户1234", dto.getCustomerName());
+        assertEquals(0, validated.getBreakfastCount());
+        assertEquals(1, validated.getLunchDinnerCount());
+        assertEquals(1, validated.getTotalCount());
+        assertEquals("SCHEDULE", validated.getScheduleMode());
+        assertEquals(LocalDate.now().toString(), validated.getStartDate());
+        assertEquals("LUNCH", validated.getStartMealType());
+        assertEquals("LUNCH_DINNER", validated.getMealType());
+        assertEquals(0, validated.getMainDishCount());
+        assertEquals(0, validated.getSideDishCount());
+        assertEquals(0, validated.getVegCount());
+        assertEquals(1, validated.getRiceCount());
+        assertEquals("白米饭", validated.getRiceType());
+        assertEquals(0, validated.getSoupCount());
+        assertEquals(BigDecimal.ZERO, validated.getBreakfastPrice());
+        assertEquals(BigDecimal.ZERO, validated.getLunchDinnerPrice());
+        assertEquals(BigDecimal.ZERO, validated.getTotalAmount());
+        assertEquals(BigDecimal.ZERO, validated.getDepositAmount());
+        assertEquals(BigDecimal.ZERO, validated.getFinalAmount());
+        assertFalse(validated.getTrialConverted());
+    }
+
+    @Test
+    void shouldRejectNormalCustomerWithoutNameOrAddress() {
+        ParentPackage parentPackage = new ParentPackage();
+        parentPackage.setId(1L);
+        parentPackage.setStatus(true);
+        parentPackage.setPackageName("标准套餐");
+
+        when(parentPackageMapper.selectById(1L)).thenReturn(parentPackage);
+
+        CustomerProfileSaveDto dto = new CustomerProfileSaveDto();
+        dto.setPhone("13800001234");
+        dto.setAddresses(Collections.emptyList());
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = new CustomerProfileSaveDto.OrderInfoDto();
+        orderInfo.setParentPackageId(1L);
+        dto.setOrderInfo(orderInfo);
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> {
+            try {
+                invokeNormalizeAndValidate(dto, true);
+            } catch (InvocationTargetException e) {
+                throw (RuntimeException) e.getCause();
+            }
+        });
+        assertEquals("客户姓名不能为空", exception.getMessage());
+    }
+
+    @Test
+    void shouldCreateTrialCustomerAndFirstOrderWithMinimalPayload() {
+        ParentPackage parentPackage = new ParentPackage();
+        parentPackage.setId(1L);
+        parentPackage.setStatus(true);
+        parentPackage.setPackageName("试餐午晚套餐");
+        parentPackage.setPoolPrefix("T");
+        parentPackage.setPoolStart(100);
+        parentPackage.setPoolEnd(199);
+
+        when(parentPackageMapper.selectById(1L)).thenReturn(parentPackage);
+        when(numberPoolService.allocate(any())).thenReturn("T100");
+        doAnswer(invocation -> {
+            CustomerProfile profileArg = invocation.getArgument(0);
+            profileArg.setId(88L);
+            return 1;
+        }).when(profileMapper).insert(any(CustomerProfile.class));
+
+        CustomerProfileSaveDto dto = new CustomerProfileSaveDto();
+        dto.setPhone("13800001234");
+        dto.setAddresses(Collections.singletonList(buildAddressDto("DEFAULT", "成都市高新区天府大道1号")));
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = new CustomerProfileSaveDto.OrderInfoDto();
+        orderInfo.setParentPackageId(1L);
+        dto.setOrderInfo(orderInfo);
+
+        customerProfileService.create(dto);
+
+        ArgumentCaptor<CustomerProfile> profileCaptor = ArgumentCaptor.forClass(CustomerProfile.class);
+        verify(profileMapper).insert(profileCaptor.capture());
+        assertEquals("T100", profileCaptor.getValue().getCustomerCode());
+        assertEquals("试餐客户1234", profileCaptor.getValue().getCustomerName());
+        assertEquals("13800001234", profileCaptor.getValue().getPhone());
+
+        ArgumentCaptor<CustomerOrder> orderCaptor = ArgumentCaptor.forClass(CustomerOrder.class);
+        verify(customerOrderMapper).insert(orderCaptor.capture());
+        CustomerOrder createdOrder = orderCaptor.getValue();
+        assertEquals(88L, createdOrder.getCustomerId());
+        assertEquals("T100", createdOrder.getCustomerCode());
+        assertEquals(1L, createdOrder.getParentPackageId());
+        assertEquals(0, createdOrder.getBreakfastCount());
+        assertEquals(1, createdOrder.getLunchDinnerCount());
+        assertEquals(1, createdOrder.getTotalCount());
+        assertEquals("LUNCH_DINNER", createdOrder.getMealType());
+        assertEquals("LUNCH", createdOrder.getStartMealType());
+        assertEquals("SCHEDULE", createdOrder.getScheduleMode());
+        assertEquals(LocalDate.now(), createdOrder.getStartDate());
+        assertEquals("白米饭", createdOrder.getRiceType());
+        assertEquals(1, createdOrder.getRiceCount());
+        assertEquals(BigDecimal.ZERO, createdOrder.getDepositAmount());
+        assertEquals(BigDecimal.ZERO, createdOrder.getTotalAmount());
+        assertEquals(BigDecimal.ZERO, createdOrder.getFinalAmount());
+        verify(addressMapper).insert(any(CustomerProfileAddress.class));
+    }
+
+    @Test
+    void shouldRejectTrialCustomerWithoutAddress() {
+        ParentPackage parentPackage = new ParentPackage();
+        parentPackage.setId(1L);
+        parentPackage.setStatus(true);
+        parentPackage.setPackageName("试餐午晚套餐");
+
+        when(parentPackageMapper.selectById(1L)).thenReturn(parentPackage);
+
+        CustomerProfileSaveDto dto = new CustomerProfileSaveDto();
+        dto.setPhone("13800001234");
+        dto.setAddresses(Collections.emptyList());
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = new CustomerProfileSaveDto.OrderInfoDto();
+        orderInfo.setParentPackageId(1L);
+        dto.setOrderInfo(orderInfo);
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> {
+            try {
+                invokeNormalizeAndValidate(dto, true);
+            } catch (InvocationTargetException e) {
+                throw (RuntimeException) e.getCause();
+            }
+        });
+        assertEquals("地址信息不能为空", exception.getMessage());
+    }
+
+    private CustomerProfileSaveDto.AddressDto buildAddressDto(String addressType, String addressDetail) {
+        CustomerProfileSaveDto.AddressDto addressDto = new CustomerProfileSaveDto.AddressDto();
+        addressDto.setAddressType(addressType);
+        addressDto.setAddressDetail(addressDetail);
+        return addressDto;
     }
 
     // ========== excludedDates 校验测试 ==========

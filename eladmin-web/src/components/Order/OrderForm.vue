@@ -35,7 +35,7 @@
       </template>
 
       <!-- ===== 公共字段：销售渠道 + 排餐模式（两种模式均显示） ===== -->
-      <el-row :gutter="20">
+      <el-row v-if="!isTrialFirstOrderMode" :gutter="20">
         <el-col :span="8">
           <el-form-item label="销售渠道">
             <el-select v-model="form.customerSource" :disabled="readonly" clearable placeholder="选择销售渠道" style="width: 100%;">
@@ -65,7 +65,7 @@
         </el-col>
       </el-row>
 
-      <el-row :gutter="20">
+      <el-row v-if="!isTrialFirstOrderMode" :gutter="20">
         <el-col :span="8">
           <el-form-item label="试餐成单" prop="trialConverted">
             <el-radio-group v-model="form.trialConverted" :disabled="readonly" @change="onTrialConvertedChange">
@@ -100,7 +100,7 @@
       </el-row>
 
       <!-- 指定日期送时显示送餐日期选择 -->
-      <el-row v-if="form.scheduleMode === 'SCHEDULE'" :gutter="20">
+      <el-row v-if="!isTrialFirstOrderMode && form.scheduleMode === 'SCHEDULE'" :gutter="20">
         <el-col :span="24">
           <el-form-item label="送餐日期">
             <MealScheduleCalendar
@@ -134,142 +134,146 @@
       </el-row>
 
       <!-- ===== 每餐菜品配置 ===== -->
-      <el-divider content-position="left">每餐菜品配置</el-divider>
-      <el-row :gutter="20">
-        <el-col :span="8">
-          <el-form-item label="主菜数(份)">
-            <el-input-number
-              v-model="form.mainDishCount"
-              :min="0"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-            />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="副菜数(份)">
-            <el-input-number
-              v-model="form.sideDishCount"
-              :min="0"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-            />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="素菜数(份)">
-            <el-input-number
-              v-model="form.vegCount"
-              :min="0"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-            />
-          </el-form-item>
-        </el-col>
-      </el-row>
-      <el-row :gutter="20">
-        <el-col :span="12">
-          <el-form-item label="米饭类型">
-            <el-select
-              v-model="form.riceType"
-              :disabled="readonly"
-              placeholder="请选择米饭类型"
-              style="width: 100%;"
-            >
-              <el-option
-                v-for="item in riceTypeOptions"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value"
+      <template v-if="!isTrialFirstOrderMode">
+        <el-divider content-position="left">每餐菜品配置</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="主菜数(份)">
+              <el-input-number
+                v-model="form.mainDishCount"
+                :min="0"
+                :disabled="readonly"
+                controls-position="right"
+                style="width: 100%;"
               />
-            </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
-          <el-form-item label="汤数(份)">
-            <el-input-number
-              v-model="form.soupCount"
-              :min="0"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-            />
-          </el-form-item>
-        </el-col>
-      </el-row>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="副菜数(份)">
+              <el-input-number
+                v-model="form.sideDishCount"
+                :min="0"
+                :disabled="readonly"
+                controls-position="right"
+                style="width: 100%;"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="素菜数(份)">
+              <el-input-number
+                v-model="form.vegCount"
+                :min="0"
+                :disabled="readonly"
+                controls-position="right"
+                style="width: 100%;"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="米饭类型">
+              <el-select
+                v-model="form.riceType"
+                :disabled="readonly"
+                placeholder="请选择米饭类型"
+                style="width: 100%;"
+              >
+                <el-option
+                  v-for="item in riceTypeOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="汤数(份)">
+              <el-input-number
+                v-model="form.soupCount"
+                :min="0"
+                :disabled="readonly"
+                controls-position="right"
+                style="width: 100%;"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </template>
 
       <!-- ===== 换菜规则 ===== -->
-      <el-divider content-position="left">换菜规则</el-divider>
-      <div class="replace-rules-section">
-        <p class="replace-rules-tip" style="color: #909399; font-size: 12px; margin: 0 0 10px 0;">
-          当排餐命中原菜时，将自动替换为目标菜，规则全订单生效
-        </p>
-        <div v-for="(rule, index) in form.replaceRules" :key="index" class="replace-rule-row">
-          <el-row :gutter="10">
-            <el-col :span="9">
-              <el-select
-                v-model="rule.sourceDishId"
-                :disabled="readonly"
-                filterable
-                remote
-                placeholder="搜索原菜品"
-                :remote-method="query => searchDishForRule(query, 'source', index)"
-                :loading="rule._sourceLoading"
-                style="width: 100%;"
-                @change="val => onRuleDishChange(val, 'source', index)"
-              >
-                <el-option
-                  v-for="item in (rule._sourceOptions || [])"
-                  :key="item.id"
-                  :label="item.name + '（' + (item.dishType || '') + '）'"
-                  :value="item.id"
-                />
-                <template v-if="rule.sourceDishName && (!rule._sourceOptions || rule._sourceOptions.length === 0)">
-                  <el-option :label="rule.sourceDishName + (rule.sourceDishInvalid ? '（已失效）' : '')" :value="rule.sourceDishId" />
-                </template>
-              </el-select>
-            </el-col>
-            <el-col :span="1" style="text-align: center; line-height: 32px;">
-              <i class="el-icon-right" />
-            </el-col>
-            <el-col :span="9">
-              <el-select
-                v-model="rule.targetDishId"
-                :disabled="readonly"
-                filterable
-                remote
-                placeholder="搜索目标菜品"
-                :remote-method="query => searchDishForRule(query, 'target', index)"
-                :loading="rule._targetLoading"
-                style="width: 100%;"
-                @change="val => onRuleDishChange(val, 'target', index)"
-              >
-                <el-option
-                  v-for="item in (rule._targetOptions || [])"
-                  :key="item.id"
-                  :label="item.name + '（' + (item.dishType || '') + '）'"
-                  :value="item.id"
-                />
-                <template v-if="rule.targetDishName && (!rule._targetOptions || rule._targetOptions.length === 0)">
-                  <el-option :label="rule.targetDishName + (rule.targetDishInvalid ? '（已失效）' : '')" :value="rule.targetDishId" />
-                </template>
-              </el-select>
-            </el-col>
-            <el-col :span="3">
-              <el-input v-model="rule.remark" :disabled="readonly" placeholder="备注" size="small" />
-            </el-col>
-            <el-col :span="2" style="text-align: center;">
-              <el-button v-if="!readonly" type="danger" icon="el-icon-delete" circle size="mini" @click="removeReplaceRule(index)" />
-            </el-col>
-          </el-row>
+      <template v-if="!isTrialFirstOrderMode">
+        <el-divider content-position="left">换菜规则</el-divider>
+        <div class="replace-rules-section">
+          <p class="replace-rules-tip" style="color: #909399; font-size: 12px; margin: 0 0 10px 0;">
+            当排餐命中原菜时，将自动替换为目标菜，规则全订单生效
+          </p>
+          <div v-for="(rule, index) in form.replaceRules" :key="index" class="replace-rule-row">
+            <el-row :gutter="10">
+              <el-col :span="9">
+                <el-select
+                  v-model="rule.sourceDishId"
+                  :disabled="readonly"
+                  filterable
+                  remote
+                  placeholder="搜索原菜品"
+                  :remote-method="query => searchDishForRule(query, 'source', index)"
+                  :loading="rule._sourceLoading"
+                  style="width: 100%;"
+                  @change="val => onRuleDishChange(val, 'source', index)"
+                >
+                  <el-option
+                    v-for="item in (rule._sourceOptions || [])"
+                    :key="item.id"
+                    :label="item.name + '（' + (item.dishType || '') + '）'"
+                    :value="item.id"
+                  />
+                  <template v-if="rule.sourceDishName && (!rule._sourceOptions || rule._sourceOptions.length === 0)">
+                    <el-option :label="rule.sourceDishName + (rule.sourceDishInvalid ? '（已失效）' : '')" :value="rule.sourceDishId" />
+                  </template>
+                </el-select>
+              </el-col>
+              <el-col :span="1" style="text-align: center; line-height: 32px;">
+                <i class="el-icon-right" />
+              </el-col>
+              <el-col :span="9">
+                <el-select
+                  v-model="rule.targetDishId"
+                  :disabled="readonly"
+                  filterable
+                  remote
+                  placeholder="搜索目标菜品"
+                  :remote-method="query => searchDishForRule(query, 'target', index)"
+                  :loading="rule._targetLoading"
+                  style="width: 100%;"
+                  @change="val => onRuleDishChange(val, 'target', index)"
+                >
+                  <el-option
+                    v-for="item in (rule._targetOptions || [])"
+                    :key="item.id"
+                    :label="item.name + '（' + (item.dishType || '') + '）'"
+                    :value="item.id"
+                  />
+                  <template v-if="rule.targetDishName && (!rule._targetOptions || rule._targetOptions.length === 0)">
+                    <el-option :label="rule.targetDishName + (rule.targetDishInvalid ? '（已失效）' : '')" :value="rule.targetDishId" />
+                  </template>
+                </el-select>
+              </el-col>
+              <el-col :span="3">
+                <el-input v-model="rule.remark" :disabled="readonly" placeholder="备注" size="small" />
+              </el-col>
+              <el-col :span="2" style="text-align: center;">
+                <el-button v-if="!readonly" type="danger" icon="el-icon-delete" circle size="mini" @click="removeReplaceRule(index)" />
+              </el-col>
+            </el-row>
+          </div>
+          <el-button v-if="!readonly" type="primary" plain size="small" icon="el-icon-plus" @click="addReplaceRule">
+            新增规则
+          </el-button>
         </div>
-        <el-button v-if="!readonly" type="primary" plain size="small" icon="el-icon-plus" @click="addReplaceRule">
-          新增规则
-        </el-button>
-      </div>
+      </template>
 
       <!-- ===== 自定义菜单图片 ===== -->
       <el-divider content-position="left">自定义菜单</el-divider>
@@ -360,7 +364,7 @@
       </template>
 
       <!-- ===== 金额信息 ===== -->
-      <el-collapse v-model="amountInfoActiveNames" class="order-form-collapse">
+      <el-collapse v-if="!isTrialFirstOrderMode" v-model="amountInfoActiveNames" class="order-form-collapse">
         <el-collapse-item name="amountInfo">
           <template slot="title">
             <span class="order-form-collapse__title">
@@ -441,60 +445,62 @@
       </el-collapse>
 
       <!-- ===== 餐数信息 ===== -->
-      <el-divider content-position="left">餐数信息</el-divider>
-      <el-row :gutter="20">
-        <el-col :span="8">
-          <el-form-item label="早餐合计(份)">
-            <el-input-number
-              v-model="form.breakfastCount"
-              :min="0"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-              @change="onMealCountChange"
-            />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="午餐+晚餐(份)">
-            <el-input-number
-              v-model="form.lunchDinnerCount"
-              :min="0"
-              :disabled="readonly"
-              controls-position="right"
-              style="width: 100%;"
-              @change="onMealCountChange"
-            />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="合计(份)">
-            <el-input-number
-              :value="totalCount"
-              :min="0"
-              disabled
-              controls-position="right"
-              style="width: 100%;"
-            />
-          </el-form-item>
-        </el-col>
-      </el-row>
+      <template v-if="!isTrialFirstOrderMode">
+        <el-divider content-position="left">餐数信息</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="早餐合计(份)">
+              <el-input-number
+                v-model="form.breakfastCount"
+                :min="0"
+                :disabled="readonly"
+                controls-position="right"
+                style="width: 100%;"
+                @change="onMealCountChange"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="午餐+晚餐(份)">
+              <el-input-number
+                v-model="form.lunchDinnerCount"
+                :min="0"
+                :disabled="readonly"
+                controls-position="right"
+                style="width: 100%;"
+                @change="onMealCountChange"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="合计(份)">
+              <el-input-number
+                :value="totalCount"
+                :min="0"
+                disabled
+                controls-position="right"
+                style="width: 100%;"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-      <el-row :gutter="20">
-        <!-- 首单模式：自动计算总价展示 -->
-        <el-col v-if="mode === 'firstOrder'" :span="8">
-          <el-form-item label="总价(自动)">
-            <el-input-number
-              :value="form.totalAmount"
-              :min="0"
-              disabled
-              :precision="2"
-              controls-position="right"
-              style="width: 100%;"
-            />
-          </el-form-item>
-        </el-col>
-      </el-row>
+        <el-row :gutter="20">
+          <!-- 首单模式：自动计算总价展示 -->
+          <el-col v-if="mode === 'firstOrder'" :span="8">
+            <el-form-item label="总价(自动)">
+              <el-input-number
+                :value="form.totalAmount"
+                :min="0"
+                disabled
+                :precision="2"
+                controls-position="right"
+                style="width: 100%;"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </template>
 
       <!-- ===== 核销信息（仅订单模式） ===== -->
       <template v-if="mode === 'order'">
@@ -554,7 +560,7 @@
       </template>
 
       <!-- ===== 日期信息（公共，但订单模式多成交时间 + 第一次送餐时间） ===== -->
-      <el-divider content-position="left">日期信息</el-divider>
+      <el-divider v-if="!isTrialFirstOrderMode" content-position="left">日期信息</el-divider>
       <template v-if="mode === 'order'">
         <el-row :gutter="20">
           <el-col :span="8">
@@ -585,7 +591,7 @@
       </template>
 
       <!-- 开始日期和餐次：两种模式均显示 -->
-      <el-row :gutter="20">
+      <el-row v-if="!isTrialFirstOrderMode" :gutter="20">
         <el-col :span="12">
           <el-form-item
             :label="mode === 'order' ? '订单开始日期' : '开始日期'"
@@ -828,6 +834,15 @@ export default {
       const breakfast = this.form.breakfastCount || 0
       const lunchDinner = this.form.lunchDinnerCount || 0
       return breakfast + lunchDinner
+    },
+    selectedParentPackage() {
+      return this.parentPackages.find(item => item.id === this.form.parentPackageId) || null
+    },
+    isTrialPackage() {
+      return !!(this.selectedParentPackage && this.selectedParentPackage.packageName && this.selectedParentPackage.packageName.includes('试餐'))
+    },
+    isTrialFirstOrderMode() {
+      return this.mode === 'firstOrder' && this.isTrialPackage
     },
     // 日历组件使用的格式：[{date: 'yyyy-MM-dd', mealTypes: [...]}, ...]
     deliveryDatesWithMealTypes: {
@@ -1211,7 +1226,8 @@ export default {
     async onParentPackageChange(parentId) {
       this.form.childPackageId = null
       await this.loadChildPackages(parentId)
-      this.$emit('package-change', parentId, null)
+      const parentPackage = this.parentPackages.find(item => item.id === parentId) || null
+      this.$emit('package-change', parentId, null, parentPackage)
     },
     // 子套餐变更
     onChildPackageChange(childPackageId) {
