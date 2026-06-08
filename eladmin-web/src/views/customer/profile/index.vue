@@ -121,18 +121,26 @@
       </div>
       <el-form ref="form" :model="form" :rules="rules" size="small" label-width="100px">
         <!-- 客户基本信息 -->
+        <el-alert
+          v-if="isTrialCreateMode()"
+          title="当前父套餐为试餐类型，客户姓名可不填，但手机号、地址和父套餐仍需填写。"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px;"
+        />
         <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="客户编号">
               <el-input v-model="form.customerCode" placeholder="不填则自动生成" style="width: 100%;" />
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col v-if="!isTrialCreateMode()" :span="8">
             <el-form-item label="客户姓名" prop="customerName">
               <el-input v-model="form.customerName" style="width: 100%;" />
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="isTrialCreateMode() ? 16 : 8">
             <el-form-item label="手机号" prop="phone">
               <el-input v-model="form.phone" style="width: 100%;" />
             </el-form-item>
@@ -295,6 +303,7 @@
             v-model="form.orderInfo"
             mode="firstOrder"
             :readonly="false"
+            @package-change="onFirstOrderPackageChange"
           />
         </template>
 
@@ -463,12 +472,30 @@ export default {
         del: ['admin', 'customerProfile:del']
       },
       rules: {
-        customerName: [{ required: true, message: '请输入客户姓名', trigger: 'blur' }],
+        customerName: [{
+          validator: (rule, value, callback) => {
+            if (!this.isTrialCreateMode() && !value) {
+              callback(new Error('请输入客户姓名'))
+              return
+            }
+            callback()
+          },
+          trigger: 'blur'
+        }],
         phone: [
           { required: true, message: '请输入手机号', trigger: 'blur' },
           { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确', trigger: 'blur' }
         ],
-        'orderInfo.startDate': [{ required: true, message: '请选择开始日期', trigger: 'change' }],
+        'orderInfo.startDate': [{
+          validator: (rule, value, callback) => {
+            if (!this.isTrialCreateMode() && !value) {
+              callback(new Error('请选择开始日期'))
+              return
+            }
+            callback()
+          },
+          trigger: 'change'
+        }],
         'orderInfo.trialOrderId': [{
           validator: (rule, value, callback) => {
             if (this.form.orderInfo && this.form.orderInfo.trialConverted && !value) {
@@ -489,6 +516,7 @@ export default {
       editRequestId: 0,
       detailDialogVisible: false,
       currentCustomer: null,
+      currentFirstOrderParentPackage: null,
       intakeDialogVisible: false,
       intakeText: '',
       intakeParsing: false,
@@ -508,9 +536,18 @@ export default {
     },
     dialogTitle() {
       return this.isCreateMode() ? '新增客户' : '编辑客户'
+    },
+    isTrialCreate() {
+      return this.isCreateMode() &&
+        this.currentFirstOrderParentPackage &&
+        this.currentFirstOrderParentPackage.packageName &&
+        this.currentFirstOrderParentPackage.packageName.includes('试餐')
     }
   },
   methods: {
+    isTrialCreateMode() {
+      return !!this.isTrialCreate
+    },
     serializeDeliveryDates(value) {
       if (typeof value === 'string') {
         const trimmed = value.trim()
@@ -532,6 +569,9 @@ export default {
     },
     removeExcludedDate(index) {
       this.form.excludedDates.splice(index, 1)
+    },
+    onFirstOrderPackageChange(parentId, childPackageId, parentPackage) {
+      this.currentFirstOrderParentPackage = parentPackage || null
     },
     isCreateMode() {
       return this.crud.status.add === CRUD.STATUS.PREPARED
@@ -558,7 +598,7 @@ export default {
       const formData = this.form
       const payload = {
         customerCode: formData.customerCode || null,
-        customerName: formData.customerName,
+        customerName: formData.customerName || null,
         phone: formData.phone,
         gestationalWeek: formData.gestationalWeek,
         allergyTags: Array.isArray(formData.allergyTags) ? formData.allergyTags : [],
@@ -577,36 +617,44 @@ export default {
 
       if (this.isCreateMode()) {
         const orderInfo = formData.orderInfo || createFirstOrderDefaultForm()
-        const breakfastCount = orderInfo.breakfastCount || 0
-        const lunchDinnerCount = orderInfo.lunchDinnerCount || 0
-        const deliveryDatesSource = Array.isArray(orderInfo.deliveryDatesWithMealTypes) && orderInfo.deliveryDatesWithMealTypes.length > 0
-          ? orderInfo.deliveryDatesWithMealTypes
-          : orderInfo.deliveryDates
-        payload.orderInfo = {
-          parentPackageId: orderInfo.parentPackageId,
-          breakfastCount,
-          lunchDinnerCount,
-          totalCount: breakfastCount + lunchDinnerCount,
-          breakfastPrice: orderInfo.breakfastPrice || 0,
-          lunchDinnerPrice: orderInfo.lunchDinnerPrice || 0,
-          totalAmount: orderInfo.totalAmount || 0,
-          depositAmount: orderInfo.depositAmount || 0,
-          finalAmount: orderInfo.finalAmount || 0,
-          scheduleMode: orderInfo.scheduleMode || 'SCHEDULE',
-          startDate: orderInfo.startDate,
-          startMealType: orderInfo.startMealType || 'BREAKFAST',
-          mealType: orderInfo.mealType || 'ALL',
-          customerSource: orderInfo.customerSource || null,
-          trialConverted: !!orderInfo.trialConverted,
-          trialOrderId: orderInfo.trialConverted ? orderInfo.trialOrderId : null,
-          deliveryDates: this.serializeDeliveryDates(deliveryDatesSource),
-          mainDishCount: orderInfo.mainDishCount || 0,
-          sideDishCount: orderInfo.sideDishCount || 0,
-          vegCount: orderInfo.vegCount || 0,
-          riceCount: orderInfo.riceCount == null ? 1 : orderInfo.riceCount,
-          riceType: orderInfo.riceType || '白米饭',
-          soupCount: orderInfo.soupCount || 0,
-          replaceRules: cleanReplaceRules(orderInfo.replaceRules)
+        if (this.isTrialCreateMode()) {
+          payload.orderInfo = {
+            parentPackageId: orderInfo.parentPackageId,
+            childPackageId: orderInfo.childPackageId || null,
+            customerSource: orderInfo.customerSource || null
+          }
+        } else {
+          const breakfastCount = orderInfo.breakfastCount || 0
+          const lunchDinnerCount = orderInfo.lunchDinnerCount || 0
+          const deliveryDatesSource = Array.isArray(orderInfo.deliveryDatesWithMealTypes) && orderInfo.deliveryDatesWithMealTypes.length > 0
+            ? orderInfo.deliveryDatesWithMealTypes
+            : orderInfo.deliveryDates
+          payload.orderInfo = {
+            parentPackageId: orderInfo.parentPackageId,
+            breakfastCount,
+            lunchDinnerCount,
+            totalCount: breakfastCount + lunchDinnerCount,
+            breakfastPrice: orderInfo.breakfastPrice || 0,
+            lunchDinnerPrice: orderInfo.lunchDinnerPrice || 0,
+            totalAmount: orderInfo.totalAmount || 0,
+            depositAmount: orderInfo.depositAmount || 0,
+            finalAmount: orderInfo.finalAmount || 0,
+            scheduleMode: orderInfo.scheduleMode || 'SCHEDULE',
+            startDate: orderInfo.startDate,
+            startMealType: orderInfo.startMealType || 'BREAKFAST',
+            mealType: orderInfo.mealType || 'ALL',
+            customerSource: orderInfo.customerSource || null,
+            trialConverted: !!orderInfo.trialConverted,
+            trialOrderId: orderInfo.trialConverted ? orderInfo.trialOrderId : null,
+            deliveryDates: this.serializeDeliveryDates(deliveryDatesSource),
+            mainDishCount: orderInfo.mainDishCount || 0,
+            sideDishCount: orderInfo.sideDishCount || 0,
+            vegCount: orderInfo.vegCount || 0,
+            riceCount: orderInfo.riceCount == null ? 1 : orderInfo.riceCount,
+            riceType: orderInfo.riceType || '白米饭',
+            soupCount: orderInfo.soupCount || 0,
+            replaceRules: cleanReplaceRules(orderInfo.replaceRules)
+          }
         }
       }
 
@@ -701,6 +749,7 @@ export default {
     },
     [CRUD.HOOK.beforeToAdd]() {
       Object.assign(this.form, JSON.parse(JSON.stringify(defaultForm)))
+      this.currentFirstOrderParentPackage = null
       this.intakeText = ''
       this.intakeResult = null
       this.intakeDialogVisible = false
@@ -740,6 +789,9 @@ export default {
       // 确保首单信息存在
       if (!this.form.orderInfo) {
         this.$set(this.form, 'orderInfo', createFirstOrderDefaultForm())
+      }
+      if (this.isCreateMode()) {
+        this.currentFirstOrderParentPackage = null
       }
       return true
     },

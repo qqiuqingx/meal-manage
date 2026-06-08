@@ -97,6 +97,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final DateTimeFormatter DISPLAY_DATE_FORMATTER = DateTimeFormatter.ofPattern("M.d");
     private static final String DEFAULT_RICE_TYPE = "普通杂粮米饭";
+    private static final String TRIAL_DEFAULT_RICE_TYPE = "白米饭";
     private static final Logger SCHEDULE_ADJUSTMENT_LOG = LoggerFactory.getLogger("mealScheduleAdjustmentLogger");
 
     @Override
@@ -727,7 +728,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     }
 
     private CustomerProfileSaveDto.OrderInfoDto normalizeAndValidate(CustomerProfileSaveDto dto, boolean createMode) {
-        if (StringUtils.isBlank(dto.getCustomerName())) {
+        boolean trialCreateMode = isTrialCreateMode(dto, createMode);
+        if (!trialCreateMode && StringUtils.isBlank(dto.getCustomerName())) {
             throw new BadRequestException("客户姓名不能为空");
         }
         if (StringUtils.isBlank(dto.getPhone())) {
@@ -743,34 +745,40 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             throw new BadRequestException("地址信息不能为空");
         }
 
-        boolean hasValidAddress = false;
-        Set<String> addressTypes = new HashSet<>();
-        for (CustomerProfileSaveDto.AddressDto addr : dto.getAddresses()) {
-            if (StringUtils.isNotBlank(addr.getAddressDetail())) {
-                hasValidAddress = true;
-            }
-            if (StringUtils.isNotBlank(addr.getAddressType())) {
-                if (addressTypes.contains(addr.getAddressType())) {
-                    throw new BadRequestException("地址类型不能重复");
+        if (dto.getAddresses() != null && !dto.getAddresses().isEmpty()) {
+            boolean hasValidAddress = false;
+            Set<String> addressTypes = new HashSet<>();
+            for (CustomerProfileSaveDto.AddressDto addr : dto.getAddresses()) {
+                if (StringUtils.isNotBlank(addr.getAddressDetail())) {
+                    hasValidAddress = true;
                 }
-                addressTypes.add(addr.getAddressType());
+                if (StringUtils.isNotBlank(addr.getAddressType())) {
+                    if (addressTypes.contains(addr.getAddressType())) {
+                        throw new BadRequestException("地址类型不能重复");
+                    }
+                    addressTypes.add(addr.getAddressType());
+                }
             }
-        }
-        if (!hasValidAddress) {
-            throw new BadRequestException("至少需要一个有效地址");
-        }
-        for (CustomerProfileSaveDto.AddressDto addr : dto.getAddresses()) {
-            if (StringUtils.isNotBlank(addr.getAddressType())) {
-                if (!"DEFAULT".equals(addr.getAddressType())
-                    && !"WORKDAY".equals(addr.getAddressType())
-                    && !"WEEKEND".equals(addr.getAddressType())) {
-                    throw new BadRequestException("地址类型必须是 DEFAULT、WORKDAY 或 WEEKEND");
+            if (!hasValidAddress) {
+                throw new BadRequestException("至少需要一个有效地址");
+            }
+            for (CustomerProfileSaveDto.AddressDto addr : dto.getAddresses()) {
+                if (StringUtils.isNotBlank(addr.getAddressType())) {
+                    if (!"DEFAULT".equals(addr.getAddressType())
+                        && !"WORKDAY".equals(addr.getAddressType())
+                        && !"WEEKEND".equals(addr.getAddressType())) {
+                        throw new BadRequestException("地址类型必须是 DEFAULT、WORKDAY 或 WEEKEND");
+                    }
                 }
             }
         }
 
         CustomerProfileSaveDto.OrderInfoDto validatedOrderInfo = null;
         if (createMode) {
+            if (trialCreateMode) {
+                applyTrialCustomerDefaults(dto);
+                applyTrialOrderDefaults(dto.getOrderInfo());
+            }
             validatedOrderInfo = normalizeAndValidateOrderInfo(dto.getOrderInfo());
         }
 
@@ -790,6 +798,134 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         validateExcludedDates(dto.getExcludedDates());
 
         return validatedOrderInfo;
+    }
+
+    /**
+     * 判断当前是否为试餐简化建档模式，仅在新增客户时生效。
+     *
+     * @param dto 客户保存参数
+     * @param createMode 是否新增模式
+     * @return true-试餐简化建档，false-普通建档
+     */
+    private boolean isTrialCreateMode(CustomerProfileSaveDto dto, boolean createMode) {
+        return createMode
+                && dto != null
+                && dto.getOrderInfo() != null
+                && isTrialParentPackage(dto.getOrderInfo().getParentPackageId());
+    }
+
+    /**
+     * 按现有试餐成单口径判断父套餐是否属于试餐类型。
+     *
+     * @param parentPackageId 父套餐ID
+     * @return true-试餐父套餐，false-非试餐父套餐
+     */
+    private boolean isTrialParentPackage(Long parentPackageId) {
+        ParentPackage parentPackage = requireEnabledParentPackage(parentPackageId);
+        return StringUtils.isNotBlank(parentPackage.getPackageName()) && parentPackage.getPackageName().contains("试餐");
+    }
+
+    /**
+     * 查询并校验父套餐存在且启用，供试餐建档预判复用。
+     *
+     * @param parentPackageId 父套餐ID
+     * @return 已启用的父套餐
+     */
+    private ParentPackage requireEnabledParentPackage(Long parentPackageId) {
+        if (parentPackageId == null) {
+            throw new BadRequestException("首单父套餐不能为空");
+        }
+        ParentPackage parentPackage = parentPackageMapper.selectById(parentPackageId);
+        if (parentPackage == null) {
+            throw new BadRequestException("父套餐不存在");
+        }
+        if (!Boolean.TRUE.equals(parentPackage.getStatus())) {
+            throw new BadRequestException("父套餐已禁用");
+        }
+        return parentPackage;
+    }
+
+    /**
+     * 补齐试餐简化建档所需的客户主档默认值，避免客户主档出现空关键字段。
+     *
+     * @param dto 客户保存参数
+     */
+    private void applyTrialCustomerDefaults(CustomerProfileSaveDto dto) {
+        if (StringUtils.isBlank(dto.getCustomerName())) {
+            String phone = dto.getPhone();
+            String suffix = phone.length() > 4 ? phone.substring(phone.length() - 4) : phone;
+            dto.setCustomerName("试餐客户" + suffix);
+        }
+    }
+
+    /**
+     * 补齐试餐简化建档首单默认值，确保后续订单保存和编号生成链路可复用现有实现。
+     *
+     * @param orderInfo 首单信息
+     */
+    private void applyTrialOrderDefaults(CustomerProfileSaveDto.OrderInfoDto orderInfo) {
+        if (orderInfo == null) {
+            return;
+        }
+        if (orderInfo.getBreakfastCount() == null) {
+            orderInfo.setBreakfastCount(0);
+        }
+        if (orderInfo.getLunchDinnerCount() == null) {
+            orderInfo.setLunchDinnerCount(1);
+        }
+        orderInfo.setTotalCount((orderInfo.getBreakfastCount() == null ? 0 : orderInfo.getBreakfastCount())
+                + (orderInfo.getLunchDinnerCount() == null ? 0 : orderInfo.getLunchDinnerCount()));
+        if (orderInfo.getBreakfastPrice() == null) {
+            orderInfo.setBreakfastPrice(BigDecimal.ZERO);
+        }
+        if (orderInfo.getLunchDinnerPrice() == null) {
+            orderInfo.setLunchDinnerPrice(BigDecimal.ZERO);
+        }
+        if (orderInfo.getTotalAmount() == null) {
+            orderInfo.setTotalAmount(BigDecimal.ZERO);
+        }
+        if (orderInfo.getDepositAmount() == null) {
+            orderInfo.setDepositAmount(BigDecimal.ZERO);
+        }
+        if (orderInfo.getFinalAmount() == null) {
+            orderInfo.setFinalAmount(BigDecimal.ZERO);
+        }
+        if (StringUtils.isBlank(orderInfo.getScheduleMode())) {
+            orderInfo.setScheduleMode("SCHEDULE");
+        }
+        if (StringUtils.isBlank(orderInfo.getStartDate())) {
+            orderInfo.setStartDate(LocalDate.now().format(DATE_FORMATTER));
+        }
+        if (StringUtils.isBlank(orderInfo.getStartMealType())) {
+            orderInfo.setStartMealType("LUNCH");
+        }
+        if (StringUtils.isBlank(orderInfo.getMealType())) {
+            orderInfo.setMealType("LUNCH_DINNER");
+        }
+        if (orderInfo.getMainDishCount() == null) {
+            orderInfo.setMainDishCount(0);
+        }
+        if (orderInfo.getSideDishCount() == null) {
+            orderInfo.setSideDishCount(0);
+        }
+        if (orderInfo.getVegCount() == null) {
+            orderInfo.setVegCount(0);
+        }
+        if (orderInfo.getRiceCount() == null) {
+            orderInfo.setRiceCount(1);
+        }
+        if (StringUtils.isBlank(orderInfo.getRiceType())) {
+            orderInfo.setRiceType(TRIAL_DEFAULT_RICE_TYPE);
+        }
+        if (orderInfo.getSoupCount() == null) {
+            orderInfo.setSoupCount(0);
+        }
+        if (orderInfo.getTrialConverted() == null) {
+            orderInfo.setTrialConverted(false);
+        }
+        if (!Boolean.TRUE.equals(orderInfo.getTrialConverted())) {
+            orderInfo.setTrialOrderId(null);
+        }
     }
 
     private CustomerProfileSaveDto.OrderInfoDto normalizeAndValidateOrderInfo(CustomerProfileSaveDto.OrderInfoDto orderInfo) {
