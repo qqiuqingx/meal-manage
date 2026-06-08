@@ -558,11 +558,13 @@
         size="small"
         max-height="500"
       >
-        <el-table-column label="客户编号" prop="customerCode" align="center" width="120" />
-        <el-table-column label="手机号" prop="phone" align="center" width="120" />
-        <el-table-column label="配送地址" prop="addressDetail" align="center" min-width="160">
+        <el-table-column label="客户信息" align="left" min-width="260">
           <template slot-scope="scope">
-            {{ scope.row.addressDetail || '暂无地址' }}
+            <div class="customer-contact-info">
+              <div>联系人：{{ scope.row.customerCode || '-' }}</div>
+              <div>电话：{{ scope.row.phone || '-' }}</div>
+              <div>地址：{{ scope.row.addressDetail || '暂无地址' }}</div>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="自定义菜单" align="center" width="100">
@@ -2157,6 +2159,13 @@ export default {
 .footer-stat__value { font-size: 15px; font-weight: 700; color: #1e293b; }
 .footer-stat__value--success { color: #16a34a; }
 .footer-stat__value--danger  { color: #dc2626; }
+
+.customer-contact-info {
+  line-height: 1.8;
+  text-align: left;
+  white-space: normal;
+  word-break: break-all;
+}
 
 /* ──────────────────────────────────────────
    打印
