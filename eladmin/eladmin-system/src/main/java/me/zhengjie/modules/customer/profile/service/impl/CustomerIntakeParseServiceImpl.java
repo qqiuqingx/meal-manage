@@ -43,6 +43,7 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
     private static final Pattern PHONE_PATTERN = Pattern.compile("^1[3-9]\\d{9}$");
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final String DEFAULT_RICE_TYPE = "普通杂粮米饭";
+    private static final String TRIAL_DEFAULT_RICE_TYPE = "白米饭";
     private static final Map<String, String> CUSTOMER_SOURCE_MAPPING = new LinkedHashMap<>();
 
     static {
@@ -378,6 +379,10 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         if (StringUtils.isNotBlank(mealCategory) && StringUtils.isBlank(packageText) && matchedPackage == null) {
             addIssue(issues, "ERROR", "orderInfo.parentPackageId", "套餐必须使用系统父套餐名称或编码，请填写“套餐”字段", mealCategory);
         }
+
+        if (isTrialPackage(matchedPackage)) {
+            applyTrialDraftDefaults(draft);
+        }
     }
 
     /**
@@ -390,7 +395,8 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
     private void collectRequiredIssues(Map<String, String> rawFields,
                                        CustomerProfileSaveDto draft,
                                        List<CustomerIntakeIssueDto> issues) {
-        if (StringUtils.isBlank(draft.getCustomerName())) {
+        boolean trialDraft = isTrialDraft(draft);
+        if (!trialDraft && StringUtils.isBlank(draft.getCustomerName())) {
             addIssue(issues, "ERROR", "customerName", "联系人不能为空", firstNonBlank(rawFields, "联系人", "客户", "姓名"));
         }
         if (StringUtils.isBlank(draft.getPhone())) {
@@ -406,14 +412,96 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
         if (draft.getOrderInfo().getParentPackageId() == null) {
             addIssue(issues, "ERROR", "orderInfo.parentPackageId", "套餐必须使用系统父套餐名称或编码", firstNonBlank(rawFields, "套餐", "父套餐", "餐别"));
         }
-        if (draft.getOrderInfo().getLunchDinnerCount() == null || draft.getOrderInfo().getLunchDinnerCount() <= 0) {
+        if (!trialDraft && (draft.getOrderInfo().getLunchDinnerCount() == null || draft.getOrderInfo().getLunchDinnerCount() <= 0)) {
             addIssue(issues, "ERROR", "orderInfo.lunchDinnerCount", "餐数不能为空且必须大于0", firstNonBlank(rawFields, "餐数", "合计"));
         }
-        if (isZero(draft.getOrderInfo().getMainDishCount())
+        if (!trialDraft
+                && isZero(draft.getOrderInfo().getMainDishCount())
                 && isZero(draft.getOrderInfo().getSideDishCount())
                 && isZero(draft.getOrderInfo().getVegCount())) {
             addIssue(issues, "ERROR", "orderInfo.mainDishCount", "菜品配置不能为空，请填写：菜品配置：2主1副1素0汤", firstNonBlank(rawFields, "菜品配置"));
         }
+    }
+
+    /**
+     * 判断父套餐是否为试餐类型，沿用订单试餐成单的套餐名称口径。
+     *
+     * @param parentPackage 已匹配的父套餐
+     * @return true 表示套餐名称包含“试餐”
+     */
+    private boolean isTrialPackage(ParentPackage parentPackage) {
+        return parentPackage != null
+                && StringUtils.isNotBlank(parentPackage.getPackageName())
+                && parentPackage.getPackageName().contains("试餐");
+    }
+
+    /**
+     * 判断解析草稿是否属于试餐建档，用于放宽联系人、餐数和菜品配置必填提示。
+     *
+     * @param draft 解析草稿
+     * @return true 表示首单已识别为试餐套餐
+     */
+    private boolean isTrialDraft(CustomerProfileSaveDto draft) {
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = draft == null ? null : draft.getOrderInfo();
+        if (orderInfo == null || orderInfo.getParentPackageId() == null || parentPackageMapper == null) {
+            return false;
+        }
+        ParentPackage parentPackage = parentPackageMapper.selectById(orderInfo.getParentPackageId());
+        return isTrialPackage(parentPackage);
+    }
+
+    /**
+     * 补齐试餐话术解析默认值，使解析草稿可直接套用试餐简化建档规则。
+     *
+     * @param draft 客户建档草稿
+     */
+    private void applyTrialDraftDefaults(CustomerProfileSaveDto draft) {
+        if (draft == null || draft.getOrderInfo() == null) {
+            return;
+        }
+        if (StringUtils.isBlank(draft.getCustomerName()) && StringUtils.isNotBlank(draft.getPhone())) {
+            String phone = draft.getPhone();
+            String suffix = phone.length() > 4 ? phone.substring(phone.length() - 4) : phone;
+            draft.setCustomerName("试餐客户" + suffix);
+        }
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = draft.getOrderInfo();
+        if (safeInt(orderInfo.getBreakfastCount()) + safeInt(orderInfo.getLunchDinnerCount()) <= 0) {
+            orderInfo.setBreakfastCount(0);
+            orderInfo.setLunchDinnerCount(1);
+            recalculateTotalCount(orderInfo);
+        }
+        if (StringUtils.isBlank(orderInfo.getScheduleMode())) {
+            orderInfo.setScheduleMode("SCHEDULE");
+        }
+        if (StringUtils.isBlank(orderInfo.getStartDate())) {
+            orderInfo.setStartDate(currentDateSupplier.get().toString());
+        }
+        if (StringUtils.isBlank(orderInfo.getMealType())) {
+            orderInfo.setMealType("LUNCH_DINNER");
+        }
+        if (StringUtils.isBlank(orderInfo.getStartMealType())) {
+            orderInfo.setStartMealType("LUNCH");
+        }
+        if (orderInfo.getRiceCount() == null) {
+            orderInfo.setRiceCount(1);
+        }
+        if (StringUtils.isBlank(orderInfo.getRiceType()) || DEFAULT_RICE_TYPE.equals(orderInfo.getRiceType())) {
+            orderInfo.setRiceType(TRIAL_DEFAULT_RICE_TYPE);
+        }
+        if (orderInfo.getSoupCount() == null) {
+            orderInfo.setSoupCount(0);
+        }
+        if (orderInfo.getMainDishCount() == null) {
+            orderInfo.setMainDishCount(0);
+        }
+        if (orderInfo.getSideDishCount() == null) {
+            orderInfo.setSideDishCount(0);
+        }
+        if (orderInfo.getVegCount() == null) {
+            orderInfo.setVegCount(0);
+        }
+        orderInfo.setTrialConverted(false);
+        orderInfo.setTrialOrderId(null);
     }
 
     /**

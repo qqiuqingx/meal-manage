@@ -315,6 +315,62 @@ class CustomerIntakeParseServiceImplTest {
     }
 
     @Test
+    void parseTrialPackageShouldAllowMissingNameMealCountAndDishConfig() {
+        ParentPackage trialPackage = new ParentPackage();
+        trialPackage.setId(88L);
+        trialPackage.setPackageName("午晚试餐套餐");
+        trialPackage.setPackageCode("TRIAL");
+
+        ParentPackageMapper parentPackageMapper = mock(ParentPackageMapper.class);
+        when(parentPackageMapper.selectOne(any(QueryWrapper.class))).thenReturn(trialPackage);
+        when(parentPackageMapper.selectById(88L)).thenReturn(trialPackage);
+        service.setParentPackageMapper(parentPackageMapper);
+
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("电话：13800001234\n地址：成都市高新区天府大道1号\n套餐：午晚试餐套餐");
+
+        CustomerIntakeParseResult result = service.parse(request);
+        CustomerProfileSaveDto draft = result.getDraft();
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = draft.getOrderInfo();
+
+        assertTrue(result.isValid());
+        assertEquals("试餐客户1234", draft.getCustomerName());
+        assertEquals(88L, orderInfo.getParentPackageId());
+        assertEquals(Integer.valueOf(0), orderInfo.getBreakfastCount());
+        assertEquals(Integer.valueOf(1), orderInfo.getLunchDinnerCount());
+        assertEquals(Integer.valueOf(1), orderInfo.getTotalCount());
+        assertEquals("SCHEDULE", orderInfo.getScheduleMode());
+        assertEquals("LUNCH_DINNER", orderInfo.getMealType());
+        assertEquals("LUNCH", orderInfo.getStartMealType());
+        assertEquals("白米饭", orderInfo.getRiceType());
+        assertFalse(Boolean.TRUE.equals(orderInfo.getTrialConverted()));
+        assertTrue(result.getIssues().stream().noneMatch(issue -> "customerName".equals(issue.getField())));
+        assertTrue(result.getIssues().stream().noneMatch(issue -> "orderInfo.lunchDinnerCount".equals(issue.getField())));
+        assertTrue(result.getIssues().stream().noneMatch(issue -> "orderInfo.mainDishCount".equals(issue.getField())));
+    }
+
+    @Test
+    void parseTrialPackageShouldStillRequireAddress() {
+        ParentPackage trialPackage = new ParentPackage();
+        trialPackage.setId(88L);
+        trialPackage.setPackageName("午晚试餐套餐");
+
+        ParentPackageMapper parentPackageMapper = mock(ParentPackageMapper.class);
+        when(parentPackageMapper.selectOne(any(QueryWrapper.class))).thenReturn(trialPackage);
+        when(parentPackageMapper.selectById(88L)).thenReturn(trialPackage);
+        service.setParentPackageMapper(parentPackageMapper);
+
+        CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
+        request.setText("电话：13800001234\n套餐：午晚试餐套餐");
+
+        CustomerIntakeParseResult result = service.parse(request);
+
+        assertFalse(result.isValid());
+        assertTrue(result.getIssues().stream().anyMatch(issue -> "addresses[0].addressDetail".equals(issue.getField())));
+        assertTrue(result.getIssues().stream().noneMatch(issue -> "customerName".equals(issue.getField())));
+    }
+
+    @Test
     void parseAmbiguousPackageTextShouldAddError() {
         CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
         request.setText("餐别：孕期营养餐不含汤（两荤一素）");
