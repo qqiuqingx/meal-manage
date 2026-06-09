@@ -12,8 +12,4 @@
     <select id="countOrderBySubPackageId" resultType="java.lang.Integer">
         SELECT COUNT(1) FROM customer_order WHERE child_package_id = #{subPackageId}
     </select>
-
-    <select id="countOrderByParentPackageId" resultType="java.lang.Integer">
-        SELECT COUNT(1) FROM customer_order WHERE parent_package_id = #{parentPackageId}
-    </select>
 </mapper>

@@ -145,11 +145,21 @@ public class ParentPackageServiceImpl implements ParentPackageService {
         parentPackageMapper.updateById(parent);
     }
 
+    /**
+     * 删除父套餐。
+     *
+     * @param id 父套餐ID，仅用于校验父子关联和订单 parent_package_id 引用并删除对应父套餐
+     */
     @Override
     public void delete(Long id) {
         ParentPackage parent = parentPackageMapper.selectById(id);
         if (parent == null) {
             throw new BadRequestException("父套餐不存在");
+        }
+        // 检查是否被订单引用（parent_package_id）
+        Integer orderCount = parentPackageMapper.countOrderByParentPackageId(id);
+        if (orderCount != null && orderCount > 0) {
+            throw new BadRequestException("该父套餐已被订单引用，无法删除");
         }
         // 检查是否有子套餐关联
         Long count = parentPackageMapper.countSubPackagesByParentId(id);

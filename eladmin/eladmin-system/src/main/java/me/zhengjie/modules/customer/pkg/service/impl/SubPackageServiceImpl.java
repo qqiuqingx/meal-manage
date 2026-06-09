@@ -78,6 +78,11 @@ public class SubPackageServiceImpl implements SubPackageService {
         subPackageMapper.updateById(entity);
     }
 
+    /**
+     * 删除子套餐。
+     *
+     * @param id 子套餐ID，仅用于校验订单的 child_package_id 引用并删除对应子套餐
+     */
     @Override
     public void delete(Long id) {
         SubPackage entity = subPackageMapper.selectById(id);
@@ -88,12 +93,6 @@ public class SubPackageServiceImpl implements SubPackageService {
         // 检查是否被订单引用（child_package_id）
         Integer orderCountBySubId = subPackageMapper.countOrderBySubPackageId(id);
         if (orderCountBySubId != null && orderCountBySubId > 0) {
-            throw new BadRequestException("该子套餐已被订单引用，无法删除");
-        }
-
-        // 检查是否被订单引用（parent_package_id）
-        Integer orderCountByParentId = subPackageMapper.countOrderByParentPackageId(id);
-        if (orderCountByParentId != null && orderCountByParentId > 0) {
             throw new BadRequestException("该子套餐已被订单引用，无法删除");
         }
 
