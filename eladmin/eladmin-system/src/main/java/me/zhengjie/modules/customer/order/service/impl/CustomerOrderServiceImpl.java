@@ -7,6 +7,7 @@ import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.order.service.CustomerOrderService;
+import me.zhengjie.modules.customer.order.util.CustomerOrderAmountPermissionUtil;
 import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
@@ -97,6 +98,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         List<CustomerOrder> list = orderMapper.findAll(criteria, page);
 
         fillOrderCountFields(list);
+        maskAmountFields(list);
 
         return new PageResult<>(list, page.getTotal());
     }
@@ -187,6 +189,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             throw new BadRequestException("客户不存在");
         }
         CustomerOrderDetailDto dto = buildDetailDto(order, profile);
+        maskAmountFields(dto);
         return dto;
     }
 
@@ -244,7 +247,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
         // 先校验订单冲突
         validateOrderConflict(dto, dto.getId());
-        validateAndNormalize(dto, dto.getId());
+        validateAndNormalize(dto, order);
 
         buildOrderEntity(order, dto);
         if (parentPackageChanged(originalParentPackageId, dto.getParentPackageId())) {
@@ -282,6 +285,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         int limit = 20;
         List<CustomerOrder> orders = orderMapper.findTrialOrders(keyword, excludeId, limit);
         fillOrderCountFields(orders);
+        maskAmountFields(orders);
         return orders;
     }
 
@@ -330,7 +334,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     /**
      * 校验并规范化 DTO
      */
-    private void validateAndNormalize(CustomerOrderSaveDto dto, Long excludeId) {
+    private void validateAndNormalize(CustomerOrderSaveDto dto, CustomerOrder existingOrder) {
         // 客户校验
         if (dto.getCustomerId() == null) {
             throw new BadRequestException("客户不能为空");
@@ -341,16 +345,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             throw new BadRequestException("客户不存在");
         }
 
-        // 金额校验
-        if (dto.getTotalAmount() == null) {
-            throw new BadRequestException("总金额不能为空");
-        }
-        if (dto.getFinalAmount() == null) {
-            throw new BadRequestException("成交金额不能为空");
-        }
-        if (dto.getFinalAmount().compareTo(dto.getTotalAmount()) > 0) {
-            throw new BadRequestException("成交金额不能超过总金额");
-        }
+        normalizeAmountFields(dto, existingOrder);
+        validateAmountFields(dto);
 
         // 日期校验：结束日期不再做硬性校验
         // if (dto.getStartDate() != null && dto.getEndDate() != null) {
@@ -400,6 +396,57 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         if (!OrderStartMealTypeUtil.isStartMealTypeAllowed(dto.getMealType(), dto.getStartMealType())) {
             throw new BadRequestException("开始餐次与订单餐次类型不匹配，可选开始餐次：" +
                     String.join("、", toMealTypeDescList(OrderStartMealTypeUtil.allowedStartMealTypes(dto.getMealType()))));
+        }
+    }
+
+    /**
+     * 按金额编辑权限规范化订单金额字段，防止绕过前端直接改金额。
+     *
+     * @param dto 订单保存参数
+     * @param existingOrder 已存在订单，新增时传 null
+     */
+    private void normalizeAmountFields(CustomerOrderSaveDto dto, CustomerOrder existingOrder) {
+        if (CustomerOrderAmountPermissionUtil.canEditAmount()) {
+            if (dto.getDepositAmount() == null) dto.setDepositAmount(BigDecimal.ZERO);
+            if (dto.getBreakfastPrice() == null) dto.setBreakfastPrice(BigDecimal.ZERO);
+            if (dto.getLunchDinnerPrice() == null) dto.setLunchDinnerPrice(BigDecimal.ZERO);
+            if (dto.getVerifiedAmount() == null) dto.setVerifiedAmount(BigDecimal.ZERO);
+            if (dto.getVerifiedCount() == null) dto.setVerifiedCount(0);
+            return;
+        }
+        if (existingOrder == null) {
+            dto.setDepositAmount(BigDecimal.ZERO);
+            dto.setTotalAmount(BigDecimal.ZERO);
+            dto.setFinalAmount(BigDecimal.ZERO);
+            dto.setBreakfastPrice(BigDecimal.ZERO);
+            dto.setLunchDinnerPrice(BigDecimal.ZERO);
+            dto.setVerifiedAmount(BigDecimal.ZERO);
+            dto.setVerifiedCount(0);
+            return;
+        }
+        dto.setDepositAmount(existingOrder.getDepositAmount() != null ? existingOrder.getDepositAmount() : BigDecimal.ZERO);
+        dto.setTotalAmount(existingOrder.getTotalAmount() != null ? existingOrder.getTotalAmount() : BigDecimal.ZERO);
+        dto.setFinalAmount(existingOrder.getFinalAmount() != null ? existingOrder.getFinalAmount() : BigDecimal.ZERO);
+        dto.setBreakfastPrice(existingOrder.getBreakfastPrice() != null ? existingOrder.getBreakfastPrice() : BigDecimal.ZERO);
+        dto.setLunchDinnerPrice(existingOrder.getLunchDinnerPrice() != null ? existingOrder.getLunchDinnerPrice() : BigDecimal.ZERO);
+        dto.setVerifiedAmount(existingOrder.getVerifiedAmount() != null ? existingOrder.getVerifiedAmount() : BigDecimal.ZERO);
+        dto.setVerifiedCount(existingOrder.getVerifiedCount() != null ? existingOrder.getVerifiedCount() : 0);
+    }
+
+    /**
+     * 校验金额字段关系，只有金额字段完成规范化后才执行。
+     *
+     * @param dto 订单保存参数
+     */
+    private void validateAmountFields(CustomerOrderSaveDto dto) {
+        if (dto.getTotalAmount() == null) {
+            throw new BadRequestException("总金额不能为空");
+        }
+        if (dto.getFinalAmount() == null) {
+            throw new BadRequestException("成交金额不能为空");
+        }
+        if (dto.getFinalAmount().compareTo(dto.getTotalAmount()) > 0) {
+            throw new BadRequestException("成交金额不能超过总金额");
         }
     }
 
@@ -566,6 +613,56 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setUpdateTime(order.getUpdateTime());
         dto.setReplaceRules(loadReplaceRules(order.getId()));
         return dto;
+    }
+
+    /**
+     * 按金额查看权限脱敏订单列表金额字段。
+     *
+     * @param orders 订单列表
+     */
+    private void maskAmountFields(List<CustomerOrder> orders) {
+        if (CustomerOrderAmountPermissionUtil.canViewAmount() || orders == null || orders.isEmpty()) {
+            return;
+        }
+        for (CustomerOrder order : orders) {
+            maskAmountFields(order);
+        }
+    }
+
+    /**
+     * 按金额查看权限脱敏单个订单实体金额字段。
+     *
+     * @param order 订单实体
+     */
+    private void maskAmountFields(CustomerOrder order) {
+        if (CustomerOrderAmountPermissionUtil.canViewAmount() || order == null) {
+            return;
+        }
+        order.setDepositAmount(null);
+        order.setTotalAmount(null);
+        order.setFinalAmount(null);
+        order.setBreakfastPrice(null);
+        order.setLunchDinnerPrice(null);
+        order.setVerifiedAmount(null);
+        order.setMealBalance(null);
+    }
+
+    /**
+     * 按金额查看权限脱敏订单详情金额字段。
+     *
+     * @param dto 订单详情
+     */
+    private void maskAmountFields(CustomerOrderDetailDto dto) {
+        if (CustomerOrderAmountPermissionUtil.canViewAmount() || dto == null) {
+            return;
+        }
+        dto.setDepositAmount(null);
+        dto.setTotalAmount(null);
+        dto.setFinalAmount(null);
+        dto.setBreakfastPrice(null);
+        dto.setLunchDinnerPrice(null);
+        dto.setVerifiedAmount(null);
+        dto.setMealBalance(null);
     }
 
     private String resolveTrialOrderCode(Long trialOrderId) {

@@ -364,7 +364,7 @@
       </template>
 
       <!-- ===== 金额信息 ===== -->
-      <el-collapse v-if="!isTrialFirstOrderMode" v-model="amountInfoActiveNames" class="order-form-collapse">
+      <el-collapse v-if="showAmount && !isTrialFirstOrderMode" v-model="amountInfoActiveNames" class="order-form-collapse">
         <el-collapse-item name="amountInfo">
           <template slot="title">
             <span class="order-form-collapse__title">
@@ -378,7 +378,7 @@
                   v-model="form.totalAmount"
                   :min="0"
                   :precision="2"
-                  :disabled="readonly || mode === 'firstOrder'"
+                  :disabled="amountReadonly || mode === 'firstOrder'"
                   controls-position="right"
                   style="width: 100%;"
                   @change="calcBalance"
@@ -391,7 +391,7 @@
                   v-model="form.finalAmount"
                   :min="0"
                   :precision="2"
-                  :disabled="readonly"
+                  :disabled="amountReadonly"
                   controls-position="right"
                   style="width: 100%;"
                   @change="calcBalance"
@@ -405,7 +405,7 @@
                   v-model="form.depositAmount"
                   :min="0"
                   :precision="2"
-                  :disabled="readonly"
+                  :disabled="amountReadonly"
                   controls-position="right"
                   style="width: 100%;"
                 />
@@ -420,7 +420,7 @@
                   v-model="form.breakfastPrice"
                   :min="0"
                   :precision="2"
-                  :disabled="readonly"
+                  :disabled="amountReadonly"
                   controls-position="right"
                   style="width: 100%;"
                   @change="calcTotalAmount"
@@ -433,7 +433,7 @@
                   v-model="form.lunchDinnerPrice"
                   :min="0"
                   :precision="2"
-                  :disabled="readonly"
+                  :disabled="amountReadonly"
                   controls-position="right"
                   style="width: 100%;"
                   @change="calcTotalAmount"
@@ -487,7 +487,7 @@
 
         <el-row :gutter="20">
           <!-- 首单模式：自动计算总价展示 -->
-          <el-col v-if="mode === 'firstOrder'" :span="8">
+          <el-col v-if="mode === 'firstOrder' && showAmount" :span="8">
             <el-form-item label="总价(自动)">
               <el-input-number
                 :value="form.totalAmount"
@@ -518,13 +518,13 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col v-if="showAmount" :span="8">
             <el-form-item label="核销金额(元)">
               <el-input-number
                 v-model="form.verifiedAmount"
                 :min="0"
                 :precision="2"
-                :disabled="readonly"
+                :disabled="amountReadonly"
                 controls-position="right"
                 style="width: 100%;"
                 @change="calcBalance"
@@ -543,7 +543,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row :gutter="20">
+        <el-row v-if="showAmount" :gutter="20">
           <el-col :span="12">
             <el-form-item label="餐费余额">
               <el-input-number
@@ -793,6 +793,16 @@ export default {
     currentCustomer: {
       type: Object,
       default: null
+    },
+    // 是否展示金额相关字段
+    showAmount: {
+      type: Boolean,
+      default: true
+    },
+    // 是否允许编辑金额相关字段
+    editableAmount: {
+      type: Boolean,
+      default: true
     }
   },
   data() {
@@ -855,6 +865,9 @@ export default {
     },
     startMealTypeOptions() {
       return START_MEAL_TYPE_OPTIONS[this.form.mealType] || START_MEAL_TYPE_OPTIONS.ALL
+    },
+    amountReadonly() {
+      return this.readonly || !this.editableAmount
     }
   },
   watch: {

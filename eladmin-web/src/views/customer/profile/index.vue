@@ -303,6 +303,8 @@
             v-model="form.orderInfo"
             mode="firstOrder"
             :readonly="false"
+            :show-amount="canViewAmount"
+            :editable-amount="canEditAmount"
             @package-change="onFirstOrderPackageChange"
           />
         </template>
@@ -407,6 +409,7 @@ import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
 import OrderForm, { createFirstOrderDefaultForm } from '@/components/Order/OrderForm.vue'
 import CustomerDetailDialog from './CustomerDetailDialog.vue'
+import { mapGetters } from 'vuex'
 
 function createDefaultAddresses() {
   return [
@@ -524,6 +527,13 @@ export default {
     }
   },
   computed: {
+    ...mapGetters(['roles']),
+    canViewAmount() {
+      return this.roles.includes('admin') || this.roles.includes('customerOrder:amount:view')
+    },
+    canEditAmount() {
+      return this.roles.includes('admin') || this.roles.includes('customerOrder:amount:edit')
+    },
     dialogVisible: {
       get() {
         return this.crud.status.cu > 0
@@ -634,11 +644,6 @@ export default {
             breakfastCount,
             lunchDinnerCount,
             totalCount: breakfastCount + lunchDinnerCount,
-            breakfastPrice: orderInfo.breakfastPrice || 0,
-            lunchDinnerPrice: orderInfo.lunchDinnerPrice || 0,
-            totalAmount: orderInfo.totalAmount || 0,
-            depositAmount: orderInfo.depositAmount || 0,
-            finalAmount: orderInfo.finalAmount || 0,
             scheduleMode: orderInfo.scheduleMode || 'SCHEDULE',
             startDate: orderInfo.startDate,
             startMealType: orderInfo.startMealType || 'BREAKFAST',
@@ -654,6 +659,13 @@ export default {
             riceType: orderInfo.riceType || '白米饭',
             soupCount: orderInfo.soupCount || 0,
             replaceRules: cleanReplaceRules(orderInfo.replaceRules)
+          }
+          if (this.canEditAmount) {
+            payload.orderInfo.breakfastPrice = orderInfo.breakfastPrice || 0
+            payload.orderInfo.lunchDinnerPrice = orderInfo.lunchDinnerPrice || 0
+            payload.orderInfo.totalAmount = orderInfo.totalAmount || 0
+            payload.orderInfo.depositAmount = orderInfo.depositAmount || 0
+            payload.orderInfo.finalAmount = orderInfo.finalAmount || 0
           }
         }
       }
@@ -704,6 +716,15 @@ export default {
         mergedForm.orderInfo = createFirstOrderDefaultForm()
       } else {
         mergedForm.orderInfo = Object.assign(createFirstOrderDefaultForm(), mergedForm.orderInfo)
+      }
+      if (!this.canViewAmount) {
+        Object.assign(mergedForm.orderInfo, {
+          breakfastPrice: 0,
+          lunchDinnerPrice: 0,
+          totalAmount: 0,
+          depositAmount: 0,
+          finalAmount: 0
+        })
       }
 
       Object.assign(this.form, mergedForm)

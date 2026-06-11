@@ -16,6 +16,7 @@
 package me.zhengjie.modules.sales.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import me.zhengjie.modules.customer.order.util.CustomerOrderAmountPermissionUtil;
 import me.zhengjie.modules.sales.domain.dto.*;
 import me.zhengjie.modules.sales.mapper.SalesDashboardMapper;
 import me.zhengjie.modules.sales.service.SalesDashboardService;
@@ -61,6 +62,7 @@ public class SalesDashboardServiceImpl implements SalesDashboardService {
             if (vo.getMonthVerificationAmount() == null) { vo.setMonthVerificationAmount(BigDecimal.ZERO); }
             if (vo.getTotalVerificationAmount() == null) { vo.setTotalVerificationAmount(BigDecimal.ZERO); }
         }
+        maskOverviewAmountFields(vo);
         return vo;
     }
 
@@ -76,6 +78,7 @@ public class SalesDashboardServiceImpl implements SalesDashboardService {
         for (int m = 1; m <= 12; m++) {
             months.add(new SalesMonthlyItemVO(m, monthMap.getOrDefault(m, BigDecimal.ZERO)));
         }
+        maskMonthlyAmounts(months);
         SalesMonthlyTrendVO vo = new SalesMonthlyTrendVO();
         vo.setYear(year);
         vo.setMonths(months);
@@ -89,6 +92,7 @@ public class SalesDashboardServiceImpl implements SalesDashboardService {
         vo.setProductAmountList(safeList(mapper.getProductAmountTop3(startDate, endDate)));
         vo.setSalespersonList(safeList(mapper.getSalespersonTop3(startDate, endDate)));
         vo.setChannelList(safeList(mapper.getChannelTop3(startDate, endDate)));
+        maskTopAmountFields(vo);
         return vo;
     }
 
@@ -98,6 +102,7 @@ public class SalesDashboardServiceImpl implements SalesDashboardService {
         criteria.setOffset((page - 1) * size);
         criteria.setSize(size);
         List<SalesDetailVO> list = mapper.getDetailList(criteria);
+        maskDetailAmountFields(list);
         long total = mapper.countDetailList(criteria);
         return new PageResult<>(list, total);
     }
@@ -114,6 +119,7 @@ public class SalesDashboardServiceImpl implements SalesDashboardService {
             if (vo.getOrderCount() == null) { vo.setOrderCount(0); }
             if (vo.getSaleAmount() == null) { vo.setSaleAmount(BigDecimal.ZERO); }
         }
+        maskChannelSummaryAmountFields(vo);
         return vo;
     }
 
@@ -128,10 +134,100 @@ public class SalesDashboardServiceImpl implements SalesDashboardService {
             if (vo.getOrderCount() == null) { vo.setOrderCount(0); }
             if (vo.getSaleAmount() == null) { vo.setSaleAmount(BigDecimal.ZERO); }
         }
+        maskSalespersonSummaryAmountFields(vo);
         return vo;
     }
 
     private List<SalesTopItemVO> safeList(List<SalesTopItemVO> list) {
         return list == null ? new ArrayList<>() : list;
+    }
+
+    /**
+     * 脱敏销售概览中的金额字段。
+     *
+     * @param vo 销售概览
+     */
+    private void maskOverviewAmountFields(SalesOverviewVO vo) {
+        if (CustomerOrderAmountPermissionUtil.canViewAmount() || vo == null) {
+            return;
+        }
+        vo.setTodayAmount(null);
+        vo.setWeekAmount(null);
+        vo.setMonthAmount(null);
+        vo.setTotalAmount(null);
+        vo.setTodayVerificationAmount(null);
+        vo.setWeekVerificationAmount(null);
+        vo.setMonthVerificationAmount(null);
+        vo.setTotalVerificationAmount(null);
+    }
+
+    /**
+     * 脱敏月度趋势中的金额值。
+     *
+     * @param months 月度趋势列表
+     */
+    private void maskMonthlyAmounts(List<SalesMonthlyItemVO> months) {
+        if (CustomerOrderAmountPermissionUtil.canViewAmount() || months == null || months.isEmpty()) {
+            return;
+        }
+        for (SalesMonthlyItemVO item : months) {
+            if (item != null) {
+                item.setAmount(null);
+            }
+        }
+    }
+
+    /**
+     * 脱敏销售看板 TOP 区域中的金额型数据。
+     *
+     * @param vo TOP 汇总
+     */
+    private void maskTopAmountFields(SalesDashboardTopVO vo) {
+        if (CustomerOrderAmountPermissionUtil.canViewAmount() || vo == null) {
+            return;
+        }
+        vo.setProductAmountList(new ArrayList<>());
+        vo.setSalespersonList(new ArrayList<>());
+        vo.setChannelList(new ArrayList<>());
+    }
+
+    /**
+     * 脱敏销售明细金额。
+     *
+     * @param list 销售明细列表
+     */
+    private void maskDetailAmountFields(List<SalesDetailVO> list) {
+        if (CustomerOrderAmountPermissionUtil.canViewAmount() || list == null || list.isEmpty()) {
+            return;
+        }
+        for (SalesDetailVO item : list) {
+            if (item != null) {
+                item.setSaleAmount(null);
+            }
+        }
+    }
+
+    /**
+     * 脱敏渠道汇总金额。
+     *
+     * @param vo 渠道汇总
+     */
+    private void maskChannelSummaryAmountFields(SalesChannelSummaryVO vo) {
+        if (CustomerOrderAmountPermissionUtil.canViewAmount() || vo == null) {
+            return;
+        }
+        vo.setSaleAmount(null);
+    }
+
+    /**
+     * 脱敏销售员汇总金额。
+     *
+     * @param vo 销售员汇总
+     */
+    private void maskSalespersonSummaryAmountFields(SalesSalespersonSummaryVO vo) {
+        if (CustomerOrderAmountPermissionUtil.canViewAmount() || vo == null) {
+            return;
+        }
+        vo.setSaleAmount(null);
     }
 }
