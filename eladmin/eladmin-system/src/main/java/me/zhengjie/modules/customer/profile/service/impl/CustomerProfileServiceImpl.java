@@ -9,6 +9,7 @@ import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
 import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.customer.order.util.CustomerOrderAmountPermissionUtil;
 import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
@@ -978,6 +979,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         if (totalCount <= 0) {
             throw new BadRequestException("首单份数必须大于0");
         }
+        normalizeFirstOrderAmountFields(orderInfo);
+        validateFirstOrderAmountFields(orderInfo);
         orderInfo.setMealType(OrderStartMealTypeUtil.normalizeOrderMealType(orderInfo.getMealType()));
         orderInfo.setStartMealType(OrderStartMealTypeUtil.normalizeStartMealType(orderInfo.getMealType(), orderInfo.getStartMealType()));
         if (!OrderStartMealTypeUtil.isStartMealTypeAllowed(orderInfo.getMealType(), orderInfo.getStartMealType())) {
@@ -991,6 +994,51 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         orderInfo.setSoupCount(orderInfo.getSoupCount() != null ? orderInfo.getSoupCount() : 0);
         orderInfo.setTotalCount(totalCount);
         return orderInfo;
+    }
+
+    /**
+     * 按金额编辑权限规范化首单金额字段，无权限时统一落 0。
+     *
+     * @param orderInfo 首单信息
+     */
+    private void normalizeFirstOrderAmountFields(CustomerProfileSaveDto.OrderInfoDto orderInfo) {
+        if (orderInfo == null) {
+            return;
+        }
+        if (!CustomerOrderAmountPermissionUtil.canEditAmount()) {
+            orderInfo.setDepositAmount(BigDecimal.ZERO);
+            orderInfo.setTotalAmount(BigDecimal.ZERO);
+            orderInfo.setFinalAmount(BigDecimal.ZERO);
+            orderInfo.setBreakfastPrice(BigDecimal.ZERO);
+            orderInfo.setLunchDinnerPrice(BigDecimal.ZERO);
+            return;
+        }
+        if (orderInfo.getDepositAmount() == null) {
+            orderInfo.setDepositAmount(BigDecimal.ZERO);
+        }
+        if (orderInfo.getBreakfastPrice() == null) {
+            orderInfo.setBreakfastPrice(BigDecimal.ZERO);
+        }
+        if (orderInfo.getLunchDinnerPrice() == null) {
+            orderInfo.setLunchDinnerPrice(BigDecimal.ZERO);
+        }
+    }
+
+    /**
+     * 校验首单金额字段关系。
+     *
+     * @param orderInfo 首单信息
+     */
+    private void validateFirstOrderAmountFields(CustomerProfileSaveDto.OrderInfoDto orderInfo) {
+        if (orderInfo.getTotalAmount() == null) {
+            throw new BadRequestException("首单总金额不能为空");
+        }
+        if (orderInfo.getFinalAmount() == null) {
+            throw new BadRequestException("首单成交金额不能为空");
+        }
+        if (orderInfo.getFinalAmount().compareTo(orderInfo.getTotalAmount()) > 0) {
+            throw new BadRequestException("首单成交金额不能超过总金额");
+        }
     }
 
     private void normalizeDishCount(Integer count, String label, boolean enforceMaxTen) {

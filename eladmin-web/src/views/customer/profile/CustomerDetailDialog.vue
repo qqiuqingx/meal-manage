@@ -67,8 +67,8 @@
               {{ subPackageMap[scope.row.childPackageId] || scope.row.childPackageName || '-' }}
             </template>
           </el-table-column>
-          <el-table-column label="总金额" prop="totalAmount" width="90" align="right" :formatter="amountFormatter" />
-          <el-table-column label="成交金额" prop="finalAmount" width="100" align="right" :formatter="amountFormatter" />
+          <el-table-column v-if="canViewAmount" label="总金额" prop="totalAmount" width="90" align="right" :formatter="amountFormatter" />
+          <el-table-column v-if="canViewAmount" label="成交金额" prop="finalAmount" width="100" align="right" :formatter="amountFormatter" />
           <el-table-column label="早餐" prop="breakfastCount" width="60" align="center" />
           <el-table-column label="午晚" prop="lunchDinnerCount" width="60" align="center" />
           <el-table-column label="合计" prop="totalCount" width="60" align="center" />
@@ -133,6 +133,7 @@
 <script>
 import { getOrdersByCustomer } from '@/api/customer/order'
 import * as packageApi from '@/api/customer/package'
+import { mapGetters } from 'vuex'
 
 export default {
   name: 'CustomerDetailDialog',
@@ -158,6 +159,10 @@ export default {
     }
   },
   computed: {
+    ...mapGetters(['roles']),
+    canViewAmount() {
+      return this.roles.includes('admin') || this.roles.includes('customerOrder:amount:view')
+    },
     dialogVisible: {
       get() {
         return this.visible
