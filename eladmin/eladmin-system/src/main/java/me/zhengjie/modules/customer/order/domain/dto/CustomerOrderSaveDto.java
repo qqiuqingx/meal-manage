@@ -54,14 +54,12 @@ public class CustomerOrderSaveDto implements Serializable {
     /**
      * 总金额
      */
-    @NotNull(message = "总金额不能为空")
     @DecimalMin(value = "0", message = "总金额不能为负数")
     private BigDecimal totalAmount;
 
     /**
      * 成交金额
      */
-    @NotNull(message = "成交金额不能为空")
     @DecimalMin(value = "0", message = "成交金额不能为负数")
     private BigDecimal finalAmount;
 

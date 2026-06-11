@@ -115,7 +115,7 @@
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="余额" prop="mealBalance" width="90" align="right">
+      <el-table-column v-if="canViewAmount" label="余额" prop="mealBalance" width="90" align="right">
         <template slot-scope="scope">
           {{ formatMoney(scope.row.mealBalance) }}
         </template>
@@ -143,17 +143,17 @@
         </template>
       </el-table-column>
       <el-table-column label="成交时间" prop="dealTime" width="150" />
-      <el-table-column label="定金" prop="depositAmount" width="90" align="right">
+      <el-table-column v-if="canViewAmount" label="定金" prop="depositAmount" width="90" align="right">
         <template slot-scope="scope">
           {{ formatMoney(scope.row.depositAmount) }}
         </template>
       </el-table-column>
-      <el-table-column label="总金额" prop="totalAmount" width="100" align="right">
+      <el-table-column v-if="canViewAmount" label="总金额" prop="totalAmount" width="100" align="right">
         <template slot-scope="scope">
           {{ formatMoney(scope.row.totalAmount) }}
         </template>
       </el-table-column>
-      <el-table-column label="成交金额" prop="finalAmount" width="100" align="right">
+      <el-table-column v-if="canViewAmount" label="成交金额" prop="finalAmount" width="100" align="right">
         <template slot-scope="scope">
           {{ formatMoney(scope.row.finalAmount) }}
         </template>
@@ -197,6 +197,8 @@
           :readonly="false"
           :customer-disabled="!!form.id"
           :current-customer="{ id: form.customerId, customerCode: form.customerCode, customerName: form.customerName, phone: form.phone }"
+          :show-amount="canViewAmount"
+          :editable-amount="canEditAmount"
           :rules="rules"
           @customer-change="onCustomerChange"
           @calc-change="onCalcChange"
@@ -225,7 +227,7 @@
         <el-form-item label="客户姓名">
           <span>{{ refundForm.customerName }}</span>
         </el-form-item>
-        <el-form-item label="退餐金额">
+        <el-form-item v-if="canViewAmount" label="退餐金额">
           <span>¥{{ formatMoney(refundForm.refundAmount) }}</span>
         </el-form-item>
         <el-form-item label="退餐原因" prop="refundReason">
@@ -296,8 +298,26 @@ export default {
       editRequestId: 0,
       rules: {
         customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
-        totalAmount: [{ required: true, message: '请输入总金额', trigger: 'blur' }],
-        finalAmount: [{ required: true, message: '请输入成交金额', trigger: 'blur' }],
+        totalAmount: [{
+          validator: (rule, value, callback) => {
+            if (this.canEditAmount && (value === null || value === undefined || value === '')) {
+              callback(new Error('请输入总金额'))
+              return
+            }
+            callback()
+          },
+          trigger: 'blur'
+        }],
+        finalAmount: [{
+          validator: (rule, value, callback) => {
+            if (this.canEditAmount && (value === null || value === undefined || value === '')) {
+              callback(new Error('请输入成交金额'))
+              return
+            }
+            callback()
+          },
+          trigger: 'blur'
+        }],
         status: [{ required: true, message: '请选择订单状态', trigger: 'change' }],
         trialOrderId: [{
           validator: (rule, value, callback) => {
@@ -313,7 +333,13 @@ export default {
     }
   },
   computed: {
-    ...mapGetters(['baseApi']),
+    ...mapGetters(['baseApi', 'roles']),
+    canViewAmount() {
+      return this.roles.includes('admin') || this.roles.includes('customerOrder:amount:view')
+    },
+    canEditAmount() {
+      return this.roles.includes('admin') || this.roles.includes('customerOrder:amount:edit')
+    },
     dialogVisible: {
       get() {
         return this.crud.status.cu > 0
@@ -429,6 +455,14 @@ export default {
       const payload = {
         ...this.form,
         replaceRules: cleanReplaceRules(this.form.replaceRules)
+      }
+      if (!this.canEditAmount) {
+        delete payload.depositAmount
+        delete payload.totalAmount
+        delete payload.finalAmount
+        delete payload.breakfastPrice
+        delete payload.lunchDinnerPrice
+        delete payload.verifiedAmount
       }
 
       // 先校验订单冲突（提交前校验）
