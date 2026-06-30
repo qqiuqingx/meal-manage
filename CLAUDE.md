@@ -82,12 +82,11 @@ Access URLs:
 - Logs page: `http://localhost:8013/#/monitor/logs`
 
 Local login:
-- Username: `admin`
-- Password: `REDACTED_PASSWORD`
-- Dev captcha bypass: `REDACTED_CODE`
+- 本地登录账号请使用你自己的初始化数据或本地配置
+- 开发环境验证码请按本地配置或调试开关处理
 
 Notes:
-- Backend `dev` profile connects to remote MySQL/Redis from `application-dev.yml`; sandboxed runs may fail with `Operation not permitted (connect failed)`. Run with network permission when starting locally through an agent.
+- Backend `dev` profile reads MySQL/Redis from environment variables; sandboxed runs may fail with `Operation not permitted (connect failed)`. Run with network permission when starting locally through an agent.
 - Start backend before frontend, because `.env.development` points `VUE_APP_BASE_API` to `http://localhost:8000`.
 - If port `8000` or `8013` is already occupied, identify the owning process before changing ports.
 
@@ -135,12 +134,13 @@ npm run lint
 - Frontend config: Environment variables in `.env.*` files
 - Server: Port 8000, HTTP/2 enabled, GZIP compression enabled
 - Frontend: Port 8013 (see `eladmin-web/vue.config.js`)
-- Default login: admin / REDACTED_PASSWORD
-- Dev验证码: 输入 `REDACTED_CODE` 可跳过验证码校验 (see `AuthController.java`)
+- Default login: use your own local seed data or private config
+- Dev验证码: use local config or debug-only settings
 
 ### Environment Variables
 
 Backend reads from:
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PWD`
 - `REDIS_HOST`, `REDIS_PORT`, `REDIS_PWD`, `REDIS_DB`
 
 ## Git Commit

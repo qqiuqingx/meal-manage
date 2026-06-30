@@ -5,8 +5,8 @@ spring:
       db-type: com.alibaba.druid.pool.DruidDataSource
       driverClassName: com.p6spy.engine.spy.P6SpyDriver
       url: jdbc:p6spy:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:eladmin}?serverTimezone=Asia/Shanghai&characterEncoding=utf8&useSSL=false
-      username: root
-      password: change-me
+      username: ${DB_USER:root}
+      password: ${DB_PWD:}
       # 初始连接数，建议设置为与最小空闲连接数相同
       initial-size: 20
       # 最小空闲连接数，保持足够的空闲连接以应对请求
@@ -50,7 +50,25 @@ spring:
         wall:
           config:
             multi-statement-allow: true
-
+  redis:
+    #数据库索引
+    database: ${REDIS_DB:2}
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PWD:}
+    #连接超时时间
+    timeout: 5000
+    # 连接池配置
+    lettuce:
+      pool:
+        # 连接池最大连接数
+        max-active: 30
+        # 连接池最大阻塞等待时间（毫秒），负值表示没有限制
+        max-wait: -1
+        # 连接池中的最大空闲连接数
+        max-idle: 20
+        # 连接池中的最小空闲连接数
+        min-idle: 1
 # 登录相关配置
 login:
   #  是否限制单用户登录

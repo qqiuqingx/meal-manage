@@ -39,6 +39,7 @@ function createContext(overrides = {}) {
     mode: 'firstOrder',
     hydratingForm: false,
     hydrationTimer: null,
+    baseApi: 'http://localhost:8000',
     riceTypeOptions: [],
     startMealTypeOptions: [
       { label: '早餐开始', value: 'BREAKFAST' },
@@ -47,6 +48,10 @@ function createContext(overrides = {}) {
     ],
     $set(target, key, value) {
       target[key] = value
+    },
+    $message: {
+      success: jest.fn(),
+      error: jest.fn()
     },
     loadChildPackages: jest.fn()
   }
@@ -60,6 +65,10 @@ function createContext(overrides = {}) {
   ctx.syncStartMealType = OrderForm.methods.syncStartMealType.bind(ctx)
   ctx.ensureTrialOrderOption = OrderForm.methods.ensureTrialOrderOption.bind(ctx)
   ctx.initReplaceRuleOptions = OrderForm.methods.initReplaceRuleOptions.bind(ctx)
+  ctx.getCustomMenuImageUrl = OrderForm.methods.getCustomMenuImageUrl.bind(ctx)
+  ctx.beforeCustomMenuImageUpload = OrderForm.methods.beforeCustomMenuImageUpload.bind(ctx)
+  ctx.handleCustomMenuImageSuccess = OrderForm.methods.handleCustomMenuImageSuccess.bind(ctx)
+  ctx.removeCustomMenuImage = OrderForm.methods.removeCustomMenuImage.bind(ctx)
 
   return ctx
 }
@@ -159,5 +168,57 @@ describe('OrderForm delivery date sync', () => {
 
     expect(source).toContain('@keydown.native.capture="handleAllergyKeydown"')
     expect(source).not.toContain('@keydown.native="handleAllergyKeydown"')
+  })
+
+  test('writes custom menu image path after successful upload', () => {
+    const ctx = createContext()
+
+    OrderForm.methods.handleCustomMenuImageSuccess.call(ctx, {
+      type: 'avatar',
+      realName: 'menu-001.jpg'
+    })
+
+    expect(ctx.form.customMenuImage).toBe('/file/avatar/menu-001.jpg')
+    expect(ctx.$message.success).toHaveBeenCalledWith('图片上传成功')
+  })
+
+  test('clears custom menu image without deleting physical file', () => {
+    const ctx = createContext({
+      customMenuImage: '/file/avatar/menu-001.jpg'
+    })
+
+    OrderForm.methods.removeCustomMenuImage.call(ctx)
+
+    expect(ctx.form.customMenuImage).toBeNull()
+  })
+
+  test('builds custom menu image preview url from baseApi', () => {
+    const ctx = createContext()
+
+    expect(OrderForm.methods.getCustomMenuImageUrl.call(ctx, '/file/avatar/menu-001.jpg'))
+      .toBe('http://localhost:8000/file/avatar/menu-001.jpg')
+    expect(OrderForm.methods.getCustomMenuImageUrl.call(ctx, 'https://cdn.example.com/menu.jpg'))
+      .toBe('https://cdn.example.com/menu.jpg')
+  })
+
+  test('rejects non-image or oversized custom menu image before upload', () => {
+    const ctx = createContext()
+
+    expect(OrderForm.methods.beforeCustomMenuImageUpload.call(ctx, {
+      type: 'text/plain',
+      size: 1024
+    })).toBe(false)
+    expect(ctx.$message.error).toHaveBeenCalledWith('只能上传图片文件')
+
+    expect(OrderForm.methods.beforeCustomMenuImageUpload.call(ctx, {
+      type: 'image/png',
+      size: 6 * 1024 * 1024
+    })).toBe(false)
+    expect(ctx.$message.error).toHaveBeenCalledWith('图片大小不能超过 5MB')
+
+    expect(OrderForm.methods.beforeCustomMenuImageUpload.call(ctx, {
+      type: 'image/png',
+      size: 1024
+    })).toBe(true)
   })
 })
