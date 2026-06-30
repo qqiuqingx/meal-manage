@@ -104,7 +104,7 @@ public class MealVerificationController {
     @Log("删除核销日志: id={#id}, 原因={#reason}")
     @ApiOperation("删除核销日志")
     @DeleteMapping("/logs/{id}")
-    @PreAuthorize("@el.check('mealPlan:list')")
+    @PreAuthorize("@el.check('verificationLog:del')")
     public ResponseEntity<Void> deleteVerificationLog(
             @PathVariable Long id,
             @RequestParam(required = false) String reason) {
