@@ -13,13 +13,21 @@ class AgentDiagnosisFacadeServiceImplTest {
 
     @Test
     void shouldDelegateDiagnosisToAgentServiceClient() {
-        AgentServiceClient client = request -> {
-            AgentDiagnosisResponse response = new AgentDiagnosisResponse();
-            response.setCustomerId(request.getCustomerId());
-            response.setRecordDate(request.getRecordDate());
-            response.setMealType(request.getMealType());
-            response.setSummary("AI 判断命中客户排除日期");
-            return response;
+        AgentServiceClient client = new AgentServiceClient() {
+            @Override
+            public AgentDiagnosisResponse diagnoseMealPlan(AgentDiagnosisRequest request) {
+                AgentDiagnosisResponse response = new AgentDiagnosisResponse();
+                response.setCustomerId(request.getCustomerId());
+                response.setRecordDate(request.getRecordDate());
+                response.setMealType(request.getMealType());
+                response.setSummary("AI 判断命中客户排除日期");
+                return response;
+            }
+
+            @Override
+            public AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId) {
+                return new AgentChatResponse();
+            }
         };
         AgentDiagnosisFacadeServiceImpl service = new AgentDiagnosisFacadeServiceImpl(client);
 
