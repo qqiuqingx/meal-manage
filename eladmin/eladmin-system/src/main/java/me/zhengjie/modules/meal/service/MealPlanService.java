@@ -17,7 +17,9 @@ package me.zhengjie.modules.meal.service;
 
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.meal.domain.dto.MealDepletionWarningDto;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
+import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
@@ -26,6 +28,7 @@ import me.zhengjie.modules.meal.domain.dto.MealPlanListDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
 import me.zhengjie.utils.PageResult;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -39,11 +42,25 @@ public interface MealPlanService {
      * 根据排餐日期和餐次生成排餐计划。
      *
      * @param recordDate 排餐日期，格式 yyyy-MM-dd
-     * @param mealType 餐次，支持 LUNCH / DINNER
+     * @param mealType 餐次，支持 BREAKFAST / LUNCH / DINNER
+     * @param customerId 指定客户ID，不传则生成全部客户的排餐计划
+     * @param menuWeekNum 指定菜单周次，需与 menuDayOfWeek 同时传入；不传则按 recordDate 推导
+     * @param menuDayOfWeek 指定菜单星期，需与 menuWeekNum 同时传入；不传则按 recordDate 推导
+     * @return 生成结果汇总
+     */
+    MealPlanGenerateResult generateMealPlan(String recordDate, String mealType, Long customerId, Integer menuWeekNum, Integer menuDayOfWeek);
+
+    /**
+     * 根据排餐日期和餐次生成排餐计划。
+     *
+     * @param recordDate 排餐日期，格式 yyyy-MM-dd
+     * @param mealType 餐次，支持 BREAKFAST / LUNCH / DINNER
      * @param customerId 指定客户ID，不传则生成全部客户的排餐计划
      * @return 生成结果汇总
      */
-    MealPlanGenerateResult generateMealPlan(String recordDate, String mealType, Long customerId);
+    default MealPlanGenerateResult generateMealPlan(String recordDate, String mealType, Long customerId) {
+        return generateMealPlan(recordDate, mealType, customerId, null, null);
+    }
 
     /**
      * 分页查询排餐计划列表
@@ -117,6 +134,16 @@ public interface MealPlanService {
     void deleteMealPlanCustomers(List<Long> customerPlanIds);
 
     /**
+     * 删除客户指定日期餐次的未核销排餐记录；若存在已核销记录则抛出异常。
+     *
+     * @param customerId 客户ID
+     * @param recordDate 排餐日期，格式 yyyy-MM-dd
+     * @param mealType 餐次，支持 BREAKFAST / LUNCH / DINNER
+     * @return 删除的客户排餐记录数量
+     */
+    int deleteUnverifiedCustomerMealForCalendarAdjustment(Long customerId, String recordDate, String mealType);
+
+    /**
      * 根据排餐计划ID查询完整详情（含客户列表和菜品明细）
      *
      * @param mealPlanId 排餐计划ID
@@ -131,4 +158,22 @@ public interface MealPlanService {
      * @return 套餐统计列表
      */
     List<MealPackageStatDto> statByDate(String date);
+
+    /**
+     * 分页查询排餐计划客户详情弹窗信息。
+     * 返回配送地址、过敏标签、特殊要求以及当前订单自定义菜单图片。
+     *
+     * @param criteria 查询条件
+     * @return 客户详情弹窗分页列表
+     */
+    PageResult<MealPlanCustomerAddressVO> queryCustomerAddresses(MealPlanCustomerQueryCriteria criteria);
+
+    /**
+     * 查询指定日期排餐后将耗尽餐数的客户订单列表。
+     * 用于在排餐计划生成后，提醒运营人员关注即将用完餐数的客户，主动跟进续费。
+     *
+     * @param targetDate 目标日期（通常传入明天的日期）
+     * @return 即将耗尽餐数的客户订单列表
+     */
+    List<MealDepletionWarningDto> getDepletionWarnings(LocalDate targetDate);
 }

@@ -23,13 +23,23 @@
         <result column="deal_time" property="dealTime"/>
         <result column="first_delivery_time" property="firstDeliveryTime"/>
         <result column="start_date" property="startDate"/>
+        <result column="start_meal_type" property="startMealType"/>
         <result column="end_date" property="endDate"/>
         <result column="status" property="status"/>
         <result column="meal_type" property="mealType"/>
         <result column="schedule_mode" property="scheduleMode"/>
         <result column="delivery_dates" property="deliveryDates"/>
         <result column="remark" property="remark"/>
+        <result column="main_dish_count" property="mainDishCount"/>
+        <result column="side_dish_count" property="sideDishCount"/>
+        <result column="veg_count" property="vegCount"/>
+        <result column="rice_count" property="riceCount"/>
+        <result column="rice_type" property="riceType"/>
+        <result column="soup_count" property="soupCount"/>
+        <result column="custom_menu_image" property="customMenuImage"/>
         <result column="customer_source" property="customerSource"/>
+        <result column="trial_converted" property="trialConverted"/>
+        <result column="trial_order_id" property="trialOrderId"/>
         <result column="create_by" property="createBy"/>
         <result column="update_by" property="updateBy"/>
         <result column="create_time" property="createTime"/>
@@ -41,23 +51,34 @@
         <result column="phone" property="phone"/>
         <result column="parent_package_name" property="parentPackageName"/>
         <result column="child_package_name" property="childPackageName"/>
+        <result column="allergy_tags" property="allergyTags" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="special_requirements" property="specialRequirements"/>
+        <result column="addresses" property="addresses" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="trial_order_code" property="trialOrderCode"/>
     </resultMap>
 
-    <!-- 条件查询订单列表(关联客户姓名、手机号和套餐名称) -->
+    <!-- 条件查询订单列表(关联客户姓名、手机号、套餐名称和过敏标签) -->
     <select id="findAll" resultMap="JoinResultMap">
-        SELECT o.*, cp.customer_name, cp.phone,
+        SELECT o.*, cp.customer_name, cp.phone, cp.allergy_tags, cp.special_requirements,
                pp.package_name as parent_package_name,
-               sp.sub_package_name as child_package_name
+               sp.sub_package_name as child_package_name,
+               trial_o.order_code as trial_order_code,
+               (SELECT JSON_ARRAYAGG(JSON_OBJECT('type', CASE cpa.address_type WHEN 'DEFAULT' THEN '默认' WHEN 'WORKDAY' THEN '工作日' WHEN 'WEEKEND' THEN '周末' END, 'detail', cpa.address_detail))
+                FROM customer_profile_address cpa WHERE cpa.customer_id = o.customer_id) as addresses
         FROM customer_order o
         LEFT JOIN customer_profile cp ON o.customer_id = cp.id
         LEFT JOIN parent_package pp ON o.parent_package_id = pp.id
         LEFT JOIN sub_package sp ON o.child_package_id = sp.id
+        LEFT JOIN customer_order trial_o ON o.trial_order_id = trial_o.id
         <where>
             <if test="criteria.orderCode != null and criteria.orderCode != ''">
                 AND o.order_code LIKE CONCAT('%', #{criteria.orderCode}, '%')
             </if>
             <if test="criteria.customerId != null">
                 AND o.customer_id = #{criteria.customerId}
+            </if>
+            <if test="criteria.customerCode != null and criteria.customerCode != ''">
+                AND o.customer_code = #{criteria.customerCode}
             </if>
             <if test="criteria.customerName != null and criteria.customerName != ''">
                 AND cp.customer_name LIKE CONCAT('%', #{criteria.customerName}, '%')
@@ -79,6 +100,12 @@
             <if test="criteria.endDate != null and criteria.endDate.length == 2">
                 AND o.end_date &gt;= #{criteria.endDate[0]}
                 AND o.end_date &lt;= #{criteria.endDate[1]}
+            </if>
+            <if test="criteria.eligibleOrderIds != null and criteria.eligibleOrderIds.size() > 0">
+                AND o.id IN
+                <foreach collection="criteria.eligibleOrderIds" item="id" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
             </if>
         </where>
         ORDER BY o.id DESC
@@ -98,6 +125,9 @@
             <if test="criteria.customerId != null">
                 AND o.customer_id = #{criteria.customerId}
             </if>
+            <if test="criteria.customerCode != null and criteria.customerCode != ''">
+                AND o.customer_code = #{criteria.customerCode}
+            </if>
             <if test="criteria.customerName != null and criteria.customerName != ''">
                 AND cp.customer_name LIKE CONCAT('%', #{criteria.customerName}, '%')
             </if>
@@ -118,6 +148,12 @@
             <if test="criteria.endDate != null and criteria.endDate.length == 2">
                 AND o.end_date &gt;= #{criteria.endDate[0]}
                 AND o.end_date &lt;= #{criteria.endDate[1]}
+            </if>
+            <if test="criteria.eligibleOrderIds != null and criteria.eligibleOrderIds.size() > 0">
+                AND o.id IN
+                <foreach collection="criteria.eligibleOrderIds" item="id" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
             </if>
         </where>
     </select>
@@ -139,6 +175,35 @@
         LIMIT 1
     </select>
 
+    <!-- 查询可关联的试餐订单：父套餐名称包含“试餐” -->
+    <select id="findTrialOrders" resultMap="JoinResultMap">
+        SELECT o.*, cp.customer_name, cp.phone, cp.allergy_tags, cp.special_requirements,
+               pp.package_name as parent_package_name,
+               sp.sub_package_name as child_package_name,
+               trial_o.order_code as trial_order_code,
+               (SELECT JSON_ARRAYAGG(JSON_OBJECT('type', CASE cpa.address_type WHEN 'DEFAULT' THEN '默认' WHEN 'WORKDAY' THEN '工作日' WHEN 'WEEKEND' THEN '周末' END, 'detail', cpa.address_detail))
+                FROM customer_profile_address cpa WHERE cpa.customer_id = o.customer_id) as addresses
+        FROM customer_order o
+        LEFT JOIN customer_profile cp ON o.customer_id = cp.id
+        LEFT JOIN parent_package pp ON o.parent_package_id = pp.id
+        LEFT JOIN sub_package sp ON o.child_package_id = sp.id
+        LEFT JOIN customer_order trial_o ON o.trial_order_id = trial_o.id
+        WHERE pp.package_name LIKE '%试餐%'
+        <if test="keyword != null and keyword != ''">
+            AND (
+                o.order_code LIKE CONCAT('%', #{keyword}, '%')
+                OR cp.customer_name LIKE CONCAT('%', #{keyword}, '%')
+                OR cp.phone LIKE CONCAT('%', #{keyword}, '%')
+                OR o.customer_code LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+        <if test="excludeId != null">
+            AND o.id != #{excludeId}
+        </if>
+        ORDER BY o.id DESC
+        LIMIT #{limit}
+    </select>
+
     <!-- 根据客户ID查询最新订单（按成交时间倒序，只查询进行中的订单） -->
     <select id="findLatestByCustomerId" resultMap="BaseResultMap">
         SELECT * FROM customer_order
@@ -147,51 +212,61 @@
         LIMIT 1
     </select>
 
-    <!-- 统计同一客户在同一时间段内的订单数量 -->
+    <!-- 根据客户ID查询所有有效订单（status=1，按成交时间倒序） -->
+    <select id="findActiveOrdersByCustomerId" resultMap="BaseResultMap">
+        SELECT * FROM customer_order
+        WHERE customer_id = #{customerId} AND status = 1
+        ORDER BY deal_time DESC
+    </select>
+
+    <select id="findActiveOrdersByCustomerIds" resultMap="BaseResultMap">
+        SELECT *
+        FROM customer_order
+        WHERE status = 1
+          AND COALESCE(remaining_count, 0) &gt; 0
+        <if test="startedBeforeDate != null">
+          AND start_date &lt; #{startedBeforeDate}
+        </if>
+          AND customer_id IN
+        <foreach collection="customerIds" item="customerId" open="(" separator="," close=")">
+            #{customerId}
+        </foreach>
+        ORDER BY customer_id ASC, start_date ASC, deal_time ASC, id ASC
+    </select>
+
+    <!-- 统计同一客户在同一时间段内的订单数量（去除结束日期限制） -->
     <select id="countOverlappingOrders" resultType="int">
         SELECT COUNT(*)
         FROM customer_order
         WHERE customer_id = #{customerId}
-          AND status != 0
-          AND (
-            (start_date &lt;= #{endDate} AND end_date &gt;= #{startDate})
-            OR (start_date BETWEEN #{startDate} AND #{endDate})
-            OR (end_date BETWEEN #{startDate} AND #{endDate})
-          )
+          AND status = 1
+          AND start_date &gt;= #{startDate}
         <if test="excludeId != null">
             AND id != #{excludeId}
         </if>
     </select>
 
-    <!-- 统计同一客户在同一时间段内的全餐次订单数量 -->
+    <!-- 统计同一客户在同一时间段内的全餐次订单数量（去除结束日期限制） -->
     <select id="countAllMealTypeOrders" resultType="int">
         SELECT COUNT(*)
         FROM customer_order
         WHERE customer_id = #{customerId}
           AND meal_type = 'ALL'
-          AND status != 0
-          AND (
-            (start_date &lt;= #{endDate} AND end_date &gt;= #{startDate})
-            OR (start_date BETWEEN #{startDate} AND #{endDate})
-            OR (end_date BETWEEN #{startDate} AND #{endDate})
-          )
+          AND status =1
+          AND start_date &gt;= #{startDate}
         <if test="excludeId != null">
             AND id != #{excludeId}
         </if>
     </select>
 
-    <!-- 统计同一客户在同一时间段内的指定餐次订单数量 -->
+    <!-- 统计同一客户在同一时间段内的指定餐次订单数量（去除结束日期限制） -->
     <select id="countMealTypeOrders" resultType="int">
         SELECT COUNT(*)
         FROM customer_order
         WHERE customer_id = #{customerId}
           AND meal_type = #{mealType}
-          AND status != 0
-          AND (
-            (start_date &lt;= #{endDate} AND end_date &gt;= #{startDate})
-            OR (start_date BETWEEN #{startDate} AND #{endDate})
-            OR (end_date BETWEEN #{startDate} AND #{endDate})
-          )
+          AND status =1
+          AND start_date &gt;= #{startDate}
         <if test="excludeId != null">
             AND id != #{excludeId}
         </if>
@@ -209,25 +284,56 @@
         GROUP BY customer_id
     </select>
 
-    <!-- 查询指定日期和餐次的有效订单候选 -->
+    <!-- 查询指定日期和餐次的有效订单候选（去除结束日期限制） -->
     <select id="findMealPlanOrders" resultMap="BaseResultMap">
-        SELECT *
-        FROM customer_order
-        WHERE status = 1
-          AND remaining_count &gt; 0
-          AND start_date &lt;= #{targetDate}
-          AND end_date &gt;= #{targetDate}
-          AND meal_type IN (#{mealType}, 'ALL')
+        SELECT o.*
+        FROM customer_order o
+        WHERE o.status = 1
+          AND o.start_date &lt;= #{targetDate}
+          AND COALESCE(o.remaining_count, 0) &gt; 0
+        <choose>
+            <when test="mealType == 'BREAKFAST'">
+                AND o.meal_type = 'ALL'
+                AND COALESCE(o.breakfast_count, 0) &gt; 0
+            </when>
+            <when test="mealType == 'LUNCH'">
+                AND o.meal_type IN ('ALL', 'LUNCH', 'LUNCH_DINNER')
+                AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
+            </when>
+            <when test="mealType == 'DINNER'">
+                AND o.meal_type IN ('ALL', 'DINNER', 'LUNCH_DINNER')
+                AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
+            </when>
+            <otherwise>
+                AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
+            </otherwise>
+        </choose>
     </select>
 
-    <!-- 查询指定日期范围内的所有订单（用于日志对比） -->
+    <!-- 查询指定日期范围内的所有订单（用于日志对比，去除结束日期限制） -->
     <select id="findByDateRangeAndMealType" resultMap="BaseResultMap">
-        SELECT *
-        FROM customer_order
-        WHERE start_date &lt;= #{targetDate}
-          AND end_date &gt;= #{targetDate}
-          AND meal_type IN (#{mealType}, 'ALL')
-        ORDER BY id
+        SELECT o.*
+        FROM customer_order o
+        WHERE o.start_date &lt;= #{targetDate}
+        and o.status =1
+        <choose>
+            <when test="mealType == 'BREAKFAST'">
+                AND o.meal_type = 'ALL'
+                AND COALESCE(o.breakfast_count, 0) &gt; 0
+            </when>
+            <when test="mealType == 'LUNCH'">
+                AND o.meal_type IN ('ALL', 'LUNCH', 'LUNCH_DINNER')
+                AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
+            </when>
+            <when test="mealType == 'DINNER'">
+                AND o.meal_type IN ('ALL', 'DINNER', 'LUNCH_DINNER')
+                AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
+            </when>
+            <otherwise>
+                AND COALESCE(o.lunch_dinner_count, 0) &gt; 0
+            </otherwise>
+        </choose>
+        ORDER BY o.id
     </select>
 
     <!-- 原子性增加核销餐数（verified_count+1，remaining_count-1） -->
@@ -254,17 +360,65 @@
           AND status = 1
     </update>
 
+    <!-- 当剩余餐数为0时，原子性更新订单状态为已完成 -->
+    <update id="updateStatusToCompletedWhenFinished">
+        UPDATE customer_order
+        SET status = 2,
+            update_time = NOW()
+        WHERE id = #{orderId}
+          AND remaining_count = 0
+          AND status = 1
+    </update>
+
     <!-- 根据订单ID统计各餐次已核销餐数 -->
     <select id="sumVerifiedCountByOrderId" resultMap="VerifiedCountResultMap">
         SELECT meal_type, SUM(verification_count) AS verified_count
         FROM meal_verification_log
         WHERE order_id = #{orderId}
+          AND (deleted = 0 OR deleted IS NULL)
         GROUP BY meal_type
     </select>
+
+    <resultMap id="OrderMealVerifiedCountResultMap" type="me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto">
+        <result column="order_id" property="orderId"/>
+        <result column="meal_type" property="mealType"/>
+        <result column="verified_count" property="verifiedCount"/>
+    </resultMap>
+
+    <select id="sumVerifiedCountByOrderIds" resultMap="OrderMealVerifiedCountResultMap">
+        SELECT order_id, meal_type, SUM(verification_count) AS verified_count
+        FROM meal_verification_log
+        WHERE order_id IN
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+          AND (deleted = 0 OR deleted IS NULL)
+        GROUP BY order_id, meal_type
+    </select>
+
+    <!-- 回退核销状态（删除核销日志时调用） -->
+    <update id="revertVerification">
+        UPDATE customer_order
+        SET verified_count = GREATEST(COALESCE(verified_count, 0) - 1, 0),
+            verified_amount = GREATEST(COALESCE(verified_amount, 0) - #{price}, 0),
+            meal_balance = COALESCE(meal_balance, 0) + #{price},
+            remaining_count = remaining_count + 1,
+            status = CASE WHEN status = 2 THEN 1 ELSE status END,
+            update_time = NOW()
+        WHERE id = #{orderId}
+    </update>
 
     <resultMap id="VerifiedCountResultMap" type="me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto">
         <result column="meal_type" property="mealType"/>
         <result column="verified_count" property="verifiedCount"/>
     </resultMap>
+
+    <!-- 退餐：更新订单状态为已退餐 -->
+    <update id="updateStatusToRefunded">
+        UPDATE customer_order
+        SET status = 3,
+            update_time = NOW()
+        WHERE id = #{orderId}
+    </update>
 
 </mapper>

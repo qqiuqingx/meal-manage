@@ -20,7 +20,24 @@ public class CustomerProfileDetailDto implements Serializable {
     private String phone;
     private Integer gestationalWeek;
     private List<String> allergyTags;
+    private List<Integer> excludedDishIds;
+    private List<String> excludedDishNames;
+    /**
+     * 排除日期列表（日期+餐次组合，Wave 1/2 完整实现）
+     */
+    private java.util.List<ExcludedDateDto> excludedDates;
     private String medicalRequirements;
+
+    /**
+     * 特殊要求
+     */
+    private String specialRequirements;
+
+    /**
+     * 生产日期
+     */
+    private LocalDate productionDate;
+
     //
     private String remark;
     private LocalDate createTime;

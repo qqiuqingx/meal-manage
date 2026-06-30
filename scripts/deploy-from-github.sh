@@ -14,6 +14,18 @@ ENV_FILE="${ENV_FILE:-/data/meals/.env}"
 COMPOSE_FILE_REL="${COMPOSE_FILE_REL:-docker/docker-compose.yml}"
 # 保留最近 N 个版本的 Docker 镜像
 KEEP_IMAGE_COUNT="${KEEP_IMAGE_COUNT:-3}"
+# Docker 构建前要求的最小可用磁盘空间（MB）
+MIN_FREE_DISK_MB="${MIN_FREE_DISK_MB:-4096}"
+# Docker 构建缓存清理策略：auto / always / never
+DOCKER_BUILD_CACHE_PRUNE="${DOCKER_BUILD_CACHE_PRUNE:-auto}"
+DOCKER_DISK_PATH="${DOCKER_DISK_PATH:-/var/lib/docker}"
+DEPLOY_PARENT_DIR="$(dirname "$DEPLOY_BASE_DIR")"
+MAVEN_IMAGE="${MAVEN_IMAGE:-maven:3.8.8-eclipse-temurin-8}"
+HOST_MAVEN_REPO="${HOST_MAVEN_REPO:-$DEPLOY_PARENT_DIR/.m2/repository}"
+BACKEND_ARTIFACT_DIR="${BACKEND_ARTIFACT_DIR:-$DEPLOY_BASE_DIR/.deploy/mealserver}"
+BACKEND_JAR_NAME="${BACKEND_JAR_NAME:-eladmin-system-1.1.jar}"
+SKIP_REPO_UPDATE="${SKIP_REPO_UPDATE:-false}"
+PREVIOUS_COMMIT="${PREVIOUS_COMMIT:-}"
 
 # 校验 KEEP_IMAGE_COUNT 必须为正整数，且至少为 2（保证回退脚本始终有镜像可选）
 if ! [[ "$KEEP_IMAGE_COUNT" =~ ^[1-9][0-9]*$ ]]; then
@@ -30,7 +42,66 @@ timestamp() {
 }
 
 log() {
-  printf '[%s] %s\n' "$(timestamp)" "$*"
+  printf '[%s] %s\n' "$(timestamp)" "$*" >&2
+}
+
+get_free_disk_mb() {
+  df -Pm "$DOCKER_DISK_PATH" 2>/dev/null | awk 'NR==2 {print $4}'
+}
+
+prune_build_cache() {
+  log "cleaning Docker build cache"
+  docker builder prune -af >/dev/null 2>&1 || log "warning: docker builder prune failed"
+}
+
+cleanup_docker_space() {
+  local available_mb
+
+  log "cleaning unused Docker containers and dangling images before rebuild"
+  docker container prune -f >/dev/null 2>&1 || log "warning: docker container prune failed"
+  docker image prune -f >/dev/null 2>&1 || log "warning: docker image prune failed"
+
+  case "$DOCKER_BUILD_CACHE_PRUNE" in
+    always)
+      prune_build_cache
+      ;;
+    never)
+      log "skipping Docker build cache cleanup (DOCKER_BUILD_CACHE_PRUNE=never)"
+      ;;
+    auto)
+      available_mb=$(get_free_disk_mb || true)
+      if [[ -z "$available_mb" ]]; then
+        log "warning: unable to read free disk space for $DOCKER_DISK_PATH, preserving Docker build cache"
+      elif (( available_mb < MIN_FREE_DISK_MB )); then
+        log "free disk space is low (${available_mb}MB), cleaning Docker build cache"
+        prune_build_cache
+      else
+        log "preserving Docker build cache (${available_mb}MB free) to speed up Maven and Node builds"
+      fi
+      ;;
+    *)
+      log "DOCKER_BUILD_CACHE_PRUNE must be auto, always, or never (got: $DOCKER_BUILD_CACHE_PRUNE)"
+      exit 1
+      ;;
+  esac
+}
+
+check_disk_space() {
+  local available_mb
+
+  available_mb=$(get_free_disk_mb || true)
+  if [[ -z "$available_mb" ]]; then
+    log "warning: unable to read free disk space for $DOCKER_DISK_PATH"
+    return 0
+  fi
+
+  if (( available_mb < MIN_FREE_DISK_MB )); then
+    log "insufficient free disk space for Docker build: ${available_mb}MB available on $DOCKER_DISK_PATH, require at least ${MIN_FREE_DISK_MB}MB"
+    log "hint: run 'docker system df' and clean /var/lib/docker or host logs before retrying"
+    exit 1
+  fi
+
+  log "free disk space check passed: ${available_mb}MB available on $DOCKER_DISK_PATH"
 }
 
 require_cmd() {
@@ -194,16 +265,51 @@ retry_until_success() {
   return 1
 }
 
+get_container_image_tag() {
+  local container_name="$1"
+  local repository="$2"
+  local image
+
+  image=$(docker inspect "$container_name" --format '{{.Config.Image}}' 2>/dev/null || true)
+  if [[ "$image" == "$repository:"* ]]; then
+    printf '%s\n' "${image#"$repository:"}"
+  fi
+}
+
+image_tag_exists() {
+  local repository="$1"
+  local tag="$2"
+
+  docker image inspect "$repository:$tag" >/dev/null 2>&1
+}
+
+build_backend_artifacts() {
+  log "building backend artifacts with host Maven repository: $HOST_MAVEN_REPO"
+  mkdir -p "$HOST_MAVEN_REPO" "$BACKEND_ARTIFACT_DIR/lib"
+  rm -f "$BACKEND_ARTIFACT_DIR/app.jar"
+  rm -rf "$BACKEND_ARTIFACT_DIR/lib"
+  mkdir -p "$BACKEND_ARTIFACT_DIR/lib"
+
+  docker run --rm \
+    -v "$DEPLOY_BASE_DIR/eladmin:/workspace" \
+    -v "$DEPLOY_BASE_DIR/docker/mealserver/settings.xml:/tmp/settings.xml:ro" \
+    -v "$HOST_MAVEN_REPO:/root/.m2/repository" \
+    -v "$BACKEND_ARTIFACT_DIR:/output" \
+    -w /workspace \
+    "$MAVEN_IMAGE" \
+    sh -c "mvn -s /tmp/settings.xml -pl eladmin-system -am clean install -Dmaven.test.skip=true -Dspring-boot.repackage.skip=true && \
+      mvn -s /tmp/settings.xml -pl eladmin-system dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=/output/lib && \
+      cp eladmin-system/target/$BACKEND_JAR_NAME /output/app.jar"
+
+  require_file "$BACKEND_ARTIFACT_DIR/app.jar"
+}
+
 deploy_compose() {
   local previous_commit="$1"
   local compose_file="$DEPLOY_BASE_DIR/$COMPOSE_FILE_REL"
 
   require_file "$compose_file"
   require_file "$ENV_FILE"
-
-  # 生成镜像 tag，精确到秒（避免同分钟多次部署标签冲突）
-  export IMAGE_TAG
-  IMAGE_TAG=$(date '+%Y%m%d%H%M%S')
 
   # 检测并分类变更
   local changed_files
@@ -218,6 +324,35 @@ deploy_compose() {
   rebuild_backend=$(echo "$build_targets" | grep -oP 'backend=\K(true|false)' || echo "false")
   rebuild_frontend=$(echo "$build_targets" | grep -oP 'frontend=\K(true|false)' || echo "false")
 
+  # docker-compose.yml uses a single IMAGE_TAG for both services. Keep the pair aligned.
+  export IMAGE_TAG
+  if [[ "$rebuild_backend" == "false" && "$rebuild_frontend" == "false" ]]; then
+    local backend_current_tag
+    local frontend_current_tag
+    backend_current_tag=$(get_container_image_tag mealserver mealserver)
+    frontend_current_tag=$(get_container_image_tag mealweb mealweb)
+
+    if [[ -n "$backend_current_tag" && "$backend_current_tag" == "$frontend_current_tag" ]] && \
+       image_tag_exists mealserver "$backend_current_tag" && \
+       image_tag_exists mealweb "$frontend_current_tag"; then
+      IMAGE_TAG="$backend_current_tag"
+      log "no rebuild needed, reusing existing image tag: $IMAGE_TAG"
+    else
+      log "no reusable paired image tag found, forcing full rebuild"
+      rebuild_backend=true
+      rebuild_frontend=true
+      IMAGE_TAG=$(date '+%Y%m%d%H%M%S')
+    fi
+  else
+    if [[ "$rebuild_backend" != "$rebuild_frontend" ]]; then
+      log "partial rebuild requested, rebuilding both services to keep image tags aligned"
+      rebuild_backend=true
+      rebuild_frontend=true
+    fi
+    # 生成镜像 tag，精确到秒（避免同分钟多次部署标签冲突）
+    IMAGE_TAG=$(date '+%Y%m%d%H%M%S')
+  fi
+
   log "change analysis complete:"
   log "  - rebuild backend: $rebuild_backend"
   log "  - rebuild frontend: $rebuild_frontend"
@@ -227,9 +362,15 @@ deploy_compose() {
     cd "$DEPLOY_BASE_DIR"
     # 停止所有容器，释放内存（4GB 服务器构建时不能有其他容器跑着）
     docker compose -f "$compose_file" --env-file "$ENV_FILE" down || true
+    cleanup_docker_space
+    check_disk_space
 
     # 先预拉取所有基础镜像（国内访问 Docker Hub 不稳定，提前拉取减少构建失败）
     log "pre-pulling base images..."
+    if [[ "$rebuild_backend" == "true" ]]; then
+      retry_until_success 3 "pulling $MAVEN_IMAGE" \
+        docker pull "$MAVEN_IMAGE" || true
+    fi
     retry_until_success 3 "pulling node:16" \
       docker pull node:16 || true
     retry_until_success 3 "pulling nginx:1.25-alpine" \
@@ -237,6 +378,7 @@ deploy_compose() {
 
     # 根据变更情况条件化构建
     if [[ "$rebuild_backend" == "true" ]]; then
+      build_backend_artifacts
       log "building backend..."
       DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build backend
     else
@@ -278,14 +420,11 @@ cleanup_old_images() {
   if [[ -n "$old_mealserver_images" ]]; then
     while IFS=$'\t' read -r image_name image_id image_created; do
       log "  删除旧后端镜像: $image_name (创建时间: $image_created)"
-      # 仅忽略"镜像不存在"错误（exit 1），其他错误（如被占用、认证失败）打印警告
-      if docker rmi "$image_id" 2>/dev/null; then
+      # 按 tag 删除，避免同一 IMAGE ID 被多个版本 tag 引用时删除失败
+      if remove_output=$(docker rmi "$image_name" 2>&1); then
         ((cleaned_count++)) || true
       else
-        exit_code=$?
-        if (( exit_code != 1 )); then
-          log "  警告: 无法删除镜像 $image_name，exit $exit_code"
-        fi
+        log "  警告: 无法删除镜像 $image_name: $remove_output"
       fi
     done <<< "$old_mealserver_images"
   fi
@@ -300,13 +439,10 @@ cleanup_old_images() {
   if [[ -n "$old_mealweb_images" ]]; then
     while IFS=$'\t' read -r image_name image_id image_created; do
       log "  删除旧前端镜像: $image_name (创建时间: $image_created)"
-      if docker rmi "$image_id" 2>/dev/null; then
+      if remove_output=$(docker rmi "$image_name" 2>&1); then
         ((cleaned_count++)) || true
       else
-        exit_code=$?
-        if (( exit_code != 1 )); then
-          log "  警告: 无法删除镜像 $image_name，exit $exit_code"
-        fi
+        log "  警告: 无法删除镜像 $image_name: $remove_output"
       fi
     done <<< "$old_mealweb_images"
   fi
@@ -332,7 +468,13 @@ main() {
   fi
 
   local previous_commit
-  previous_commit=$(prepare_repo)
+  if [[ "$SKIP_REPO_UPDATE" == "true" ]]; then
+    previous_commit="$PREVIOUS_COMMIT"
+    log "repository update skipped by bootstrap script"
+  else
+    previous_commit=$(prepare_repo)
+  fi
+
   deploy_compose "$previous_commit"
   cleanup_old_images
   print_summary

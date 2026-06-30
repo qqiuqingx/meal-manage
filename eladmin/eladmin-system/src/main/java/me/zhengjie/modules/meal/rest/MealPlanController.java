@@ -22,18 +22,25 @@ import lombok.RequiredArgsConstructor;
 import me.zhengjie.annotation.Limit;
 import me.zhengjie.annotation.Log;
 import me.zhengjie.aspect.LimitType;
+import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.meal.domain.dto.MealDepletionWarningDto;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
+import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateRequest;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
 import me.zhengjie.modules.meal.domain.dto.MealPlanListDetailVO;
+import me.zhengjie.modules.meal.domain.dto.MealPlanManualReplaceSaveRequest;
+import me.zhengjie.modules.meal.domain.dto.MealPlanManualReplaceVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
+import me.zhengjie.modules.meal.service.MealPlanManualReplaceService;
 import me.zhengjie.modules.meal.service.MealPlanService;
 import me.zhengjie.utils.PageResult;
+import me.zhengjie.utils.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -42,11 +49,14 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -61,9 +71,10 @@ import java.util.List;
 public class MealPlanController {
 
     private final MealPlanService mealPlanService;
+    private final MealPlanManualReplaceService mealPlanManualReplaceService;
 
     /**
-     * 生成指定日期、指定餐次的排餐计划。
+     * 生成指定日期、指定餐次（BREAKFAST/LUNCH/DINNER）的排餐计划。
      */
     @Log("生成排餐计划")
     @ApiOperation("生成排餐计划")
@@ -71,7 +82,12 @@ public class MealPlanController {
     @Limit(key = "generate", period = 60, count = 5, name = "generateMealPlan", prefix = "mealPlan", limitType = LimitType.IP)
     @PreAuthorize("@el.check('mealPlan:generate')")
     public ResponseEntity<MealPlanGenerateResult> generateMealPlan(@Validated @RequestBody MealPlanGenerateRequest request) {
-        return new ResponseEntity<>(mealPlanService.generateMealPlan(request.getRecordDate(), request.getMealType(), request.getCustomerId()), HttpStatus.OK);
+        return new ResponseEntity<>(mealPlanService.generateMealPlan(
+                request.getRecordDate(),
+                request.getMealType(),
+                request.getCustomerId(),
+                request.getMenuWeekNum(),
+                request.getMenuDayOfWeek()), HttpStatus.OK);
     }
 
     /**
@@ -141,6 +157,20 @@ public class MealPlanController {
     }
 
     /**
+     * 根据排餐计划ID查询客户详情弹窗信息。
+     */
+    @Log("查询排餐计划客户详情")
+    @ApiOperation("查询排餐计划客户详情")
+    @GetMapping("/{mealPlanId}/customer-addresses")
+    @PreAuthorize("@el.check('mealPlan:list')")
+    public ResponseEntity<PageResult<MealPlanCustomerAddressVO>> queryCustomerAddresses(
+            @ApiParam(value = "排餐计划ID", required = true) @PathVariable Long mealPlanId,
+            MealPlanCustomerQueryCriteria criteria) {
+        criteria.setMealPlanId(mealPlanId);
+        return new ResponseEntity<>(mealPlanService.queryCustomerAddresses(criteria), HttpStatus.OK);
+    }
+
+    /**
      * 根据客户计划ID查询详情。
      */
     @Log("查询排餐计划客户详情")
@@ -172,7 +202,7 @@ public class MealPlanController {
     @PreAuthorize("@el.check('mealPlan:del')")
     public ResponseEntity<Void> deleteMealPlan(
             @ApiParam(value = "排餐日期，格式 yyyy-MM-dd", required = true) @RequestParam String recordDate,
-            @ApiParam(value = "餐次（LUNCH午餐/DINNER晚餐）", required = true) @RequestParam String mealType,
+            @ApiParam(value = "餐次（BREAKFAST早餐/LUNCH午餐/DINNER晚餐）", required = true) @RequestParam String mealType,
             @ApiParam(value = "指定客户ID，不传则删除全部") @RequestParam(required = false) Long customerId) {
         mealPlanService.deleteMealPlan(recordDate, mealType, customerId);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
@@ -199,6 +229,56 @@ public class MealPlanController {
     @PreAuthorize("@el.check('mealPlan:del')")
     public ResponseEntity<Void> deleteMealPlanCustomers(@RequestBody List<Long> customerPlanIds) {
         mealPlanService.deleteMealPlanCustomers(customerPlanIds);
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    }
+
+    /**
+     * 查询指定日期排餐后将耗尽餐数的客户订单列表。
+     * 用于排餐计划生成后提醒运营人员关注即将用完餐数的客户。
+     */
+    @Log("查询餐数耗尽预警")
+    @ApiOperation("查询餐数耗尽预警")
+    @GetMapping("/depletion-warnings")
+    @PreAuthorize("@el.check('mealPlan:list')")
+    public ResponseEntity<List<MealDepletionWarningDto>> getDepletionWarnings(
+            @ApiParam(value = "目标日期，格式 yyyy-MM-dd，默认明天") @RequestParam(required = false) String date) {
+        LocalDate targetDate;
+        if (StringUtils.isNotBlank(date)) {
+            try {
+                targetDate = LocalDate.parse(date, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            } catch (Exception e) {
+                throw new BadRequestException("日期格式不正确，请使用 yyyy-MM-dd 格式");
+            }
+        } else {
+            targetDate = LocalDate.now().plusDays(1);
+        }
+        return new ResponseEntity<>(mealPlanService.getDepletionWarnings(targetDate), HttpStatus.OK);
+    }
+
+    /**
+     * 查询指定排餐计划的手工换菜关系列表。
+     */
+    @Log("查询手工换菜关系")
+    @ApiOperation("查询手工换菜关系")
+    @GetMapping("/{mealPlanId}/manual-replaces")
+    @PreAuthorize("@el.check('mealPlan:list')")
+    public ResponseEntity<List<MealPlanManualReplaceVO>> queryManualReplaces(
+            @ApiParam(value = "排餐计划ID", required = true) @PathVariable Long mealPlanId) {
+        return new ResponseEntity<>(mealPlanManualReplaceService.queryByMealPlanId(mealPlanId), HttpStatus.OK);
+    }
+
+    /**
+     * 全量保存指定排餐计划的手工换菜关系。
+     * 采用覆盖式写入：先软删旧关系，再插入新关系。
+     */
+    @Log("保存手工换菜关系")
+    @ApiOperation("保存手工换菜关系")
+    @PutMapping("/{mealPlanId}/manual-replaces")
+    @PreAuthorize("@el.check('mealPlan:edit')")
+    public ResponseEntity<Void> saveManualReplaces(
+            @ApiParam(value = "排餐计划ID", required = true) @PathVariable Long mealPlanId,
+            @Validated @RequestBody MealPlanManualReplaceSaveRequest request) {
+        mealPlanManualReplaceService.saveManualReplaces(mealPlanId, request);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 }

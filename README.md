@@ -1,92 +1,250 @@
-<h1 style="text-align: center">ELADMIN 后台管理系统</h1>
+# ELADMIN-MP 餐食运营管理系统
 
-#### 项目简介
+基于 ELADMIN 二次开发的前后端分离后台系统，当前业务重心是客户建档、套餐签约、订单餐数、智能排餐、生产单、配送核销、退餐和销售统计。技术底座为 Spring Boot 2.7.18 + MyBatis-Plus + Spring Security + JWT + Redis + Vue 2.7 + Element UI。
 
-一个基于 Spring Boot 2.7.18 、 Mybatis-Plus、 JWT、Spring Security、Redis、Vue的前后端分离的后台管理系统
+> 原 ELADMIN 通用后台能力仍保留，包括用户、角色、菜单、部门、字典、日志、SQL 监控、定时任务、代码生成、文件存储等。
 
-**开发文档：**  [https://eladmin.vip](https://eladmin.vip)
+## 系统定位
 
-**体验地址：**  [https://eladmin.vip/demo](https://eladmin.vip/demo)
+系统围绕餐食交付链路组织业务：
 
-**账号密码：** `admin / 123456`
+1. 销售录入客户档案和首单，系统生成客户编号和订单编号。
+2. 套餐和菜品维护提供排餐所需的商品、规格、菜品线、配料和排期数据。
+3. 排餐管理根据有效订单、配送规则、过敏/忌口、排除日期和菜单排期生成每日客户餐单。
+4. 生产和配送侧按排餐记录执行送餐。
+5. 核销管理记录实际取餐，扣减餐数和餐费余额，并在餐数耗尽时自动完单。
+6. 客户用餐统计和排餐日历支持查看剩余餐数、低余量预警和人工调整餐次。
 
+## 核心业务模块
 
+| 模块 | 说明 | 主要入口 |
+| --- | --- | --- |
+| 客户管理 | 客户档案、地址、孕周、过敏标签、特殊要求、签约套餐、客户编号 | `modules/customer/profile` |
+| 套餐管理 | 父套餐、子套餐、编号池、套餐餐数统计 | `modules/customer/pkg`、`modules/customer/numberpool` |
+| 订单管理 | 订单生命周期、早餐/午晚餐餐数、金额、排餐模式、开始餐次 | `modules/customer/order` |
+| 配菜管理 | 菜品主档、配料字典、配料分类、菜品排期、过敏过滤基础数据 | `modules/meal` |
+| 排餐管理 | 生成排餐计划、客户餐单明细、生产单、排餐日历人工调整 | `modules/meal` |
+| 核销管理 | 批量核销、核销日志、核销回退、自动完单 | `modules/meal` |
+| 退餐管理 | 订单退餐、排餐取消、日志追溯 | `modules/meal` |
+| 销售看板 | 客户、订单、销售统计指标 | `modules/sales` |
 
-#### 主要特性
+## 近期演进
 
-- 使用最新技术栈，社区资源丰富。
-- 高效率开发，代码生成器可一键生成前后端代码
-- 支持数据字典，可方便地对一些状态进行管理
-- 支持接口限流，避免恶意请求导致服务层压力过大
-- 支持接口级别的功能权限与数据权限，可自定义操作
-- 自定义权限注解与匿名接口注解，可快速对接口拦截与放行
-- 对一些常用地前端组件封装：表格数据请求、数据字典等
-- 前后端统一异常拦截处理，统一输出异常，避免繁琐的判断
-- 支持在线用户管理与服务器性能监控，支持限制单用户登录
-- 支持运维管理，可方便地对远程服务器的应用进行部署与管理
+从近期提交看，系统主要在以下方向迭代：
 
-#### 系统功能
+- 客户话术建档解析：支持从销售话术中解析客户、地址、套餐、配送和备注信息。
+- 客户用餐统计：新增月度用餐统计、低余量预警和固定列宽优化。
+- 排餐日历：支持客户维度查看、人工新增/取消餐次、取消未核销排餐、调整日志单独落盘。
+- 排餐生成：支持人工新增餐次、开始餐次控制、订单预计剩余餐数、米饭类型和编号明细展示规则。
+- 业务文档：补充剩余餐数计算、排餐首次标记、排餐日历调整等说明。
 
-- 用户管理：提供用户的相关配置，新增用户后，默认密码为123456
-- 角色管理：对权限与菜单进行分配，可根据部门设置角色的数据权限
-- 菜单管理：已实现菜单动态路由，后端可配置化，支持多级菜单
-- 部门管理：可配置系统组织架构，树形表格展示
-- 岗位管理：配置各个部门的职位
-- 字典管理：可维护常用一些固定的数据，如：状态，性别等
-- 系统日志：记录用户操作日志与异常日志，方便开发人员定位排错
-- SQL监控：采用druid 监控数据库访问性能，默认用户名admin，密码123456
-- 定时任务：整合Quartz做定时任务，加入任务日志，任务运行情况一目了然
-- 代码生成：高灵活度生成前后端代码，减少大量重复的工作任务
-- 邮件工具：配合富文本，发送html格式的邮件
-- 亚马逊S3云存储：支持市面上大多数对象存储，兼容亚马逊S3协议，如七牛云，阿里云等
-- 支付宝支付：整合了支付宝支付并且提供了测试账号，可自行测试
-- 服务监控：监控服务器的负载情况
-- 运维管理：一键部署你的应用
+## 技术栈
 
-#### 项目结构
+### 后端
 
-项目采用按功能分模块的开发方式，结构如下
+- Java 8
+- Spring Boot 2.7.18
+- MyBatis-Plus 3.5.3.1
+- Spring Security + JWT
+- Redis / Lettuce / Redisson
+- Druid + p6spy
+- MySQL Connector/J 9.2.0
+- fastjson2 2.0.54
+- Knife4j / Swagger
 
-- `eladmin-common` 为系统的公共模块，各种工具类，公共配置存在该模块
+### 前端
 
-- `eladmin-system` 为系统核心模块也是项目入口模块，也是最终需要打包部署的模块
+- Vue 2.7.16
+- Vue Router 3.x
+- Vuex 3.x
+- Element UI 2.15.14
+- Vue CLI 3 / Webpack 4
+- Axios、ECharts、wangeditor
 
-- `eladmin-logging` 为系统的日志模块，其他模块如果需要记录日志需要引入该模块
+## 目录结构
 
-- `eladmin-tools` 为第三方工具模块，包含：邮件、亚马逊S3云存储、本地存储、支付宝
-
-- `eladmin-generator` 为系统的代码生成模块，支持生成前后端CRUD代码
-
-#### 详细结构
-
+```text
+eladmin-mp/
+├── eladmin/                         # 后端 Maven 多模块工程
+│   ├── eladmin-common/              # 公共注解、配置、异常、工具类
+│   ├── eladmin-logging/             # 操作日志与异常日志
+│   ├── eladmin-system/              # 系统启动入口和核心业务模块
+│   │   └── src/main/java/me/zhengjie/
+│   │       ├── AppRun.java
+│   │       └── modules/
+│   │           ├── customer/        # 客户、订单、套餐、编号池
+│   │           ├── meal/            # 菜品、排餐、核销、退餐
+│   │           ├── sales/           # 销售看板
+│   │           ├── security/        # 登录认证
+│   │           ├── system/          # 用户、角色、菜单等后台能力
+│   │           ├── quartz/          # 定时任务
+│   │           └── maint/           # 运维管理
+│   ├── eladmin-tools/               # 邮件、存储、支付宝等工具模块
+│   ├── eladmin-generator/           # 代码生成器
+│   ├── doc/
+│   │   ├── business/                # 业务说明文档
+│   │   └── apidoc/                  # 接口 Markdown 文档
+│   └── sql/                         # 业务表结构和数据脚本
+├── eladmin-web/                     # Vue 前端工程
+│   └── src/views/
+│       ├── customer/                # 客户、订单、套餐、统计页面
+│       ├── meal/                    # 菜品、排餐、生产单、核销页面
+│       ├── system/                  # 系统管理页面
+│       └── maint/                   # 运维页面
+├── docker/                          # 后端 JAR + 前端 Nginx 容器部署
+├── sql/                             # 基础库表和迁移脚本
+└── doc/                             # 根目录规划/移动端等补充文档
 ```
-- eladmin-common 公共模块
-    - annotation 为系统自定义注解
-    - aspect 自定义注解的切面
-    - base 提供了 Entity 基类
-    - config 项目通用配置
-        - Mybatis-Plus 配置
-        - Web配置跨域与静态资源映射、Swagger配置，文件上传临时路径配置
-        - Redis配置，Redission配置, 异步线程池配置
-        - 权限拦截配置：AuthorityConfig、Druid 删除广告配置
-    - exception 项目统一异常的处理
-    - utils 系统通用工具类，列举一些常用的工具类
-        - BigDecimaUtils 金额计算工具类
-        - RequestHolder 请求工具类
-        - SecurityUtils 安全工具类
-        - StringUtils 字符串工具类
-        - SpringBeanHolder Spring Bean工具类
-        - RedisUtils Redis工具类
-        - EncryptUtils 加密工具类
-        - FileUtil 文件工具类
-- eladmin-system 系统核心模块（系统启动入口）
-    - sysrunner 程序启动后处理数据
-    - modules 系统相关模块(登录授权、系统监控、定时任务、系统模块、运维模块)
-- eladmin-logging 系统日志模块
-- eladmin-tools 系统第三方工具模块
-    - email 邮件工具
-    - amazon 亚马逊S3云存储工具
-    - alipay 支付宝支付工具
-    - local-storage 本地存储工具
-- eladmin-generator 系统代码生成模块
+
+## 本地开发
+
+### 环境准备
+
+- JDK 8
+- Maven 3.x
+- Node.js 16 或兼容 Vue CLI 3 的版本
+- MySQL
+- Redis
+
+前端脚本已内置 `NODE_OPTIONS=--openssl-legacy-provider`，可兼容较新的 Node.js OpenSSL 行为。
+
+### 后端启动
+
+```bash
+cd eladmin
+
+# 构建后端所有模块
+mvn clean install -DskipTests
+
+# 方式一：打包后运行
+java -jar eladmin-system/target/eladmin-system-1.1.jar --spring.profiles.active=dev
+
+# 方式二：开发期直接运行启动类
+mvn -pl eladmin-system spring-boot:run -Dspring-boot.run.profiles=dev
 ```
+
+默认后端端口为 `8000`，配置文件位于：
+
+- `eladmin/eladmin-system/src/main/resources/config/application.yml`
+- `eladmin/eladmin-system/src/main/resources/config/application-dev.yml`
+- `eladmin/eladmin-system/src/main/resources/config/application-prod.yml`
+
+Redis 支持通过环境变量覆盖：
+
+```bash
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PWD=
+REDIS_DB=1
+```
+
+开发环境登录和验证码请使用本地私有配置或初始化数据，不要把真实凭据提交到仓库。
+
+### 前端启动
+
+```bash
+cd eladmin-web
+
+npm install
+npm run dev
+```
+
+默认前端端口为 `8013`，代理和端口配置见 `eladmin-web/vue.config.js`，环境变量见 `eladmin-web/.env.*`。
+
+### 构建
+
+```bash
+# 后端
+cd eladmin
+mvn clean package -DskipTests
+
+# 前端生产包
+cd ../eladmin-web
+npm run build:prod
+```
+
+### Docker 部署
+
+```bash
+cd docker
+cp .env.example .env
+# 按环境修改 .env 中的数据库、Redis、JWT 等配置
+docker compose up -d --build
+```
+
+容器部署中前端默认暴露 `18080`，后端在 Docker 网络内监听 `8000`，由前端 Nginx 代理访问。
+
+## 测试
+
+后端 `pom.xml` 中 Surefire 默认配置为跳过测试。需要显式开启：
+
+```bash
+cd eladmin
+mvn test -DskipTests=false
+
+# 指定测试类
+mvn -Dtest=CustomerProfileServiceImplTest test -DskipTests=false
+```
+
+前端：
+
+```bash
+cd eladmin-web
+npm run lint
+npm run test:unit
+```
+
+单元测试新增的数据必须在 `@After` / `@AfterEach` 或测试前置清理中删除，且只能删除当前测试创建的数据，避免误删业务数据或其他测试数据。
+
+## 业务文档索引
+
+修改业务逻辑前先阅读对应业务文档，变更后同步更新。
+
+- [客户管理业务说明](eladmin/doc/business/客户管理业务说明.md)
+- [套餐管理业务说明](eladmin/doc/business/套餐管理业务说明.md)
+- [订单管理业务说明](eladmin/doc/business/订单管理业务说明.md)
+- [配菜管理业务说明](eladmin/doc/business/配菜管理业务说明.md)
+- [排餐管理业务说明](eladmin/doc/business/排餐管理业务说明.md)
+- [核销管理业务说明](eladmin/doc/business/核销管理业务说明.md)
+- [客户话术建档解析草稿规则](eladmin/doc/business/客户话术建档解析草稿规则.md)
+
+## 接口文档索引
+
+运行时 Knife4j 地址为 `/doc.html`。新增或修改接口时，同时更新 `eladmin/doc/apidoc/` 下的 Markdown 文档。
+
+- [客户档案管理接口文档](eladmin/doc/apidoc/客户档案管理接口文档.md)
+- [客户订单管理接口文档](eladmin/doc/apidoc/客户订单管理接口文档.md)
+- [客户用餐统计页面接口文档](eladmin/doc/apidoc/客户用餐统计页面接口文档.md)
+- [父套餐餐数统计接口](eladmin/doc/apidoc/父套餐餐数统计接口.md)
+- [菜品管理接口文档](eladmin/doc/apidoc/菜品管理接口文档.md)
+- [排餐计划接口文档](eladmin/doc/apidoc/排餐计划接口文档.md)
+- [排餐计划生成接口](eladmin/doc/apidoc/排餐计划生成接口.md)
+- [订单排餐日历接口文档](eladmin/doc/apidoc/订单排餐日历接口文档.md)
+- [核销管理接口文档](eladmin/doc/apidoc/核销管理接口文档.md)
+- [退餐管理接口](eladmin/doc/apidoc/退餐管理接口.md)
+
+## 关键规则
+
+- JSON 序列化使用 fastjson2，项目中已排除 Jackson 默认 JSON 依赖。
+- MyBatis-Plus Mapper XML 位于 `eladmin/eladmin-system/src/main/resources/mapper/`。
+- 新增或修改方法时补充清晰方法注释，说明用途、关键参数和返回含义。
+- 新增数据库实体字段时添加字段注释，说明业务含义。
+- 业务逻辑变更必须同步更新 `eladmin/doc/business/`。
+- API 变更必须同步更新 `eladmin/doc/apidoc/`。
+- 数据库排查不要使用 Docker 进入容器查询，优先使用本地工具或脚本直连。
+- 提交信息使用中文描述，type 使用英文，例如：`feat: 新增套餐编号池功能`。
+
+## 常用入口
+
+| 类型 | 地址/文件 |
+| --- | --- |
+| 后端启动类 | `eladmin/eladmin-system/src/main/java/me/zhengjie/AppRun.java` |
+| 后端配置 | `eladmin/eladmin-system/src/main/resources/config/` |
+| 前端配置 | `eladmin-web/vue.config.js`、`eladmin-web/.env.*` |
+| API 在线文档 | `http://localhost:8000/doc.html` |
+| Druid 监控 | `http://localhost:8000/druid/` |
+| 前端本地服务 | `http://localhost:8013/` |
+
+## License
+
+本项目基于 ELADMIN 二次开发，原始项目遵循 Apache License 2.0。业务定制代码请按当前仓库约定使用。

@@ -8,6 +8,22 @@ export function getProfiles(params) {
   })
 }
 
+export function getMealStats(params) {
+  return axios({
+    url: '/api/customerProfile/mealStats',
+    method: 'get',
+    params
+  })
+}
+
+export function saveMealScheduleAdjustments(data) {
+  return axios({
+    url: '/api/customerProfile/mealStats/scheduleAdjustments',
+    method: 'put',
+    data
+  })
+}
+
 export function getProfile(id) {
   return axios({
     url: `/api/customerProfile/${id}`,
@@ -20,6 +36,14 @@ export function generateCode(parentPackageId) {
     url: '/api/customerProfile/generateCode',
     method: 'get',
     params: { parentPackageId }
+  })
+}
+
+export function parseIntakeText(data) {
+  return axios({
+    url: '/api/customerProfile/intake/parse',
+    method: 'post',
+    data
   })
 }
 
@@ -47,5 +71,4 @@ export function del(ids) {
   })
 }
 
-export default { getProfiles, getProfile, generateCode, add, edit, del }
-
+export default { getProfiles, getMealStats, getProfile, generateCode, parseIntakeText, add, edit, del, saveMealScheduleAdjustments }

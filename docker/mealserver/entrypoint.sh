@@ -33,7 +33,7 @@ echo "Redis Host: ${REDIS_HOST}:${REDIS_PORT}"
 echo "JVM Heap  : ${BACKEND_JVM_HEAP_MIN} - ${BACKEND_JVM_HEAP_MAX}"
 echo "=========================================="
 
-exec java ${JAVA_OPTS} -jar app.jar \
+exec java ${JAVA_OPTS} -cp "app.jar:lib/*" me.zhengjie.AppRun \
   --spring.profiles.active=${SPRING_PROFILES_ACTIVE:-prod} \
   --spring.datasource.druid.driverClassName=com.mysql.cj.jdbc.Driver \
   --spring.datasource.druid.url="jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?serverTimezone=Asia/Shanghai&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true" \

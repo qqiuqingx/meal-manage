@@ -37,13 +37,33 @@ class MealPlanControllerTest {
 
         MealPlanGenerateResult result = new MealPlanGenerateResult();
         result.setMealPlanId(100L);
-        when(mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null)).thenReturn(result);
+        when(mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null, null, null)).thenReturn(result);
 
         ResponseEntity<MealPlanGenerateResult> response = mealPlanController.generateMealPlan(request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(100L, response.getBody().getMealPlanId());
-        verify(mealPlanService).generateMealPlan("2026-04-01", "LUNCH", null);
+        verify(mealPlanService).generateMealPlan("2026-04-01", "LUNCH", null, null, null);
+    }
+
+    @Test
+    void shouldDelegateGenerateMealPlanWithMenuWeekAndDay() {
+        MealPlanGenerateRequest request = new MealPlanGenerateRequest();
+        request.setRecordDate("2026-04-01");
+        request.setMealType("DINNER");
+        request.setCustomerId(88L);
+        request.setMenuWeekNum(2);
+        request.setMenuDayOfWeek(4);
+
+        MealPlanGenerateResult result = new MealPlanGenerateResult();
+        result.setMealPlanId(101L);
+        when(mealPlanService.generateMealPlan("2026-04-01", "DINNER", 88L, 2, 4)).thenReturn(result);
+
+        ResponseEntity<MealPlanGenerateResult> response = mealPlanController.generateMealPlan(request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(101L, response.getBody().getMealPlanId());
+        verify(mealPlanService).generateMealPlan("2026-04-01", "DINNER", 88L, 2, 4);
     }
 
     @Test

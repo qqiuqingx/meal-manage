@@ -14,6 +14,7 @@ import me.zhengjie.modules.meal.domain.dto.DishIngredientDto;
 import me.zhengjie.modules.meal.domain.DishIngredientRelation;
 import me.zhengjie.modules.meal.domain.enums.MealPackageEnum;
 import me.zhengjie.modules.meal.domain.enums.DishTypeEnum;
+import me.zhengjie.modules.meal.util.ScheduleKeyUtil;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.meal.mapper.CustomerDietaryRestrictionsMapper;
 import me.zhengjie.modules.meal.mapper.CustomerMenuRecordMapper;
@@ -30,6 +31,7 @@ import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
+import me.zhengjie.modules.meal.mapper.MealSchedulePlanMapper;
 import me.zhengjie.modules.system.domain.DictDetail;
 import me.zhengjie.utils.FileUtil;
 import lombok.RequiredArgsConstructor;
@@ -76,6 +78,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     private final CustomerProfileMapper customerProfileMapper;
     private final MealPlanMapper mealPlanMapper;
     private final MealPlanCustomerMapper mealPlanCustomerMapper;
+    private final MealSchedulePlanMapper mealSchedulePlanMapper;
 
     private static final String[] DISH_TYPES = {"MAIN", "SIDE", "SOUP", "VEGETABLE", "RICE"};
     private static final String[] MEAL_TYPES = {"LUNCH", "DINNER"};
@@ -247,20 +250,84 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         }
     }
 
+    /**
+     * 批量填充菜品餐次信息
+     */
+    private void fillMealTimeInfoBatch(List<Dish> dishes, Map<Integer, Set<String>> dishMealTypeMap) {
+        if (dishes == null || dishes.isEmpty() || dishMealTypeMap == null) {
+            return;
+        }
+        for (Dish dish : dishes) {
+            Set<String> mealTypes = dishMealTypeMap.get(dish.getId());
+            if (mealTypes != null && !mealTypes.isEmpty()) {
+                dish.setMealTimeInfo(mealTypes);
+            }
+        }
+    }
+
     @Override
     public PageResult<Dish> queryAll(DishQueryCriteria criteria, Page<Object> page){
+        applyScheduleDateFilter(criteria);
         PageResult<Dish> result = PageUtil.toPage(dishMapper.findAll(criteria, page));
         fillIngredientsBatch(result.getContent());
         fillMealPackageDetailsBatch(result.getContent());
+        fillMealTimeInfoBatch(result.getContent(), criteria.getDishMealTypeMap());
         return result;
     }
 
     @Override
     public List<Dish> queryAll(DishQueryCriteria criteria){
+        applyScheduleDateFilter(criteria);
         List<Dish> list = dishMapper.findAll(criteria);
         fillIngredientsBatch(list);
         fillMealPackageDetailsBatch(list);
         return list;
+    }
+
+    private void applyScheduleDateFilter(DishQueryCriteria criteria) {
+        if (criteria == null) {
+            return;
+        }
+        String scheduleDate = criteria.getScheduleDate();
+        if (scheduleDate == null || scheduleDate.trim().isEmpty()) {
+            criteria.setScheduledDishIds(null);
+            criteria.setDishMealTypeMap(null);
+            return;
+        }
+        LocalDate targetDate = ScheduleKeyUtil.parseDate(scheduleDate.trim());
+        int weekNum = ScheduleKeyUtil.calcWeek(targetDate);
+        int dayOfWeek = ScheduleKeyUtil.calcDay(targetDate);
+
+        QueryWrapper<me.zhengjie.modules.meal.domain.MealSchedulePlan> qw = new QueryWrapper<>();
+        qw.select("dish_id", "meal_time")
+          .eq("week_num", weekNum)
+          .eq("day_of_week", dayOfWeek)
+          .eq("enabled", true);
+        List<me.zhengjie.modules.meal.domain.MealSchedulePlan> plans = mealSchedulePlanMapper.selectList(qw);
+
+        List<Integer> dishIds = plans.stream()
+                .map(me.zhengjie.modules.meal.domain.MealSchedulePlan::getDishId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Integer, Set<String>> dishMealTypeMap = new HashMap<>();
+        for (me.zhengjie.modules.meal.domain.MealSchedulePlan plan : plans) {
+            dishMealTypeMap.computeIfAbsent(plan.getDishId(), k -> new HashSet<>())
+                          .add(plan.getMealTime());
+        }
+
+        criteria.setScheduledDishIds(dishIds);
+        criteria.setDishMealTypeMap(dishMealTypeMap);
+    }
+
+    @Override
+    public Dish getById(java.io.Serializable id) {
+        Dish dish = super.getById(id);
+        if (dish != null) {
+            fillIngredientsBatch(Collections.singletonList(dish));
+            fillMealPackageDetailsBatch(Collections.singletonList(dish));
+        }
+        return dish;
     }
 
     /**
@@ -404,12 +471,9 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
      * 计算周数和星期（月中周：1-4周）
      */
     private int[] calculateWeekAndDay(String dateStr) {
-        LocalDate targetDate = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        // 星期：1=周一，7=周日（从LocalDate直接获取）
-        int dayOfWeek = targetDate.getDayOfWeek().getValue();
-        // 月中周：1-7日=第1周，8-14日=第2周，15-21日=第3周，22-28日=第4周，29-31日=第5周
-        int weekNum = (targetDate.getDayOfMonth() - 1) / 7 + 1;
-
+        LocalDate targetDate = ScheduleKeyUtil.parseDate(dateStr);
+        int dayOfWeek = ScheduleKeyUtil.calcDay(targetDate);
+        int weekNum = ScheduleKeyUtil.calcWeek(targetDate);
         return new int[]{weekNum, dayOfWeek};
     }
 
@@ -1391,9 +1455,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             if (order == null) continue;
 
             me.zhengjie.modules.customer.pkg.domain.ParentPackage pkg = packageMap.get(order.getParentPackageId());
-            String mealPackage = (pkg != null) ? pkg.getPackageCode() : null;
-            String mealPackageDesc = (pkg != null) ? pkg.getPackageName() : null;
-            if (mealPackage == null) continue;
+            String mealPackage = (pkg != null) ? pkg.getPackageName() : order.getParentPackageName();
+            if (mealPackage == null || mealPackage.isEmpty()) continue;
 
             String key = mealType + "|" + mealPackage;
             groupCustomerIds.computeIfAbsent(key, k -> new HashSet<>()).add(pc.getCustomerId());
@@ -1425,9 +1488,9 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             DailyCustomerStats.MealPackageGroup group = new DailyCustomerStats.MealPackageGroup();
             group.setMealType(mealType);
             group.setMealPackage(mealPackage);
-            // 从 packageMap 获取套餐名称
+            // 从 packageMap 获取套餐名称（mealPackage 现在就是 packageName）
             String pkgDesc = packageMap.values().stream()
-                    .filter(p -> p.getPackageCode().equals(mealPackage))
+                    .filter(p -> Objects.equals(p.getPackageName(), mealPackage))
                     .findFirst()
                     .map(me.zhengjie.modules.customer.pkg.domain.ParentPackage::getPackageName)
                     .orElse(mealPackage);

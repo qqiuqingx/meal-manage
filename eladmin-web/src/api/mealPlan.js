@@ -26,6 +26,22 @@ export function getMealPlanFullDetail(id) {
   })
 }
 
+export function getMealPlanCustomers(id, params) {
+  return request({
+    url: `/api/meal-plan/${id}/customers`,
+    method: 'get',
+    params
+  })
+}
+
+export function getMealPlanCustomerAddresses(id, params) {
+  return request({
+    url: `/api/meal-plan/${id}/customer-addresses`,
+    method: 'get',
+    params
+  })
+}
+
 export function delMealPlan(params) {
   return request({
     url: '/api/meal-plan',
@@ -47,5 +63,28 @@ export function getMealPackageStatistics(params) {
     url: '/api/meal-plan/statistics-by-date',
     method: 'get',
     params
+  })
+}
+
+export function getDepletionWarnings(params) {
+  return request({
+    url: '/api/meal-plan/depletion-warnings',
+    method: 'get',
+    params
+  })
+}
+
+export function getManualReplaces(mealPlanId) {
+  return request({
+    url: `/api/meal-plan/${mealPlanId}/manual-replaces`,
+    method: 'get'
+  })
+}
+
+export function saveManualReplaces(mealPlanId, data) {
+  return request({
+    url: `/api/meal-plan/${mealPlanId}/manual-replaces`,
+    method: 'put',
+    data
   })
 }

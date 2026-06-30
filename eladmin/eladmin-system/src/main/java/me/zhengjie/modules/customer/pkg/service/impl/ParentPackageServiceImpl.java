@@ -84,9 +84,18 @@ public class ParentPackageServiceImpl implements ParentPackageService {
 
     @Override
     public void create(ParentPackage resources, List<Long> subPackageIds) {
-        // prefix 唯一性校验
-        if (parentPackageMapper.existsByPrefix(resources.getPrefix(), null)) {
-            throw new BadRequestException("编号前缀 " + resources.getPrefix() + " 已存在");
+        // POOL-12/14: 池配置必填，poolEnd 必须大于 poolStart
+        if (resources.getPoolPrefix() == null || resources.getPoolPrefix().isEmpty()) {
+            throw new BadRequestException("编号池前缀不能为空");
+        }
+        if (resources.getPoolStart() == null) {
+            throw new BadRequestException("编号池起始号不能为空");
+        }
+        if (resources.getPoolEnd() == null) {
+            throw new BadRequestException("编号池结束号不能为空");
+        }
+        if (resources.getPoolEnd() <= resources.getPoolStart()) {
+            throw new BadRequestException("结束号必须大于起始号");
         }
         parentPackageMapper.insert(resources);
         insertSubRelations(resources.getId(), subPackageIds);
@@ -94,9 +103,22 @@ public class ParentPackageServiceImpl implements ParentPackageService {
 
     @Override
     public void update(ParentPackage resources, List<Long> subPackageIds) {
-        // prefix 唯一性校验（排除自身）
-        if (parentPackageMapper.existsByPrefix(resources.getPrefix(), resources.getId())) {
-            throw new BadRequestException("编号前缀 " + resources.getPrefix() + " 已存在");
+        // POOL-13/14: 修改时如果设置了池字段，校验 poolEnd > poolStart
+        // 如果任何一个池字段有值，则所有池字段都不能为空
+        boolean hasPoolField = resources.getPoolPrefix() != null || resources.getPoolStart() != null || resources.getPoolEnd() != null;
+        if (hasPoolField) {
+            if (resources.getPoolPrefix() == null || resources.getPoolPrefix().isEmpty()) {
+                throw new BadRequestException("编号池前缀不能为空");
+            }
+            if (resources.getPoolStart() == null) {
+                throw new BadRequestException("编号池起始号不能为空");
+            }
+            if (resources.getPoolEnd() == null) {
+                throw new BadRequestException("编号池结束号不能为空");
+            }
+            if (resources.getPoolEnd() <= resources.getPoolStart()) {
+                throw new BadRequestException("结束号必须大于起始号");
+            }
         }
         parentPackageMapper.updateById(resources);
         // 先删旧关联，再批量插入新关联
@@ -123,11 +145,21 @@ public class ParentPackageServiceImpl implements ParentPackageService {
         parentPackageMapper.updateById(parent);
     }
 
+    /**
+     * 删除父套餐。
+     *
+     * @param id 父套餐ID，仅用于校验父子关联和订单 parent_package_id 引用并删除对应父套餐
+     */
     @Override
     public void delete(Long id) {
         ParentPackage parent = parentPackageMapper.selectById(id);
         if (parent == null) {
             throw new BadRequestException("父套餐不存在");
+        }
+        // 检查是否被订单引用（parent_package_id）
+        Integer orderCount = parentPackageMapper.countOrderByParentPackageId(id);
+        if (orderCount != null && orderCount > 0) {
+            throw new BadRequestException("该父套餐已被订单引用，无法删除");
         }
         // 检查是否有子套餐关联
         Long count = parentPackageMapper.countSubPackagesByParentId(id);

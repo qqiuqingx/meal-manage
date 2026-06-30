@@ -8,14 +8,18 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+
+import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
+import me.zhengjie.modules.customer.profile.handler.ExcludedDateListTypeHandler;
 
 /**
  * 客户档案主档实体
  */
 @Data
-@TableName("customer_profile")
+@TableName(value = "customer_profile", autoResultMap = true)
 public class CustomerProfile implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -50,9 +54,77 @@ public class CustomerProfile implements Serializable {
     private List<String> allergyTags;
 
     /**
+     * 排除菜品ID列表(JSON数组)
+     */
+    @TableField(value = "excluded_dish_ids", typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    private List<Integer> excludedDishIds;
+
+    /**
+     * 排除日期列表(JSON数组)
+     */
+    @TableField(value = "excluded_dates", typeHandler = ExcludedDateListTypeHandler.class)
+    private List<ExcludedDateDto> excludedDates;
+
+    /**
+     * 判断指定日期+餐次是否被排除
+     * @param date 目标日期
+     * @param mealType 餐次类型（LUNCH/DINNER）
+     * @return true=被排除，应跳过该日期的排餐
+     */
+    public boolean isExcluded(LocalDate date, String mealType) {
+        if (excludedDates == null || excludedDates.isEmpty()) {
+            return false;
+        }
+        String targetDateStr = date.toString();  // ISO-8601: "yyyy-MM-dd"
+        for (Object item : excludedDates) {
+            ExcludedDateDto excluded = toExcludedDateDto(item);
+            if (excluded != null
+                    && targetDateStr.equals(excluded.getDate())
+                    && excluded.getMealTypes() != null
+                    && excluded.getMealTypes().contains(mealType)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @SuppressWarnings("unchecked")
+    private ExcludedDateDto toExcludedDateDto(Object item) {
+        if (item instanceof ExcludedDateDto) {
+            return (ExcludedDateDto) item;
+        }
+        if (item instanceof java.util.Map) {
+            java.util.Map<String, Object> map = (java.util.Map<String, Object>) item;
+            ExcludedDateDto dto = new ExcludedDateDto();
+            Object date = map.get("date");
+            if (date instanceof String) {
+                dto.setDate((String) date);
+            }
+            Object mealTypes = map.get("mealTypes");
+            if (mealTypes instanceof List) {
+                dto.setMealTypes((List<String>) mealTypes);
+            }
+            return dto;
+        }
+        return null;
+    }
+
+    /**
      * 医嘱要求
      */
     private String medicalRequirements;
+
+    /**
+     * 特殊要求
+     */
+    @TableField(value = "special_requirements")
+    private String specialRequirements;
+
+    /**
+     * 生产日期
+     */
+    @TableField(value = "production_date")
+    private LocalDate productionDate;
 
     //
     private String remark;
@@ -138,4 +210,16 @@ public class CustomerProfile implements Serializable {
      */
     @TableField(exist = false)
     private Integer remainingLunchDinnerCount;
+
+    /**
+     * 送餐模式(查询时从最新订单填充)
+     */
+    @TableField(exist = false)
+    private String scheduleMode;
+
+    /**
+     * 排除菜品名称拼接字符串(查询时从dish表关联填充)
+     */
+    @TableField(exist = false)
+    private String excludedDishNamesStr;
 }

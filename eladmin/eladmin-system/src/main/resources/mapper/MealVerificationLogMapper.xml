@@ -52,6 +52,7 @@
         left join customer_order co on v.order_id = co.id
         left join parent_package pp on co.parent_package_id = pp.id
         <where>
+            and (v.deleted = 0 or v.deleted is null)
             <if test="criteria.customerName != null and criteria.customerName != ''">
                 and cp.customer_name like concat('%', #{criteria.customerName}, '%')
             </if>
@@ -79,5 +80,20 @@
         </where>
         order by v.operate_time desc, v.id desc
     </select>
+
+    <update id="softDeleteIfActive">
+        update meal_verification_log
+        set deleted = 1,
+            delete_time = #{deleteTime},
+            deleted_by = #{deletedBy}
+        where id = #{id}
+          and (deleted = 0 or deleted is null)
+    </update>
+
+    <update id="markAsRefunded">
+        update meal_verification_log
+        set is_refunded = 1, refund_time = NOW()
+        where order_id = #{orderId}
+    </update>
 
 </mapper>

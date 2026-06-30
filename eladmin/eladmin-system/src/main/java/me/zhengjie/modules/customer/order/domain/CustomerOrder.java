@@ -10,6 +10,7 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 客户订单实体
@@ -119,17 +120,22 @@ public class CustomerOrder implements Serializable {
     private LocalDate startDate;
 
     /**
+     * 开始餐次(BREAKFAST/LUNCH/DINNER)
+     */
+    private String startMealType;
+
+    /**
      * 订单结束日期
      */
     private LocalDate endDate;
 
     /**
-     * 订单状态(0=已取消,1=进行中,2=已完成)
+     * 订单状态(0=已取消,1=进行中,2=已完成,3=已退餐)
      */
     private Integer status;
 
     /**
-     * 餐次类型(LUNCH=午餐订单,DINNER=晚餐订单,ALL=全餐次订单)
+     * 餐次类型(ALL=早+午餐+晚餐,LUNCH=午餐,DINNER=晚餐,LUNCH_DINNER=午餐+晚餐)
      */
     private String mealType;
 
@@ -152,6 +158,16 @@ public class CustomerOrder implements Serializable {
      * 销售渠道
      */
     private String customerSource;
+
+    /**
+     * 是否试餐成单
+     */
+    private Boolean trialConverted;
+
+    /**
+     * 关联试餐订单ID
+     */
+    private Long trialOrderId;
 
     /**
      * 创建人
@@ -194,6 +210,18 @@ public class CustomerOrder implements Serializable {
     private Integer totalCount;
 
     /**
+     * 预计剩余餐数(当前剩余餐数 - 今日已排未核销餐数)
+     */
+    @TableField(exist = false)
+    private Integer estimatedRemainingCount;
+
+    /**
+     * 已排餐餐数（有效排餐记录总数）
+     */
+    @TableField(exist = false)
+    private Integer scheduledCount;
+
+    /**
      * 父套餐名称(查询时填充)
      */
     @TableField(exist = false)
@@ -204,4 +232,69 @@ public class CustomerOrder implements Serializable {
      */
     @TableField(exist = false)
     private String childPackageName;
+
+    /**
+     * 客户过敏标签(查询时填充，来自 customer_profile.allergy_tags)
+     */
+    @TableField(exist = false)
+    private List<String> allergyTags;
+
+    /**
+     * 客户特殊要求(查询时填充，来自 customer_profile.special_requirements)
+     */
+    @TableField(exist = false)
+    private String specialRequirements;
+
+    /**
+     * 客户地址列表(查询时填充，来自 customer_profile_address)
+     */
+    @TableField(exist = false)
+    private List<AddressInfo> addresses;
+
+    /**
+     * 关联试餐订单编号(查询时填充)
+     */
+    @TableField(exist = false)
+    private String trialOrderCode;
+
+    @Data
+    public static class AddressInfo implements Serializable {
+        private String type;
+        private String detail;
+    }
+
+    /**
+     * 每餐主菜/荤菜数量
+     */
+    private Integer mainDishCount;
+
+    /**
+     * 每餐副菜数量
+     */
+    private Integer sideDishCount;
+
+    /**
+     * 每餐素菜数量
+     */
+    private Integer vegCount;
+
+    /**
+     * 每餐米饭数量（默认1，页面不展示）
+     */
+    private Integer riceCount;
+
+    /**
+     * 米饭类型（普通杂粮米饭、杂粮1:1米饭、三色糙米、白米饭）
+     */
+    private String riceType;
+
+    /**
+     * 每餐汤数量
+     */
+    private Integer soupCount;
+
+    /**
+     * 自定义菜单图片地址，用于客户换菜参考
+     */
+    private String customMenuImage;
 }

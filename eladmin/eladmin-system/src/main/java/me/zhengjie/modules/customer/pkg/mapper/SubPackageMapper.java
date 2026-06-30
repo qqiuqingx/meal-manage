@@ -27,6 +27,4 @@ public interface SubPackageMapper extends BaseMapper<SubPackage> {
     List<SubPackage> findByParentPackageId(@Param("parentPackageId") Long parentPackageId);
 
     Integer countOrderBySubPackageId(@Param("subPackageId") Long subPackageId);
-
-    Integer countOrderByParentPackageId(@Param("parentPackageId") Long parentPackageId);
 }

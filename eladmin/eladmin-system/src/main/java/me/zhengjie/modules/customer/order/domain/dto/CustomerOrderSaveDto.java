@@ -2,13 +2,17 @@ package me.zhengjie.modules.customer.order.domain.dto;
 
 import lombok.Data;
 
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
+
 import javax.validation.constraints.DecimalMin;
+import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 客户订单保存 DTO
@@ -50,14 +54,12 @@ public class CustomerOrderSaveDto implements Serializable {
     /**
      * 总金额
      */
-    @NotNull(message = "总金额不能为空")
     @DecimalMin(value = "0", message = "总金额不能为负数")
     private BigDecimal totalAmount;
 
     /**
      * 成交金额
      */
-    @NotNull(message = "成交金额不能为空")
     @DecimalMin(value = "0", message = "成交金额不能为负数")
     private BigDecimal finalAmount;
 
@@ -123,6 +125,11 @@ public class CustomerOrderSaveDto implements Serializable {
     private LocalDate startDate;
 
     /**
+     * 开始餐次(BREAKFAST/LUNCH/DINNER)
+     */
+    private String startMealType;
+
+    /**
      * 订单结束日期
      */
     private LocalDate endDate;
@@ -133,7 +140,7 @@ public class CustomerOrderSaveDto implements Serializable {
     private Integer status;
 
     /**
-     * 餐次类型(LUNCH=午餐订单,DINNER=晚餐订单,ALL=全餐次订单)
+     * 餐次类型(ALL=早+午餐+晚餐,LUNCH=午餐,DINNER=晚餐,LUNCH_DINNER=午餐+晚餐)
      */
     private String mealType;
 
@@ -148,6 +155,12 @@ public class CustomerOrderSaveDto implements Serializable {
     private String deliveryDates;
 
     /**
+     * 送餐日期及餐次（新格式，供前端日历使用）
+     * 格式：[{"date":"2026-04-15","mealTypes":["BREAKFAST","LUNCH","DINNER"]},...]
+     */
+    private String deliveryDatesWithMealTypes;
+
+    /**
      * 备注
      */
     private String remark;
@@ -156,4 +169,72 @@ public class CustomerOrderSaveDto implements Serializable {
      * 销售渠道
      */
     private String customerSource;
+
+    /**
+     * 是否试餐成单
+     */
+    private Boolean trialConverted;
+
+    /**
+     * 关联试餐订单ID
+     */
+    private Long trialOrderId;
+
+    /**
+     * 每餐主菜/荤菜数量
+     */
+    @NotNull(message = "主菜数量不能为空")
+    @Min(value = 0, message = "主菜数量不能为负数")
+    private Integer mainDishCount;
+
+    /**
+     * 每餐副菜数量
+     */
+    @NotNull(message = "副菜数量不能为空")
+    @Min(value = 0, message = "副菜数量不能为负数")
+    private Integer sideDishCount;
+
+    /**
+     * 每餐素菜数量
+     */
+    @NotNull(message = "素菜数量不能为空")
+    @Min(value = 0, message = "素菜数量不能为负数")
+    private Integer vegCount;
+
+    /**
+     * 每餐米饭数量（默认1，页面不展示）
+     */
+    private Integer riceCount;
+
+    /**
+     * 米饭类型（普通杂粮米饭、杂粮1:1米饭、三色糙米、白米饭）
+     */
+    private String riceType;
+
+    /**
+     * 每餐汤数量
+     */
+    @NotNull(message = "汤数量不能为空")
+    @Min(value = 0, message = "汤数量不能为负数")
+    private Integer soupCount;
+
+    /**
+     * 自定义菜单图片地址，用于客户换菜参考
+     */
+    private String customMenuImage;
+
+    /**
+     * 换菜规则列表
+     */
+    private List<CustomerOrderReplaceRuleDto> replaceRules;
+
+    /**
+     * 过敏食物标签（编辑时同步到客户档案）
+     */
+    private List<String> allergyTags;
+
+    /**
+     * 特殊要求（编辑时同步到客户档案）
+     */
+    private String specialRequirements;
 }

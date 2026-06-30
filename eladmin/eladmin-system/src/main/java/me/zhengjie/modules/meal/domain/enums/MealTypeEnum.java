@@ -13,6 +13,7 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum MealTypeEnum {
 
+    BREAKFAST("BREAKFAST", "早餐"),
     LUNCH("LUNCH", "午餐"),
     DINNER("DINNER", "晚餐");
 

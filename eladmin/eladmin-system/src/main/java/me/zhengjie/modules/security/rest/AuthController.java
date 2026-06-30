@@ -42,6 +42,7 @@ import me.zhengjie.utils.SecurityUtils;
 import me.zhengjie.utils.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.env.Environment;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -74,6 +75,7 @@ public class AuthController {
     private final LoginProperties loginProperties;
     private final PasswordEncoder passwordEncoder;
     private final UserDetailsServiceImpl userDetailsService;
+    private final Environment environment;
 
     @Log("用户登录")
     @ApiOperation("登录授权")
@@ -81,8 +83,8 @@ public class AuthController {
     public ResponseEntity<Object> login(@Validated @RequestBody AuthUserDto authUser, HttpServletRequest request) throws Exception {
         // 密码解密
         String password = RsaUtils.decryptByPrivateKey(RsaProperties.privateKey, authUser.getPassword());
-        // 固定验证码 REDACTED_CODE 跳过校验（支持开发和测试）
-        if (!"REDACTED_CODE".equalsIgnoreCase(authUser.getCode())) {
+        // 仅在 dev 环境允许本地配置的验证码绕过，避免公开环境保留后门
+        if (!(isDevProfileActive() && StringUtils.isNotBlank(getDevCaptchaBypass()) && getDevCaptchaBypass().equalsIgnoreCase(authUser.getCode()))) {
             // 查询验证码
             String code = redisUtils.get(authUser.getUuid(), String.class);
             // 清除验证码
@@ -117,6 +119,24 @@ public class AuthController {
         onlineUserService.save(jwtUser, token, request);
         // 返回登录信息
         return ResponseEntity.ok(authInfo);
+    }
+
+    /**
+     * 判断当前是否处于 dev profile。
+     *
+     * @return true 表示当前启用了 dev 环境，false 表示其他环境
+     */
+    private boolean isDevProfileActive() {
+        return environment.acceptsProfiles("dev");
+    }
+
+    /**
+     * 获取 dev 环境下允许使用的验证码绕过值。
+     *
+     * @return 配置中的开发验证码绕过值，未配置时返回空字符串
+     */
+    private String getDevCaptchaBypass() {
+        return environment.getProperty("login.code.dev-bypass", "");
     }
 
     @ApiOperation("获取用户信息")

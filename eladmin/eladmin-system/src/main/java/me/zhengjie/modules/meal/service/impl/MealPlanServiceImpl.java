@@ -16,56 +16,67 @@
 package me.zhengjie.modules.meal.service.impl;
 
 import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import cn.hutool.json.JSONUtil;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
+import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
-import me.zhengjie.modules.customer.pkg.domain.SubPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
-import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
+import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.meal.domain.Dish;
 import me.zhengjie.modules.meal.domain.DishIngredientRelation;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.MealPlanCustomerItem;
+import me.zhengjie.modules.meal.domain.MealPlanManualReplace;
+import me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto;
+import me.zhengjie.modules.meal.domain.dto.DishQueryCriteria;
+import me.zhengjie.modules.meal.domain.dto.MealDepletionWarningDto;
+import me.zhengjie.modules.meal.domain.enums.DishTypeEnum;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
+import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerItemVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
+import me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
 import me.zhengjie.modules.meal.domain.dto.MealPlanListDetailVO;
+import me.zhengjie.modules.meal.domain.dto.MealPlanManualReplaceVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanQueryCriteria;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.meal.mapper.DishMapper;
+import me.zhengjie.modules.meal.mapper.MealSchedulePlanMapper;
+import me.zhengjie.modules.meal.service.DishIngredientCategoryService;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerItemMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
+import me.zhengjie.modules.meal.mapper.MealPlanManualReplaceMapper;
 import me.zhengjie.modules.meal.service.MealPlanService;
 import me.zhengjie.modules.meal.util.ScheduleKeyUtil;
 import me.zhengjie.utils.PageResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import me.zhengjie.utils.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.util.CollectionUtils;
 
 import java.sql.Timestamp;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -83,6 +94,7 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     private static final String MEAL_TYPE_LUNCH = "LUNCH";
     private static final String MEAL_TYPE_DINNER = "DINNER";
+    private static final String MEAL_TYPE_BREAKFAST = "BREAKFAST";
     private static final String SCHEDULE_MODE_DAILY = "DAILY";
     private static final String SCHEDULE_MODE_WEEKDAY = "WEEKDAY";
     private static final String SCHEDULE_MODE_WEEKEND = "WEEKEND";
@@ -90,11 +102,15 @@ public class MealPlanServiceImpl implements MealPlanService {
     private static final String PLAN_STATUS_GENERATING = "GENERATING";
     private static final String PLAN_STATUS_SUCCESS = "SUCCESS";
     private static final String PLAN_STATUS_FAILED = "FAILED";
+    private static final String REPLACE_REASON_EXCLUDED = "EXCLUDED";
     private static final String DISH_TYPE_MAIN = "MAIN";
     private static final String DISH_TYPE_SIDE = "SIDE";
     private static final String DISH_TYPE_VEGETABLE = "VEGETABLE";
     private static final String DISH_TYPE_SOUP = "SOUP";
     private static final String DISH_TYPE_RICE = "RICE";
+    private static final String DEFAULT_RICE_TYPE = "默认";
+    private static final String REPLACE_REASON_CUSTOMER_SELECTED = "客户选择替换";
+    private static final String REPLACE_REASON_ORDER_RULE = "ORDER_RULE";
     private static final Map<String, ReentrantLock> GENERATE_LOCKS = new ConcurrentHashMap<>();
 
     private final MealPlanMapper mealPlanMapper;
@@ -103,18 +119,25 @@ public class MealPlanServiceImpl implements MealPlanService {
     private final CustomerOrderMapper customerOrderMapper;
     private final CustomerProfileMapper customerProfileMapper;
     private final ParentPackageMapper parentPackageMapper;
-    private final SubPackageMapper subPackageMapper;
     private final DishMapper dishMapper;
     private final DishIngredientMapper dishIngredientMapper;
+    private final MealSchedulePlanMapper mealSchedulePlanMapper;
+    private final DishIngredientCategoryService dishIngredientCategoryService;
+    private final CustomerOrderReplaceRuleMapper replaceRuleMapper;
+    private final CustomerMealScheduleAdditionMapper customerMealScheduleAdditionMapper;
+    private final MealPlanManualReplaceMapper mealPlanManualReplaceMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public MealPlanGenerateResult generateMealPlan(String recordDate, String mealType, Long customerId) {
+    public MealPlanGenerateResult generateMealPlan(String recordDate, String mealType, Long customerId,
+                                                   Integer menuWeekNum, Integer menuDayOfWeek) {
         long startTime = System.currentTimeMillis();
-        log.info("开始生成排餐计划 - 日期: {}, 餐次: {}, 客户ID: {}", recordDate, mealType, customerId);
+        log.info("开始生成排餐计划 - 日期: {}, 餐次: {}, 客户ID: {}, 菜单周次: {}, 菜单星期: {}",
+                recordDate, mealType, customerId, menuWeekNum, menuDayOfWeek);
 
         LocalDate targetDate = ScheduleKeyUtil.parseDate(recordDate);
         String normalizedMealType = validateParams(mealType);
+        MenuSlot menuSlot = resolveMenuSlot(targetDate, menuWeekNum, menuDayOfWeek);
         String lockKey = buildGenerateLockKey(targetDate, normalizedMealType);
         log.debug("开始获取锁 - lockKey: {}", lockKey);
 
@@ -123,7 +146,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         log.debug("成功获取锁 - lockKey: {}", lockKey);
         registerLockCleanup(lockKey, lock);
 
-        MealPlanGenerateResult result = doGenerateMealPlan(targetDate, normalizedMealType, customerId);
+        MealPlanGenerateResult result = doGenerateMealPlan(targetDate, normalizedMealType, customerId, menuSlot);
 
         log.info("排餐计划生成完成 - 耗时: {}ms, 计划ID: {}, 成功数: {}, 失败数: {}",
                 System.currentTimeMillis() - startTime,
@@ -137,7 +160,8 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 执行排餐生成主流程：清理旧计划、加载候选数据、逐个订单生成并汇总结果。
      */
-    private MealPlanGenerateResult doGenerateMealPlan(LocalDate targetDate, String mealType, Long customerId) {
+    private MealPlanGenerateResult doGenerateMealPlan(LocalDate targetDate, String mealType, Long customerId,
+                                                      MenuSlot menuSlot) {
         log.debug("开始执行排餐生成主流程 - 日期: {}, 餐次: {}", targetDate, mealType);
 
         long startTime = System.currentTimeMillis();
@@ -157,20 +181,27 @@ public class MealPlanServiceImpl implements MealPlanService {
         Map<Long, CustomerProfile> customerMap = loadCustomers(orders);
         log.debug("加载客户档案完成 - 客户数量: {}", customerMap.size());
 
-        Map<Long, SubPackage> subPackageMap = loadSubPackages(orders);
-        log.debug("加载子套餐完成 - 套餐数量: {}", subPackageMap.size());
-
         Map<Long, ParentPackage> parentPackageMap = loadParentPackages(orders);
         log.debug("加载父套餐完成 - 套餐数量: {}", parentPackageMap.size());
 
-        List<Dish> scheduledDishes = loadScheduledDishes(targetDate, mealType);
+        List<Dish> scheduledDishes = loadScheduledDishes(menuSlot, mealType);
         log.debug("加载排期菜品完成 - 菜品数量: {}", scheduledDishes.size());
 
-        Map<Integer, Set<String>> dishIngredientMap = loadDishIngredients(scheduledDishes);
+        List<Dish> riceDishes = loadRiceDishes();
+        log.debug("加载固定米饭菜品完成 - 菜品数量: {}", riceDishes.size());
+
+        List<Dish> candidateDishes = mergeCandidateDishes(scheduledDishes, riceDishes);
+        Map<Integer, Set<String>> dishIngredientMap = loadDishIngredients(candidateDishes);
         log.debug("加载菜品食材完成 - 菜品-食材关联数量: {}", dishIngredientMap.size());
 
-        Map<Long, Map<String, List<Dish>>> candidateDishMap = buildCandidateDishPool(scheduledDishes, orders, parentPackageMap);
+        Map<Long, Map<String, List<Dish>>> candidateDishMap = buildCandidateDishPool(candidateDishes, orders, parentPackageMap);
         log.debug("构建候选菜池完成 - 父套餐数量: {}", candidateDishMap.size());
+
+        Map<String, Set<String>> categoryIngredientMap = loadCategoryIngredientMapping();
+        log.debug("加载分类→配料映射完成 - 分类数量: {}", categoryIngredientMap.size());
+
+        Map<Long, Map<Long, CustomerOrderReplaceRule>> orderReplaceRuleMap = buildOrderReplaceRuleMap(orders);
+        log.debug("加载订单换菜规则完成 - 有规则的订单数: {}", orderReplaceRuleMap.size());
 
         log.debug("数据加载总耗时: {}ms", System.currentTimeMillis() - dataLoadStart);
 
@@ -188,45 +219,44 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         for (int i = 0; i < orders.size(); i++) {
             CustomerOrder order = orders.get(i);
-            log.info("处理订单 {}/{} - 订单ID: {}, 客户ID: {},客户code{}, 父套餐ID: {}, 子套餐ID: {}",
+            CustomerProfile customer = customerMap.get(order.getCustomerId());
+            String customerCode = customer != null ? customer.getCustomerCode() : null;
+            String customerName = customer != null ? customer.getCustomerName() : null;
+            log.info("处理订单 {}/{} - 订单ID: {}, 客户: {}-{}, 父套餐ID: {},餐数:{}",
                     i + 1, orders.size(),
                     order.getId(),
-                    customerMap.get(order.getCustomerId()).getCustomerCode(),
-                    customerMap.get(order.getCustomerId()).getCustomerName(),
-                    order.getParentPackageName(),
-                    subPackageMap.get(order.getChildPackageId()).getSubPackageName());
+                    customerCode,
+                    customerName,
+                    order.getParentPackageId(),order.getMainDishCount()+","+order.getSideDishCount()+","+order.getVegCount()+","+order.getRiceCount()+","+order.getSoupCount());
 
-            CustomerProfile customer = customerMap.get(order.getCustomerId());
-            SubPackage subPackage = subPackageMap.get(order.getChildPackageId());
             if (customer == null) {
                 log.warn("订单处理失败：客户档案不存在 - 订单ID: {}, 客户ID: {}",
                         order.getId(), order.getCustomerId());
-                failCount += saveFailPlan(mealPlan.getId(), order, null, null, "客户档案不存在", failDetails);
-                continue;
-            }
-            if (subPackage == null) {
-                log.warn("订单处理失败：子套餐不存在 - 订单ID: {}, 子套餐ID: {}",
-                        order.getId(), order.getChildPackageId());
-                failCount += saveFailPlan(mealPlan.getId(), order, customer, null, "子套餐不存在", failDetails);
+                failCount += saveFailPlan(mealPlan.getId(), order, null, "客户档案不存在", failDetails, mealType);
                 continue;
             }
             if (!parentPackageMap.containsKey(order.getParentPackageId())) {
                 log.warn("订单处理失败：父套餐不存在 - 订单ID: {}, 父套餐ID: {}",
                         order.getId(), order.getParentPackageId());
-                failCount += saveFailPlan(mealPlan.getId(), order, customer, subPackage, "父套餐不存在", failDetails);
+                failCount += saveFailPlan(mealPlan.getId(), order, customer, "父套餐不存在", failDetails, mealType);
                 continue;
             }
 
             try {
-                CustomerMealPlan customerPlan = buildCustomerPlan(order, customer, subPackage, candidateDishMap, dishIngredientMap,
-                        targetDate, mealType, parentPackageMap);
-                saveSuccessPlan(mealPlan.getId(), order, customer, subPackage, customerPlan);
+                CustomerMealPlan customerPlan = buildCustomerPlan(order, customer, candidateDishMap, dishIngredientMap,
+                        targetDate, mealType, parentPackageMap, categoryIngredientMap);
+                applyOrderReplaceRules(order.getId(), customerPlan, orderReplaceRuleMap);
+                saveSuccessPlan(mealPlan.getId(), order, customer, customerPlan, mealType);
                 successCount++;
                 log.debug("订单处理成功 - 订单ID: {}", order.getId());
+            } catch (MealPlanBuildException e) {
+                log.warn("订单处理失败 - 订单ID: {}, 客户ID: {}, 失败原因: {}",
+                        order.getId(), order.getCustomerId(), e.getMessage());
+                failCount += saveFailPlan(mealPlan.getId(), order, customer, e.getMessage(), failDetails, e.getCustomerPlan(), mealType);
             } catch (BadRequestException e) {
                 log.warn("订单处理失败 - 订单ID: {}, 客户ID: {}, 失败原因: {}",
                         order.getId(), order.getCustomerId(), e.getMessage());
-                failCount += saveFailPlan(mealPlan.getId(), order, customer, subPackage, e.getMessage(), failDetails);
+                failCount += saveFailPlan(mealPlan.getId(), order, customer, e.getMessage(), failDetails, mealType);
             }
         }
 
@@ -242,13 +272,33 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
-     * 校验餐次参数，只允许午餐和晚餐。
+     * 校验餐次参数，仅支持 BREAKFAST / LUNCH / DINNER。
      */
     private String validateParams(String mealType) {
-        if (!MEAL_TYPE_LUNCH.equals(mealType) && !MEAL_TYPE_DINNER.equals(mealType)) {
-            throw new BadRequestException("餐次仅支持LUNCH或DINNER");
+        if (!MEAL_TYPE_LUNCH.equals(mealType) && !MEAL_TYPE_DINNER.equals(mealType) && !MEAL_TYPE_BREAKFAST.equals(mealType)) {
+            throw new BadRequestException("餐次仅支持LUNCH、DINNER或BREAKFAST");
         }
         return mealType;
+    }
+
+    private MenuSlot resolveMenuSlot(LocalDate targetDate, Integer menuWeekNum, Integer menuDayOfWeek) {
+        if ((menuWeekNum == null) != (menuDayOfWeek == null)) {
+            throw new BadRequestException("menuWeekNum和menuDayOfWeek必须同时传入或同时不传");
+        }
+        if (menuWeekNum == null) {
+            MenuSlot slot = new MenuSlot(ScheduleKeyUtil.calcWeek(targetDate), ScheduleKeyUtil.calcDay(targetDate), false);
+            log.info("排餐菜单槽位已确定 - source: {}, weekNum: {}, dayOfWeek: {}", "AUTO", slot.getWeekNum(), slot.getDayOfWeek());
+            return slot;
+        }
+        if (menuWeekNum < 1 || menuWeekNum > 4) {
+            throw new BadRequestException("menuWeekNum范围仅支持1-4");
+        }
+        if (menuDayOfWeek < 1 || menuDayOfWeek > 7) {
+            throw new BadRequestException("menuDayOfWeek范围仅支持1-7");
+        }
+        MenuSlot slot = new MenuSlot(menuWeekNum, menuDayOfWeek, true);
+        log.info("排餐菜单槽位已确定 - source: {}, weekNum: {}, dayOfWeek: {}", "MANUAL", slot.getWeekNum(), slot.getDayOfWeek());
+        return slot;
     }
 
     /**
@@ -336,24 +386,75 @@ public class MealPlanServiceImpl implements MealPlanService {
             } else if (order.getRemainingCount() == null || order.getRemainingCount() <= 0) {
                 log.info("订单被过滤 - 订单ID: {}, 客户ID: {}, 剩余餐数: {} (餐数用完)",
                         order.getId(), order.getCustomerId(), order.getRemainingCount());
-            } else if (!"LUNCH".equals(mealType) && !"ALL".equals(order.getMealType())) {
-                log.info("订单被过滤 - 订单ID: {}, 客户ID: {}, 订单餐次: {}, 目标餐次: {} (餐次不匹配)",
-                        order.getId(), order.getCustomerId(), order.getMealType(), mealType);
             }
         }
 
         List<CustomerOrder> candidateOrders = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
+        candidateOrders = mergeManualAdditionOrders(candidateOrders, targetDate, mealType);
         log.info("基础条件过滤后的候选订单 - 数量: {}", candidateOrders.size());
+
+        // 批量查询各订单的已排餐数量
+        Map<Long, Integer> scheduledCountMap = new HashMap<>();
+        if (!candidateOrders.isEmpty()) {
+            List<Long> orderIds = candidateOrders.stream().map(CustomerOrder::getId).collect(Collectors.toList());
+            List<OrderScheduledCountDto> scheduledCounts =
+                    mealPlanCustomerMapper.countScheduledByOrderIds(orderIds, mealType);
+            for (OrderScheduledCountDto dto : scheduledCounts) {
+                scheduledCountMap.put(dto.getOrderId(), dto.getScheduledCount());
+            }
+            log.debug("已排餐数量查询完成 - 订单数: {}, 有已排记录的订单数: {}", orderIds.size(), scheduledCountMap.size());
+        }
+
+        // 批量加载客户档案（用于排除日期检查）
+        Map<Long, CustomerProfile> customerMap = new HashMap<>();
+        if (!candidateOrders.isEmpty()) {
+            Set<Long> customerIds = candidateOrders.stream().map(CustomerOrder::getCustomerId)
+                    .filter(Objects::nonNull).collect(Collectors.toSet());
+            if (!customerIds.isEmpty()) {
+                for (CustomerProfile c : customerProfileMapper.findByIds(customerIds)) {
+                    customerMap.put(c.getId(), c);
+                }
+            }
+        }
 
         List<CustomerOrder> validOrders = new ArrayList<>();
         for (CustomerOrder order : candidateOrders) {
             if (customerId != null && !Objects.equals(order.getCustomerId(), customerId)) {
                 continue;
             }
-            String matchReason = getScheduleModeMatchReason(order, targetDate);
+            String startMealTypeReason = getStartMealTypeMismatchReason(order, mealType, targetDate);
+            if (startMealTypeReason != null) {
+                log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 餐次: {}, 原因: {}",
+                        order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(), mealType, startMealTypeReason);
+                continue;
+            }
+            boolean manualAddition = hasManualAddition(order.getId(), targetDate, mealType);
+            String matchReason = manualAddition ? null : getScheduleModeMatchReason(order, mealType,targetDate);
             if (matchReason != null) {
-                log.info("订单被过滤 - 订单ID: {}, 客户ID: {}, 餐次: {}, 配送模式: {}, 原因: {}",
-                        order.getId(), order.getCustomerId(), order.getMealType(), order.getScheduleMode(), matchReason);
+                log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 餐次: {}, 配送模式: {}, 原因: {}",
+                        order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(), order.getMealType(), order.getScheduleMode(), matchReason);
+                continue;
+            }
+            // 检查客户是否排除了该日期+餐次
+            CustomerProfile customer = customerMap.get(order.getCustomerId());
+            if (customer != null && customer.isExcluded(targetDate, mealType)) {
+                log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 日期: {}, 餐次: {}, 原因: 排除日期",
+                        order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(), targetDate, mealType);
+                continue;
+            }
+            // 检查已排餐数量是否已达到订单对应餐次的餐数上限
+            Integer scheduledCount = scheduledCountMap.get(order.getId());
+            int currentScheduled = scheduledCount != null ? scheduledCount : 0;
+            int maxCount;
+            if (MEAL_TYPE_BREAKFAST.equals(mealType)) {
+                maxCount = order.getBreakfastCount() != null ? order.getBreakfastCount() : 0;
+            } else {
+                maxCount = order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0;
+            }
+            if (currentScheduled >= maxCount) {
+                log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 餐次: {}, 餐数上限: {}, 已排未核销: {}, 原因: 已排餐数量已达上限",
+                        order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(),
+                        mealType, maxCount, currentScheduled);
                 continue;
             }
             validOrders.add(order);
@@ -367,18 +468,142 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
+     * 加载指定日期餐次的人工新增订单，并合并进候选订单列表。
+     *
+     * @param candidateOrders 常规规则过滤后的候选订单
+     * @param targetDate 排餐日期
+     * @param mealType 餐次
+     * @return 合并人工新增后的候选订单列表
+     */
+    private List<CustomerOrder> mergeManualAdditionOrders(List<CustomerOrder> candidateOrders,
+                                                          LocalDate targetDate,
+                                                          String mealType) {
+        List<CustomerMealScheduleAddition> additions =
+                customerMealScheduleAdditionMapper.selectActiveByDateMeal(targetDate, mealType);
+        if (additions == null || additions.isEmpty()) {
+            return candidateOrders;
+        }
+        Map<Long, CustomerOrder> additionOrderMap = new LinkedHashMap<>();
+        List<String> additionCustomerDetails = new ArrayList<>();
+        for (CustomerMealScheduleAddition addition : additions) {
+            if (addition == null || addition.getOrderId() == null) {
+                additionCustomerDetails.add(formatManualAdditionCustomer(null, addition));
+                continue;
+            }
+            CustomerOrder order = customerOrderMapper.selectById(addition.getOrderId());
+            additionOrderMap.put(addition.getOrderId(), order);
+            additionCustomerDetails.add(formatManualAdditionCustomer(order, addition));
+        }
+        log.info("人工新增排餐记录查询完成 - 日期: {}, 餐次: {}, 记录数: {}, 客户明细: {}",
+                targetDate, mealType, additions.size(), additionCustomerDetails);
+
+        Set<Long> existingOrderIds = candidateOrders.stream()
+                .map(CustomerOrder::getId)
+                .collect(Collectors.toSet());
+        List<CustomerOrder> merged = new ArrayList<>(candidateOrders);
+        int duplicateCount = 0;
+        int invalidCount = 0;
+        int mergedCount = 0;
+        for (CustomerMealScheduleAddition addition : additions) {
+            if (addition == null || addition.getOrderId() == null) {
+                invalidCount++;
+                continue;
+            }
+            if (existingOrderIds.contains(addition.getOrderId())) {
+                duplicateCount++;
+                continue;
+            }
+            CustomerOrder order = additionOrderMap.get(addition.getOrderId());
+            if (isManualAdditionOrderAvailable(order, targetDate)) {
+                merged.add(order);
+                existingOrderIds.add(order.getId());
+                mergedCount++;
+            } else {
+                invalidCount++;
+            }
+        }
+        log.info("人工新增排餐记录合并完成 - 日期: {}, 餐次: {}, 查询记录数: {}, 新增并入订单数: {}, 跳过重复订单数: {}, 跳过无效订单数: {}",
+                targetDate, mealType, additions.size(), mergedCount, duplicateCount, invalidCount);
+        return merged;
+    }
+
+    /**
+     * 格式化人工新增记录对应的客户日志信息，便于排查具体客户和绑定订单。
+     *
+     * @param order 人工新增绑定订单
+     * @param addition 人工新增记录
+     * @return 客户日志展示文本
+     */
+    private String formatManualAdditionCustomer(CustomerOrder order, CustomerMealScheduleAddition addition) {
+        Long customerId = addition != null ? addition.getCustomerId() : null;
+        Long orderId = addition != null ? addition.getOrderId() : null;
+        if (order == null) {
+            return String.format("customerId=%s, orderId=%s, customer=未知客户", customerId, orderId);
+        }
+        String customerName = StringUtils.isBlank(order.getCustomerName()) ? "未知客户" : order.getCustomerName();
+        String customerCode = StringUtils.isBlank(order.getCustomerCode()) ? "-" : order.getCustomerCode();
+        return String.format("customerId=%s, orderId=%s, customer=%s-%s",
+                customerId, orderId, customerName, customerCode);
+    }
+
+    /**
+     * 判断人工新增记录绑定的订单在生成日期仍可用。
+     */
+    private boolean isManualAdditionOrderAvailable(CustomerOrder order, LocalDate targetDate) {
+        if (order == null || order.getStatus() == null || order.getStatus() != 1) {
+            return false;
+        }
+        if (order.getRemainingCount() == null || order.getRemainingCount() <= 0) {
+            return false;
+        }
+        if (order.getStartDate() != null && targetDate.isBefore(order.getStartDate())) {
+            return false;
+        }
+        return order.getEndDate() == null || !targetDate.isAfter(order.getEndDate());
+    }
+
+    /**
+     * 判断订单指定日期餐次是否存在人工新增记录。
+     */
+    private boolean hasManualAddition(Long orderId, LocalDate targetDate, String mealType) {
+        return customerMealScheduleAdditionMapper.selectActiveByOrderDateMeal(orderId, targetDate, mealType) != null;
+    }
+
+    private String getStartMealTypeMismatchReason(CustomerOrder order, String targetMealType, LocalDate targetDate) {
+        String normalizedStartMealType = OrderStartMealTypeUtil.normalizeStartMealType(order.getMealType(), order.getStartMealType());
+        if (OrderStartMealTypeUtil.hasStartedForMeal(order.getStartDate(), normalizedStartMealType, targetDate, targetMealType)) {
+            return null;
+        }
+        return String.format("开始餐次为%s，当前餐次%s尚未开始",
+                OrderStartMealTypeUtil.mealTypeDesc(normalizedStartMealType),
+                OrderStartMealTypeUtil.mealTypeDesc(targetMealType));
+    }
+
+    /**
      * 获取配送模式匹配失败的原因，如果匹配则返回 null。
      */
-    private String getScheduleModeMatchReason(CustomerOrder order, LocalDate targetDate) {
+    private String getScheduleModeMatchReason(CustomerOrder order,String targetMealType, LocalDate targetDate) {
         String scheduleMode = order.getScheduleMode();
         if (scheduleMode == null || SCHEDULE_MODE_DAILY.equals(scheduleMode)) {
             return null; // 匹配
         }
         if (SCHEDULE_MODE_SCHEDULE.equals(scheduleMode)) {
-            List<String> deliveryDates = parseJsonArray(order.getDeliveryDates());
+            List<String> deliveryDates = parseDeliveryDatesWithMealTypes(order.getDeliveryDates());
             if (deliveryDates.contains(targetDate.toString())) {
-                return null; // 匹配
+                // 旧格式仅记录日期，不区分餐次；命中日期时沿用旧逻辑直接通过
+                DeliveryDateWithMealTypes deliveryDateWithMealTypes = parseDElivery(order.getDeliveryDates(), targetDate.toString(), targetMealType);
+                if (deliveryDateWithMealTypes == null) {
+                    return null;
+                }
+                if (deliveryDateWithMealTypes.getMealTypes().contains(targetMealType)){
+                    return null;
+                }
+
+
+                return  String.format("SCHEDULE模式 - 今日餐次(%s)不在配送日餐次中: %s", targetMealType, JSONUtil.toJsonStr(deliveryDateWithMealTypes.getMealTypes()));
             }
+
+
             return String.format("SCHEDULE模式 - 今日(%s)不在配送日列表中: %s", targetDate, deliveryDates);
         }
         if (SCHEDULE_MODE_WEEKDAY.equals(scheduleMode)) {
@@ -400,7 +625,7 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 判断订单配送模式是否命中目标日期。
      */
     private boolean scheduleModeMatches(CustomerOrder order, LocalDate targetDate) {
-        return getScheduleModeMatchReason(order, targetDate) == null;
+        return getScheduleModeMatchReason(order,order.getMealType(), targetDate) == null;
     }
 
     /**
@@ -434,27 +659,6 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 按订单子套餐ID批量加载套餐数据。
      */
-    private Map<Long, SubPackage> loadSubPackages(List<CustomerOrder> orders) {
-        Set<Long> ids = orders.stream().map(CustomerOrder::getChildPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
-        if (ids.isEmpty()) {
-            log.debug("订单中没有有效的子套餐ID，无需加载子套餐数据");
-            return Collections.emptyMap();
-        }
-
-        long startTime = System.currentTimeMillis();
-        Map<Long, SubPackage> packageMap = new HashMap<>();
-        for (SubPackage subPackage : subPackageMapper.selectBatchIds(ids)) {
-            packageMap.put(subPackage.getId(), subPackage);
-        }
-
-        log.debug("子套餐加载完成 - 套餐ID数量: {}, 加载数: {}, 耗时: {}ms",
-                ids.size(), packageMap.size(), System.currentTimeMillis() - startTime);
-        return packageMap;
-    }
-
-    /**
-     * 按订单父套餐ID批量加载套餐数据。
-     */
     private Map<Long, ParentPackage> loadParentPackages(List<CustomerOrder> orders) {
         Set<Long> ids = orders.stream().map(CustomerOrder::getParentPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
         if (ids.isEmpty()) {
@@ -476,19 +680,19 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 按父套餐归类候选菜池，供后续客户排餐复用。
      */
-    private Map<Long, Map<String, List<Dish>>> buildCandidateDishPool(List<Dish> scheduledDishes, List<CustomerOrder> orders,
+    private Map<Long, Map<String, List<Dish>>> buildCandidateDishPool(List<Dish> candidateDishes, List<CustomerOrder> orders,
                                                                      Map<Long, ParentPackage> parentPackageMap) {
         Set<Long> parentPackageIds = orders.stream().map(CustomerOrder::getParentPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
-        if (parentPackageIds.isEmpty() || scheduledDishes.isEmpty()) {
-            log.debug("父套餐ID为空或排期菜品为空，跳过构建候选菜池");
+        if (parentPackageIds.isEmpty() || candidateDishes.isEmpty()) {
+            log.debug("父套餐ID为空或候选菜品为空，跳过构建候选菜池");
             return Collections.emptyMap();
         }
 
         long startTime = System.currentTimeMillis();
         Map<Long, Map<String, List<Dish>>> candidateDishMap = new HashMap<>();
 
-        log.debug("开始构建候选菜池 - 父套餐ID数量: {}, 排期菜品数量: {}",
-                parentPackageIds.size(), scheduledDishes.size());
+        log.debug("开始构建候选菜池 - 父套餐ID数量: {}, 候选菜品数量: {}",
+                parentPackageIds.size(), candidateDishes.size());
 
         for (Long parentPackageId : parentPackageIds) {
             ParentPackage parentPackage = parentPackageMap.get(parentPackageId);
@@ -496,11 +700,17 @@ public class MealPlanServiceImpl implements MealPlanService {
             Map<String, List<Dish>> dishTypeMap = new HashMap<>();
 
             int matchedDishes = 0;
-            for (Dish dish : scheduledDishes) {
+            for (Dish dish : candidateDishes) {
+                // RICE_TYPE 米饭不绑定任何套餐，是全局通用菜品，每个父套餐都应包含
+                if (DishTypeEnum.RICE_TYPE.getCode().equals(dish.getDishType())) {
+                    dishTypeMap.computeIfAbsent(normalizeCandidateDishType(dish.getDishType()), key -> new ArrayList<>()).add(dish);
+                    matchedDishes++;
+                    continue;
+                }
                 if (!matchesParentPackage(dish.getMealPackages(), parentPackageId, packageCode)) {
                     continue;
                 }
-                dishTypeMap.computeIfAbsent(dish.getDishType(), key -> new ArrayList<>()).add(dish);
+                dishTypeMap.computeIfAbsent(normalizeCandidateDishType(dish.getDishType()), key -> new ArrayList<>()).add(dish);
                 matchedDishes++;
             }
 
@@ -519,21 +729,71 @@ public class MealPlanServiceImpl implements MealPlanService {
     /**
      * 按排期和餐次查询当日候选菜品。
      */
-    private List<Dish> loadScheduledDishes(LocalDate targetDate, String mealType) {
+    private List<Dish> loadScheduledDishes(MenuSlot menuSlot, String mealType) {
         long startTime = System.currentTimeMillis();
         log.debug("查询排期菜品 - 周序号: {}, 星期: {}, 餐次: {}",
-                ScheduleKeyUtil.calcWeek(targetDate),
-                ScheduleKeyUtil.calcDay(targetDate),
+                menuSlot.getWeekNum(),
+                menuSlot.getDayOfWeek(),
                 mealType);
 
-        List<Dish> scheduledDishes = dishMapper.findBySchedule(
-                ScheduleKeyUtil.calcWeek(targetDate),
-                ScheduleKeyUtil.calcDay(targetDate),
+        List<Dish> scheduledDishes = mealSchedulePlanMapper.findBySchedule(
+                menuSlot.getWeekNum(),
+                menuSlot.getDayOfWeek(),
                 mealType);
+        if (scheduledDishes == null || scheduledDishes.isEmpty()) {
+            return Collections.emptyList();
+        }
 
         log.debug("排期菜品查询完成 - 数量: {}, 耗时: {}ms",
                 scheduledDishes.size(), System.currentTimeMillis() - startTime);
         return scheduledDishes;
+    }
+
+    /**
+     * 查询固定米饭菜品。RICE 不依赖 meal_schedule_plan，而是直接从 dish 主档读取。
+     */
+    private List<Dish> loadRiceDishes() {
+        DishQueryCriteria criteria = new DishQueryCriteria();
+        criteria.setDishType(DishTypeEnum.RICE_TYPE.getCode());
+
+        criteria.setEnabled(true);
+        List<Dish> riceDishes = dishMapper.findAll(criteria);
+        if (riceDishes == null || riceDishes.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return riceDishes;
+    }
+
+    /**
+     * 特殊米饭类型只用于主档和订单选择，进入排餐后统一按 RICE 处理。
+     */
+    private String normalizeCandidateDishType(String dishType) {
+        if (DishTypeEnum.RICE_TYPE.getCode().equals(dishType)) {
+            return DISH_TYPE_RICE;
+        }
+        return dishType;
+    }
+
+    /**
+     * 合并排期菜品与固定米饭菜品，按菜品ID去重，供后续统一构建候选池和加载食材。
+     */
+    private List<Dish> mergeCandidateDishes(List<Dish> scheduledDishes, List<Dish> riceDishes) {
+        Map<Integer, Dish> merged = new LinkedHashMap<>();
+        if (scheduledDishes != null) {
+            for (Dish dish : scheduledDishes) {
+                if (dish != null && dish.getId() != null) {
+                    merged.put(dish.getId(), dish);
+                }
+            }
+        }
+        if (riceDishes != null) {
+            for (Dish dish : riceDishes) {
+                if (dish != null && dish.getId() != null) {
+                    merged.putIfAbsent(dish.getId(), dish);
+                }
+            }
+        }
+        return new ArrayList<>(merged.values());
     }
 
     /**
@@ -563,7 +823,7 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         long startTime = System.currentTimeMillis();
         List<DishIngredientRelation> relations = dishIngredientMapper.findRelationsByDishIds(dishIds);
-       
+
 
         Map<Integer, Set<String>> dishIngredients = new HashMap<>();
         for (DishIngredientRelation relation : relations) {
@@ -576,160 +836,260 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
+     * 加载分类名称→配料名称集合的映射，用于三级过敏词展开。
+     */
+    private Map<String, Set<String>> loadCategoryIngredientMapping() {
+        return dishIngredientCategoryService.getCategoryIngredientMapping();
+    }
+
+    /**
      * 为单个订单生成具体菜品组合。
      */
-    private CustomerMealPlan buildCustomerPlan(CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
+    private CustomerMealPlan buildCustomerPlan(CustomerOrder order, CustomerProfile customer,
                                                Map<Long, Map<String, List<Dish>>> candidateDishMap,
                                                Map<Integer, Set<String>> dishIngredientMap,
                                                LocalDate targetDate, String mealType,
-                                               Map<Long, ParentPackage> parentPackageMap) {
+                                               Map<Long, ParentPackage> parentPackageMap,
+                                               Map<String, Set<String>> categoryIngredientMap) {
+        // BREAKFAST 餐次不生成菜品明细，只创建客户排餐记录
+        if (MEAL_TYPE_BREAKFAST.equals(mealType)) {
+            return new CustomerMealPlan();
+        }
+
+        DishQuantityConfig config = new DishQuantityConfig(order);
+
         Map<String, List<Dish>> dishTypeMap = candidateDishMap.get(order.getParentPackageId());
         if (dishTypeMap == null || dishTypeMap.isEmpty()) {
             throw new BadRequestException("当前父套餐没有可用候选菜");
         }
-        // log.info("buildCustomerPlan_dishTypeMap:"+JSONUtil.toJsonStr(dishTypeMap));
         List<String> allergyTags = customer.getAllergyTags() == null ? Collections.emptyList() : customer.getAllergyTags();
         Set<Integer> selectedDishIds = new HashSet<>();
         List<SelectedDish> selectedDishes = new ArrayList<>();
-        pickRequiredDishes(subPackage.getMeatCount(), selectedDishes, selectedDishIds, dishTypeMap, allergyTags,
-                dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap);
-        pickVegetables(subPackage.getVegCount(), selectedDishes, selectedDishIds, dishTypeMap, allergyTags,
-                dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap);
-        pickOptionalDish(Boolean.TRUE.equals(subPackage.getIncludeSoup()), DISH_TYPE_SOUP, selectedDishes, selectedDishIds,
-                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap);
-        pickOptionalDish(Boolean.TRUE.equals(subPackage.getIncludeRice()), DISH_TYPE_RICE, selectedDishes, selectedDishIds,
-                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap);
+        List<String> failureReasons = new ArrayList<>();
         CustomerMealPlan customerMealPlan = new CustomerMealPlan();
-        customerMealPlan.setSelectedDishes(selectedDishes);
+
+        // 使用 DishQuantityConfig 获取菜品数量
+        pickRequiredDishes(config.getMainDishCount(), config.getSideDishCount(), selectedDishes, selectedDishIds, dishTypeMap, allergyTags,
+                dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons, customer, categoryIngredientMap);
+        pickVegetables(config.getVegCount(), selectedDishes, selectedDishIds, dishTypeMap, allergyTags,
+                dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons, customer, categoryIngredientMap);
+        pickRiceDish(config.getRiceCount(), config.getRiceType(), selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap,  customerMealPlan, failureReasons, customer, categoryIngredientMap);
+        pickOptionalDish(config.getSoupCount(), DISH_TYPE_SOUP, selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, order.getParentPackageId(), parentPackageMap, customerMealPlan, failureReasons, customer, categoryIngredientMap);
+
+        // 处理客户需要显示排除的菜品
+        List<SkippedAllergyDish> skippedAllergyDishes = customerMealPlan.getSkippedAllergyDishes();
+        List<SelectedDish> selectedDishes1 = markExcludedDishes(selectedDishes, skippedAllergyDishes, customer);
+
+        customerMealPlan.setSelectedDishes(selectedDishes1);
+
+        if (!failureReasons.isEmpty()) {
+            throw new MealPlanBuildException(String.join("；", failureReasons), customerMealPlan);
+        }
         return customerMealPlan;
     }
 
     /**
-     * 选择荤菜，支持单荤和主副菜组合两种配置，带过敏回退逻辑。
+     * 客户显式排除的菜品。
      */
-    private void pickRequiredDishes(Integer meatCount, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
-                                    Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
-                                    LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap) {
-        int requiredCount = meatCount == null ? 0 : meatCount;
-        if (requiredCount <= 0) {
-            return;
+    private List<SelectedDish> markExcludedDishes(List<SelectedDish> selectedDishes,List<SkippedAllergyDish> skippedAllergyDishes, CustomerProfile customerProfile) {
+        List<Integer> excludedDishIds = customerProfile.getExcludedDishIds();
+        if (selectedDishes == null || selectedDishes.isEmpty() || excludedDishIds == null || excludedDishIds.isEmpty()) {
+            return selectedDishes;
         }
-        if (requiredCount == 1) {
-            // 一荤: MAIN -> SIDE -> 次日MAIN -> 次日SIDE
-            DishSelectResult result = selectDishWithFallback(DISH_TYPE_MAIN, DISH_TYPE_SIDE, selectedDishIds, allergyTags,
-                    dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
-            if (result == null || result.getDish() == null) {
-                throw new BadRequestException("荤菜不足");
+
+        Set<Integer> excludedDishIdSet = new HashSet<>(excludedDishIds);
+        List<SelectedDish> result = new ArrayList<>(selectedDishes.size());
+        for (SelectedDish selectedDish : selectedDishes) {
+            Dish dish = selectedDish.getDish();
+            if (dish == null || dish.getId() == null || !excludedDishIdSet.contains(dish.getId())) {
+                result.add(selectedDish);
+                continue;
             }
-            selectedDishes.add(new SelectedDish(result.getDish().getDishType(), result.getDish(),
-                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason()));
-            selectedDishIds.add(result.getDish().getId());
-            return;
-        }
-        if (requiredCount != 2) {
-            throw new BadRequestException("荤菜数量配置不支持");
-        }
-        // 二荤一素: 需要同时有MAIN和SIDE
-        // 尝试从当日选择MAIN和SIDE
-        Dish mainDish = selectDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, allergyTags, dishIngredientMap);
-        Dish sideDish = selectDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, dishIngredientMap);
-
-        // 记录原本想选的菜品
-        Dish originalMainDish = mainDish;
-        Dish originalSideDish = sideDish;
-        String mainReplaceReason = null;
-        String sideReplaceReason = null;
-
-        // 回退1: MAIN过敏，用SIDE作为MAIN
-        if (mainDish == null && sideDish != null) {
-            log.info("主菜全部过敏，改用副菜作为主菜");
-            originalMainDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
-            mainReplaceReason = "ALLERGY";
-            mainDish = sideDish;
-            sideDish = null; // 重新选择SIDE
-        }
-
-        // 回退2: 重新选择SIDE
-        if (sideDish == null) {
-            sideDish = selectDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, dishIngredientMap);
-        }
-
-        // 回退3: 当日不足，尝试次日菜品
-        if (mainDish == null || sideDish == null) {
-            log.warn("当日荤菜不足，尝试次日菜品");
-            Map<String, List<Dish>> nextDayDishTypeMap = loadNextDayDishTypeMap(targetDate, mealType, parentPackageId, parentPackageMap);
-            Map<Integer, Set<String>> nextDayIngredients = loadDishIngredients(
-                    nextDayDishTypeMap.values().stream().flatMap(List::stream).collect(Collectors.toList()));
-
-            if (mainDish == null) {
-                if (originalMainDish == null) {
-                    originalMainDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, dishIngredientMap);
-                }
-                mainDish = selectDish(nextDayDishTypeMap.get(DISH_TYPE_MAIN), selectedDishIds, allergyTags, nextDayIngredients);
-                if (mainDish != null) {
-                    log.info("次日主菜选择成功 - 菜品: {}", mainDish.getName());
-                    mainReplaceReason = mainReplaceReason == null ? "NEXT_DAY" : mainReplaceReason;
-                }
+            if (selectedDish.isReplaced&& !CollectionUtils.isEmpty(selectedDish.getMatchedAllergyTags())){
+                log.info("已被过敏排除的菜品：{},不再校验 排除菜品ID列表", dish.getName());
+                result.add(selectedDish);
+                continue;
             }
-            if (sideDish == null) {
-                if (originalSideDish == null) {
-                    originalSideDish = getFirstAvailableDish(dishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, dishIngredientMap);
-                }
-                sideDish = selectDish(nextDayDishTypeMap.get(DISH_TYPE_SIDE), selectedDishIds, allergyTags, nextDayIngredients);
-                if (sideDish != null) {
-                    log.info("次日副菜选择成功 - 菜品: {}", sideDish.getName());
-                    sideReplaceReason = sideReplaceReason == null ? "NEXT_DAY" : sideReplaceReason;
-                }
-            }
-        }
 
-        if (mainDish == null || sideDish == null) {
-            throw new BadRequestException("荤菜不足，必须同时选出主菜和副菜");
+
+
+            String replaceReason = selectedDish.getReplaceReason() != null
+                    ? selectedDish.getReplaceReason()
+                    : REPLACE_REASON_EXCLUDED;
+            Set<String> strings = new LinkedHashSet<>(selectedDish.getMatchedAllergyTags());
+            strings.add("排除菜品");
+            log.info("客户{} 编号{}被排除的菜品：{}，id:{}。原因：{}",
+                    customerProfile.getCustomerName(), customerProfile.getCustomerCode(),
+                    dish.getName(),dish.getId(), replaceReason);
+            skippedAllergyDishes.add(new SkippedAllergyDish(
+
+                    dish,
+
+
+                    strings, replaceReason));
         }
-        selectedDishes.add(new SelectedDish(DISH_TYPE_MAIN, mainDish,
-                mainReplaceReason != null, originalMainDish, mainReplaceReason));
-        selectedDishes.add(new SelectedDish(DISH_TYPE_SIDE, sideDish,
-                sideReplaceReason != null, originalSideDish, sideReplaceReason));
-        selectedDishIds.add(mainDish.getId());
-        selectedDishIds.add(sideDish.getId());
+        return result;
     }
 
     /**
-     * 选择素菜，带过敏回退逻辑。
+     * 固定日菜单规则：主菜/副菜每天每类最多提供 1 份，超出部分通过补菜数量记录。
+     */
+    private void pickRequiredDishes(Integer mainCount, Integer sideCount, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
+                                    Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
+                                    LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap,
+                                    CustomerMealPlan customerMealPlan, List<String> failureReasons, CustomerProfile customerProfile,
+                                    Map<String, Set<String>> categoryIngredientMap) {
+        pickSingleDishIfRequired(mainCount, DISH_TYPE_MAIN, "主菜不足", selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
+                customerMealPlan, failureReasons, customerProfile, categoryIngredientMap);
+        pickSingleDishIfRequired(sideCount, DISH_TYPE_SIDE, "副菜不足", selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
+                customerMealPlan, failureReasons, customerProfile, categoryIngredientMap);
+    }
+
+    /**
+     * 固定日菜单规则：素菜每天最多提供 1 份，超出部分通过补菜数量记录。
      */
     private void pickVegetables(Integer vegCount, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                 Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
-                                LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap) {
-        int requiredCount = vegCount == null ? 0 : vegCount;
-        for (int i = 0; i < requiredCount; i++) {
-            DishSelectResult result = selectDishWithFallback(DISH_TYPE_VEGETABLE, null, selectedDishIds, allergyTags,
-                    dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
-            if (result == null || result.getDish() == null) {
-                throw new BadRequestException("素菜不足");
-            }
-            selectedDishes.add(new SelectedDish(DISH_TYPE_VEGETABLE, result.getDish(),
-                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason()));
-            selectedDishIds.add(result.getDish().getId());
-        }
+                                LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap,
+                                CustomerMealPlan customerMealPlan, List<String> failureReasons, CustomerProfile customerProfile,
+                                Map<String, Set<String>> categoryIngredientMap) {
+        pickSingleDishIfRequired(vegCount, DISH_TYPE_VEGETABLE, "素菜不足", selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
+                customerMealPlan, failureReasons, customerProfile, categoryIngredientMap);
     }
 
     /**
-     * 在套餐配置要求时补选汤或米饭等可选菜品，带过敏回退逻辑。
+     * 固定日菜单规则：汤或米饭每天每类最多提供 1 份，超出部分通过补菜数量记录。
      */
-    private void pickOptionalDish(boolean required, String dishType, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
+    private void pickOptionalDish(Integer count, String dishType, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
                                   Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
-                                  LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap) {
-        if (!required) {
+                                  LocalDate targetDate, String mealType, Long parentPackageId, Map<Long, ParentPackage> parentPackageMap,
+                                  CustomerMealPlan customerMealPlan, List<String> failureReasons, CustomerProfile customerProfile,
+                                  Map<String, Set<String>> categoryIngredientMap) {
+        pickSingleDishIfRequired(count, dishType, dishType + "类型菜品不足", selectedDishes, selectedDishIds,
+                dishTypeMap, allergyTags, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap,
+                customerMealPlan, failureReasons, customerProfile, categoryIngredientMap);
+    }
+
+    /**
+     * 米饭选择：优先匹配订单指定的米饭类型（riceType），匹配不到则回退到任意米饭。
+     */
+    private void pickRiceDish(Integer riceCount, String riceType, List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
+                             Map<String, List<Dish>> dishTypeMap, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap,
+                             CustomerMealPlan customerMealPlan, List<String> failureReasons, CustomerProfile customerProfile,
+                             Map<String, Set<String>> categoryIngredientMap) {
+        if (riceCount == null || riceCount <= 0) {
             return;
         }
-        // log.info("pickOptionalDish_dishTypeMap:"+JSONUtil.toJsonStr(dishTypeMap));
-        DishSelectResult result = selectDishWithFallback(dishType, null, selectedDishIds, allergyTags,
-                dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap);
+        List<Dish> riceDishes = new ArrayList<>(dishTypeMap.getOrDefault(DISH_TYPE_RICE, Collections.emptyList()));
+        List<Dish> riceTypeDishes = dishTypeMap.get(DishTypeEnum.RICE_TYPE.getCode());
+        if (riceTypeDishes != null) {
+            riceDishes.addAll(riceTypeDishes);
+        }
+        if (riceDishes.isEmpty()) {
+            failureReasons.add("米饭类型菜品不足");
+            return;
+        }
+        // 如果指定了米饭类型，优先从名称匹配的米饭中选择
+        DishSelectResult result = null;
+        Dish originalRiceDish = isSpecifiedRiceType(riceType) ? riceDishes.get(0) : null;
+        if (isSpecifiedRiceType(riceType)) {
+            List<Dish> matched = new ArrayList<>();
+            for (Dish d : riceDishes) {
+                if (riceType.equals(d.getName())) {
+                    matched.add(d);
+                }
+            }
+            if (!matched.isEmpty()) {
+                result = selectDish(matched, selectedDishIds, allergyTags, dishIngredientMap, categoryIngredientMap);
+            }
+            // 匹配不到指定米饭类型，回退到白米饭默认
+            if (result == null || result.getDish() == null) {
+                List<Dish> defaultRice = new ArrayList<>();
+                for (Dish d : riceDishes) {
+                    if ("白米饭".equals(d.getName())) {
+                        defaultRice.add(d);
+                    }
+                }
+                if (!defaultRice.isEmpty()) {
+                    result = selectDish(defaultRice, selectedDishIds, allergyTags, dishIngredientMap, categoryIngredientMap);
+                }
+            }
+        }
+        // 未指定类型（默认），选菜单中的米饭（排除RICE_TYPE特殊米饭）
         if (result == null || result.getDish() == null) {
-            throw new BadRequestException(dishType + "类型菜品不足");
+            List<Dish> menuRice = new ArrayList<>();
+            for (Dish d : riceDishes) {
+                if (!DishTypeEnum.RICE_TYPE.getCode().equals(d.getDishType())) {
+                    menuRice.add(d);
+                }
+            }
+            if (!menuRice.isEmpty()) {
+                result = selectDish(menuRice, selectedDishIds, allergyTags, dishIngredientMap, categoryIngredientMap);
+            }
+        }
+        // 菜单米饭选不到，回退到全部米饭
+        if (result == null || result.getDish() == null) {
+            result = selectDish(riceDishes, selectedDishIds, allergyTags, dishIngredientMap, categoryIngredientMap);
+        }
+        for (SkippedAllergyDish sad : result.getSkippedAllergyDishes()) {
+            customerMealPlan.addSkippedAllergyDish(sad);
+        }
+        if (result.getDish() == null) {
+            if (!isAllergyFilteredOut(result)) {
+                failureReasons.add("米饭类型菜品不足");
+            }
+            return;
+        }
+        if (isSpecifiedRiceType(riceType)) {
+            selectedDishes.add(new SelectedDish(DISH_TYPE_RICE, result.getDish(),
+                    true, originalRiceDish, REPLACE_REASON_CUSTOMER_SELECTED, result.getMatchedAllergyTags()));
+        } else {
+            selectedDishes.add(new SelectedDish(DISH_TYPE_RICE, result.getDish(),
+                    result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
+        }
+        selectedDishIds.add(result.getDish().getId());
+    }
+
+    private boolean isSpecifiedRiceType(String riceType) {
+        return StringUtils.isNotBlank(riceType) && !DEFAULT_RICE_TYPE.equals(riceType);
+    }
+
+    /**
+     * 固定日菜单规则：某一类型只要客户需求大于 0，就从当日菜单中选 1 份。
+     * 超出的份数通过补菜数量字段记录，不在排餐明细里重复选第二道同类型菜。
+     */
+    private void pickSingleDishIfRequired(Integer requiredCount, String dishType, String failReason,
+                                          List<SelectedDish> selectedDishes, Set<Integer> selectedDishIds,
+                                          Map<String, List<Dish>> dishTypeMap, List<String> allergyTags,
+                                          Map<Integer, Set<String>> dishIngredientMap,
+                                          LocalDate targetDate, String mealType, Long parentPackageId,
+                                          Map<Long, ParentPackage> parentPackageMap,
+                                          CustomerMealPlan customerMealPlan, List<String> failureReasons,
+                                          CustomerProfile customerProfile,
+                                          Map<String, Set<String>> categoryIngredientMap) {
+        if (requiredCount == null || requiredCount <= 0) {
+            log.debug("客户{}(编号{}) 不需要 {} 类型菜品（需求数量：{}），跳过选菜",
+                    customerProfile.getCustomerName(), customerProfile.getCustomerCode(), dishType, requiredCount);
+            return;
+        }
+        DishSelectResult result = selectDishWithFallback(dishType, null, selectedDishIds, allergyTags,
+                dishTypeMap, dishIngredientMap, targetDate, mealType, parentPackageId, parentPackageMap, categoryIngredientMap);
+        for (SkippedAllergyDish sad : result.getSkippedAllergyDishes()) {
+            customerMealPlan.addSkippedAllergyDish(sad);
+        }
+        if (result.getDish() == null) {
+            if (!isAllergyFilteredOut(result)) {
+                failureReasons.add(failReason);
+            }
+            return;
         }
         selectedDishes.add(new SelectedDish(dishType, result.getDish(),
-                result.isReplaced(), result.getOriginalDish(), result.getReplaceReason()));
+                result.isReplaced(), result.getOriginalDish(), result.getReplaceReason(), result.getMatchedAllergyTags()));
         selectedDishIds.add(result.getDish().getId());
     }
 
@@ -751,57 +1111,39 @@ public class MealPlanServiceImpl implements MealPlanService {
                                        List<String> allergyTags, Map<String, List<Dish>> dishTypeMap,
                                        Map<Integer, Set<String>> dishIngredientMap,
                                        LocalDate targetDate, String mealType, Long parentPackageId,
-                                       Map<Long, ParentPackage> parentPackageMap) {
+                                       Map<Long, ParentPackage> parentPackageMap,
+                                       Map<String, Set<String>> categoryIngredientMap) {
         // 尝试首选类型
-        Dish dish = selectDish(dishTypeMap.get(primaryType), selectedDishIds, allergyTags, dishIngredientMap);
-        if (dish != null) {
-            return DishSelectResult.noReplace(dish);
+        DishSelectResult result = selectDish(dishTypeMap.get(primaryType), selectedDishIds, allergyTags, dishIngredientMap, categoryIngredientMap);
+        if (result.getDish() != null) {
+            return result;
         }
 
-        // 尝试次选类型
+        // 收集首选类型中被过敏过滤的菜品
+        List<SkippedAllergyDish> allSkipped = new ArrayList<>(result.getSkippedAllergyDishes());
+
         if (fallbackType != null) {
-            // 记录原本想选的菜品（首选类型的第一个候选）
-            Dish originalDish = getFirstAvailableDish(dishTypeMap.get(primaryType), selectedDishIds, dishIngredientMap);
-            log.info("{}类型菜品全部过敏，改用{}类型", primaryType, fallbackType);
-            dish = selectDish(dishTypeMap.get(fallbackType), selectedDishIds, allergyTags, dishIngredientMap);
-            if (dish != null) {
-                return DishSelectResult.withReplace(dish, originalDish, "ALLERGY");
-            }
+            log.info("当前未启用类型替换 - primaryType={}, fallbackType={}", primaryType, fallbackType);
         }
 
-        // 尝试次日菜品
-        log.warn("当日{}类型菜品不足，尝试次日菜品", primaryType);
-        Map<String, List<Dish>> nextDayDishTypeMap = loadNextDayDishTypeMap(targetDate, mealType, parentPackageId, parentPackageMap);
-        if (nextDayDishTypeMap.isEmpty()) {
-            return null;
+        // 尝试次日菜品（暂不启用）
+        if (allSkipped.isEmpty()) {
+            log.warn("【暂跳过替换菜品】当日{}类型菜品不足，未尝试次日菜品", primaryType);
+        } else {
+            log.info("当日{}类型菜品因过敏被过滤，未尝试次日菜品", primaryType);
         }
+        // Map<String, List<Dish>> nextDayDishTypeMap = loadNextDayDishTypeMap(targetDate, mealType, parentPackageId, parentPackageMap);
+        // ... (注释中的备用代码保持不变)
 
-        Map<Integer, Set<String>> nextDayIngredients = loadDishIngredients(
-                nextDayDishTypeMap.values().stream().flatMap(List::stream).collect(Collectors.toList()));
-
-        // 记录原本想选的菜品
-        Dish originalDish = getFirstAvailableDish(dishTypeMap.get(primaryType), selectedDishIds, dishIngredientMap);
-        if (originalDish == null && fallbackType != null) {
-            originalDish = getFirstAvailableDish(dishTypeMap.get(fallbackType), selectedDishIds, dishIngredientMap);
+        // 返回空结果，附带收集到的所有过敏菜品
+        if (!allSkipped.isEmpty()) {
+            return new DishSelectResult(null, false, null, null, Collections.emptySet(), allSkipped);
         }
+        return DishSelectResult.noDish();
+    }
 
-        // 优先尝试次日首选类型
-        dish = selectDish(nextDayDishTypeMap.get(primaryType), selectedDishIds, allergyTags, nextDayIngredients);
-        if (dish != null) {
-            log.info("次日{}类型选择成功 - 菜品: {}", primaryType, dish.getName());
-            return DishSelectResult.withReplace(dish, originalDish, "NEXT_DAY");
-        }
-
-        // 如果次选类型存在，尝试次日次选类型
-        if (fallbackType != null) {
-            dish = selectDish(nextDayDishTypeMap.get(fallbackType), selectedDishIds, allergyTags, nextDayIngredients);
-            if (dish != null) {
-                log.info("次日{}类型选择成功 - 菜品: {}", fallbackType, dish.getName());
-                return DishSelectResult.withReplace(dish, originalDish, "NEXT_DAY");
-            }
-        }
-
-        return null;
+    private boolean isAllergyFilteredOut(DishSelectResult result) {
+        return result != null && result.getDish() == null && !result.getSkippedAllergyDishes().isEmpty();
     }
 
     /**
@@ -827,7 +1169,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         LocalDate nextDate = targetDate.plusDays(1);
         log.debug("加载次日排期菜品 - 日期: {}, 餐次: {}", nextDate, mealType);
 
-        List<Dish> nextDayDishes = loadScheduledDishes(nextDate, mealType);
+        List<Dish> nextDayDishes = loadScheduledDishes(
+                new MenuSlot(ScheduleKeyUtil.calcWeek(nextDate), ScheduleKeyUtil.calcDay(nextDate), false),
+                mealType);
         if (nextDayDishes.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -840,7 +1184,7 @@ public class MealPlanServiceImpl implements MealPlanService {
             if (!matchesParentPackage(dish.getMealPackages(), parentPackageId, packageCode)) {
                 continue;
             }
-            dishTypeMap.computeIfAbsent(dish.getDishType(), k -> new ArrayList<>()).add(dish);
+            dishTypeMap.computeIfAbsent(normalizeCandidateDishType(dish.getDishType()), k -> new ArrayList<>()).add(dish);
         }
         sortDishTypeMap(dishTypeMap);
 
@@ -849,99 +1193,108 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
-     * 从候选列表中挑选首个未重复且不过敏的菜品。
+     * 从候选列表中挑选首个未重复且不过敏的菜品，返回选择结果（含匹配的过敏标签和被过滤的过敏菜品）。
      */
-    private Dish selectDish(List<Dish> dishes, Set<Integer> selectedDishIds, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap) {
+    private DishSelectResult selectDish(List<Dish> dishes, Set<Integer> selectedDishIds, List<String> allergyTags, Map<Integer, Set<String>> dishIngredientMap, Map<String, Set<String>> categoryIngredientMap) {
         if (dishes == null || dishes.isEmpty()) {
-            return null;
+            return DishSelectResult.noDish();
         }
+        List<SkippedAllergyDish> skippedAllergies = new ArrayList<>();
         for (Dish dish : dishes) {
             if (selectedDishIds.contains(dish.getId())) {
                 continue;
             }
-            if (containsAllergy(allergyTags, dishIngredientMap.get(dish.getId()))) {
-                log.warn("过敏菜品：{}",JSONUtil.toJsonStr(dish));
+            Set<String> matchedAllergies = getMatchedAllergyTags(allergyTags, dishIngredientMap.get(dish.getId()), categoryIngredientMap);
+            if (!matchedAllergies.isEmpty()) {
+                log.warn("过敏菜品：{}", JSONUtil.toJsonStr(dish));
+                skippedAllergies.add(new SkippedAllergyDish(dish, matchedAllergies,"ALLERGY"));
                 continue;
             }
-            return dish;
+            return DishSelectResult.noReplace(dish, Collections.emptySet(), skippedAllergies);
         }
-        return null;
+        // 所有候选都过敏或无候选，返回空结果并附上被过滤的过敏菜品
+        if (!skippedAllergies.isEmpty()) {
+            return new DishSelectResult(null, false, null, null, Collections.emptySet(), skippedAllergies);
+        }
+        return DishSelectResult.noDish();
     }
 
     /**
-     * 判断菜品食材是否与客户过敏标签精确命中。
+     * 判断菜品食材是否与客户过敏标签命中，支持三级过敏词：
+     * 1. 配料名称：直接匹配
+     * 2. 二级分类名称：展开该分类下所有配料后匹配
+     * 3. 一级分类名称：展开该分类下所有配料后匹配
+     * 返回匹配到的原始过敏标签集合（用于展示过敏原因）。
      */
-    private boolean containsAllergy(List<String> allergyTags, Set<String> ingredientNames) {
+    private Set<String> getMatchedAllergyTags(List<String> allergyTags, Set<String> ingredientNames,
+                                               Map<String, Set<String>> categoryIngredientMap) {
+        Set<String> matched = new HashSet<>();
         if (allergyTags == null || allergyTags.isEmpty() || ingredientNames == null || ingredientNames.isEmpty()) {
-            return false;
+            return matched;
         }
         for (String allergyTag : allergyTags) {
             if (allergyTag == null) {
                 continue;
             }
-            for (String ingredientName : ingredientNames) {
-                if (allergyTag.equals(ingredientName)) {
-                    log.warn("过敏--{}",allergyTag);
-                    return true;
+            // 优先级1：配料名称精确匹配
+            if (ingredientNames.contains(allergyTag)) {
+                log.debug("过敏匹配-配料名：{}", allergyTag);
+                matched.add(allergyTag);
+                continue;
+            }
+            // 优先级2/3：分类名称匹配（一级或二级分类）
+            Set<String> categoryIngredients = categoryIngredientMap.get(allergyTag);
+            if (categoryIngredients != null) {
+                for (String catIngredient : categoryIngredients) {
+                    if (ingredientNames.contains(catIngredient)) {
+                        log.debug("过敏匹配-分类({})：菜品包含 {}", allergyTag, catIngredient);
+                        matched.add(allergyTag);
+                        break;
+                    }
                 }
             }
         }
-        return false;
+        return matched;
     }
 
     /**
      * 将成功生成的客户排餐结果落库到主表和明细表。
      */
-    private void saveSuccessPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
-                                 CustomerMealPlan customerPlan) {
+    private void saveSuccessPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
+                                 CustomerMealPlan customerPlan, String mealType) {
         log.debug("保存成功排餐计划 - 计划ID: {}, 订单ID: {}, 客户ID: {}",
                 mealPlanId, order.getId(), order.getCustomerId());
 
-        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, subPackage, 1, "");
+        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, 1, "", mealType);
         mealPlanCustomerMapper.insert(entity);
 
-        int seq = 1;
-        for (SelectedDish selectedDish : customerPlan.getSelectedDishes()) {
-            MealPlanCustomerItem item = new MealPlanCustomerItem();
-            item.setCustomerPlanId(entity.getId());
-            item.setDishType(selectedDish.getDishType());
-            item.setDishId(selectedDish.getDish().getId());
-            item.setDishName(selectedDish.getDish().getName());
-            item.setSeq(seq++);
-            item.setDeleted(false);
-            // 记录替换信息
-            if (selectedDish.isReplaced()) {
-                item.setIsReplaced(true);
-                if (selectedDish.getOriginalDish() != null) {
-                    item.setOriginalDishId(selectedDish.getOriginalDish().getId());
-                    item.setOriginalDishName(selectedDish.getOriginalDish().getName());
-                }
-                item.setReplaceReason(selectedDish.getReplaceReason());
-            }
-            mealPlanCustomerItemMapper.insert(item);
+        saveSelectedItems(entity.getId(), entity.getCustomerName(), customerPlan);
+        saveAllergyFilteredItems(entity.getId(), entity.getCustomerName(), customerPlan);
 
-            log.debug("保存客户菜品明细 - 客户计划ID: {}, 菜品ID: {}, 菜品类型: {}, 菜品名称: {}, 是否替换: {}, 替换原因: {}",
-                    entity.getCustomerName(), selectedDish.getDish().getId(),
-                    selectedDish.getDishType(), selectedDish.getDish().getName(),
-                    selectedDish.isReplaced(), selectedDish.getReplaceReason());
-        }
-
-        log.debug("成功排餐计划保存完成 - 客户计划ID: {}, 选菜数量: {}",
-                entity.getId(), customerPlan.getSelectedDishes().size());
+        log.debug("成功排餐计划保存完成 - 客户计划ID: {}, 选菜数量: {}, 过敏菜品数量: {}",
+                entity.getId(), customerPlan.getSelectedDishes().size(), customerPlan.getSkippedAllergyDishes().size());
     }
 
     /**
      * 记录单个订单的失败结果，并追加失败原因到返回结果。
      */
-    private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer, SubPackage subPackage,
-                             String failReason, List<MealPlanGenerateResult.FailDetail> failDetails) {
+    private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
+                             String failReason, List<MealPlanGenerateResult.FailDetail> failDetails, String mealType) {
+        return saveFailPlan(mealPlanId, order, customer, failReason, failDetails, null, mealType);
+    }
+
+    private int saveFailPlan(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
+                             String failReason, List<MealPlanGenerateResult.FailDetail> failDetails,
+                             CustomerMealPlan customerPlan, String mealType) {
         log.debug("保存失败排餐计划 - 计划ID: {}, 订单ID: {}, 客户ID: {}, 失败原因: {}",
                 mealPlanId, order.getId(),
                 customer != null ? customer.getId() : order.getCustomerId(),
                 failReason);
 
-        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, subPackage, 0, failReason);
+        MealPlanCustomer entity = buildCustomerEntity(mealPlanId, order, customer, 0, failReason, mealType);
         mealPlanCustomerMapper.insert(entity);
+        saveSelectedItems(entity.getId(), entity.getCustomerName(), customerPlan);
+        saveAllergyFilteredItems(entity.getId(), entity.getCustomerName(), customerPlan);
 
         MealPlanGenerateResult.FailDetail failDetail = new MealPlanGenerateResult.FailDetail();
         failDetail.setFailReason(failReason);
@@ -951,11 +1304,82 @@ public class MealPlanServiceImpl implements MealPlanService {
         return 1;
     }
 
+    private void saveSelectedItems(Long customerPlanId, String customerName, CustomerMealPlan customerPlan) {
+        if (customerPlan == null || customerPlan.getSelectedDishes() == null || customerPlan.getSelectedDishes().isEmpty()) {
+            return;
+        }
+        int seq = 1;
+        for (SelectedDish selectedDish : customerPlan.getSelectedDishes()) {
+            MealPlanCustomerItem item = new MealPlanCustomerItem();
+            item.setCustomerPlanId(customerPlanId);
+            item.setDishType(selectedDish.getDishType());
+            item.setDishId(selectedDish.getDish().getId());
+            item.setDishName(selectedDish.getDish().getName());
+            item.setSeq(seq++);
+            item.setDeleted(false);
+            if (selectedDish.isReplaced()) {
+                item.setIsReplaced(true);
+                if (selectedDish.getOriginalDish() != null) {
+                    item.setOriginalDishId(selectedDish.getOriginalDish().getId());
+                    item.setOriginalDishName(selectedDish.getOriginalDish().getName());
+                }
+                item.setOriginalDishType(selectedDish.getOriginalDishType());
+                item.setReplaceReason(selectedDish.getReplaceReason());
+            }
+            Set<String> matchedAllergies = selectedDish.getMatchedAllergyTags();
+            if (matchedAllergies != null && !matchedAllergies.isEmpty()) {
+                item.setIsAllergyFiltered(true);
+                item.setAllergyReasons(String.join(",", matchedAllergies));
+                log.info("【过敏记录】客户: {}, 菜品: {}, 过敏标签: {}",
+                        customerName, selectedDish.getDish().getName(), String.join(",", matchedAllergies));
+            }
+            mealPlanCustomerItemMapper.insert(item);
+            log.debug("保存客户菜品明细 - 客户: {}, 菜品ID: {}, 菜品类型: {}, 菜品名称: {}, 是否替换: {}, 替换原因: {}",
+                    customerName, selectedDish.getDish().getId(),
+                    selectedDish.getDishType(), selectedDish.getDish().getName(),
+                    selectedDish.isReplaced(), selectedDish.getReplaceReason());
+        }
+    }
+
+    private void saveAllergyFilteredItems(Long customerPlanId, String customerName, CustomerMealPlan customerPlan) {
+        if (customerPlan == null || customerPlan.getSkippedAllergyDishes() == null || customerPlan.getSkippedAllergyDishes().isEmpty()) {
+            return;
+        }
+        int allergySeq = 100; // 用较大序号区分
+        for (SkippedAllergyDish sad : customerPlan.getSkippedAllergyDishes()) {
+            MealPlanCustomerItem allergyItem = new MealPlanCustomerItem();
+            allergyItem.setCustomerPlanId(customerPlanId);
+            allergyItem.setDishType(sad.getDish().getDishType());
+            allergyItem.setDishId(sad.getDish().getId());
+            allergyItem.setDishName(sad.getDish().getName());
+            allergyItem.setOriginalDishId(sad.getDish().getId());
+            allergyItem.setOriginalDishName(sad.getDish().getName());
+            allergyItem.setSeq(allergySeq++);
+            allergyItem.setDeleted(false);
+            allergyItem.setIsAllergyFiltered(true);
+            allergyItem.setIsReplaced(false);
+            allergyItem.setAllergyReasons(String.join(",", sad.getAllergyReasons()));
+            allergyItem.setReplaceReason(sad.getReplaceReason());
+
+            mealPlanCustomerItemMapper.insert(allergyItem);
+            String replaceReason = sad.getReplaceReason();
+
+            if (org.apache.commons.lang3.StringUtils.equals(replaceReason, "ALLERGY")) {
+                log.info("【过敏记录-写入】客户: {}, 菜品: {},  allergy-过敏",
+                        customerName, sad.getDish().getName());
+            }else if (org.apache.commons.lang3.StringUtils.equals(replaceReason, REPLACE_REASON_EXCLUDED)) {
+                log.info("【客户过滤菜品-写入】客户: {}, 菜品: {}",
+                        customerName, sad.getDish().getName());
+            }
+
+        }
+    }
+
     /**
      * 组装客户排餐记录实体，统一填充订单、客户和套餐快照字段。
      */
     private MealPlanCustomer buildCustomerEntity(Long mealPlanId, CustomerOrder order, CustomerProfile customer,
-                                                 SubPackage subPackage, int status, String failReason) {
+                                                 int status, String failReason, String mealType) {
         MealPlanCustomer entity = new MealPlanCustomer();
         entity.setMealPlanId(mealPlanId);
         entity.setCustomerId(customer != null ? customer.getId() : order.getCustomerId());
@@ -966,10 +1390,21 @@ public class MealPlanServiceImpl implements MealPlanService {
         entity.setChildPackageId(order.getChildPackageId());
         entity.setStatus(status);
         entity.setFailReason(failReason);
-        entity.setMeatRequiredCount(subPackage != null && subPackage.getMeatCount() != null ? subPackage.getMeatCount() : 0);
-        entity.setVegRequiredCount(subPackage != null && subPackage.getVegCount() != null ? subPackage.getVegCount() : 0);
-        entity.setIncludeSoup(subPackage != null && Boolean.TRUE.equals(subPackage.getIncludeSoup()) ? 1 : 0);
-        entity.setIncludeRice(subPackage != null && Boolean.TRUE.equals(subPackage.getIncludeRice()) ? 1 : 0);
+        if (MEAL_TYPE_BREAKFAST.equals(mealType)) {
+            entity.setBreakfastCount(order.getBreakfastCount() != null ? order.getBreakfastCount() : 0);
+        } else {
+            entity.setMeatRequiredCount(order.getMainDishCount() != null ? order.getMainDishCount() : 0);
+            entity.setVegRequiredCount(order.getVegCount() != null ? order.getVegCount() : 0);
+            entity.setIncludeSoup(order.getSoupCount() != null && order.getSoupCount() > 0 ? 1 : 0);
+            entity.setIncludeRice(order.getRiceCount() != null && order.getRiceCount() > 0 ? 1 : 0);
+            // 补菜数量 = max(0, 需求数 - 每日固定提供1个)，基础数量从 customer_order 关联获取，无需冗余存储
+            DishQuantityConfig cfg = new DishQuantityConfig(order);
+            entity.setSupplementaryMainCount(cfg.getSupplementaryMainCount());
+            entity.setSupplementarySideCount(cfg.getSupplementarySideCount());
+            entity.setSupplementaryVegCount(cfg.getSupplementaryVegCount());
+            entity.setSupplementaryRiceCount(cfg.getSupplementaryRiceCount());
+            entity.setSupplementarySoupCount(cfg.getSupplementarySoupCount());
+        }
         entity.setDeleted(false);
         return entity;
     }
@@ -1070,15 +1505,46 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 将内部排餐结果转换为接口返回对象。
      */
     private MealPlanGenerateResult buildResult(MealPlan mealPlan, List<MealPlanGenerateResult.FailDetail> failDetails) {
+        List<MealPlanGenerateResult.FailDetail> effectiveFailDetails = failDetails == null
+                ? Collections.emptyList()
+                : failDetails;
+        int failCount = mealPlan.getFailCount() == null ? 0 : mealPlan.getFailCount();
+        if (failCount != effectiveFailDetails.size()) {
+            log.info("排餐失败汇总与明细数量不一致，开始按当前有效失败记录重建 - 计划ID: {}, 汇总失败数: {}, 当前明细数: {}",
+                    mealPlan.getId(), failCount, effectiveFailDetails.size());
+            effectiveFailDetails = rebuildFailDetails(mealPlan.getId());
+            failCount = effectiveFailDetails.size();
+        }
+
         MealPlanGenerateResult result = new MealPlanGenerateResult();
         result.setMealPlanId(mealPlan.getId());
         result.setRecordDate(mealPlan.getRecordDate().toString());
         result.setMealType(mealPlan.getMealType());
         result.setTotalCount(mealPlan.getTotalCount());
         result.setSuccessCount(mealPlan.getSuccessCount());
-        result.setFailCount(mealPlan.getFailCount());
-        result.setFailDetails(failDetails);
+        result.setFailCount(failCount);
+        result.setFailDetails(effectiveFailDetails);
         return result;
+    }
+
+    private List<MealPlanGenerateResult.FailDetail> rebuildFailDetails(Long mealPlanId) {
+        if (mealPlanId == null) {
+            return Collections.emptyList();
+        }
+
+        List<MealPlanCustomer> customerPlans = mealPlanCustomerMapper.selectByMealPlanId(mealPlanId);
+        if (CollectionUtils.isEmpty(customerPlans)) {
+            return Collections.emptyList();
+        }
+
+        return customerPlans.stream()
+                .filter(plan -> Integer.valueOf(0).equals(plan.getStatus()))
+                .map(plan -> {
+                    MealPlanGenerateResult.FailDetail failDetail = new MealPlanGenerateResult.FailDetail();
+                    failDetail.setFailReason(plan.getFailReason());
+                    return failDetail;
+                })
+                .collect(Collectors.toList());
     }
 
     /**
@@ -1142,8 +1608,148 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
     }
 
+    /**
+     * 解析带餐次信息的配送日期JSON数组。
+     * 支持新旧两种格式：
+     * - 新格式: [{"date": "2026-04-01", "mealTypes": ["BREAKFAST", "LUNCH"]}]
+     * - 旧格式: ["2026-04-01", "2026-04-02"]
+     */
+    private List<String> parseDeliveryDatesWithMealTypes(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            String trimmed = json.trim();
+            // 检查是否是对象数组（新格式以 [{ 开头）
+            if (trimmed.startsWith("[{")) {
+                // 新格式: [{"date": "...", "mealTypes": [...]}]
+                List<DeliveryDateWithMealTypes> dates = JSON.parseArray(json, DeliveryDateWithMealTypes.class);
+                return dates.stream()
+                        .filter(d -> d.getDate() != null)
+                        .map(DeliveryDateWithMealTypes::getDate)
+                        .collect(Collectors.toList());
+            } else {
+                // 旧格式: ["2026-04-01", "2026-04-02"]
+                return JSON.parseArray(json, String.class);
+            }
+        } catch (Exception e) {
+            log.warn("解析deliveryDates失败: {}", json, e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * 校验客户的餐次是否在排期餐次中
+     *
+     * @param json 新格式: [{"date": "2026-04-01", "mealTypes": ["BREAKFAST", "LUNCH"]}]
+     * @return true 匹配成功
+     */
+    public DeliveryDateWithMealTypes parseDElivery(String json,String targetDate,String targetMealType) {
+        String trimmed = json.trim();
+        if (trimmed.startsWith("[{")) {
+            List<DeliveryDateWithMealTypes> deliveryDateWithMealTypes = JSON.parseArray(json, DeliveryDateWithMealTypes.class);
+            return deliveryDateWithMealTypes.stream()
+                    .filter(d -> d.getDate() != null)
+                    .filter(d -> d.getDate().equals(targetDate))
+
+                    .findFirst().orElse(null);
+        } else {
+            // 旧格式: ["2026-04-01", "2026-04-02"]
+            return  null;
+        }
+
+    }
+
+    /**
+     * 内部类：配送日期及餐次信息
+     */
+    private static class DeliveryDateWithMealTypes {
+        private String date;
+        private List<String> mealTypes;
+
+        public String getDate() {
+            return date;
+        }
+
+        public void setDate(String date) {
+            this.date = date;
+        }
+
+        public List<String> getMealTypes() {
+            return mealTypes;
+        }
+
+        public void setMealTypes(List<String> mealTypes) {
+            this.mealTypes = mealTypes;
+        }
+    }
+
+    private static class MenuSlot {
+        private final int weekNum;
+        private final int dayOfWeek;
+        private final boolean manual;
+
+        private MenuSlot(int weekNum, int dayOfWeek, boolean manual) {
+            this.weekNum = weekNum;
+            this.dayOfWeek = dayOfWeek;
+            this.manual = manual;
+        }
+
+        private int getWeekNum() {
+            return weekNum;
+        }
+
+        private int getDayOfWeek() {
+            return dayOfWeek;
+        }
+
+        private boolean isManual() {
+            return manual;
+        }
+    }
+
+    /**
+     * 菜品数量配置封装：从 CustomerOrder 直接读取 5 个新字段，null 值自动转换为 0。
+     * 废弃 SubPackage 字段，排餐逻辑完全从订单配置读取。
+     */
+    private static class DishQuantityConfig {
+        private final int mainDishCount;
+        private final int sideDishCount;
+        private final int vegCount;
+        private final int riceCount;
+        private final String riceType;
+        private final int soupCount;
+
+        public DishQuantityConfig(CustomerOrder order) {
+            this.mainDishCount = order.getMainDishCount() != null ? order.getMainDishCount() : 0;
+            this.sideDishCount = order.getSideDishCount() != null ? order.getSideDishCount() : 0;
+            this.vegCount = order.getVegCount() != null ? order.getVegCount() : 0;
+            this.riceCount = order.getRiceCount() != null ? order.getRiceCount() : 0;
+            this.riceType = order.getRiceType();
+            this.soupCount = order.getSoupCount() != null ? order.getSoupCount() : 0;
+        }
+
+        public int getMainDishCount() { return mainDishCount; }
+        public int getSideDishCount() { return sideDishCount; }
+        public int getVegCount() { return vegCount; }
+        public int getRiceCount() { return riceCount; }
+        public String getRiceType() { return riceType; }
+        public int getSoupCount() { return soupCount; }
+        /** 补主菜数量 = max(0, 主菜需求数 - 每日固定1个) */
+        public int getSupplementaryMainCount() { return Math.max(0, mainDishCount - 1); }
+        /** 补副菜数量 = max(0, 副菜需求数 - 每日固定1个) */
+        public int getSupplementarySideCount() { return Math.max(0, sideDishCount - 1); }
+        /** 补素菜数量 = max(0, 素菜需求数 - 每日固定1个) */
+        public int getSupplementaryVegCount() { return Math.max(0, vegCount - 1); }
+        /** 补米饭数量 = max(0, 米饭需求数 - 每日固定1个) */
+        public int getSupplementaryRiceCount() { return Math.max(0, riceCount - 1); }
+        /** 补汤数量 = max(0, 汤需求数 - 每日固定1个) */
+        public int getSupplementarySoupCount() { return Math.max(0, soupCount - 1); }
+    }
+
     private static class CustomerMealPlan {
         private List<SelectedDish> selectedDishes = new ArrayList<>();
+        private List<SkippedAllergyDish> skippedAllergyDishes = new ArrayList<>();
 
         public List<SelectedDish> getSelectedDishes() {
             return selectedDishes;
@@ -1152,47 +1758,196 @@ public class MealPlanServiceImpl implements MealPlanService {
         public void setSelectedDishes(List<SelectedDish> selectedDishes) {
             this.selectedDishes = selectedDishes;
         }
+
+        public List<SkippedAllergyDish> getSkippedAllergyDishes() {
+            return skippedAllergyDishes;
+        }
+
+        public void addSkippedAllergyDish(SkippedAllergyDish dish) {
+            this.skippedAllergyDishes.add(dish);
+        }
+
+        public void addSkippedAllergyDishes(List<SkippedAllergyDish> dishes) {
+            this.skippedAllergyDishes.addAll(dishes);
+        }
+    }
+
+    private static class MealPlanBuildException extends BadRequestException {
+        private final CustomerMealPlan customerPlan;
+
+        private MealPlanBuildException(String msg, CustomerMealPlan customerPlan) {
+            super(msg);
+            this.customerPlan = customerPlan;
+        }
+
+        public CustomerMealPlan getCustomerPlan() {
+            return customerPlan;
+        }
     }
 
     /**
-     * 菜品选择结果，包含选中的菜品和替换信息
+     * 被过敏过滤掉的菜品信息
+     */
+    private static class SkippedAllergyDish {
+        private final Dish dish;
+        private final Set<String> allergyReasons;
+        private  final String replaceReason;
+
+        private SkippedAllergyDish(Dish dish, Set<String> allergyReasons,String replaceReason) {
+            this.dish = dish;
+            this.allergyReasons = allergyReasons;
+            this.replaceReason = replaceReason;
+        }
+
+        public String getReplaceReason() {
+            return replaceReason;
+        }
+
+
+        public Dish getDish() { return dish; }
+        public Set<String> getAllergyReasons() { return allergyReasons; }
+    }
+
+    /**
+     * 菜品选择结果，包含选中的菜品、替换信息和匹配的过敏标签
      */
     private static class DishSelectResult {
         private final Dish dish;
         private final boolean isReplaced;
         private final Dish originalDish;
         private final String replaceReason;
+        private final Set<String> matchedAllergyTags;
+        private final List<SkippedAllergyDish> skippedAllergyDishes;
 
-        private DishSelectResult(Dish dish, boolean isReplaced, Dish originalDish, String replaceReason) {
+        private DishSelectResult(Dish dish, boolean isReplaced, Dish originalDish, String replaceReason,
+                                Set<String> matchedAllergyTags, List<SkippedAllergyDish> skippedAllergyDishes) {
             this.dish = dish;
             this.isReplaced = isReplaced;
             this.originalDish = originalDish;
             this.replaceReason = replaceReason;
+            this.matchedAllergyTags = matchedAllergyTags;
+            this.skippedAllergyDishes = skippedAllergyDishes;
         }
 
-        public static DishSelectResult noReplace(Dish dish) {
-            return new DishSelectResult(dish, false, null, null);
+        public static DishSelectResult noDish() {
+            return new DishSelectResult(null, false, null, null, Collections.emptySet(), Collections.emptyList());
+        }
+
+        public static DishSelectResult noReplace(Dish dish, Set<String> matchedAllergyTags) {
+            return new DishSelectResult(dish, false, null, null, matchedAllergyTags, Collections.emptyList());
+        }
+
+        public static DishSelectResult noReplace(Dish dish, Set<String> matchedAllergyTags, List<SkippedAllergyDish> skippedAllergyDishes) {
+            return new DishSelectResult(dish, false, null, null, matchedAllergyTags, skippedAllergyDishes);
+        }
+
+        public static DishSelectResult noDishWithSkipped(List<SkippedAllergyDish> skippedAllergyDishes) {
+            return new DishSelectResult(null, false, null, null, Collections.emptySet(), skippedAllergyDishes);
         }
 
         public static DishSelectResult withReplace(Dish dish, Dish originalDish, String reason) {
-            return new DishSelectResult(dish, true, originalDish, reason);
+            return new DishSelectResult(dish, true, originalDish, reason, Collections.emptySet(), Collections.emptyList());
         }
 
-        public Dish getDish() {
-            return dish;
+        public Dish getDish() { return dish; }
+        public boolean isReplaced() { return isReplaced; }
+        public Dish getOriginalDish() { return originalDish; }
+        public String getReplaceReason() { return replaceReason; }
+        public Set<String> getMatchedAllergyTags() { return matchedAllergyTags; }
+        public List<SkippedAllergyDish> getSkippedAllergyDishes() {
+            return skippedAllergyDishes != null ? skippedAllergyDishes : Collections.emptyList();
+        }
+        public boolean hasMatchedAllergies() {
+            return matchedAllergyTags != null && !matchedAllergyTags.isEmpty();
+        }
+    }
+
+    // ========== 订单换菜规则 ==========
+
+    /**
+     * 批量加载订单换菜规则，按 orderId -> sourceDishId 建立内存 Map。
+     */
+    private Map<Long, Map<Long, CustomerOrderReplaceRule>> buildOrderReplaceRuleMap(List<CustomerOrder> orders) {
+        if (orders == null || orders.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Set<Long> orderIds = orders.stream()
+                .map(CustomerOrder::getId)
+                .collect(Collectors.toSet());
+
+        List<CustomerOrderReplaceRule> rules = replaceRuleMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<CustomerOrderReplaceRule>()
+                        .in("order_id", orderIds)
+                        .eq("deleted", false)
+                        .eq("enabled", true));
+
+        if (rules.isEmpty()) {
+            return Collections.emptyMap();
         }
 
-        public boolean isReplaced() {
-            return isReplaced;
+        Map<Long, Map<Long, CustomerOrderReplaceRule>> result = new HashMap<>();
+        for (CustomerOrderReplaceRule rule : rules) {
+            result.computeIfAbsent(rule.getOrderId(), k -> new HashMap<>())
+                    .put(rule.getSourceDishId(), rule);
+        }
+        return result;
+    }
+
+    /**
+     * 对已选菜品应用订单换菜规则。
+     * 若命中规则：替换为目标菜、记录原菜信息、清空过敏标记。
+     * 若目标菜已停用或已删除：跳过该规则、保留原始选菜、记录 WARN 日志。
+     */
+    private void applyOrderReplaceRules(Long orderId, CustomerMealPlan customerPlan,
+                                        Map<Long, Map<Long, CustomerOrderReplaceRule>> ruleMap) {
+        if (customerPlan == null || customerPlan.getSelectedDishes() == null || ruleMap == null) {
+            return;
+        }
+        Map<Long, CustomerOrderReplaceRule> sourceMap = ruleMap.get(orderId);
+        if (sourceMap == null || sourceMap.isEmpty()) {
+            return;
         }
 
-        public Dish getOriginalDish() {
-            return originalDish;
-        }
+        List<SelectedDish> newSelected = new ArrayList<>();
+        for (SelectedDish sd : customerPlan.getSelectedDishes()) {
+            if (sd.getDish() == null) {
+                newSelected.add(sd);
+                continue;
+            }
+            CustomerOrderReplaceRule rule = sourceMap.get(Long.valueOf(sd.getDish().getId()));
+            if (rule == null) {
+                newSelected.add(sd);
+                continue;
+            }
 
-        public String getReplaceReason() {
-            return replaceReason;
+            // 查找目标菜品
+            Dish targetDish = dishMapper.selectById(rule.getTargetDishId().intValue());
+            if (targetDish == null || !Boolean.TRUE.equals(targetDish.getEnabled())) {
+                log.warn("订单换菜规则跳过 - 规则ID: {}, 订单ID: {}, 原菜ID: {}, 目标菜ID: {} ({}), 原因: {}",
+                        rule.getId(), orderId, rule.getSourceDishId(), rule.getTargetDishId(),
+                        rule.getTargetDishName(),
+                        targetDish == null ? "菜品已删除" : "菜品已停用");
+                newSelected.add(sd);
+                continue;
+            }
+
+            log.info("订单换菜规则命中 - 订单ID: {}, 原菜: {}({}), 替换为: {}({})",
+                    orderId, sd.getDish().getName(), sd.getDish().getId(),
+                    targetDish.getName(), targetDish.getId());
+
+            // 用新构造器创建替换后的 SelectedDish，记录 originalDishType
+            SelectedDish replaced = new SelectedDish(
+                    targetDish.getDishType(),
+                    targetDish,
+                    true,
+                    sd.getDish(),
+                    sd.getDishType(),
+                    REPLACE_REASON_ORDER_RULE,
+                    Collections.emptySet()
+            );
+            newSelected.add(replaced);
         }
+        customerPlan.setSelectedDishes(newSelected);
     }
 
     private static class SelectedDish {
@@ -1200,22 +1955,39 @@ public class MealPlanServiceImpl implements MealPlanService {
         private final Dish dish;
         private final boolean isReplaced;
         private final Dish originalDish;
+        private final String originalDishType;
         private final String replaceReason;
+        private final Set<String> matchedAllergyTags;
 
         private SelectedDish(String dishType, Dish dish) {
             this.dishType = dishType;
             this.dish = dish;
             this.isReplaced = false;
             this.originalDish = null;
+            this.originalDishType = null;
             this.replaceReason = null;
+            this.matchedAllergyTags = Collections.emptySet();
         }
 
-        private SelectedDish(String dishType, Dish dish, boolean isReplaced, Dish originalDish, String replaceReason) {
+        private SelectedDish(String dishType, Dish dish, boolean isReplaced, Dish originalDish, String replaceReason, Set<String> matchedAllergyTags) {
             this.dishType = dishType;
             this.dish = dish;
             this.isReplaced = isReplaced;
             this.originalDish = originalDish;
+            this.originalDishType = originalDish != null ? originalDish.getDishType() : null;
             this.replaceReason = replaceReason;
+            this.matchedAllergyTags = matchedAllergyTags != null ? matchedAllergyTags : Collections.emptySet();
+        }
+
+        private SelectedDish(String dishType, Dish dish, boolean isReplaced, Dish originalDish,
+                             String originalDishType, String replaceReason, Set<String> matchedAllergyTags) {
+            this.dishType = dishType;
+            this.dish = dish;
+            this.isReplaced = isReplaced;
+            this.originalDish = originalDish;
+            this.originalDishType = originalDishType;
+            this.replaceReason = replaceReason;
+            this.matchedAllergyTags = matchedAllergyTags != null ? matchedAllergyTags : Collections.emptySet();
         }
 
         public String getDishType() {
@@ -1234,8 +2006,16 @@ public class MealPlanServiceImpl implements MealPlanService {
             return originalDish;
         }
 
+        public String getOriginalDishType() {
+            return originalDishType;
+        }
+
         public String getReplaceReason() {
             return replaceReason;
+        }
+
+        public Set<String> getMatchedAllergyTags() {
+            return matchedAllergyTags;
         }
     }
 
@@ -1284,9 +2064,8 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     @Override
     public PageResult<MealPlanCustomer> queryCustomers(MealPlanCustomerQueryCriteria criteria) {
-        Page<MealPlanCustomer> page = new Page<>(criteria.getPage() , criteria.getSize());
-        Page<MealPlanCustomer> result = mealPlanCustomerMapper.selectPageByCriteria(criteria, page);
-        return new PageResult<>(result.getRecords(), result.getTotal());
+        List<MealPlanCustomer> customers = mealPlanCustomerMapper.selectByMealPlanId(criteria.getMealPlanId());
+        return paginateList(customers, criteria.getPage(), criteria.getSize());
     }
 
     @Override
@@ -1351,14 +2130,19 @@ public class MealPlanServiceImpl implements MealPlanService {
 
     private MealPlanDetailVO.CustomerPlanDetail assembleCustomerDetail(
             MealPlanCustomer customer,
+            LocalDate recordDate,
             Map<Long, List<MealPlanCustomerItem>> itemsByCustomerPlanId,
-            Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> ingredientsMap) {
+            Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> ingredientsMap,
+            Set<Long> firstMealCustomerPlanIds) {
         MealPlanDetailVO.CustomerPlanDetail detail = new MealPlanDetailVO.CustomerPlanDetail();
         detail.setId(customer.getId());
         detail.setCustomerId(customer.getCustomerId());
         detail.setCustomerName(customer.getCustomerName());
         detail.setPhone(customer.getPhone());
         detail.setCustomerCode(customer.getCustomerCode());
+        detail.setFirstMealOfOrder(customer.getStatus() != null
+                && customer.getStatus() == 1
+                && firstMealCustomerPlanIds.contains(customer.getId()));
         detail.setOrderId(customer.getOrderId());
         detail.setParentPackageId(customer.getParentPackageId());
         detail.setChildPackageId(customer.getChildPackageId());
@@ -1368,9 +2152,16 @@ public class MealPlanServiceImpl implements MealPlanService {
         detail.setVegRequiredCount(customer.getVegRequiredCount());
         detail.setIncludeSoup(customer.getIncludeSoup());
         detail.setIncludeRice(customer.getIncludeRice());
+        detail.setSupplementaryMainCount(customer.getSupplementaryMainCount());
+        detail.setSupplementarySideCount(customer.getSupplementarySideCount());
+        detail.setSupplementaryVegCount(customer.getSupplementaryVegCount());
+        detail.setSupplementaryRiceCount(customer.getSupplementaryRiceCount());
+        detail.setSupplementarySoupCount(customer.getSupplementarySoupCount());
         detail.setIsVerified(customer.getIsVerified());
         detail.setVerificationTime(customer.getVerificationTime() != null ? customer.getVerificationTime().toString() : null);
         detail.setVerificationOperator(customer.getVerificationOperator());
+        detail.setSpecialRequirements(customer.getSpecialRequirements());
+        fillProductionDateMark(detail, customer.getProductionDate(), recordDate);
 
         List<MealPlanCustomerItem> items = itemsByCustomerPlanId.getOrDefault(customer.getId(), Collections.emptyList());
         List<MealPlanCustomerItemVO> itemVOs = items.stream()
@@ -1378,6 +2169,40 @@ public class MealPlanServiceImpl implements MealPlanService {
                 .collect(Collectors.toList());
         detail.setItems(itemVOs);
         return detail;
+    }
+
+    /**
+     * 填充排餐详情中的生产日期标记信息。
+     *
+     * @param detail 排餐客户详情
+     * @param productionDate 客户生产日期
+     * @param recordDate 排餐日期
+     */
+    private void fillProductionDateMark(MealPlanDetailVO.CustomerPlanDetail detail, LocalDate productionDate, LocalDate recordDate) {
+        detail.setProductionDate(productionDate != null ? productionDate.toString() : null);
+        if (productionDate == null || recordDate == null) {
+            detail.setNearProductionDate(false);
+            detail.setProductionDateDiffDays(null);
+            return;
+        }
+        long diffDays = ChronoUnit.DAYS.between(productionDate, recordDate);
+        boolean nearProductionDate = diffDays >= 0 && diffDays <= 3;
+        detail.setNearProductionDate(nearProductionDate);
+        detail.setProductionDateDiffDays(nearProductionDate ? (int) diffDays : null);
+    }
+
+    private Set<Long> buildFirstMealCustomerPlanIdSet(List<MealPlanCustomer> customers) {
+        if (customers == null || customers.isEmpty()) {
+            return Collections.emptySet();
+        }
+        List<Long> customerPlanIds = customers.stream()
+                .map(MealPlanCustomer::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (customerPlanIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return new HashSet<>(mealPlanCustomerMapper.selectFirstSuccessfulCustomerPlanIds(customerPlanIds));
     }
 
     private MealPlanListDetailVO assembleMealPlanListDetail(
@@ -1395,8 +2220,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         vo.setStatus(plan.getStatus());
         vo.setGenerateTime(plan.getGenerateTime() != null ? plan.getGenerateTime().toString() : null);
 
+        Set<Long> firstMealCustomerPlanIds = buildFirstMealCustomerPlanIdSet(customers);
         List<MealPlanDetailVO.CustomerPlanDetail> customerDetails = customers.stream()
-                .map(customer -> assembleCustomerDetail(customer, itemsByCustomerPlanId, ingredientsMap))
+                .map(customer -> assembleCustomerDetail(customer, plan.getRecordDate(), itemsByCustomerPlanId, ingredientsMap, firstMealCustomerPlanIds))
                 .collect(Collectors.toList());
         vo.setCustomers(customerDetails);
         vo.setTotalCustomers(customerDetails.size());
@@ -1435,6 +2261,8 @@ public class MealPlanServiceImpl implements MealPlanService {
         vo.setOriginalDishId(item.getOriginalDishId());
         vo.setOriginalDishName(item.getOriginalDishName());
         vo.setReplaceReason(item.getReplaceReason());
+        vo.setIsAllergyFiltered(item.getIsAllergyFiltered());
+        vo.setAllergyReasons(item.getAllergyReasons());
         return vo;
     }
 
@@ -1525,6 +2353,47 @@ public class MealPlanServiceImpl implements MealPlanService {
         log.info("批量删除客户排餐计划完成 - 数量: {}", customerPlanIds.size());
     }
 
+    /**
+     * 删除客户指定日期餐次的未核销排餐记录；若存在已核销记录则拒绝日历取消操作。
+     * 异常信息会带上具体日期和餐次，方便前端提示用户。
+     *
+     * @param customerId 客户ID
+     * @param recordDate 排餐日期，格式 yyyy-MM-dd
+     * @param mealType 餐次，支持 BREAKFAST / LUNCH / DINNER
+     * @return 删除的客户排餐记录数量
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteUnverifiedCustomerMealForCalendarAdjustment(Long customerId, String recordDate, String mealType) {
+        LocalDate targetDate = ScheduleKeyUtil.parseDate(recordDate);
+        List<CustomerGeneratedMealPlanDto> generatedRecords =
+                mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(customerId, targetDate, mealType);
+        if (generatedRecords == null || generatedRecords.isEmpty()) {
+            return 0;
+        }
+        for (CustomerGeneratedMealPlanDto record : generatedRecords) {
+            if (Boolean.TRUE.equals(record.getVerified())) {
+                throw new BadRequestException(String.format("%s %s已核销，不能取消排餐",
+                        targetDate, OrderStartMealTypeUtil.mealTypeDesc(mealType)));
+            }
+        }
+        List<Long> customerPlanIds = generatedRecords.stream()
+                .map(CustomerGeneratedMealPlanDto::getCustomerPlanId)
+                .collect(Collectors.toList());
+        mealPlanCustomerItemMapper.softDeleteByCustomerPlanIds(customerPlanIds);
+        mealPlanCustomerMapper.softDeleteByIds(customerPlanIds);
+        Set<Long> mealPlanIds = generatedRecords.stream()
+                .map(CustomerGeneratedMealPlanDto::getMealPlanId)
+                .collect(Collectors.toSet());
+        for (Long mealPlanId : mealPlanIds) {
+            MealPlan mealPlan = mealPlanMapper.selectById(mealPlanId);
+            if (mealPlan != null && !Boolean.TRUE.equals(mealPlan.getDeleted())) {
+                refreshMealPlanSummary(mealPlan, true);
+            }
+        }
+        return customerPlanIds.size();
+    }
+
     // ========== 聚合查询接口实现 ==========
 
     @Override
@@ -1558,14 +2427,32 @@ public class MealPlanServiceImpl implements MealPlanService {
         result.setMealPlan(planVO);
 
         // 设置客户列表
+        Set<Long> firstMealCustomerPlanIds = buildFirstMealCustomerPlanIdSet(customers);
         List<MealPlanDetailVO.CustomerPlanDetail> customerDetails = customers.stream()
-                .map(customer -> assembleCustomerDetail(customer, itemsMap, finalIngredientsMap))
+                .map(customer -> assembleCustomerDetail(customer, mealPlan.getRecordDate(), itemsMap, finalIngredientsMap, firstMealCustomerPlanIds))
                 .collect(Collectors.toList());
 
         result.setCustomers(customerDetails);
         result.setTotalCustomers(customerDetails.size());
         result.setSuccessCount((int) customerDetails.stream().filter(c -> c.getStatus() != null && c.getStatus() == 1).count());
         result.setFailCount((int) customerDetails.stream().filter(c -> c.getStatus() != null && c.getStatus() == 0).count());
+
+        // 查询手工换菜关系
+        List<MealPlanManualReplace> manualReplaceRecords = mealPlanManualReplaceMapper.selectByMealPlanId(mealPlanId);
+        List<MealPlanManualReplaceVO> manualReplaceVOs = manualReplaceRecords.stream().map(entity -> {
+            MealPlanManualReplaceVO vo = new MealPlanManualReplaceVO();
+            vo.setId(entity.getId());
+            vo.setMealPlanId(entity.getMealPlanId());
+            vo.setCustomerPlanId(entity.getCustomerPlanId());
+            vo.setCustomerId(entity.getCustomerId());
+            vo.setCustomerCode(entity.getCustomerCode());
+            vo.setCustomerName(entity.getCustomerName());
+            vo.setDishId(entity.getDishId());
+            vo.setDishName(entity.getDishName());
+            vo.setDishType(entity.getDishType());
+            return vo;
+        }).collect(Collectors.toList());
+        result.setManualReplaces(manualReplaceVOs);
 
         log.info("查询排餐计划完整详情完成 - 计划ID: {}, 客户数: {}", mealPlanId, customerDetails.size());
         return result;
@@ -1577,5 +2464,178 @@ public class MealPlanServiceImpl implements MealPlanService {
         List<MealPackageStatDto> result = mealPlanCustomerMapper.statByDate(date);
         log.info("按日期统计各父套餐餐数完成 - 日期: {}, 结果数量: {}", date, result.size());
         return result;
+    }
+
+    @Override
+    public PageResult<MealPlanCustomerAddressVO> queryCustomerAddresses(MealPlanCustomerQueryCriteria criteria) {
+        List<MealPlanCustomerAddressVO> customers = mealPlanCustomerMapper.selectCustomerAddresses(criteria.getMealPlanId());
+        return paginateList(customers, criteria.getPage(), criteria.getSize());
+    }
+
+    /**
+     * 对结果列表做内存分页，确保弹窗接口在复杂 SQL 下也能稳定返回总数和当前页数据。
+     *
+     * @param records 原始结果列表
+     * @param pageNo 页码，从 1 开始
+     * @param pageSize 每页数量
+     * @param <T> 数据类型
+     * @return 分页结果
+     */
+    private <T> PageResult<T> paginateList(List<T> records, Integer pageNo, Integer pageSize) {
+        List<T> safeRecords = records == null ? Collections.emptyList() : records;
+        int safePage = pageNo == null || pageNo < 1 ? 1 : pageNo;
+        int safeSize = pageSize == null || pageSize < 1 ? 10 : pageSize;
+        int total = safeRecords.size();
+        int fromIndex = Math.min((safePage - 1) * safeSize, total);
+        int toIndex = Math.min(fromIndex + safeSize, total);
+        return new PageResult<>(safeRecords.subList(fromIndex, toIndex), total);
+    }
+
+    /**
+     * 查询指定日期排餐后将耗尽餐数的客户订单列表。
+     * 遍历所有有效订单，按早餐、午晚餐两个餐数池分别统计剩余餐数和目标日期排餐情况。
+     * 用于提醒运营人员关注即将用完餐数的客户，主动跟进续费。
+     */
+    @Override
+    public List<MealDepletionWarningDto> getDepletionWarnings(LocalDate targetDate) {
+        // 查询仍有合计剩余餐数的有效订单，再按早餐/午晚餐餐数池分别判断是否需要预警。
+        List<CustomerOrder> activeOrders = customerOrderMapper.selectList(
+            new QueryWrapper<CustomerOrder>()
+                .eq("status", 1)
+                .gt("COALESCE(remaining_count, 0)", 0)
+                .le("start_date", targetDate)
+        );
+        if (activeOrders.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Long> orderIds = activeOrders.stream()
+            .map(CustomerOrder::getId)
+            .collect(Collectors.toList());
+
+        // 统计目标日期各订单各餐次的有效排餐数。
+        List<OrderScheduledCountDto> scheduledCounts =
+            mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(orderIds, targetDate);
+        Map<Long, Map<String, Integer>> scheduledCountMap = new HashMap<>();
+        for (OrderScheduledCountDto dto : scheduledCounts) {
+            if (dto.getOrderId() == null || dto.getMealType() == null) {
+                continue;
+            }
+            scheduledCountMap
+                    .computeIfAbsent(dto.getOrderId(), k -> new HashMap<>())
+                    .put(dto.getMealType(), dto.getScheduledCount() != null ? dto.getScheduledCount() : 0);
+        }
+
+        // 统计各订单各餐次已核销数，用于按餐数池计算真实剩余餐数。
+        List<OrderMealVerifiedCountDto> verifiedCounts = customerOrderMapper.sumVerifiedCountByOrderIds(orderIds);
+        Map<Long, Map<String, Integer>> verifiedCountMap = new HashMap<>();
+        for (OrderMealVerifiedCountDto dto : verifiedCounts) {
+            if (dto.getOrderId() == null || dto.getMealType() == null) {
+                continue;
+            }
+            verifiedCountMap
+                    .computeIfAbsent(dto.getOrderId(), k -> new HashMap<>())
+                    .put(dto.getMealType(), dto.getVerifiedCount() != null ? dto.getVerifiedCount() : 0);
+        }
+
+        // 加载客户档案信息
+        Set<Long> customerIds = activeOrders.stream()
+            .map(CustomerOrder::getCustomerId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+        Map<Long, CustomerProfile> customerMap = new HashMap<>();
+        if (!customerIds.isEmpty()) {
+            List<CustomerProfile> profiles = customerProfileMapper.selectBatchIds(customerIds);
+            for (CustomerProfile cp : profiles) {
+                customerMap.put(cp.getId(), cp);
+            }
+        }
+
+        // 构建预警结果
+        List<MealDepletionWarningDto> warnings = new ArrayList<>();
+        for (CustomerOrder order : activeOrders) {
+            CustomerProfile cp = customerMap.get(order.getCustomerId());
+            appendDepletionWarningIfNeeded(warnings, order, cp, MEAL_TYPE_BREAKFAST,
+                    calculateBreakfastRemaining(order, verifiedCountMap.get(order.getId())),
+                    getScheduledCount(scheduledCountMap.get(order.getId()), MEAL_TYPE_BREAKFAST));
+            appendDepletionWarningIfNeeded(warnings, order, cp, "LUNCH_DINNER",
+                    calculateLunchDinnerRemaining(order, verifiedCountMap.get(order.getId())),
+                    getScheduledCount(scheduledCountMap.get(order.getId()), MEAL_TYPE_LUNCH)
+                            + getScheduledCount(scheduledCountMap.get(order.getId()), MEAL_TYPE_DINNER));
+        }
+
+        return warnings;
+    }
+
+    /**
+     * 按餐数池判断是否需要加入耗尽预警。
+     *
+     * @param warnings 预警结果列表
+     * @param order 客户订单
+     * @param cp 客户档案，可能为空
+     * @param mealType 餐数池类型，BREAKFAST 或 LUNCH_DINNER
+     * @param remaining 当前餐数池剩余餐数
+     * @param scheduledCount 目标日期该餐数池排餐数
+     */
+    private void appendDepletionWarningIfNeeded(List<MealDepletionWarningDto> warnings,
+                                                CustomerOrder order,
+                                                CustomerProfile cp,
+                                                String mealType,
+                                                int remaining,
+                                                int scheduledCount) {
+        if (remaining <= 0 || (remaining > 1 && scheduledCount < remaining)) {
+            return;
+        }
+        MealDepletionWarningDto dto = new MealDepletionWarningDto();
+        dto.setOrderId(order.getId());
+        dto.setCustomerId(order.getCustomerId());
+        dto.setCustomerCode(cp != null ? cp.getCustomerCode() : order.getCustomerCode());
+        dto.setCustomerName(cp != null ? cp.getCustomerName() : "");
+        dto.setMealType(mealType);
+        dto.setMealTypeName(MEAL_TYPE_BREAKFAST.equals(mealType) ? "早餐" : "午晚餐");
+        dto.setRemainingCount(remaining);
+        dto.setTomorrowScheduledCount(scheduledCount);
+        warnings.add(dto);
+    }
+
+    /**
+     * 计算早餐餐数池剩余餐数。
+     *
+     * @param order 客户订单
+     * @param verifiedByMealType 订单各餐次已核销数
+     * @return 早餐剩余餐数，最小为0
+     */
+    private int calculateBreakfastRemaining(CustomerOrder order, Map<String, Integer> verifiedByMealType) {
+        int breakfastCount = order.getBreakfastCount() != null ? order.getBreakfastCount() : 0;
+        return Math.max(breakfastCount - getScheduledCount(verifiedByMealType, MEAL_TYPE_BREAKFAST), 0);
+    }
+
+    /**
+     * 计算午晚餐共享餐数池剩余餐数。
+     *
+     * @param order 客户订单
+     * @param verifiedByMealType 订单各餐次已核销数
+     * @return 午晚餐剩余餐数，最小为0
+     */
+    private int calculateLunchDinnerRemaining(CustomerOrder order, Map<String, Integer> verifiedByMealType) {
+        int lunchDinnerCount = order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0;
+        int verified = getScheduledCount(verifiedByMealType, MEAL_TYPE_LUNCH)
+                + getScheduledCount(verifiedByMealType, MEAL_TYPE_DINNER);
+        return Math.max(lunchDinnerCount - verified, 0);
+    }
+
+    /**
+     * 从餐次统计映射中读取数量。
+     *
+     * @param countMap 餐次到数量的映射，可能为空
+     * @param mealType 餐次类型
+     * @return 数量，空值按0处理
+     */
+    private int getScheduledCount(Map<String, Integer> countMap, String mealType) {
+        if (countMap == null) {
+            return 0;
+        }
+        Integer count = countMap.get(mealType);
+        return count != null ? count : 0;
     }
 }
