@@ -10,6 +10,14 @@ application.pid
 ### Worktrees ###
 .worktrees/
 
+### Local agent/planning docs ###
+.claude/
+.planning/
+
+### Runtime logs ###
+eladmin/logs/
+eladmin/eladmin-system/logs/
+
 # Generated log directories
 eladmin/log.path_IS_UNDEFINED/
 spy.log

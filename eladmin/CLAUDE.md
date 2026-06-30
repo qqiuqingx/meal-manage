@@ -154,19 +154,19 @@ modules/<module>/
 - Config files: `eladmin-system/src/main/resources/config/application*.yml`
 - Active profile set in `application.yml`: `spring.profiles.active: dev`
 - RSA keys for password encryption in `application.yml`
-- Redis via env vars: `REDIS_HOST`, `REDIS_PORT`, `REDIS_PWD`, `REDIS_DB`
+- MySQL and Redis are read from environment variables or private local overrides
 
 ## Database
 
-**MySQL** (127.0.0.1:13306/mydatabase) — 查询方式为 Python + pymysql：
+**MySQL** — 查询方式为 Python + pymysql，连接参数请从本地环境变量或私有配置中读取：
 
 ```python
 import pymysql
 
 conn = pymysql.connect(
-    host='127.0.0.1', port=13306,
+    host='127.0.0.1', port=3306,
     user='root', password='change-me',
-    database='mydatabase'
+    database='eladmin'
 )
 cur = conn.cursor()
 
@@ -181,8 +181,6 @@ conn.commit()
 cur.close()
 conn.close()
 ```
-
-> 连接凭据（`change-me`）可从 `~/.claude/mcp-database-config.yml` 中查看。
 
 ### 核心业务表
 
