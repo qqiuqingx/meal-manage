@@ -1,7 +1,7 @@
 <template>
   <div class="dashboard-container">
     <div class="dashboard-editor-container">
-      <github-corner class="github-corner" />
+      <github-corner v-if="false" class="github-corner" />
 
       <!-- 日期选择器独立一行 -->
       <el-row :gutter="32" style="margin-bottom: 18px; display: flex; align-items: center;">

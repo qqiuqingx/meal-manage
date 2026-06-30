@@ -83,4 +83,19 @@ public class MealVerificationLog implements Serializable {
 
     @ApiModelProperty(value = "创建时间")
     private Date createTime;
+
+    @ApiModelProperty(value = "是否删除（0未删除 1已删除）")
+    private Integer deleted;
+
+    @ApiModelProperty(value = "删除时间")
+    private Date deleteTime;
+
+    @ApiModelProperty(value = "删除操作人")
+    private String deletedBy;
+
+    @ApiModelProperty(value = "是否已退餐（0=否，1=是）")
+    private Integer isRefunded;
+
+    @ApiModelProperty(value = "退餐时间")
+    private Date refundTime;
 }

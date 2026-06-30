@@ -11,6 +11,7 @@ import java.sql.Timestamp;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.TableField;
 
 /**
  * 配料实体
@@ -30,7 +31,10 @@ public class DishIngredient implements Serializable {
     @ApiModelProperty(value = "配料名称")
     private String name;
 
-    @ApiModelProperty(value = "配料分类：MEAT肉类、VEGETABLE蔬菜、SEAFOOD海鲜、TOFU豆制品、SPICE调料、OTHER其他")
+    @ApiModelProperty(value = "二级分类ID")
+    private Integer categoryId;
+
+    @ApiModelProperty(value = "配料分类（兼容旧字段）：MEAT、VEGETABLE、SEAFOOD、TOFU、SPICE、OTHER")
     private String category;
 
     @ApiModelProperty(value = "单位：克g、毫升ml、个")
@@ -50,6 +54,22 @@ public class DishIngredient implements Serializable {
 
     @ApiModelProperty(value = "更新时间")
     private Timestamp updateTime;
+
+    @TableField(exist = false)
+    @ApiModelProperty(value = "二级分类名称（非数据库字段）")
+    private String categoryName;
+
+    @TableField(exist = false)
+    @ApiModelProperty(value = "一级分类ID（非数据库字段）")
+    private Integer parentCategoryId;
+
+    @TableField(exist = false)
+    @ApiModelProperty(value = "一级分类名称（非数据库字段）")
+    private String parentCategoryName;
+
+    @TableField(exist = false)
+    @ApiModelProperty(value = "分类路径（非数据库字段，如：蔬菜/瓜类）")
+    private String categoryPathName;
 
     public void copy(DishIngredient source){
         BeanUtil.copyProperties(source,this, CopyOptions.create().setIgnoreNullValue(true));

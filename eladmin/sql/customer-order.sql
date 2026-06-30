@@ -28,6 +28,7 @@ CREATE TABLE customer_order (
     deal_time DATETIME NULL COMMENT '成交时间',
     first_delivery_time DATETIME NULL COMMENT '第一次送餐时间',
     start_date DATE NULL COMMENT '订单开始日期',
+    start_meal_type VARCHAR(20) NULL COMMENT '开始餐次(BREAKFAST/LUNCH/DINNER)',
     end_date DATE NULL COMMENT '订单结束日期',
     status TINYINT NOT NULL DEFAULT 1 COMMENT '订单状态(0=已取消,1=进行中,2=已完成)',
     meal_type VARCHAR(20) NULL COMMENT '餐次类型: LUNCH=午餐订单, DINNER=晚餐订单, ALL=全餐次订单',
@@ -64,6 +65,13 @@ ADD COLUMN delivery_dates TEXT NULL COMMENT '送餐日期(JSON数组格式)'
 AFTER schedule_mode;
 
 -- ============================================
+-- Migration: Add start_meal_type field (for existing databases)
+-- ============================================
+ALTER TABLE customer_order
+ADD COLUMN start_meal_type VARCHAR(20) NULL COMMENT '开始餐次(BREAKFAST/LUNCH/DINNER)'
+AFTER start_date;
+
+-- ============================================
 -- Sys Menu (for permission management)
 -- Menu structure under "客户管理" (pid=122):
 --   订单管理 (directory, id=133)
@@ -71,6 +79,8 @@ AFTER schedule_mode;
 --         ├── 订单新增 (button, id=135)
 --         ├── 订单编辑 (button, id=136)
 --         ├── 订单删除 (button, id=137)
+--         ├── 金额查看 (button, id=138)
+--         ├── 金额编辑 (button, id=139)
 -- ============================================
 
 -- 订单管理 (directory)
@@ -79,9 +89,11 @@ VALUES (133, 122, 1, 0, '订单管理', NULL, NULL, 3, 'documentation', 'order',
 
 -- 订单管理 (menu)
 INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time)
-VALUES (134, 133, 3, 1, '订单管理', 'CustomerOrder', 'customer/order/index', 1, 'documentation', 'order', b'0', b'0', b'0', 'customerOrder:list', NULL, NULL, NOW(), NULL);
+VALUES (134, 133, 5, 1, '订单管理', 'CustomerOrder', 'customer/order/index', 1, 'documentation', 'order', b'0', b'0', b'0', 'customerOrder:list', NULL, NULL, NOW(), NULL);
 
 -- 订单按钮权限 (pid = 134)
 INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (135, 134, 0, 2, '订单新增', NULL, '', 1, '', '', b'0', b'0', b'0', 'customerOrder:add', NULL, NULL, NOW(), NULL);
 INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (136, 134, 0, 2, '订单编辑', NULL, '', 2, '', '', b'0', b'0', b'0', 'customerOrder:edit', NULL, NULL, NOW(), NULL);
 INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (137, 134, 0, 2, '订单删除', NULL, '', 3, '', '', b'0', b'0', b'0', 'customerOrder:del', NULL, NULL, NOW(), NULL);
+INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (138, 134, 0, 2, '金额查看', NULL, '', 4, '', '', b'0', b'0', b'0', 'customerOrder:amount:view', NULL, NULL, NOW(), NULL);
+INSERT INTO sys_menu (menu_id, pid, sub_count, type, title, name, component, menu_sort, icon, path, i_frame, cache, hidden, permission, create_by, update_by, create_time, update_time) VALUES (139, 134, 0, 2, '金额编辑', NULL, '', 5, '', '', b'0', b'0', b'0', 'customerOrder:amount:edit', NULL, NULL, NOW(), NULL);

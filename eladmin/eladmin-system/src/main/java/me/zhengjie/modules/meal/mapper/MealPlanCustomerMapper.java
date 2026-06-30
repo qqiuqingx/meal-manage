@@ -17,12 +17,15 @@ package me.zhengjie.modules.meal.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
+import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerQueryCriteria;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -74,4 +77,86 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
     int markVerifiedIfPending(@Param("id") Long id,
                               @Param("verificationTime") java.util.Date verificationTime,
                               @Param("verificationOperator") String verificationOperator);
+
+    /**
+     * 根据排餐计划ID查询客户的配送地址信息
+     */
+    List<MealPlanCustomerAddressVO> selectCustomerAddresses(@Param("mealPlanId") Long mealPlanId);
+
+    /**
+     * 回退核销状态（删除核销日志时调用）
+     * @param id 客户排餐ID
+     * @return 更新行数
+     */
+    int revertVerified(@Param("id") Long id);
+
+    /**
+     * 批量查询各订单当前餐数池的已排餐数量。
+     * 早餐按 BREAKFAST 单独统计；午餐/晚餐按共享餐池合并统计 LUNCH + DINNER。
+     *
+     * @param orderIds 订单ID列表
+     * @param mealType 当前生成的餐次（BREAKFAST/LUNCH/DINNER）
+     * @return 订单ID -> 当前餐数池已排数量 的映射
+     */
+    List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countScheduledByOrderIds(@Param("orderIds") List<Long> orderIds, @Param("mealType") String mealType);
+
+    /**
+     * 批量查询各订单全部有效排餐数量。
+     * 统计口径：meal_plan_customer.deleted=0 且 meal_plan.deleted=0。
+     *
+     * @param orderIds 订单ID列表
+     * @return 订单ID -> 已排餐总数 的映射
+     */
+    List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countAllScheduledByOrderIds(@Param("orderIds") List<Long> orderIds);
+
+    /**
+     * 批量查询各订单今天已排餐但未核销的数量。
+     * @param orderIds 订单ID列表
+     * @param recordDate 统计日期
+     * @return 订单ID -> 今日未核销排餐数量 的映射
+     */
+    List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countTodayUnverifiedScheduledByOrderIds(@Param("orderIds") List<Long> orderIds,
+                                                                                                             @Param("recordDate") LocalDate recordDate);
+
+    /**
+     * 查询客户在日期范围内已生成的排餐日期和餐次。
+     */
+    List<CustomerScheduledMealDto> selectScheduledMealsByCustomerIdsAndDateRange(@Param("customerIds") List<Long> customerIds,
+                                                                                 @Param("startDate") LocalDate startDate,
+                                                                                 @Param("endDate") LocalDate endDate);
+
+    /**
+     * 查询客户指定日期餐次的有效已生成排餐记录。
+     *
+     * @param customerId 客户ID
+     * @param recordDate 排餐日期
+     * @param mealType 餐次
+     * @return 已生成排餐记录
+     */
+    List<me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto> selectGeneratedByCustomerDateMeal(@Param("customerId") Long customerId,
+                                                                                                            @Param("recordDate") LocalDate recordDate,
+                                                                                                            @Param("mealType") String mealType);
+
+    /**
+     * 根据排餐计划ID查询所有未核销的客户排餐记录
+     * @param mealPlanId 排餐计划ID
+     * @return 未核销的客户排餐记录列表
+     */
+    List<MealPlanCustomer> selectUnverifiedByMealPlanId(@Param("mealPlanId") Long mealPlanId);
+
+    /**
+     * 批量查询当前页面中哪些客户排餐记录属于订单当前餐次的首次成功排餐
+     * @param customerPlanIds 当前排餐计划中的客户计划ID列表
+     * @return 首次成功排餐的客户计划ID列表
+     */
+    List<Long> selectFirstSuccessfulCustomerPlanIds(@Param("customerPlanIds") List<Long> customerPlanIds);
+
+    /**
+     * 批量查询各订单在指定日期各餐次的有效排餐数（状态为成功且未删除）。
+     * @param orderIds 订单ID列表
+     * @param recordDate 排餐日期
+     * @return 订单ID + 餐次 -> 排餐数量 的映射
+     */
+    List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countSuccessfulScheduledByOrderIdsAndDate(@Param("orderIds") List<Long> orderIds,
+                                                                                                               @Param("recordDate") LocalDate recordDate);
 }

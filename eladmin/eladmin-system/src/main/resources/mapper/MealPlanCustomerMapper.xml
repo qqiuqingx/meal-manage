@@ -21,6 +21,13 @@
         <result column="veg_required_count" property="vegRequiredCount"/>
         <result column="include_soup" property="includeSoup"/>
         <result column="include_rice" property="includeRice"/>
+        <result column="supplementary_main_count" property="supplementaryMainCount"/>
+        <result column="supplementary_side_count" property="supplementarySideCount"/>
+        <result column="supplementary_veg_count" property="supplementaryVegCount"/>
+        <result column="supplementary_rice_count" property="supplementaryRiceCount"/>
+        <result column="supplementary_soup_count" property="supplementarySoupCount"/>
+        <result column="special_requirements" property="specialRequirements"/>
+        <result column="production_date" property="productionDate"/>
         <result column="create_by" property="createBy"/>
         <result column="update_by" property="updateBy"/>
         <result column="deleted" property="deleted"/>
@@ -35,33 +42,40 @@
     </resultMap>
 
     <select id="selectPageByCriteria" resultMap="BaseResultMap">
-        select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
-               status, is_verified, verification_time, verification_operator, fail_reason,
-               meat_required_count, veg_required_count, include_soup, include_rice,
-               create_by, update_by, deleted, create_time, update_time
-        from meal_plan_customer
+        select mpc.id, mpc.meal_plan_id, mpc.customer_id, mpc.customer_name, mpc.phone,
+               cp.customer_code, mpc.order_id, mpc.parent_package_id, mpc.child_package_id,
+               mpc.status, mpc.is_verified, mpc.verification_time, mpc.verification_operator, mpc.fail_reason,
+               mpc.meat_required_count, mpc.veg_required_count, mpc.include_soup, mpc.include_rice,
+               mpc.supplementary_main_count, mpc.supplementary_side_count, mpc.supplementary_veg_count,
+               mpc.supplementary_rice_count, mpc.supplementary_soup_count,
+               cp.special_requirements, cp.production_date,
+               mpc.create_by, mpc.update_by, mpc.deleted, mpc.create_time, mpc.update_time
+        from meal_plan_customer mpc
+        left join customer_profile cp on mpc.customer_id = cp.id
         <where>
-            deleted = 0
+            mpc.deleted = 0
             <if test="criteria.mealPlanId != null">
-                and meal_plan_id = #{criteria.mealPlanId}
+                and mpc.meal_plan_id = #{criteria.mealPlanId}
             </if>
             <if test="criteria.customerName != null and criteria.customerName != ''">
-                and customer_name like concat('%', #{criteria.customerName}, '%')
+                and mpc.customer_name like concat('%', #{criteria.customerName}, '%')
             </if>
             <if test="criteria.phone != null and criteria.phone != ''">
-                and phone like concat('%', #{criteria.phone}, '%')
+                and mpc.phone like concat('%', #{criteria.phone}, '%')
             </if>
             <if test="criteria.status != null">
-                and status = #{criteria.status}
+                and mpc.status = #{criteria.status}
             </if>
         </where>
-        order by id asc
+        order by mpc.id asc
     </select>
 
     <select id="selectById" resultMap="BaseResultMap">
         select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
                status, is_verified, verification_time, verification_operator, fail_reason,
                meat_required_count, veg_required_count, include_soup, include_rice,
+               supplementary_main_count, supplementary_side_count, supplementary_veg_count,
+               supplementary_rice_count, supplementary_soup_count,
                create_by, update_by, deleted, create_time, update_time
         from meal_plan_customer
         where id = #{id}
@@ -72,6 +86,8 @@
         select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
                status, is_verified, verification_time, verification_operator, fail_reason,
                meat_required_count, veg_required_count, include_soup, include_rice,
+               supplementary_main_count, supplementary_side_count, supplementary_veg_count,
+               supplementary_rice_count, supplementary_soup_count,
                create_by, update_by, deleted, create_time, update_time
         from meal_plan_customer
         where id in
@@ -96,7 +112,11 @@
                cp.customer_code, mpc.order_id, mpc.parent_package_id, mpc.child_package_id,
                mpc.status, mpc.is_verified, mpc.verification_time, mpc.verification_operator,
                mpc.fail_reason, mpc.meat_required_count, mpc.veg_required_count,
-               mpc.include_soup, mpc.include_rice, mpc.create_by, mpc.update_by,
+               mpc.include_soup, mpc.include_rice, mpc.supplementary_main_count,
+               mpc.supplementary_side_count, mpc.supplementary_veg_count,
+               mpc.supplementary_rice_count, mpc.supplementary_soup_count,
+               cp.special_requirements, cp.production_date,
+               mpc.create_by, mpc.update_by,
                mpc.deleted, mpc.create_time, mpc.update_time
         from meal_plan_customer mpc
         left join customer_profile cp on mpc.customer_id = cp.id
@@ -110,7 +130,11 @@
                cp.customer_code, mpc.order_id, mpc.parent_package_id, mpc.child_package_id,
                mpc.status, mpc.is_verified, mpc.verification_time, mpc.verification_operator,
                mpc.fail_reason, mpc.meat_required_count, mpc.veg_required_count,
-               mpc.include_soup, mpc.include_rice, mpc.create_by, mpc.update_by,
+               mpc.include_soup, mpc.include_rice, mpc.supplementary_main_count,
+               mpc.supplementary_side_count, mpc.supplementary_veg_count,
+               mpc.supplementary_rice_count, mpc.supplementary_soup_count,
+               cp.special_requirements, cp.production_date,
+               mpc.create_by, mpc.update_by,
                mpc.deleted, mpc.create_time, mpc.update_time
         from meal_plan_customer mpc
         left join customer_profile cp on mpc.customer_id = cp.id
@@ -147,5 +171,216 @@
           and deleted = 0
           and (is_verified = 0 or is_verified is null)
     </update>
+
+    <!-- 回退核销状态（删除核销日志时调用） -->
+    <update id="revertVerified">
+        update meal_plan_customer
+        set is_verified = 0,
+            verification_time = null,
+            verification_operator = null,
+            update_time = now()
+        where id = #{id}
+          and deleted = 0
+    </update>
+
+    <resultMap id="MealPlanCustomerAddressVOMap" type="me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO">
+        <result column="customer_id" property="customerId"/>
+        <result column="customer_code" property="customerCode"/>
+        <result column="phone" property="phone"/>
+        <result column="address_detail" property="addressDetail"/>
+        <result column="address_type" property="addressType"/>
+        <result column="allergy_tags" property="allergyTags"
+                typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="special_requirements" property="specialRequirements"/>
+        <result column="custom_menu_image" property="customMenuImage"/>
+    </resultMap>
+
+    <select id="selectCustomerAddresses" resultMap="MealPlanCustomerAddressVOMap">
+        SELECT
+            mpc.customer_id,
+            cp.customer_code,
+            mpc.phone,
+            COALESCE(
+                (SELECT cpa.address_detail FROM customer_profile_address cpa
+                 WHERE cpa.customer_id = mpc.customer_id
+                   AND cpa.address_type = CASE WHEN DAYOFWEEK(mp.record_date) IN (1, 7) THEN 'WEEKEND' ELSE 'WORKDAY' END
+                 LIMIT 1),
+                (SELECT cpa.address_detail FROM customer_profile_address cpa
+                 WHERE cpa.customer_id = mpc.customer_id
+                   AND cpa.address_type = 'DEFAULT'
+                 LIMIT 1)
+            ) AS address_detail,
+            CASE
+                WHEN EXISTS (SELECT 1 FROM customer_profile_address cpa2
+                             WHERE cpa2.customer_id = mpc.customer_id
+                               AND cpa2.address_type = CASE WHEN DAYOFWEEK(mp.record_date) IN (1, 7) THEN 'WEEKEND' ELSE 'WORKDAY' END)
+                THEN CASE WHEN DAYOFWEEK(mp.record_date) IN (1, 7) THEN 'WEEKEND' ELSE 'WORKDAY' END
+                WHEN EXISTS (SELECT 1 FROM customer_profile_address cpa3
+                             WHERE cpa3.customer_id = mpc.customer_id
+                               AND cpa3.address_type = 'DEFAULT')
+                THEN 'DEFAULT'
+                ELSE NULL
+            END AS address_type,
+            cp.allergy_tags,
+            cp.special_requirements,
+            co.custom_menu_image
+        FROM meal_plan_customer mpc
+        JOIN meal_plan mp ON mpc.meal_plan_id = mp.id
+        LEFT JOIN customer_profile cp ON mpc.customer_id = cp.id
+        LEFT JOIN customer_order co ON mpc.order_id = co.id
+        WHERE mpc.meal_plan_id = #{mealPlanId}
+          AND mpc.deleted = 0
+        ORDER BY mpc.id ASC
+    </select>
+
+    <!--
+      批量查询各订单当前餐数池的已排餐数量。
+      早餐按 BREAKFAST 单独统计；午餐/晚餐按共享餐池合并统计 LUNCH + DINNER。
+    -->
+    <select id="countScheduledByOrderIds" resultType="me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto">
+        select mpc.order_id as orderId, count(*) as scheduledCount
+        from meal_plan_customer mpc
+        join meal_plan mp on mpc.meal_plan_id = mp.id
+        where mpc.deleted = 0
+          and mp.deleted = 0
+          and (
+              (#{mealType} = 'BREAKFAST' and mp.meal_type = 'BREAKFAST')
+              or
+              (#{mealType} in ('LUNCH', 'DINNER') and mp.meal_type in ('LUNCH', 'DINNER'))
+          )
+          and mpc.order_id in
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+        group by mpc.order_id
+    </select>
+
+    <!-- 批量查询各订单全部有效排餐数量 -->
+    <select id="countAllScheduledByOrderIds" resultType="me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto">
+        select mpc.order_id as orderId, count(*) as scheduledCount
+        from meal_plan_customer mpc
+        join meal_plan mp on mpc.meal_plan_id = mp.id
+        where mpc.deleted = 0
+          and mp.deleted = 0
+          and mpc.order_id in
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+        group by mpc.order_id
+    </select>
+
+    <!-- 批量查询各订单今天已排餐但未核销的数量 -->
+    <select id="countTodayUnverifiedScheduledByOrderIds" resultType="me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto">
+        select mpc.order_id as orderId, count(*) as scheduledCount
+        from meal_plan_customer mpc
+        join meal_plan mp on mpc.meal_plan_id = mp.id
+        where mpc.deleted = 0
+          and mp.deleted = 0
+          and mpc.status = 1
+          and mp.record_date = #{recordDate}
+          and (mpc.is_verified = 0 or mpc.is_verified is null)
+          and mpc.order_id in
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+        group by mpc.order_id
+    </select>
+
+    <select id="selectScheduledMealsByCustomerIdsAndDateRange" resultType="me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto">
+        select distinct
+            mpc.customer_id as customerId,
+            mp.record_date as recordDate,
+            mp.meal_type as mealType
+        from meal_plan_customer mpc
+        join meal_plan mp on mpc.meal_plan_id = mp.id
+        where mpc.deleted = 0
+          and mp.deleted = 0
+          and mpc.status = 1
+          and mp.record_date &gt;= #{startDate}
+          and mp.record_date &lt;= #{endDate}
+          and mpc.customer_id in
+        <foreach collection="customerIds" item="customerId" open="(" separator="," close=")">
+            #{customerId}
+        </foreach>
+        order by mpc.customer_id asc, mp.record_date asc, mp.meal_type asc
+    </select>
+
+    <select id="selectGeneratedByCustomerDateMeal" resultType="me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto">
+        select
+            mp.id as mealPlanId,
+            mpc.id as customerPlanId,
+            mpc.customer_id as customerId,
+            mp.record_date as recordDate,
+            mp.meal_type as mealType,
+            case when mpc.is_verified = 1 then true else false end as verified
+        from meal_plan_customer mpc
+        join meal_plan mp on mpc.meal_plan_id = mp.id
+        where mpc.deleted = 0
+          and mp.deleted = 0
+          and mpc.status = 1
+          and mpc.customer_id = #{customerId}
+          and mp.record_date = #{recordDate}
+          and mp.meal_type = #{mealType}
+        order by mpc.id asc
+    </select>
+
+    <!-- 根据排餐计划ID查询所有未核销的客户排餐记录 -->
+    <select id="selectUnverifiedByMealPlanId" resultMap="BaseResultMap">
+        select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
+               status, is_verified, verification_time, verification_operator, fail_reason,
+               meat_required_count, veg_required_count, include_soup, include_rice,
+               supplementary_main_count, supplementary_side_count, supplementary_veg_count,
+               supplementary_rice_count, supplementary_soup_count,
+               create_by, update_by, deleted, create_time, update_time
+        from meal_plan_customer
+        where meal_plan_id = #{mealPlanId}
+          and deleted = 0
+          and (is_verified = 0 or is_verified is null)
+        order by id asc
+    </select>
+
+    <!-- 批量查询哪些客户排餐记录属于订单当前餐次的首次成功排餐 -->
+    <select id="selectFirstSuccessfulCustomerPlanIds" resultType="java.lang.Long">
+        select current_rec.id
+        from meal_plan_customer current_rec
+        join meal_plan current_plan on current_plan.id = current_rec.meal_plan_id
+        where current_rec.deleted = 0
+          and current_plan.deleted = 0
+          and current_rec.status = 1
+          and current_rec.id in
+        <foreach collection="customerPlanIds" item="customerPlanId" open="(" separator="," close=")">
+            #{customerPlanId}
+        </foreach>
+          and not exists (
+            select 1
+            from meal_plan_customer previous_rec
+            join meal_plan previous_plan on previous_plan.id = previous_rec.meal_plan_id
+            where previous_rec.deleted = 0
+              and previous_plan.deleted = 0
+              and previous_rec.status = 1
+              and previous_rec.order_id = current_rec.order_id
+              and previous_plan.meal_type = current_plan.meal_type
+              and (
+                  previous_plan.record_date &lt; current_plan.record_date
+                  or (previous_plan.record_date = current_plan.record_date and previous_rec.id &lt; current_rec.id)
+              )
+          )
+    </select>
+
+    <!-- 批量查询各订单在指定日期各餐次的有效排餐数（状态为成功且未删除） -->
+    <select id="countSuccessfulScheduledByOrderIdsAndDate" resultType="me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto">
+        select mpc.order_id as orderId, mp.meal_type as mealType, count(*) as scheduledCount
+        from meal_plan_customer mpc
+        join meal_plan mp on mpc.meal_plan_id = mp.id
+        where mpc.deleted = 0
+          and mp.deleted = 0
+          and mpc.status = 1
+          and mp.record_date = #{recordDate}
+          and mpc.order_id in
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+        group by mpc.order_id, mp.meal_type
+    </select>
 
 </mapper>

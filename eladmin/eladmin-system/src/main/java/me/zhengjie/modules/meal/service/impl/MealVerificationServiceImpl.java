@@ -41,6 +41,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
 
@@ -69,13 +71,20 @@ public class MealVerificationServiceImpl implements MealVerificationService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MealVerificationResultDto verify(MealVerificationDto dto) {
+        return verify(dto, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MealVerificationResultDto verify(MealVerificationDto dto, String operator) {
         MealVerificationResultDto result = new MealVerificationResultDto();
 
         for (Long customerPlanId : dto.getCustomerPlanIds()) {
             try {
-                verifySingle(customerPlanId, dto.getRemark());
+                verifySingle(customerPlanId, dto.getRemark(), operator);
                 result.setSuccessCount(result.getSuccessCount() + 1);
             } catch (Exception e) {
+                log.error("核销异常",e);
                 log.error("核销失败，客户计划ID: {}, 错误: {}", customerPlanId, e.getMessage());
                 result.setFailCount(result.getFailCount() + 1);
                 result.getFailReasons().add("客户ID " + customerPlanId + ": " + e.getMessage());
@@ -87,8 +96,9 @@ public class MealVerificationServiceImpl implements MealVerificationService {
 
     /**
      * 单个核销
+     * @param operator 操作人，如果为空则尝试从 SecurityContext 获取
      */
-    private void verifySingle(Long customerPlanId, String remark) {
+    private void verifySingle(Long customerPlanId, String remark, String operator) {
         // 1. 获取客户排餐信息
         MealPlanCustomer customerPlan = mealPlanCustomerMapper.selectById(customerPlanId);
         if (customerPlan == null) {
@@ -113,12 +123,17 @@ public class MealVerificationServiceImpl implements MealVerificationService {
             throw new BadRequestException("关联订单不存在");
         }
 
-        // 5. 检查订单剩余餐数
+        // 5. 只允许进行中的订单继续核销，避免已退餐订单被重复消费
+        if (order.getStatus() == null || order.getStatus() != 1) {
+            throw new BadRequestException("只有进行中的订单可以核销，当前状态：" + getStatusDesc(order.getStatus()));
+        }
+
+        // 6. 检查订单剩余餐数
         if (order.getRemainingCount() == null || order.getRemainingCount() <= 0) {
             throw new BadRequestException("订单剩余餐数不足，当前剩余: " + (order.getRemainingCount() == null ? 0 : order.getRemainingCount()));
         }
 
-        // 6. 计算核销单价
+        // 7. 计算核销单价
         BigDecimal price = null;
         String mealType = mealPlan.getMealType();
         if ("LUNCH".equals(mealType) || "DINNER".equals(mealType)) {
@@ -133,27 +148,37 @@ public class MealVerificationServiceImpl implements MealVerificationService {
             throw new BadRequestException("订单单价配置异常，无法核销");
         }
 
-        // 7. 原子更新客户排餐核销状态，避免并发重复核销
+        // 8. 获取操作人（支持定时任务场景）
+        if (operator == null) {
+            operator = SecurityUtils.getCurrentUsername();
+        }
+
+        // 9. 原子更新客户排餐核销状态，避免并发重复核销
         Date verificationTime = new Date();
-        String operator = SecurityUtils.getCurrentUsername();
         int planUpdated = mealPlanCustomerMapper.markVerifiedIfPending(customerPlanId, verificationTime, operator);
         if (planUpdated == 0) {
             throw new BadRequestException("该客户已完成核销，请勿重复操作");
         }
 
-        // 8. 更新订单：核销餐数+1，剩余餐数-1，核销金额+单价，餐费余额-单价
+        // 9. 更新订单：核销餐数+1，剩余餐数-1，核销金额+单价，餐费余额-单价
         int updated = customerOrderMapper.incrementVerifiedCountAndAmount(order.getId(), price);
         if (updated == 0) {
             throw new BadRequestException("订单更新失败，可能是并发操作导致");
         }
 
-        // 9. 重新读取订单，基于最新状态生成准确日志
+        // 9.5. 检查是否需要更新订单状态为已完成
+        int statusUpdated = customerOrderMapper.updateStatusToCompletedWhenFinished(order.getId());
+        if (statusUpdated > 0) {
+            log.info("订单剩余餐数为0，自动更新订单状态为已完成，订单ID: {}", order.getId());
+        }
+
+        // 10. 重新读取订单，基于最新状态生成准确日志
         CustomerOrder latestOrder = customerOrderMapper.selectById(customerPlan.getOrderId());
         if (latestOrder == null) {
             throw new BadRequestException("关联订单不存在");
         }
 
-        // 10. 记录核销日志
+        // 11. 记录核销日志
         MealVerificationLog log = new MealVerificationLog();
         log.setMealPlanCustomerId(customerPlanId);
         log.setMealPlanId(customerPlan.getMealPlanId());
@@ -174,6 +199,7 @@ public class MealVerificationServiceImpl implements MealVerificationService {
         log.setOperator(operator);
         log.setOperateTime(verificationTime);
         log.setRemark(remark);
+        log.setDeleted(0);
         verificationLogMapper.insert(log);
     }
 
@@ -185,7 +211,77 @@ public class MealVerificationServiceImpl implements MealVerificationService {
     @Override
     public List<MealVerificationLog> queryByOrderId(Long orderId) {
         QueryWrapper<MealVerificationLog> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("order_id", orderId).orderByDesc("operate_time", "id");
+        queryWrapper.eq("order_id", orderId)
+                .and(wrapper -> wrapper.eq("deleted", 0).or().isNull("deleted"))
+                .orderByDesc("operate_time", "id");
         return verificationLogMapper.selectList(queryWrapper);
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteVerificationLog(Long id, String reason) {
+        MealVerificationLog logRecord = verificationLogMapper.selectById(id);
+        if (logRecord == null) {
+            throw new BadRequestException("核销日志不存在");
+        }
+        if (logRecord.getDeleted() != null && logRecord.getDeleted() == 1) {
+            throw new BadRequestException("该记录已删除，请刷新列表");
+        }
+
+        // 查询订单，获取价格
+        CustomerOrder order = customerOrderMapper.selectById(logRecord.getOrderId());
+        if (order == null) {
+            throw new BadRequestException("关联订单不存在");
+        }
+
+        // 根据 mealType 决定核销单价
+        BigDecimal price;
+        String mealType = logRecord.getMealType();
+        if ("LUNCH".equals(mealType) || "DINNER".equals(mealType)) {
+            price = order.getLunchDinnerPrice();
+        } else {
+            price = order.getBreakfastPrice();
+        }
+        if (price == null) {
+            price = BigDecimal.ZERO;
+        }
+
+        Date deleteTime = new Date();
+        String deletedBy = SecurityUtils.getCurrentUsername();
+        int deletedRows = verificationLogMapper.softDeleteIfActive(id, deletedBy, deleteTime);
+        if (deletedRows == 0) {
+            throw new BadRequestException("该记录已删除，请刷新列表");
+        }
+
+        // 回退 MealPlanCustomer: is_verified=0
+        int revertedPlanRows = mealPlanCustomerMapper.revertVerified(logRecord.getMealPlanCustomerId());
+        if (revertedPlanRows == 0) {
+            throw new BadRequestException("关联排餐状态异常，无法回退核销");
+        }
+
+        // 回退 CustomerOrder: verifiedCount-1, remainingCount+1, verifiedAmount-price, 如果已完成则回退为进行中
+        int revertedOrderRows = customerOrderMapper.revertVerification(logRecord.getOrderId(), price);
+        if (revertedOrderRows == 0) {
+            throw new BadRequestException("关联订单状态异常，无法回退核销");
+        }
+    }
+
+    private String getStatusDesc(Integer status) {
+        if (status == null) {
+            return "未知";
+        }
+        switch (status) {
+            case 0:
+                return "已取消";
+            case 1:
+                return "进行中";
+            case 2:
+                return "已完成";
+            case 3:
+                return "已退餐";
+            default:
+                return "未知";
+        }
+    }
+
 }

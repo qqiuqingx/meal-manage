@@ -1,11 +1,13 @@
 package me.zhengjie.modules.customer.order.domain.dto;
 
 import lombok.Data;
+import org.springframework.format.annotation.DateTimeFormat;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 客户订单查询条件
@@ -20,6 +22,8 @@ public class CustomerOrderQueryCriteria implements Serializable {
     private String customerName;
 
     private Long customerId;
+
+    private String customerCode;
 
     /**
      * 订单状态: 0=已取消, 1=进行中, 2=已完成
@@ -45,4 +49,15 @@ public class CustomerOrderQueryCriteria implements Serializable {
      * 销售渠道
      */
     private String customerSource;
+
+    /**
+     * 排餐日期（前端传入，用于筛选该日期能参与排餐的订单）
+     */
+    @DateTimeFormat(pattern = "yyyy-MM-dd")
+    private LocalDate scheduleDate;
+
+    /**
+     * 符合排餐条件的订单ID列表（后端Service层计算，禁止信任前端传入）
+     */
+    private List<Long> eligibleOrderIds;
 }

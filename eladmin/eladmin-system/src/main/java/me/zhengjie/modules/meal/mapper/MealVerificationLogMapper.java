@@ -23,6 +23,8 @@ import me.zhengjie.modules.meal.domain.dto.MealVerificationLogVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.Date;
+
 /**
  * 核销日志Mapper
  * @author qqx
@@ -39,4 +41,18 @@ public interface MealVerificationLogMapper extends BaseMapper<MealVerificationLo
      */
     Page<MealVerificationLogVO> selectPageByCriteria(@Param("criteria") MealVerificationLogQueryCriteria criteria,
                                                       Page<MealVerificationLogVO> page);
+
+    /**
+     * 仅软删除未删除的核销日志，避免重复删除导致重复回滚
+     */
+    int softDeleteIfActive(@Param("id") Long id,
+                           @Param("deletedBy") String deletedBy,
+                           @Param("deleteTime") Date deleteTime);
+
+    /**
+     * 标记核销记录为已退餐
+     * @param orderId 订单ID
+     * @return 更新行数
+     */
+    int markAsRefunded(@Param("orderId") Long orderId);
 }

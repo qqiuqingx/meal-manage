@@ -4,15 +4,28 @@
     <div class="head-container">
       <div v-if="crud.props.searchToggle">
         <el-input v-model="query.orderCode" clearable size="small" placeholder="订单编号" style="width: 150px;" class="filter-item" @keyup.enter.native="crud.toQuery" />
+        <el-input v-model="query.customerCode" clearable size="small" placeholder="客户编号" style="width: 120px;" class="filter-item" @keyup.enter.native="crud.toQuery" />
         <el-input v-model="query.customerName" clearable size="small" placeholder="客户姓名" style="width: 120px;" class="filter-item" @keyup.enter.native="crud.toQuery" />
         <el-select v-model="query.status" clearable size="small" placeholder="订单状态" class="filter-item" style="width: 100px" @change="crud.toQuery">
           <el-option label="进行中" :value="1" />
           <el-option label="已完成" :value="2" />
           <el-option label="已取消" :value="0" />
+          <el-option label="已退餐" :value="3" />
         </el-select>
         <el-select v-model="query.customerSource" clearable size="small" placeholder="销售渠道" class="filter-item" style="width: 120px" @change="crud.toQuery">
           <el-option v-for="item in customerSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
+        <el-date-picker
+          v-model="query.scheduleDate"
+          type="date"
+          size="small"
+          placeholder="排餐日期"
+          class="filter-item"
+          style="width: 150px"
+          value-format="yyyy-MM-dd"
+          clearable
+          @change="crud.toQuery"
+        />
         <rrOperation />
       </div>
       <crudOperation :permission="permission" />
@@ -26,30 +39,83 @@
       @selection-change="crud.selectionChangeHandler"
     >
       <el-table-column :selectable="checkboxT" type="selection" width="55" />
-      <el-table-column label="订单编号" prop="orderCode" width="140" />
-      <el-table-column label="客户姓名" prop="customerName" width="100" />
-      <el-table-column label="手机号" prop="phone" width="120" />
-      <el-table-column label="定金" prop="depositAmount" width="90" align="right">
+      <el-table-column label="客户编号" prop="customerCode" width="120" fixed="left" />
+      <el-table-column label="客户姓名" prop="customerName" width="100" fixed="left" />
+      <el-table-column label="手机号" prop="phone" width="120" fixed="left" />
+      <el-table-column label="地址" min-width="200">
         <template slot-scope="scope">
-          {{ formatMoney(scope.row.depositAmount) }}
+          <div v-if="!scope.row.addresses || scope.row.addresses.length === 0">-</div>
+          <el-tag v-for="addr in scope.row.addresses" :key="addr.type" size="mini" style="margin-bottom: 2px; display: block; white-space: normal; height: auto;">
+            {{ addr.type }}: {{ addr.detail }}
+          </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="总金额" prop="totalAmount" width="100" align="right">
+      <el-table-column label="规格" width="110">
         <template slot-scope="scope">
-          {{ formatMoney(scope.row.totalAmount) }}
+          {{ packageSpecText(scope.row) }}
         </template>
       </el-table-column>
-      <el-table-column label="成交金额" prop="finalAmount" width="100" align="right">
+      <el-table-column label="含汤" width="70" align="center">
         <template slot-scope="scope">
-          {{ formatMoney(scope.row.finalAmount) }}
+          {{ scope.row.soupCount >= 1 ? '含汤' : '不含汤' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="排餐模式" width="100">
+        <template slot-scope="scope">
+          {{ scheduleModeText(scope.row.scheduleMode) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip>
+        <template slot-scope="scope">
+          {{ scope.row.specialRequirements || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="自定义菜单" width="100" align="center">
+        <template slot-scope="scope">
+          <el-image
+            v-if="scope.row.customMenuImage"
+            :src="getCustomMenuImageUrl(scope.row.customMenuImage)"
+            :preview-src-list="[getCustomMenuImageUrl(scope.row.customMenuImage)]"
+            fit="contain"
+            style="width: 40px; height: 40px; cursor: pointer;"
+          />
+          <span v-else style="color: #c0c4cc;">-</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="过敏" width="150">
+        <template slot-scope="scope">
+          <span v-if="!scope.row.allergyTags || scope.row.allergyTags.length === 0">-</span>
+          <el-tag v-for="tag in scope.row.allergyTags" :key="tag" size="mini" type="warning" style="margin-right: 4px;">
+            {{ tag }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="早餐" prop="breakfastCount" width="60" align="center" />
       <el-table-column label="午晚" prop="lunchDinnerCount" width="60" align="center" />
       <el-table-column label="合计" prop="totalCount" width="60" align="center" />
       <el-table-column label="核销" prop="verifiedCount" width="60" align="center" />
-      <el-table-column label="剩余" prop="remainingCount" width="60" align="center" />
-      <el-table-column label="余额" prop="mealBalance" width="90" align="right">
+      <el-table-column label="已排餐" prop="scheduledCount" width="80" align="center" />
+      <el-table-column prop="remainingCount" width="70" align="center">
+        <template slot="header">
+          <span class="column-help">
+            剩余
+            <el-tooltip content="当前订单剩余餐数，已扣减所有已核销餐数。" placement="top">
+              <i class="el-icon-question" />
+            </el-tooltip>
+          </span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="estimatedRemainingCount" width="120" align="center">
+        <template slot="header">
+          <span class="column-help">
+            预计剩余餐数
+            <el-tooltip content="预计剩余餐数 = 剩余餐数 - 今天已排餐但未核销餐数；今天已核销的餐不重复扣减。" placement="top">
+              <i class="el-icon-question" />
+            </el-tooltip>
+          </span>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="canViewAmount" label="余额" prop="mealBalance" width="90" align="right">
         <template slot-scope="scope">
           {{ formatMoney(scope.row.mealBalance) }}
         </template>
@@ -73,13 +139,30 @@
       </el-table-column>
       <el-table-column label="订单期间" width="180">
         <template slot-scope="{ row }">
-          {{ formatDate(row.startDate) }} ~ {{ formatDate(row.endDate) }}
+          {{ formatOrderPeriod(row) }}
         </template>
       </el-table-column>
       <el-table-column label="成交时间" prop="dealTime" width="150" />
-      <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="130px" align="center">
+      <el-table-column v-if="canViewAmount" label="定金" prop="depositAmount" width="90" align="right">
         <template slot-scope="scope">
-          <el-button size="mini" type="primary" icon="edit" @click="crud.toEdit(scope.row)">编辑</el-button>
+          {{ formatMoney(scope.row.depositAmount) }}
+        </template>
+      </el-table-column>
+      <el-table-column v-if="canViewAmount" label="总金额" prop="totalAmount" width="100" align="right">
+        <template slot-scope="scope">
+          {{ formatMoney(scope.row.totalAmount) }}
+        </template>
+      </el-table-column>
+      <el-table-column v-if="canViewAmount" label="成交金额" prop="finalAmount" width="100" align="right">
+        <template slot-scope="scope">
+          {{ formatMoney(scope.row.finalAmount) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="订单编号" prop="orderCode" width="140" />
+      <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="180" align="center" fixed="right">
+        <template slot-scope="scope">
+          <el-button size="mini" type="primary" icon="edit" :disabled="scope.row.status !== 1" @click="handleEdit(scope.row)">编辑</el-button>
+          <el-button v-if="scope.row.status === 1" size="mini" type="danger" icon="refresh" @click="openRefundDialog(scope.row)">退餐</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -113,7 +196,9 @@
           mode="order"
           :readonly="false"
           :customer-disabled="!!form.id"
-          :current-customer="{ id: form.customerId, customerName: form.customerName, phone: form.phone }"
+          :current-customer="{ id: form.customerId, customerCode: form.customerCode, customerName: form.customerName, phone: form.phone }"
+          :show-amount="canViewAmount"
+          :editable-amount="canEditAmount"
           :rules="rules"
           @customer-change="onCustomerChange"
           @calc-change="onCalcChange"
@@ -132,25 +217,62 @@
         <el-button :loading="submitLoading" type="primary" @click="submitForm">确认</el-button>
       </div>
     </el-dialog>
+
+    <!--退餐对话框-->
+    <el-dialog title="退餐" :visible.sync="refundDialogVisible" width="500px" append-to-body :close-on-click-modal="false">
+      <el-form ref="refundFormRef" :model="refundForm" :rules="refundRules" size="small" label-width="90px">
+        <el-form-item label="订单编号">
+          <span>{{ refundForm.orderCode }}</span>
+        </el-form-item>
+        <el-form-item label="客户姓名">
+          <span>{{ refundForm.customerName }}</span>
+        </el-form-item>
+        <el-form-item v-if="canViewAmount" label="退餐金额">
+          <span>¥{{ formatMoney(refundForm.refundAmount) }}</span>
+        </el-form-item>
+        <el-form-item label="退餐原因" prop="refundReason">
+          <el-input v-model="refundForm.refundReason" type="textarea" :rows="3" placeholder="请输入退餐原因" />
+        </el-form-item>
+      </el-form>
+      <div slot="footer" class="dialog-footer">
+        <el-button @click="refundDialogVisible = false">取消</el-button>
+        <el-button :loading="refundLoading" type="primary" @click="confirmRefund">确认退餐</el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script>
 import * as orderApi from '@/api/customer/order'
 import * as dictDetailApi from '@/api/system/dictDetail'
+import { refundMeal } from '@/api/mealRefund'
 import { createOrderDefaultForm } from '@/components/Order/OrderForm.vue'
 import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
 import OrderForm from '@/components/Order/OrderForm.vue'
 import { parseTime } from '@/utils/index'
+import { mapGetters } from 'vuex'
+
+function cleanReplaceRules(rules) {
+  if (!rules || !rules.length) return []
+  return rules.filter(r => r.sourceDishId && r.targetDishId).map(r => ({
+    sourceDishId: r.sourceDishId,
+    sourceDishName: r.sourceDishName,
+    sourceDishType: r.sourceDishType,
+    targetDishId: r.targetDishId,
+    targetDishName: r.targetDishName,
+    targetDishType: r.targetDishType,
+    remark: r.remark
+  }))
+}
 
 export default {
   name: 'CustomerOrder',
   components: { crudOperation, rrOperation, OrderForm },
   mixins: [presenter(), header(), form(createOrderDefaultForm()), crud()],
   cruds() {
-    return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }})
+    return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }, query: { orderCode: '', customerCode: '', customerName: '', status: null, customerSource: null, scheduleDate: null }})
   },
   data() {
     return {
@@ -159,23 +281,65 @@ export default {
         edit: ['admin', 'customerOrder:edit'],
         del: ['admin', 'customerOrder:del']
       },
-      query: {
+      submitLoading: false,
+      refundLoading: false,
+      refundDialogVisible: false,
+      refundForm: {
+        orderId: null,
         orderCode: '',
         customerName: '',
-        status: null,
-        customerSource: null
+        refundAmount: 0,
+        refundReason: ''
       },
-      submitLoading: false,
+      refundRules: {
+        refundReason: [{ required: true, message: '请输入退餐原因', trigger: 'blur' }]
+      },
       customerSourceOptions: [],
+      editRequestId: 0,
       rules: {
         customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
-        totalAmount: [{ required: true, message: '请输入总金额', trigger: 'blur' }],
-        finalAmount: [{ required: true, message: '请输入成交金额', trigger: 'blur' }],
-        status: [{ required: true, message: '请选择订单状态', trigger: 'change' }]
+        totalAmount: [{
+          validator: (rule, value, callback) => {
+            if (this.canEditAmount && (value === null || value === undefined || value === '')) {
+              callback(new Error('请输入总金额'))
+              return
+            }
+            callback()
+          },
+          trigger: 'blur'
+        }],
+        finalAmount: [{
+          validator: (rule, value, callback) => {
+            if (this.canEditAmount && (value === null || value === undefined || value === '')) {
+              callback(new Error('请输入成交金额'))
+              return
+            }
+            callback()
+          },
+          trigger: 'blur'
+        }],
+        status: [{ required: true, message: '请选择订单状态', trigger: 'change' }],
+        trialOrderId: [{
+          validator: (rule, value, callback) => {
+            if (this.form.trialConverted && !value) {
+              callback(new Error('请选择关联试餐订单'))
+              return
+            }
+            callback()
+          },
+          trigger: 'change'
+        }]
       }
     }
   },
   computed: {
+    ...mapGetters(['baseApi', 'roles']),
+    canViewAmount() {
+      return this.roles.includes('admin') || this.roles.includes('customerOrder:amount:view')
+    },
+    canEditAmount() {
+      return this.roles.includes('admin') || this.roles.includes('customerOrder:amount:edit')
+    },
     dialogVisible: {
       get() {
         return this.crud.status.cu > 0
@@ -194,17 +358,6 @@ export default {
     this.loadCustomerSourceDict()
   },
   methods: {
-    serializeDeliveryDates(value) {
-      if (Array.isArray(value)) {
-        const dates = value.map(item => String(item || '').trim()).filter(Boolean)
-        return dates.length ? JSON.stringify(dates) : null
-      }
-      if (typeof value === 'string') {
-        const trimmed = value.trim()
-        return trimmed || null
-      }
-      return null
-    },
     loadCustomerSourceDict() {
       dictDetailApi.get('customer_source').then(res => {
         this.customerSourceOptions = (res.content || res.data || res || []).map(item => ({
@@ -218,7 +371,17 @@ export default {
       const item = this.customerSourceOptions.find(o => o.value === value)
       return item ? item.label : value
     },
+    /**
+     * 获取自定义菜单图片完整访问地址
+     */
+    getCustomMenuImageUrl(path) {
+      if (!path) return ''
+      if (path.startsWith('http://') || path.startsWith('https://')) return path
+      return this.baseApi + path
+    },
     [CRUD.HOOK.beforeToCU]() {
+      const currentForm = { ...this.form }
+      Object.assign(this.form, createOrderDefaultForm(), currentForm)
       return true
     },
     [CRUD.HOOK.beforeToAdd]() {
@@ -238,12 +401,68 @@ export default {
     cancelDialog() {
       this.crud.cancelCU()
     },
+    async handleEdit(row) {
+      const requestId = this.editRequestId + 1
+      this.editRequestId = requestId
+      try {
+        const res = await orderApi.getOrder(row.id)
+        if (requestId !== this.editRequestId) {
+          return
+        }
+        const detail = res.data || res
+        // 订单详情接口不返回客户编号，这里沿用列表行数据，确保编辑态客户回显使用客户编号。
+        detail.customerCode = row.customerCode || detail.customerCode
+        this.crud.toEdit(detail)
+      } catch (e) {
+        if (requestId !== this.editRequestId) {
+          return
+        }
+        this.$message.error('获取订单详情失败: ' + (e.message || '未知错误'))
+      }
+    },
     async submitForm() {
       const valid = await this.$refs.orderFormRef.validate().catch(() => false)
       if (!valid) return
+      if (this.form.trialConverted && !this.form.trialOrderId) {
+        this.$message.warning('请选择关联试餐订单')
+        return
+      }
+
+      // 前端校验换菜规则：原菜不能重复
+      const rules = this.form.replaceRules
+      if (rules && rules.length > 0) {
+        const sourceIds = rules.map(r => r.sourceDishId).filter(Boolean)
+        if (new Set(sourceIds).size !== sourceIds.length) {
+          this.$message.warning('同一订单不能重复配置同一个原菜')
+          return
+        }
+        for (const rule of rules) {
+          if (!rule.sourceDishId) {
+            this.$message.warning('换菜规则中的原菜不能为空')
+            return
+          }
+          if (!rule.targetDishId) {
+            this.$message.warning('换菜规则中的目标菜不能为空')
+            return
+          }
+          if (rule.sourceDishId === rule.targetDishId) {
+            this.$message.warning('原菜和目标菜不能相同')
+            return
+          }
+        }
+      }
+
       const payload = {
         ...this.form,
-        deliveryDates: this.serializeDeliveryDates(this.form.deliveryDates)
+        replaceRules: cleanReplaceRules(this.form.replaceRules)
+      }
+      if (!this.canEditAmount) {
+        delete payload.depositAmount
+        delete payload.totalAmount
+        delete payload.finalAmount
+        delete payload.breakfastPrice
+        delete payload.lunchDinnerPrice
+        delete payload.verifiedAmount
       }
 
       // 先校验订单冲突（提交前校验）
@@ -288,20 +507,45 @@ export default {
       this.form.remainingCount = Math.max(0, total - verified)
     },
     statusText(status) {
+      if (status === 0) return '已取消'
       if (status === 1) return '进行中'
       if (status === 2) return '已完成'
-      if (status === 0) return '已取消'
+      if (status === 3) return '已退餐'
       return '未知'
     },
     statusTagType(status) {
+      if (status === 0) return 'danger'
       if (status === 1) return 'success'
       if (status === 2) return 'info'
-      if (status === 0) return 'danger'
+      if (status === 3) return 'warning'
       return 'info'
     },
     mealTypeText(mealType) {
       if (!mealType || mealType === 'ALL') return '-'
-      return mealType === 'LUNCH' ? '午餐' : '晚餐'
+      const map = { LUNCH: '午餐', DINNER: '晚餐', LUNCH_DINNER: '午+晚' }
+      return map[mealType] || mealType
+    },
+    scheduleModeText(scheduleMode) {
+      const map = {
+        SCHEDULE: '指定日期',
+        DAILY: '每天送',
+        WEEKEND: '周末送',
+        WEEKDAY: '工作日'
+      }
+      return map[scheduleMode] || '-'
+    },
+    startMealTypeText(startMealType) {
+      const map = {
+        BREAKFAST: '早餐起',
+        LUNCH: '午餐起',
+        DINNER: '晚餐起'
+      }
+      return map[startMealType] || '早餐起'
+    },
+    formatOrderPeriod(row) {
+      if (!row.startDate) return '-'
+      const startDate = this.formatDate(row.startDate)
+      return `${startDate}（${this.startMealTypeText(row.startMealType)}）起`
     },
     checkboxT() {
       return true
@@ -313,9 +557,47 @@ export default {
       }
       return amount.toFixed(2)
     },
+    packageSpecText(row) {
+      const meat = (row.mainDishCount || 0) + (row.sideDishCount || 0)
+      const veg = row.vegCount || 0
+      const soup = row.soupCount || 0
+      return soup > 0 ? `${meat}荤${veg}素-${soup}汤` : `${meat}荤${veg}素`
+    },
     formatDate(val) {
       if (!val) return '-'
       return parseTime(val, '{y}-{m}-{d}')
+    },
+    openRefundDialog(row) {
+      this.refundForm = {
+        orderId: row.id,
+        orderCode: row.orderCode,
+        customerName: row.customerName,
+        refundAmount: row.mealBalance || 0,
+        refundReason: ''
+      }
+      this.refundDialogVisible = true
+      this.$nextTick(() => {
+        this.$refs.refundFormRef && this.$refs.refundFormRef.clearValidate()
+      })
+    },
+    confirmRefund() {
+      this.$refs.refundFormRef.validate(async valid => {
+        if (!valid) return
+        this.refundLoading = true
+        try {
+          await refundMeal({
+            orderId: this.refundForm.orderId,
+            refundReason: this.refundForm.refundReason
+          })
+          this.$message.success('退餐成功')
+          this.refundDialogVisible = false
+          this.crud.refresh()
+        } catch (e) {
+          this.$message.error(e.message || '退餐失败')
+        } finally {
+          this.refundLoading = false
+        }
+      })
     }
   }
 }
@@ -328,5 +610,15 @@ export default {
 }
 .head-container .filter-item {
   margin-right: 10px;
+}
+.column-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.column-help .el-icon-question {
+  color: #909399;
+  cursor: help;
+  font-size: 13px;
 }
 </style>

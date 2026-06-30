@@ -2,6 +2,8 @@ package me.zhengjie.modules.meal.domain.dto;
 
 import lombok.Data;
 import io.swagger.annotations.ApiModelProperty;
+import java.util.List;
+import java.util.Set;
 
 /**
  * 菜品查询条件
@@ -25,6 +27,15 @@ public class DishQueryCriteria {
 
     @ApiModelProperty(value = "是否启用")
     private Boolean enabled;
+
+    @ApiModelProperty(value = "排期日期，格式：yyyy-MM-dd")
+    private String scheduleDate;
+
+    @ApiModelProperty(value = "排期匹配的菜品ID列表（内部字段）", hidden = true)
+    private List<Integer> scheduledDishIds;
+
+    @ApiModelProperty(value = "菜品ID到餐次集合的映射（内部字段）", hidden = true)
+    private java.util.Map<Integer, Set<String>> dishMealTypeMap;
 
     @ApiModelProperty(value = "页码")
     private Integer page = 0;

@@ -30,11 +30,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -94,5 +96,19 @@ public class MealVerificationController {
     @PreAuthorize("@el.check('mealPlan:list')")
     public ResponseEntity<List<MealVerificationLog>> queryLogsByOrderId(@PathVariable Long orderId) {
         return new ResponseEntity<>(mealVerificationService.queryByOrderId(orderId), HttpStatus.OK);
+    }
+
+    /**
+     * 删除核销日志
+     */
+    @Log("删除核销日志: id={#id}, 原因={#reason}")
+    @ApiOperation("删除核销日志")
+    @DeleteMapping("/logs/{id}")
+    @PreAuthorize("@el.check('verificationLog:del')")
+    public ResponseEntity<Void> deleteVerificationLog(
+            @PathVariable Long id,
+            @RequestParam(required = false) String reason) {
+        mealVerificationService.deleteVerificationLog(id, reason);
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 }

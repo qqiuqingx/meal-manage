@@ -11,14 +11,34 @@
             @keyup.enter.native="handleQuery"
           />
         </el-form-item>
-        <el-form-item label="分类" prop="category">
-          <el-select v-model="queryParams.category" placeholder="请选择分类" clearable>
-            <el-option label="肉类" value="MEAT" />
-            <el-option label="蔬菜" value="VEGETABLE" />
-            <el-option label="海鲜" value="SEAFOOD" />
-            <el-option label="豆制品" value="TOFU" />
-            <el-option label="调料" value="SPICE" />
-            <el-option label="其他" value="OTHER" />
+        <el-form-item label="一级分类" prop="parentCategoryId">
+          <el-select
+            v-model="queryParams.parentCategoryId"
+            placeholder="请选择一级分类"
+            clearable
+            @change="handleParentCategoryChange"
+          >
+            <el-option
+              v-for="item in level1Categories"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="二级分类" prop="categoryId">
+          <el-select
+            v-model="queryParams.categoryId"
+            placeholder="请选择二级分类"
+            clearable
+            :disabled="!queryParams.parentCategoryId"
+          >
+            <el-option
+              v-for="item in level2Categories"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="状态" prop="enabled">
@@ -38,6 +58,7 @@
     <el-card class="table-card" shadow="never">
       <div slot="header" class="clearfix">
         <el-button type="primary" icon="el-icon-plus" @click="handleAdd">新增</el-button>
+        <el-button icon="el-icon-collection-tag" @click="handleCategoryManage">分类管理</el-button>
         <el-button type="danger" icon="el-icon-delete" :disabled="multiple" @click="handleDelete">删除</el-button>
         <el-button type="warning" icon="el-icon-download" @click="handleDownload">导出</el-button>
       </div>
@@ -46,9 +67,14 @@
       <el-table v-loading="loading" :data="ingredientList" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" align="center" />
         <el-table-column label="配料名称" prop="name" align="center" />
-        <el-table-column label="分类" prop="category" align="center">
+        <el-table-column label="分类" align="center" width="200">
           <template slot-scope="scope">
-            <el-tag :type="getCategoryTagType(scope.row.category)">
+            <span v-if="scope.row.categoryPathName">{{ scope.row.categoryPathName }}</span>
+            <el-tag
+              v-else
+              :type="getCategoryTagType(scope.row.category)"
+              size="small"
+            >
               {{ getCategoryLabel(scope.row.category) }}
             </el-tag>
           </template>
@@ -78,25 +104,36 @@
       <pagination
         v-show="total > 0"
         :total="total"
-        :page.sync="queryParams.page"
+        :page="queryParams.page + 1"
         :limit.sync="queryParams.size"
-        @pagination="getList"
+        @pagination="handlePagination"
       />
     </el-card>
 
     <!-- 新增/编辑弹窗 -->
-    <ingredient-form ref="ingredientForm" @refresh="getList" />
+    <ingredient-form ref="ingredientForm" :category-tree="categoryTree" @refresh="getList" />
+
+    <category-manager
+      :visible.sync="categoryManagerVisible"
+      :category-tree="categoryTree"
+      @refresh-categories="refreshCategories"
+    />
   </div>
 </template>
 
 <script>
 import { queryIngredients, editIngredient, delIngredients, downloadIngredients } from '@/api/dishIngredient'
+import { queryCategoryTree } from '@/api/dishIngredientCategory'
+import Pagination from '@/components/Pagination'
 import IngredientForm from './form'
+import CategoryManager from './categoryManager'
 
 export default {
   name: 'DishIngredient',
   components: {
-    IngredientForm
+    Pagination,
+    IngredientForm,
+    CategoryManager
   },
   data() {
     return {
@@ -110,9 +147,14 @@ export default {
         page: 0,
         size: 10,
         name: null,
-        category: null,
+        parentCategoryId: null,
+        categoryId: null,
         enabled: null
       },
+      categoryTree: [],
+      level1Categories: [],
+      level2Categories: [],
+      categoryManagerVisible: false,
       categoryMap: {
         MEAT: { label: '肉类', type: 'danger' },
         VEGETABLE: { label: '蔬菜', type: 'success' },
@@ -124,14 +166,76 @@ export default {
     }
   },
   created() {
+    this.refreshCategories()
     this.getList()
   },
   methods: {
+    async refreshCategories() {
+      try {
+        const tree = await queryCategoryTree()
+        this.categoryTree = tree || []
+        this.level1Categories = this.categoryTree
+        const changed = this.syncQueryCategoryState(this.categoryTree)
+        if (changed) {
+          this.getList()
+        }
+      } catch (error) {
+        console.error('加载分类失败', error)
+      }
+    },
+    getLevel2CategoriesByParentId(parentId) {
+      if (!parentId) {
+        return []
+      }
+      const parent = this.level1Categories.find(c => c.id === parentId)
+      return parent && parent.children ? parent.children : []
+    },
+    syncQueryCategoryState(tree) {
+      const categoryTree = Array.isArray(tree) ? tree : []
+      let changed = false
+      if (!this.queryParams.parentCategoryId) {
+        this.level2Categories = []
+        if (this.queryParams.categoryId !== null) {
+          this.queryParams.categoryId = null
+          changed = true
+        }
+        return changed
+      }
+
+      const parent = categoryTree.find(c => c.id === this.queryParams.parentCategoryId)
+      if (!parent) {
+        this.queryParams.parentCategoryId = null
+        if (this.queryParams.categoryId !== null) {
+          this.queryParams.categoryId = null
+        }
+        this.level2Categories = []
+        changed = true
+        return changed
+      }
+
+      this.level2Categories = parent.children || []
+      const exists = this.level2Categories.some(c => c.id === this.queryParams.categoryId)
+      if (!exists) {
+        if (this.queryParams.categoryId !== null) {
+          this.queryParams.categoryId = null
+          changed = true
+        }
+      }
+      return changed
+    },
+    handleParentCategoryChange(parentId) {
+      this.queryParams.categoryId = null
+      this.level2Categories = this.getLevel2CategoriesByParentId(parentId)
+    },
     getList() {
       this.loading = true
       queryIngredients(this.queryParams).then(response => {
-        this.ingredientList = response.content
-        this.total = response.totalElements
+        this.ingredientList = response.content || []
+        this.total = response.totalElements || 0
+      }).catch(() => {
+        this.ingredientList = []
+        this.total = 0
+      }).finally(() => {
         this.loading = false
       })
     },
@@ -140,8 +244,14 @@ export default {
       this.getList()
     },
     resetQuery() {
+      this.level2Categories = []
       this.resetForm('queryForm')
       this.handleQuery()
+    },
+    handlePagination({ page, limit }) {
+      this.queryParams.page = page - 1
+      this.queryParams.size = limit
+      this.getList()
     },
     handleSelectionChange(selection) {
       this.ids = selection.map(item => item.id)
@@ -150,6 +260,9 @@ export default {
     },
     handleAdd() {
       this.$refs.ingredientForm.handleAdd()
+    },
+    handleCategoryManage() {
+      this.categoryManagerVisible = true
     },
     handleUpdate(row) {
       this.$refs.ingredientForm.handleUpdate(row.id)
@@ -177,7 +290,8 @@ export default {
     handleDownload() {
       const params = {
         name: this.queryParams.name,
-        category: this.queryParams.category,
+        parentCategoryId: this.queryParams.parentCategoryId,
+        categoryId: this.queryParams.categoryId,
         enabled: this.queryParams.enabled
       }
       downloadIngredients(params).then(response => {

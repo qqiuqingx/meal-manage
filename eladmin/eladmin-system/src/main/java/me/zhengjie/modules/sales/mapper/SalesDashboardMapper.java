@@ -28,8 +28,8 @@ import java.util.List;
 @Mapper
 public interface SalesDashboardMapper {
 
-    /**
-     * 销售金额四卡片
+/**
+     * 销售看板概览（销售额 + 核销额）
      */
     SalesOverviewVO getOverview(@Param("startDate") String startDate, @Param("endDate") String endDate);
 

@@ -1,6 +1,7 @@
 package me.zhengjie.modules.customer.profile.domain.dto;
 
 import lombok.Data;
+import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
 
 import java.io.Serializable;
 import java.util.List;
@@ -25,7 +26,27 @@ public class CustomerProfileSaveDto implements Serializable {
 
     private List<String> allergyTags;
 
+    /**
+     * 排除菜品ID列表
+     */
+    private List<Integer> excludedDishIds;
+
+    /**
+     * 排除日期列表（日期+餐次组合，Wave 1/2 完整实现）
+     */
+    private java.util.List<ExcludedDateDto> excludedDates;
+
     private String medicalRequirements;
+
+    /**
+     * 特殊要求
+     */
+    private String specialRequirements;
+
+    /**
+     * 生产日期（格式：yyyy-MM-dd）
+     */
+    private String productionDate;
 
     // 备注
     private String remark;
@@ -65,9 +86,19 @@ public class CustomerProfileSaveDto implements Serializable {
         private java.math.BigDecimal finalAmount;
         private String scheduleMode;
         private String startDate;
+        private String startMealType;
         private String endDate;
         private String mealType;
         private String customerSource;
+        private Boolean trialConverted;
+        private Long trialOrderId;
         private String deliveryDates;
+        private Integer mainDishCount;
+        private Integer sideDishCount;
+        private Integer vegCount;
+        private Integer riceCount;
+        private String riceType;
+        private Integer soupCount;
+        private List<CustomerOrderReplaceRuleDto> replaceRules;
     }
 }

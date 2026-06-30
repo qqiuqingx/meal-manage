@@ -24,6 +24,8 @@ import lombok.Getter;
 import lombok.Setter;
 import me.zhengjie.base.BaseEntity;
 
+import java.time.LocalDate;
+
 /**
  * 排餐计划客户结果
  * @author qqx
@@ -92,4 +94,54 @@ public class MealPlanCustomer extends BaseEntity {
 
     @ApiModelProperty(value = "是否删除")
     private Boolean deleted;
+
+    /**
+     * 补主菜数量 = max(0, 主菜需求数 - 每日菜单固定提供1个)
+     */
+    @ApiModelProperty(value = "补主菜数量")
+    private Integer supplementaryMainCount;
+
+    /**
+     * 补副菜数量 = max(0, 副菜需求数 - 每日菜单固定提供1个)
+     */
+    @ApiModelProperty(value = "补副菜数量")
+    private Integer supplementarySideCount;
+
+    /**
+     * 补素菜数量 = max(0, 素菜需求数 - 每日菜单固定提供1个)
+     */
+    @ApiModelProperty(value = "补素菜数量")
+    private Integer supplementaryVegCount;
+
+    /**
+     * 补米饭数量 = max(0, 米饭需求数 - 每日菜单固定提供1个)
+     */
+    @ApiModelProperty(value = "补米饭数量")
+    private Integer supplementaryRiceCount;
+
+        /**
+     * 补汤数量 = max(0, 汤需求数 - 每日菜单固定提供1个)
+     */
+    @ApiModelProperty(value = "补汤数量")
+    private Integer supplementarySoupCount;
+
+    /**
+     * 早餐配送数量（BREAKFAST 餐次专用）
+     */
+    @ApiModelProperty(value = "早餐配送数量")
+    private Integer breakfastCount;
+
+    /**
+     * 特殊要求（关联查询填充）
+     */
+    @TableField(exist = false)
+    @ApiModelProperty(value = "特殊要求")
+    private String specialRequirements;
+
+    /**
+     * 客户生产日期（关联 customer_profile 查询填充）
+     */
+    @TableField(exist = false)
+    @ApiModelProperty(value = "客户生产日期")
+    private LocalDate productionDate;
 }

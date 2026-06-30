@@ -1,0 +1,507 @@
+<template>
+  <div class="meal-schedule-calendar">
+    <!-- 月份导航 -->
+    <div class="calendar-header">
+      <div class="calendar-header__nav">
+        <el-button-group>
+          <el-button size="small" icon="el-icon-arrow-left" @click="prevMonth">上个月</el-button>
+          <el-button size="small" @click="goToToday">今天</el-button>
+          <el-button size="small" @click="nextMonth">下个月</el-button>
+        </el-button-group>
+      </div>
+      <div class="calendar-header__title">
+        {{ currentYear }}年{{ currentMonth + 1 }}月
+      </div>
+      <div class="calendar-header__actions">
+        <el-button-group>
+          <el-button size="small" @click="selectAllDates">全选</el-button>
+          <el-button size="small" @click="clearAllDates">清空</el-button>
+        </el-button-group>
+      </div>
+    </div>
+
+    <!-- 星期表头 -->
+    <div class="calendar-weekdays">
+      <div
+        v-for="(day, index) in weekdays"
+        :key="index"
+        class="calendar-weekday"
+        :class="{ 'calendar-weekday--weekend': isWeekend(index) }"
+      >
+        {{ day }}
+      </div>
+    </div>
+
+    <!-- 日期网格 -->
+    <div class="calendar-grid">
+      <CalendarDay
+        v-for="(day, index) in calendarDays"
+        :key="index"
+        :date="day.date"
+        :is-current-month="day.isCurrentMonth"
+        :is-prev-month="day.isPrevMonth"
+        :is-next-month="day.isNextMonth"
+        :is-selected="isSelected(day.date)"
+        :disabled="!day.isCurrentMonth || !isDateValid(day.date)"
+        :meal-types="getMealTypesForDate(day.date)"
+        @click="handleDateClick"
+      />
+    </div>
+
+    <!-- 餐次配置对话框 -->
+    <el-dialog
+      :visible.sync="showMealSelector"
+      title="配置餐次"
+      width="400px"
+      :close-on-click-modal="false"
+      destroy-on-close
+      append-to-body
+      modal-append-to-body
+      @visible-change="handleMealSelectorVisibleChange"
+    >
+      <MealTypeSelector
+        v-if="selectedDate"
+        :date="selectedDate"
+        :value="selectedDateMealTypes"
+        :allowed-meal-types="selectedDateAllowedMealTypes"
+        @input="handleMealTypesChange"
+        @save="handleMealTypesSave"
+        @cancel="closeMealSelector"
+      />
+    </el-dialog>
+
+    <!-- 汇总信息 -->
+    <div v-if="!hideSummary" class="calendar-summary">
+      <div class="calendar-summary__item">
+        <span class="calendar-summary__label">已选日期：</span>
+        <span class="calendar-summary__value">{{ internalSelectedDates.length }} 天</span>
+      </div>
+      <div class="calendar-summary__item">
+        <span class="calendar-summary__label calendar-summary__label--breakfast">早餐：</span>
+        <span class="calendar-summary__value">{{ mealCounts.breakfastCount }} 份</span>
+      </div>
+      <div class="calendar-summary__item">
+        <span class="calendar-summary__label calendar-summary__label--lunch">午餐：</span>
+        <span class="calendar-summary__value">{{ mealCounts.lunchCount }} 份</span>
+      </div>
+      <div class="calendar-summary__item">
+        <span class="calendar-summary__label calendar-summary__label--dinner">晚餐：</span>
+        <span class="calendar-summary__value">{{ mealCounts.dinnerCount }} 份</span>
+      </div>
+      <div class="calendar-summary__item">
+        <span class="calendar-summary__label calendar-summary__label--total">午晚合计：</span>
+        <span class="calendar-summary__value">{{ mealCounts.lunchDinnerCount }} 份</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import CalendarDay from './CalendarDay.vue'
+import MealTypeSelector from './MealTypeSelector.vue'
+import PopupManager from 'element-ui/lib/utils/popup/popup-manager'
+import {
+  generateCalendarData,
+  formatDate,
+  parseDate,
+  addMonths,
+  calculateMealCounts,
+  normalizeDeliveryDates,
+  getDateRange,
+  MealType
+} from '@/utils/calendar'
+
+export default {
+  name: 'MealScheduleCalendar',
+  components: {
+    CalendarDay,
+    MealTypeSelector
+  },
+  props: {
+    // 已选日期（新格式：[{date: 'yyyy-MM-dd', mealTypes: [...]}, ...]）
+    value: {
+      type: Array,
+      default: () => []
+    },
+    // 订单开始日期
+    startDate: {
+      type: String,
+      default: null
+    },
+    // 订单开始餐次
+    startMealType: {
+      type: String,
+      default: 'BREAKFAST'
+    },
+    // 订单结束日期
+    endDate: {
+      type: String,
+      default: null
+    },
+    // 是否只读
+    readonly: {
+      type: Boolean,
+      default: false
+    },
+    // 是否隐藏汇总行（用于排除日期模式）
+    hideSummary: {
+      type: Boolean,
+      default: false
+    },
+    // 订单餐次类型，用于决定默认餐次和可选餐次
+    orderMealType: {
+      type: String,
+      default: 'ALL'
+    }
+  },
+  data() {
+    return {
+      currentYear: new Date().getFullYear(),
+      currentMonth: new Date().getMonth(),
+      calendarDays: [],
+      showMealSelector: false,
+      selectedDate: null,
+      selectedDateMealTypes: [],
+      weekdays: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'],
+      internalSelectedDates: []
+    }
+  },
+  computed: {
+    selectedDates() {
+      console.log('[Calendar] computed selectedDates, value:', JSON.stringify(this.value))
+      const result = normalizeDeliveryDates(this.value)
+      console.log('[Calendar] computed selectedDates result:', JSON.stringify(result))
+      return result
+    },
+    mealCounts() {
+      return calculateMealCounts(this.internalSelectedDates)
+    },
+    selectedDateAllowedMealTypes() {
+      return this.getAllowedMealTypesForDate(this.selectedDate)
+    }
+  },
+  watch: {
+    value: {
+      handler(val) {
+        console.log('[Calendar] watch.value:', JSON.stringify(val))
+        const normalized = normalizeDeliveryDates(val)
+        console.log('[Calendar] normalized:', JSON.stringify(normalized))
+        this.internalSelectedDates = normalized
+        this.normalizeSelectionsForConstraints()
+        this.$forceUpdate()
+      },
+      immediate: true
+    },
+    currentYear() {
+      this.generateCalendar()
+    },
+    currentMonth() {
+      this.generateCalendar()
+    },
+    startDate() {
+      this.normalizeSelectionsForConstraints()
+      this.generateCalendar()
+    },
+    startMealType() {
+      this.normalizeSelectionsForConstraints()
+    },
+    endDate() {
+      this.normalizeSelectionsForConstraints()
+      this.generateCalendar()
+    },
+    orderMealType() {
+      this.normalizeSelectionsForConstraints()
+      this.generateCalendar()
+    }
+  },
+  created() {
+    console.log('[Calendar] created, startDate:', this.startDate, 'endDate:', this.endDate, 'value:', JSON.stringify(this.value))
+    // 立即初始化 internalSelectedDates，防止首次渲染时数据为空
+    this.internalSelectedDates = normalizeDeliveryDates(this.value)
+    this.normalizeSelectionsForConstraints()
+    console.log('[Calendar] created internalSelectedDates:', JSON.stringify(this.internalSelectedDates))
+    this.generateCalendar()
+    // 如果有开始日期，跳到开始日期所在月份
+    if (this.startDate) {
+      const date = parseDate(this.startDate)
+      console.log('[Calendar] parsed startDate:', date)
+      if (date) {
+        this.currentYear = date.getFullYear()
+        this.currentMonth = date.getMonth()
+        console.log('[Calendar] jumped to', this.currentYear, this.currentMonth)
+      }
+    }
+  },
+  methods: {
+    generateCalendar() {
+      this.calendarDays = generateCalendarData(this.currentYear, this.currentMonth)
+    },
+    isSelected(date) {
+      const formattedDate = formatDate(date)
+      const selected = this.internalSelectedDates.some(item => item.date === formattedDate)
+      console.log('[Calendar] isSelected', formattedDate, '=>', selected, 'internalSelectedDates:', JSON.stringify(this.internalSelectedDates))
+      return selected
+    },
+    getMealTypesForDate(date) {
+      const formattedDate = formatDate(date)
+      const selected = this.internalSelectedDates.find(item => item.date === formattedDate)
+      return selected ? selected.mealTypes : []
+    },
+    getBaseAllowedMealTypes() {
+      switch (this.orderMealType) {
+        case 'LUNCH_DINNER':
+          return [MealType.LUNCH, MealType.DINNER]
+        case 'LUNCH':
+          return [MealType.LUNCH]
+        case 'DINNER':
+          return [MealType.DINNER]
+        case 'ALL':
+        default:
+          return [MealType.BREAKFAST, MealType.LUNCH, MealType.DINNER]
+      }
+    },
+    getAllowedMealTypesForDate(date) {
+      const baseAllowedMealTypes = this.getBaseAllowedMealTypes()
+      if (!date || !this.startDate) {
+        return baseAllowedMealTypes
+      }
+      const start = parseDate(this.startDate)
+      if (!start || formatDate(start) !== formatDate(date)) {
+        return baseAllowedMealTypes
+      }
+      const mealOrder = {
+        [MealType.BREAKFAST]: 1,
+        [MealType.LUNCH]: 2,
+        [MealType.DINNER]: 3
+      }
+      const startOrder = mealOrder[this.startMealType] || mealOrder[MealType.BREAKFAST]
+      return baseAllowedMealTypes.filter(type => (mealOrder[type] || 0) >= startOrder)
+    },
+    normalizeSelectionsForConstraints() {
+      const normalized = normalizeDeliveryDates(this.internalSelectedDates).map(item => {
+        const allowedMealTypes = this.getAllowedMealTypesForDate(parseDate(item.date))
+        return {
+          ...item,
+          mealTypes: (item.mealTypes || []).filter(type => allowedMealTypes.includes(type))
+        }
+      }).filter(item => this.isDateValid(parseDate(item.date)) && item.mealTypes.length > 0)
+
+      if (JSON.stringify(normalized) !== JSON.stringify(this.internalSelectedDates)) {
+        this.emitChange(normalized)
+      }
+    },
+    handleDateClick({ date, formattedDate }) {
+      if (this.readonly) return
+
+      const existingIndex = this.internalSelectedDates.findIndex(item => item.date === formattedDate)
+
+      if (existingIndex >= 0) {
+        // 已选中，打开餐次配置
+        this.openMealSelector(date, this.internalSelectedDates[existingIndex].mealTypes)
+      } else {
+        // 未选中，添加并配置餐次
+        this.addDate(date)
+      }
+    },
+    addDate(date) {
+      const formattedDate = formatDate(date)
+      const defaultMealTypes = this.getAllowedMealTypesForDate(date)
+      const newSelected = [
+        ...this.internalSelectedDates,
+        { date: formattedDate, mealTypes: [...defaultMealTypes] }
+      ]
+      this.emitChange(newSelected)
+      // 自动打开餐次配置
+      this.openMealSelector(date, [...defaultMealTypes])
+    },
+    removeDate(date) {
+      const formattedDate = formatDate(date)
+      const newSelected = this.internalSelectedDates.filter(item => item.date !== formattedDate)
+      this.emitChange(newSelected)
+    },
+    openMealSelector(date, mealTypes) {
+      this.selectedDate = date
+      const allowedMealTypes = this.getAllowedMealTypesForDate(date)
+      this.selectedDateMealTypes = mealTypes.filter(type => allowedMealTypes.includes(type))
+      this.showMealSelector = true
+    },
+    handleMealTypesSave(mealTypes) {
+      const formattedDate = formatDate(this.selectedDate)
+      const newSelected = this.internalSelectedDates.map(item => {
+        if (item.date === formattedDate) {
+          return { ...item, mealTypes: [...mealTypes] }
+        }
+        return item
+      })
+      this.emitChange(newSelected)
+      this.closeMealSelector()
+    },
+    closeMealSelector() {
+      this.showMealSelector = false
+      this.selectedDate = null
+      this.selectedDateMealTypes = []
+    },
+    handleMealSelectorVisibleChange(visible) {
+      if (!visible) {
+        this.closeMealSelector()
+      }
+    },
+    handleMealTypesChange(mealTypes) {
+      this.selectedDateMealTypes = [...mealTypes]
+    },
+    emitChange(value) {
+      const normalized = normalizeDeliveryDates(value)
+      this.internalSelectedDates = normalized
+      this.$emit('input', normalized)
+      this.$emit('selection-change', calculateMealCounts(normalized))
+    },
+    prevMonth() {
+      const newDate = addMonths(new Date(this.currentYear, this.currentMonth, 1), -1)
+      this.currentYear = newDate.getFullYear()
+      this.currentMonth = newDate.getMonth()
+    },
+    nextMonth() {
+      const newDate = addMonths(new Date(this.currentYear, this.currentMonth, 1), 1)
+      this.currentYear = newDate.getFullYear()
+      this.currentMonth = newDate.getMonth()
+    },
+    goToToday() {
+      const today = new Date()
+      this.currentYear = today.getFullYear()
+      this.currentMonth = today.getMonth()
+    },
+    selectAllDates() {
+      if (this.readonly) return
+
+      let dateRange
+      if (this.startDate && this.endDate) {
+        dateRange = getDateRange(this.startDate, this.endDate)
+      } else {
+        dateRange = this.calendarDays
+          .filter(day => day.isCurrentMonth && this.isDateValid(parseDate(day.date)))
+          .map(day => day.date)
+      }
+
+      const newSelected = dateRange.map(date => ({
+        date,
+        mealTypes: [...this.getAllowedMealTypesForDate(parseDate(date))]
+      })).filter(item => item.mealTypes.length > 0)
+      this.emitChange(newSelected)
+    },
+    clearAllDates() {
+      if (this.readonly) return
+      this.$confirm('确定要清空所有选中的日期吗？', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+        zIndex: PopupManager.nextZIndex()
+      }).then(() => {
+        this.closeMealSelector()
+        this.emitChange([])
+      }).catch(() => {})
+    },
+    isDateValid(date) {
+      if (!this.startDate) return true
+      const start = parseDate(this.startDate)
+      if (!start) return true
+      const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+      const s = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+      return d >= s
+    },
+    isWeekend(index) {
+      return index === 0 || index === 6
+    }
+  }
+}
+</script>
+
+<style scoped>
+.meal-schedule-calendar {
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 10px;
+  background-color: #ffffff;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.calendar-header__title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.calendar-weekday {
+  text-align: center;
+  padding: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #606266;
+}
+
+.calendar-weekday--weekend {
+  color: #f56c6c;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendar-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+}
+
+.calendar-summary__item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.calendar-summary__label {
+  font-size: 14px;
+  color: #606266;
+}
+
+.calendar-summary__value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.calendar-summary__label--breakfast {
+  color: #67c23a;
+}
+
+.calendar-summary__label--lunch {
+  color: #e6a23c;
+}
+
+.calendar-summary__label--dinner {
+  color: #409eff;
+}
+
+.calendar-summary__label--total {
+  font-weight: 500;
+}
+</style>

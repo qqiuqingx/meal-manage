@@ -74,6 +74,12 @@ export const constantRouterMap = [
         component: (resolve) => require(['@/views/meal/verificationLog/index'], resolve),
         name: 'VerificationLog',
         meta: { title: '核销记录', noCache: true }
+      },
+      {
+        path: 'dish-list',
+        component: (resolve) => require(['@/views/meal/dish/list'], resolve),
+        name: 'DishList',
+        meta: { title: '菜品主档列表', noCache: true }
       }
     ]
   }

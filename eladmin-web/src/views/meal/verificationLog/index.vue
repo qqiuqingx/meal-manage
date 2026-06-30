@@ -23,6 +23,7 @@
         </el-form-item>
         <el-form-item label="餐次" prop="mealType">
           <el-select v-model="queryParams.mealType" placeholder="请选择餐次" clearable style="width: 100px;">
+            <el-option label="早餐" value="BREAKFAST" />
             <el-option label="午餐" value="LUNCH" />
             <el-option label="晚餐" value="DINNER" />
           </el-select>
@@ -91,8 +92,8 @@
         </el-table-column>
         <el-table-column label="餐次" prop="mealType" align="center" width="70">
           <template slot-scope="scope">
-            <el-tag :type="scope.row.mealType === 'LUNCH' ? 'primary' : 'warning'" size="mini">
-              {{ scope.row.mealType === 'LUNCH' ? '午餐' : '晚餐' }}
+            <el-tag :type="mealTypeTagType(scope.row.mealType)" size="mini">
+              {{ mealTypeText(scope.row.mealType) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -112,9 +113,10 @@
           </template>
         </el-table-column>
         <el-table-column label="备注" prop="remark" align="center" show-overflow-tooltip />
-        <el-table-column label="操作" align="center" width="70" fixed="right">
+        <el-table-column label="操作" align="center" width="110" fixed="right">
           <template slot-scope="scope">
             <el-button type="text" icon="el-icon-view" @click="handleDetail(scope.row)">详情</el-button>
+            <el-button type="text" icon="el-icon-delete" style="color: #f56c6c;" @click="handleDelete(scope.row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -133,7 +135,7 @@
     <el-dialog title="核销记录详情" :visible.sync="detailVisible" width="600px" append-to-body>
       <el-descriptions :column="2" border size="small">
         <el-descriptions-item label="排餐日期">{{ formatDate(detail.recordDate) }}</el-descriptions-item>
-        <el-descriptions-item label="餐次">{{ detail.mealType === 'LUNCH' ? '午餐' : '晚餐' }}</el-descriptions-item>
+        <el-descriptions-item label="餐次">{{ mealTypeText(detail.mealType) }}</el-descriptions-item>
         <el-descriptions-item label="客户名称">{{ detail.customerName }}</el-descriptions-item>
         <el-descriptions-item label="客户编码">{{ detail.customerCode }}</el-descriptions-item>
         <el-descriptions-item label="订单ID">{{ detail.orderId }}</el-descriptions-item>
@@ -155,8 +157,9 @@
 </template>
 
 <script>
-import { queryVerificationLogs } from '@/api/mealVerification'
+import { queryVerificationLogs, deleteVerificationLog } from '@/api/mealVerification'
 import Pagination from '@/components/Pagination'
+import { MealTypeName } from '@/utils/calendar'
 
 export default {
   name: 'VerificationLog',
@@ -186,6 +189,14 @@ export default {
     this.getList()
   },
   methods: {
+    mealTypeText(mealType) {
+      return MealTypeName[mealType] || mealType || '-'
+    },
+    mealTypeTagType(mealType) {
+      if (mealType === 'BREAKFAST') return 'success'
+      if (mealType === 'LUNCH') return 'primary'
+      return 'warning'
+    },
     getList() {
       this.loading = true
       const params = {}
@@ -224,6 +235,20 @@ export default {
     handleDetail(row) {
       this.detail = row
       this.detailVisible = true
+    },
+    handleDelete(row) {
+      this.$confirm('确定要删除该核销记录吗？删除后将退回餐数和取消核销状态。', '删除确认', {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        deleteVerificationLog(row.id, '页面删除').then(() => {
+          this.getList()
+          this.$message.success('删除成功')
+        }).catch(() => {
+          // error handled by interceptor
+        })
+      }).catch(() => {})
     },
     formatDate(val) {
       if (!val) return '—'

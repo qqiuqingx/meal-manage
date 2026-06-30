@@ -1,30 +1,50 @@
 package me.zhengjie.modules.meal.service.impl;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
-import me.zhengjie.modules.customer.pkg.domain.SubPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
-import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
+import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
+import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
+import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.meal.domain.Dish;
 import me.zhengjie.modules.meal.domain.DishIngredientRelation;
 import me.zhengjie.modules.meal.domain.MealPlan;
+import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.meal.domain.dto.DishQueryCriteria;
+import me.zhengjie.modules.meal.domain.dto.MealDepletionWarningDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
+import me.zhengjie.modules.meal.domain.dto.MealPlanDetailVO;
+import me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto;
+import me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.meal.mapper.DishMapper;
+import me.zhengjie.modules.meal.mapper.MealSchedulePlanMapper;
+import me.zhengjie.modules.meal.service.DishIngredientCategoryService;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerItemMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
+import me.zhengjie.modules.meal.mapper.MealPlanManualReplaceMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
+import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
@@ -36,17 +56,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class MealPlanServiceImplTest {
 
     @Mock
     private MealPlanMapper mealPlanMapper;
     @Mock
     private MealPlanCustomerMapper mealPlanCustomerMapper;
+    @Mock
+    private MealPlanManualReplaceMapper mealPlanManualReplaceMapper;
     @Mock
     private MealPlanCustomerItemMapper mealPlanCustomerItemMapper;
     @Mock
@@ -56,26 +81,524 @@ class MealPlanServiceImplTest {
     @Mock
     private ParentPackageMapper parentPackageMapper;
     @Mock
-    private SubPackageMapper subPackageMapper;
-    @Mock
     private DishMapper dishMapper;
     @Mock
     private DishIngredientMapper dishIngredientMapper;
+    @Mock
+    private MealSchedulePlanMapper mealSchedulePlanMapper;
+    @Mock
+    private DishIngredientCategoryService dishIngredientCategoryService;
+    @Mock
+    private CustomerMealScheduleAdditionMapper customerMealScheduleAdditionMapper;
+    @Mock
+    private CustomerOrderReplaceRuleMapper replaceRuleMapper;
 
     @InjectMocks
     private MealPlanServiceImpl mealPlanService;
 
+    @BeforeEach
+    void setUp() {
+        lenient().when(dishIngredientCategoryService.getCategoryIngredientMapping()).thenReturn(Collections.emptyMap());
+        lenient().when(mealPlanManualReplaceMapper.selectByMealPlanId(anyLong())).thenReturn(Collections.emptyList());
+    }
+
     @Test
     void shouldRejectInvalidMealType() {
-        assertThrows(BadRequestException.class, () -> mealPlanService.generateMealPlan("2026-04-01", "BREAKFAST", null));
+        assertThrows(BadRequestException.class, () -> mealPlanService.generateMealPlan("2026-04-01", "INVALID", null));
         verify(mealPlanMapper, never()).insert(any(MealPlan.class));
+    }
+
+    @Test
+    void shouldRejectIncompleteMenuSlotParams() {
+        assertThrows(BadRequestException.class,
+                () -> mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null, 2, null));
+        assertThrows(BadRequestException.class,
+                () -> mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null, null, 3));
+        verify(mealPlanMapper, never()).insert(any(MealPlan.class));
+    }
+
+    @Test
+    void shouldRejectOutOfRangeMenuSlotParams() {
+        assertThrows(BadRequestException.class,
+                () -> mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null, 0, 3));
+        assertThrows(BadRequestException.class,
+                () -> mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null, 5, 3));
+        assertThrows(BadRequestException.class,
+                () -> mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null, 2, 0));
+        assertThrows(BadRequestException.class,
+                () -> mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null, 2, 8));
+        verify(mealPlanMapper, never()).insert(any(MealPlan.class));
+    }
+
+    @Test
+    void shouldWarnWhenTargetDateScheduleWillDepleteLunchDinnerPool() {
+        LocalDate targetDate = LocalDate.of(2026, 5, 29);
+        CustomerOrder order = buildOrder();
+        order.setId(101L);
+        order.setCustomerId(201L);
+        order.setCustomerCode("C201");
+        order.setBreakfastCount(10);
+        order.setLunchDinnerCount(10);
+        order.setRemainingCount(12);
+
+        CustomerProfile customer = buildCustomer();
+        customer.setId(201L);
+        customer.setCustomerCode("C201");
+        customer.setCustomerName("李四");
+
+        when(customerOrderMapper.selectList(any())).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(101L)))
+                .thenReturn(Arrays.asList(
+                        buildVerifiedCount(101L, "LUNCH", 4),
+                        buildVerifiedCount(101L, "DINNER", 4)
+                ));
+        when(mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(Collections.singletonList(101L), targetDate))
+                .thenReturn(Arrays.asList(
+                        buildScheduledCount(101L, "LUNCH", 1),
+                        buildScheduledCount(101L, "DINNER", 1)
+                ));
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(customer));
+
+        List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
+
+        assertEquals(1, warnings.size());
+        assertEquals("LUNCH_DINNER", warnings.get(0).getMealType());
+        assertEquals(Integer.valueOf(2), warnings.get(0).getRemainingCount());
+        assertEquals(Integer.valueOf(2), warnings.get(0).getTomorrowScheduledCount());
+    }
+
+    @Test
+    void shouldWarnLunchDinnerPoolEvenWhenTotalRemainingCountIsHigh() {
+        LocalDate targetDate = LocalDate.of(2026, 5, 29);
+        CustomerOrder order = buildOrder();
+        order.setId(102L);
+        order.setCustomerId(202L);
+        order.setCustomerCode("C202");
+        order.setBreakfastCount(30);
+        order.setLunchDinnerCount(10);
+        order.setRemainingCount(31);
+
+        CustomerProfile customer = buildCustomer();
+        customer.setId(202L);
+        customer.setCustomerCode("C202");
+        customer.setCustomerName("王五");
+
+        when(customerOrderMapper.selectList(any())).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(102L)))
+                .thenReturn(Collections.singletonList(buildVerifiedCount(102L, "LUNCH", 9)));
+        when(mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(Collections.singletonList(102L), targetDate))
+                .thenReturn(Collections.emptyList());
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(customer));
+
+        List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
+
+        assertEquals(1, warnings.size());
+        assertEquals("LUNCH_DINNER", warnings.get(0).getMealType());
+        assertEquals(Integer.valueOf(1), warnings.get(0).getRemainingCount());
+        assertEquals(Integer.valueOf(0), warnings.get(0).getTomorrowScheduledCount());
+    }
+
+    @Test
+    void shouldWarnWhenTargetDateScheduleWillDepleteBreakfastPool() {
+        LocalDate targetDate = LocalDate.of(2026, 6, 1);
+        CustomerOrder order = buildOrder();
+        order.setId(103L);
+        order.setCustomerId(203L);
+        order.setCustomerCode("C203");
+        order.setBreakfastCount(3);
+        order.setLunchDinnerCount(10);
+        order.setRemainingCount(11);
+
+        CustomerProfile customer = buildCustomer();
+        customer.setId(203L);
+        customer.setCustomerCode("C203");
+        customer.setCustomerName("赵六");
+
+        when(customerOrderMapper.selectList(any())).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(103L)))
+                .thenReturn(Collections.singletonList(buildVerifiedCount(103L, "BREAKFAST", 2)));
+        when(mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(Collections.singletonList(103L), targetDate))
+                .thenReturn(Collections.singletonList(buildScheduledCount(103L, "BREAKFAST", 1)));
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(customer));
+
+        List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
+
+        assertEquals(1, warnings.size());
+        assertEquals("BREAKFAST", warnings.get(0).getMealType());
+        assertEquals("早餐", warnings.get(0).getMealTypeName());
+        assertEquals(Integer.valueOf(1), warnings.get(0).getRemainingCount());
+        assertEquals(Integer.valueOf(1), warnings.get(0).getTomorrowScheduledCount());
+    }
+
+    @Test
+    void shouldNotWarnWhenMealPoolAlreadyHasNoRemainingCount() {
+        LocalDate targetDate = LocalDate.of(2026, 6, 1);
+        CustomerOrder order = buildOrder();
+        order.setId(104L);
+        order.setCustomerId(204L);
+        order.setCustomerCode("C204");
+        order.setBreakfastCount(2);
+        order.setLunchDinnerCount(0);
+        order.setRemainingCount(1);
+
+        when(customerOrderMapper.selectList(any())).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(104L)))
+                .thenReturn(Collections.singletonList(buildVerifiedCount(104L, "BREAKFAST", 2)));
+        when(mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(Collections.singletonList(104L), targetDate))
+                .thenReturn(Collections.singletonList(buildScheduledCount(104L, "BREAKFAST", 1)));
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.emptyList());
+
+        List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
+
+        assertEquals(0, warnings.size());
+    }
+
+    @Test
+    void shouldNotWarnWhenTargetDateScheduleDoesNotConsumeAllRemainingCount() {
+        LocalDate targetDate = LocalDate.of(2026, 6, 1);
+        CustomerOrder order = buildOrder();
+        order.setId(105L);
+        order.setCustomerId(205L);
+        order.setCustomerCode("C205");
+        order.setBreakfastCount(5);
+        order.setLunchDinnerCount(0);
+        order.setRemainingCount(3);
+
+        when(customerOrderMapper.selectList(any())).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(105L)))
+                .thenReturn(Collections.singletonList(buildVerifiedCount(105L, "BREAKFAST", 2)));
+        when(mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(Collections.singletonList(105L), targetDate))
+                .thenReturn(Collections.singletonList(buildScheduledCount(105L, "BREAKFAST", 1)));
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.emptyList());
+
+        List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
+
+        assertEquals(0, warnings.size());
+    }
+
+    @Test
+    void shouldUseOrderCustomerCodeWhenProfileIsMissingForDepletionWarning() {
+        LocalDate targetDate = LocalDate.of(2026, 6, 1);
+        CustomerOrder order = buildOrder();
+        order.setId(106L);
+        order.setCustomerId(206L);
+        order.setCustomerCode("ORDER-CODE");
+        order.setBreakfastCount(1);
+        order.setLunchDinnerCount(0);
+        order.setRemainingCount(1);
+
+        when(customerOrderMapper.selectList(any())).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(106L)))
+                .thenReturn(Collections.emptyList());
+        when(mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(Collections.singletonList(106L), targetDate))
+                .thenReturn(Collections.singletonList(buildScheduledCount(106L, "BREAKFAST", 1)));
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.emptyList());
+
+        List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
+
+        assertEquals(1, warnings.size());
+        assertEquals("ORDER-CODE", warnings.get(0).getCustomerCode());
+        assertEquals("", warnings.get(0).getCustomerName());
+    }
+
+    @Test
+    void shouldRejectCalendarAdjustmentDeleteWhenGeneratedMealIsVerified() {
+        CustomerGeneratedMealPlanDto generated = new CustomerGeneratedMealPlanDto();
+        generated.setMealPlanId(10L);
+        generated.setCustomerPlanId(20L);
+        generated.setCustomerId(30L);
+        generated.setRecordDate(LocalDate.of(2026, 5, 24));
+        generated.setMealType("LUNCH");
+        generated.setVerified(true);
+
+        when(mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(30L, LocalDate.of(2026, 5, 24), "LUNCH"))
+                .thenReturn(Collections.singletonList(generated));
+
+        assertThrows(BadRequestException.class,
+                () -> mealPlanService.deleteUnverifiedCustomerMealForCalendarAdjustment(30L, "2026-05-24", "LUNCH"));
+        verify(mealPlanCustomerItemMapper, never()).softDeleteByCustomerPlanIds(anyList());
+        verify(mealPlanCustomerMapper, never()).softDeleteByIds(anyList());
+    }
+
+    @Test
+    void shouldSoftDeleteUnverifiedGeneratedMealForCalendarAdjustment() {
+        CustomerGeneratedMealPlanDto generated = new CustomerGeneratedMealPlanDto();
+        generated.setMealPlanId(10L);
+        generated.setCustomerPlanId(20L);
+        generated.setCustomerId(30L);
+        generated.setRecordDate(LocalDate.of(2026, 5, 24));
+        generated.setMealType("LUNCH");
+        generated.setVerified(false);
+
+        MealPlan mealPlan = new MealPlan();
+        mealPlan.setId(10L);
+        mealPlan.setDeleted(false);
+        when(mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(30L, LocalDate.of(2026, 5, 24), "LUNCH"))
+                .thenReturn(Collections.singletonList(generated));
+        when(mealPlanMapper.selectById(10L)).thenReturn(mealPlan);
+        when(mealPlanCustomerMapper.selectByMealPlanId(10L)).thenReturn(Collections.emptyList());
+
+        int deletedCount = mealPlanService.deleteUnverifiedCustomerMealForCalendarAdjustment(30L, "2026-05-24", "LUNCH");
+
+        assertEquals(1, deletedCount);
+        verify(mealPlanCustomerItemMapper).softDeleteByCustomerPlanIds(Collections.singletonList(20L));
+        verify(mealPlanCustomerMapper).softDeleteByIds(Collections.singletonList(20L));
+        verify(mealPlanMapper).softDeletePlanById(10L);
+    }
+
+    @Test
+    void shouldIgnoreManualAdditionOrderOutsideDateRangeWhenGeneratingMealPlan() throws Exception {
+        CustomerMealScheduleAddition addition = new CustomerMealScheduleAddition();
+        addition.setOrderId(10L);
+        addition.setCustomerId(1L);
+        addition.setRecordDate(LocalDate.of(2026, 5, 25));
+        addition.setMealType("LUNCH");
+
+        CustomerOrder expiredOrder = buildOrder();
+        expiredOrder.setId(10L);
+        expiredOrder.setStatus(1);
+        expiredOrder.setRemainingCount(5);
+        expiredOrder.setStartDate(LocalDate.of(2026, 4, 1));
+        expiredOrder.setEndDate(LocalDate.of(2026, 4, 30));
+
+        when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(LocalDate.of(2026, 5, 25), "LUNCH"))
+                .thenReturn(Collections.singletonList(addition));
+        when(customerOrderMapper.selectById(10L)).thenReturn(expiredOrder);
+
+        Method method = MealPlanServiceImpl.class.getDeclaredMethod(
+                "mergeManualAdditionOrders", List.class, LocalDate.class, String.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<CustomerOrder> result = (List<CustomerOrder>) method.invoke(
+                mealPlanService, Collections.emptyList(), LocalDate.of(2026, 5, 25), "LUNCH");
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void shouldTreatLunchAndDinnerAsSharedSchedulePoolWhenFilteringValidOrders() throws Exception {
+        CustomerOrder order = buildOrder();
+        order.setId(10L);
+        order.setCustomerId(1L);
+        order.setCustomerName("A009");
+        order.setCustomerCode("A009");
+        order.setLunchDinnerCount(1);
+        order.setMealType("LUNCH_DINNER");
+        order.setStartDate(LocalDate.of(2026, 4, 1));
+        order.setEndDate(LocalDate.of(2026, 4, 30));
+
+        CustomerProfile customer = buildCustomer();
+        customer.setId(1L);
+        customer.setCustomerCode("A009");
+        customer.setCustomerName("A009");
+
+        when(customerOrderMapper.findByDateRangeAndMealType(LocalDate.of(2026, 4, 2), "DINNER"))
+                .thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 2), "DINNER"))
+                .thenReturn(Collections.singletonList(order));
+        when(mealPlanCustomerMapper.countScheduledByOrderIds(Collections.singletonList(10L), "DINNER"))
+                .thenReturn(Collections.singletonList(buildScheduledCount(10L, "LUNCH", 1)));
+        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+
+        Method method = MealPlanServiceImpl.class.getDeclaredMethod(
+                "loadValidOrders", LocalDate.class, String.class, Long.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<CustomerOrder> result = (List<CustomerOrder>) method.invoke(
+                mealPlanService, LocalDate.of(2026, 4, 2), "DINNER", null);
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void shouldLogManualAdditionCountAndCustomersWhenMergingOrders() throws Exception {
+        CustomerMealScheduleAddition additionA = new CustomerMealScheduleAddition();
+        additionA.setOrderId(10L);
+        additionA.setCustomerId(1L);
+        additionA.setRecordDate(LocalDate.of(2026, 4, 1));
+        additionA.setMealType("LUNCH");
+
+        CustomerMealScheduleAddition additionB = new CustomerMealScheduleAddition();
+        additionB.setOrderId(11L);
+        additionB.setCustomerId(2L);
+        additionB.setRecordDate(LocalDate.of(2026, 4, 1));
+        additionB.setMealType("LUNCH");
+
+        CustomerOrder orderA = buildOrder();
+        orderA.setId(10L);
+        orderA.setCustomerId(1L);
+        orderA.setCustomerName("张三");
+        orderA.setCustomerCode("C001");
+
+        CustomerOrder orderB = buildOrder();
+        orderB.setId(11L);
+        orderB.setCustomerId(2L);
+        orderB.setCustomerName("李四");
+        orderB.setCustomerCode("C002");
+
+        when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Arrays.asList(additionA, additionB));
+        when(customerOrderMapper.selectById(10L)).thenReturn(orderA);
+        when(customerOrderMapper.selectById(11L)).thenReturn(orderB);
+
+        Logger logger = (Logger) LoggerFactory.getLogger(MealPlanServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            Method method = MealPlanServiceImpl.class.getDeclaredMethod(
+                    "mergeManualAdditionOrders", List.class, LocalDate.class, String.class);
+            method.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            List<CustomerOrder> result = (List<CustomerOrder>) method.invoke(
+                    mealPlanService, Collections.emptyList(), LocalDate.of(2026, 4, 1), "LUNCH");
+
+            assertEquals(2, result.size());
+            String logOutput = appender.list.stream()
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .reduce((left, right) -> left + "\n" + right)
+                    .orElse("");
+            assertTrue(logOutput.contains("人工新增排餐记录查询完成"));
+            assertTrue(logOutput.contains("记录数: 2"));
+            assertTrue(logOutput.contains("张三-C001"));
+            assertTrue(logOutput.contains("李四-C002"));
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
+    void shouldUseManualMenuSlotWhenProvided() {
+        CustomerOrder order = buildOrder();
+        order.setMainDishCount(1);
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("2-3"), 1);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(2, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.singletonList(mainIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null, 2, 3);
+
+        assertEquals(1, result.getSuccessCount());
+        verify(mealSchedulePlanMapper).findBySchedule(2, 3, "LUNCH");
+    }
+
+    @Test
+    void shouldFallbackToDateDerivedMenuSlotWhenNotProvided() {
+        CustomerOrder order = buildOrder();
+        order.setMainDishCount(1);
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.singletonList(mainIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null, null, null);
+
+        assertEquals(1, result.getSuccessCount());
+        verify(mealSchedulePlanMapper).findBySchedule(1, 3, "LUNCH");
+    }
+
+    @Test
+    void shouldIncludeManualAdditionOrderWhenScheduleModeDoesNotMatch() {
+        CustomerOrder order = buildOrder();
+        order.setScheduleMode("WEEKEND");
+        order.setMainDishCount(1);
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+        CustomerMealScheduleAddition addition = new CustomerMealScheduleAddition();
+        addition.setOrderId(order.getId());
+        addition.setCustomerId(order.getCustomerId());
+        addition.setRecordDate(LocalDate.of(2026, 4, 1));
+        addition.setMealType("LUNCH");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.emptyList());
+        when(customerOrderMapper.findByDateRangeAndMealType(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Collections.singletonList(addition));
+        when(customerMealScheduleAdditionMapper.selectActiveByOrderDateMeal(order.getId(), LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(addition);
+        when(customerOrderMapper.selectById(order.getId())).thenReturn(order);
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.singletonList(mainIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getSuccessCount());
     }
 
     @Test
     void shouldGenerateMealPlanSuccessfully() {
         CustomerOrder order = buildOrder();
+        order.setMainDishCount(1);
+        order.setSideDishCount(0);
+        order.setVegCount(1);
+        order.setRiceCount(0);
+        order.setSoupCount(1);
         CustomerProfile customer = buildCustomer();
-        SubPackage subPackage = buildSubPackage(1, 1, true, false);
         ParentPackage parentPackage = buildParentPackage();
         Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
         Dish vegDish = buildDish(12, "清炒菜心", "VEGETABLE", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 2);
@@ -86,10 +609,25 @@ class MealPlanServiceImplTest {
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
-        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
-        when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        // Stub insert to return 1 and assign an ID to the inserted record
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
-        when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, vegDish, soupDish));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, vegDish, soupDish));
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(mainIngredient, vegIngredient, soupIngredient));
 
         MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
@@ -98,39 +636,117 @@ class MealPlanServiceImplTest {
         assertEquals(1, result.getSuccessCount());
         assertEquals(0, result.getFailCount());
         assertTrue(result.getFailDetails().isEmpty());
-        verify(dishMapper).findBySchedule(1, 3, "LUNCH");
+        verify(mealSchedulePlanMapper).findBySchedule(1, 3, "LUNCH");
         verify(dishMapper, never()).selectList(null);
         verify(customerOrderMapper, never()).selectList(null);
         verify(mealPlanMapper).insert(any(MealPlan.class));
         verify(mealPlanCustomerMapper).insert(any());
-        verify(mealPlanCustomerItemMapper).insert(any());
+        // 3 dishes (MAIN, VEGETABLE, SOUP) each get one insert call
+        verify(mealPlanCustomerItemMapper, org.mockito.Mockito.times(3)).insert(any());
+        // verify supplementary counts: supplementary = max(0, required - 1)
+        ArgumentCaptor<MealPlanCustomer> captor = ArgumentCaptor.forClass(MealPlanCustomer.class);
+        verify(mealPlanCustomerMapper).insert(captor.capture());
+        MealPlanCustomer entity = captor.getValue();
+        assertEquals(0, entity.getSupplementaryMainCount()); // max(0, 1-1)
+        assertEquals(0, entity.getSupplementarySideCount()); // max(0, 1-1)
+        assertEquals(0, entity.getSupplementaryVegCount());
+        assertEquals(0, entity.getSupplementaryRiceCount());
+        assertEquals(0, entity.getSupplementarySoupCount());
     }
 
     @Test
     void shouldRecordFailureWhenRequiredDishMissing() {
         CustomerOrder order = buildOrder();
+        order.setMainDishCount(2);
+        order.setSideDishCount(0);
+        order.setVegCount(0);
+        order.setRiceCount(0);
+        order.setSoupCount(0);
         CustomerProfile customer = buildCustomer();
-        SubPackage subPackage = buildSubPackage(2, 0, false, false);
         ParentPackage parentPackage = buildParentPackage();
         Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
         DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
-        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
-        when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        lenient().when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
-        when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.singletonList(mainIngredient));
 
         MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
 
         assertEquals(1, result.getTotalCount());
-        assertEquals(0, result.getSuccessCount());
-        assertEquals(1, result.getFailCount());
-        assertEquals("荤菜不足，必须同时选出主菜和副菜", result.getFailDetails().get(0).getFailReason());
-        verify(mealPlanCustomerMapper).insert(any());
-        verify(mealPlanCustomerItemMapper, never()).insert(any());
+        assertEquals(1, result.getSuccessCount());
+        assertEquals(0, result.getFailCount());
+        verify(mealPlanCustomerItemMapper, org.mockito.Mockito.times(1)).insert(any());
+
+        ArgumentCaptor<MealPlanCustomer> captor = ArgumentCaptor.forClass(MealPlanCustomer.class);
+        verify(mealPlanCustomerMapper).insert(captor.capture());
+        assertEquals(1, captor.getValue().getSupplementaryMainCount());
+    }
+
+    @Test
+    void shouldRebuildFailDetailsForPartialRerunWhenSummaryAndCurrentDetailsMismatch() {
+        MealPlan existingPlan = new MealPlan();
+        existingPlan.setId(99L);
+        existingPlan.setRecordDate(LocalDate.of(2026, 4, 1));
+        existingPlan.setMealType("LUNCH");
+
+        CustomerOrder order = buildOrder();
+
+        MealPlan refreshPlan = new MealPlan();
+        refreshPlan.setId(99L);
+        refreshPlan.setRecordDate(LocalDate.of(2026, 4, 1));
+        refreshPlan.setMealType("LUNCH");
+        refreshPlan.setSuccessCount(0);
+        refreshPlan.setFailCount(1);
+        refreshPlan.setTotalCount(1);
+
+        MealPlanCustomer historicalFail = new MealPlanCustomer();
+        historicalFail.setStatus(0);
+        historicalFail.setFailReason("历史失败");
+
+        MealPlanCustomer latestFail1 = new MealPlanCustomer();
+        latestFail1.setStatus(0);
+        latestFail1.setFailReason("历史失败");
+        MealPlanCustomer latestFail2 = new MealPlanCustomer();
+        latestFail2.setStatus(0);
+        latestFail2.setFailReason("客户档案不存在");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(existingPlan);
+        when(mealPlanMapper.findCustomerPlanIdsByMealPlanIdAndCustomerId(99L, 1L)).thenReturn(Collections.singletonList(501L));
+        when(mealPlanMapper.selectById(99L)).thenReturn(refreshPlan);
+        when(mealPlanCustomerMapper.selectByMealPlanId(99L))
+                .thenReturn(Collections.singletonList(historicalFail))
+                .thenReturn(Arrays.asList(latestFail1, latestFail2));
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.emptyList());
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", 1L);
+
+        assertEquals(2, result.getFailCount());
+        assertEquals(2, result.getFailDetails().size());
+        assertEquals("历史失败", result.getFailDetails().get(0).getFailReason());
+        assertEquals("客户档案不存在", result.getFailDetails().get(1).getFailReason());
+        verify(mealPlanCustomerItemMapper).softDeleteByCustomerPlanIds(Collections.singletonList(501L));
+        verify(mealPlanCustomerMapper).softDeleteByIds(Collections.singletonList(501L));
     }
 
     @Test
@@ -140,8 +756,8 @@ class MealPlanServiceImplTest {
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(existingPlan);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.emptyList());
-        when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
-        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.emptyList());
+        lenient().when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
+        lenient().when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.emptyList());
 
         mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
 
@@ -155,7 +771,6 @@ class MealPlanServiceImplTest {
     void shouldLoadOnlyScheduledDishIngredients() {
         CustomerOrder order = buildOrder();
         CustomerProfile customer = buildCustomer();
-        SubPackage subPackage = buildSubPackage(1, 0, false, false);
         ParentPackage parentPackage = buildParentPackage();
         Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
         Dish sideDish = buildDish(12, "小炒肉", "SIDE", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 2);
@@ -164,10 +779,24 @@ class MealPlanServiceImplTest {
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
-        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
-        when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        lenient().when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
-        when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, sideDish));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, sideDish));
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(mainIngredient, sideIngredient));
 
         mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
@@ -179,9 +808,9 @@ class MealPlanServiceImplTest {
     @Test
     void shouldUseExactAllergyMatch() {
         CustomerOrder order = buildOrder();
+        order.setMainDishCount(1);
         CustomerProfile customer = buildCustomer();
         customer.setAllergyTags(Collections.singletonList("虾"));
-        SubPackage subPackage = buildSubPackage(1, 0, false, false);
         ParentPackage parentPackage = buildParentPackage();
         Dish blockedDish = buildDish(11, "白灼虾", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
         Dish allowedDish = buildDish(12, "虾仁蒸蛋", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 2);
@@ -190,17 +819,678 @@ class MealPlanServiceImplTest {
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
-        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
-        when(subPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(subPackage));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        lenient().when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
-        when(dishMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(blockedDish, allowedDish));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(blockedDish, allowedDish));
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(blockedIngredient, allowedIngredient));
 
         mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
 
         ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomerItem> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomerItem.class);
+        // selected dish (1 insert) + allergy filtered dish (1 insert) = 2 inserts total
+        verify(mealPlanCustomerItemMapper, org.mockito.Mockito.times(2)).insert(captor.capture());
+        // captor.getAllValues() returns in insertion order; last = allergy record (dishId=11)
+        assertEquals(11, captor.getAllValues().get(1).getDishId());
+        assertEquals("白灼虾", captor.getAllValues().get(1).getDishName());
+    }
+
+    @Test
+    void shouldMarkExcludedSelectedDishAsReplaced() {
+        CustomerOrder order = buildOrder();
+        order.setMainDishCount(1);
+        CustomerProfile customer = buildCustomer();
+        customer.setExcludedDishIds(Collections.singletonList(11));
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        lenient().when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.singletonList(mainIngredient));
+
+        mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomerItem> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomerItem.class);
+        // excluded dish replacement record (1 insert)
+        verify(mealPlanCustomerItemMapper, org.mockito.Mockito.times(1)).insert(captor.capture());
+        // Only allergy-filtered items are inserted for excluded dishes
+        assertEquals(false, captor.getValue().getIsReplaced());
+        assertEquals(11, captor.getValue().getDishId());
+        assertEquals(11, captor.getValue().getOriginalDishId());
+        assertEquals("红烧鸡", captor.getValue().getOriginalDishName());
+        assertEquals("EXCLUDED", captor.getValue().getReplaceReason());
+    }
+
+    // ===== Wave 0 TDD Tests: excluded-date filtering in loadValidOrders() =====
+
+    /**
+     * Test: shouldSkipExcludedDateMealType
+     *
+     * When customer has excludedDates = [ExcludedDateDto{date="2026-04-01", mealTypes=["LUNCH"]}],
+     * calling generateMealPlan("2026-04-01", "LUNCH", null) should skip the order entirely.
+     * Expected: totalCount=0, no customer records inserted, no item records inserted.
+     */
+    @Test
+    void shouldSkipExcludedDateMealType() {
+        CustomerOrder order = buildOrder();
+        CustomerProfile customer = buildCustomer();
+        // Set up excluded date: 2026-04-01 is excluded for LUNCH
+        ExcludedDateDto excludedDate = new ExcludedDateDto();
+        excludedDate.setDate("2026-04-01");
+        excludedDate.setMealTypes(Collections.singletonList("LUNCH"));
+        customer.setExcludedDates(Collections.singletonList(excludedDate));
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(0, result.getTotalCount());
+        assertEquals(0, result.getSuccessCount());
+        // No records should be inserted for excluded date+mealType
+        verify(mealPlanCustomerMapper, never()).insert(any());
+        verify(mealPlanCustomerItemMapper, never()).insert(any());
+        verify(customerOrderMapper, never()).selectList(null);
+    }
+
+    /**
+     * Test: shouldNotSkipNonExcludedOrder
+     *
+     * When customer's excludedDates = [ExcludedDateDto{date="2026-04-02", mealTypes=["LUNCH"]}]
+     * but we generate for "2026-04-01", the order should be processed normally.
+     */
+    @Test
+    void shouldNotSkipNonExcludedOrder() {
+        CustomerOrder order = buildOrder();
+        CustomerProfile customer = buildCustomer();
+        // Set up excluded date for DIFFERENT date (2026-04-02)
+        ExcludedDateDto excludedDate = new ExcludedDateDto();
+        excludedDate.setDate("2026-04-02");
+        excludedDate.setMealTypes(Collections.singletonList("LUNCH"));
+        customer.setExcludedDates(Collections.singletonList(excludedDate));
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
+        Dish vegDish = buildDish(12, "清炒菜心", "VEGETABLE", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 2);
+        Dish soupDish = buildDish(13, "玉米排骨汤", "SOUP", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 3);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+        DishIngredientRelation vegIngredient = buildIngredient(12, "菜心");
+        DishIngredientRelation soupIngredient = buildIngredient(13, "玉米");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        lenient().when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, vegDish, soupDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(mainIngredient, vegIngredient, soupIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getSuccessCount());
+        verify(mealPlanCustomerMapper).insert(any());
+    }
+
+    /**
+     * Test: shouldGenerateNoRecordsForExcludedDate
+     *
+     * Confirms that for an excluded date+mealType, zero meal_plan_customer and
+     * meal_plan_customer_item records are generated.
+     */
+    @Test
+    void shouldGenerateNoRecordsForExcludedDate() {
+        CustomerOrder order = buildOrder();
+        CustomerProfile customer = buildCustomer();
+        ExcludedDateDto excludedDate = new ExcludedDateDto();
+        excludedDate.setDate("2026-04-01");
+        excludedDate.setMealTypes(Collections.singletonList("LUNCH"));
+        customer.setExcludedDates(Collections.singletonList(excludedDate));
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+
+        mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        verify(mealPlanCustomerMapper, never()).insert(any());
+        verify(mealPlanCustomerItemMapper, never()).insert(any());
+    }
+
+    @Test
+    void shouldRecordFailureWhenCustomerProfileMissing() {
+        CustomerOrder order = buildOrder();
+        order.setCustomerId(99L);
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.emptyList());
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getTotalCount());
+        assertEquals(0, result.getSuccessCount());
+        assertEquals(1, result.getFailCount());
+        assertEquals(1, result.getFailDetails().size());
+        assertEquals("客户档案不存在", result.getFailDetails().get(0).getFailReason());
+        verify(mealPlanCustomerMapper).insert(any(MealPlanCustomer.class));
+        verify(mealPlanCustomerItemMapper, never()).insert(any());
+    }
+
+    // ===== Phase 04 Tests: DishQuantityConfig from order fields =====
+
+    /**
+     * Test: buildCustomerPlan reads from order's 5 new fields (mainDishCount, sideDishCount, vegCount, riceCount, soupCount).
+     * Order has mainDishCount=2, sideDishCount=1, vegCount=1, riceCount=1, soupCount=1.
+     * 固定日菜单下，每类最多选 1 个菜品，其余记补餐数量。
+     */
+    @Test
+    void testBuildCustomerPlan_usesOrderFields() {
+        CustomerOrder order = buildOrderWithDishCounts(2, 1, 1, 1, 1);
+        order.setRiceType("白米饭");
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
+        Dish sideDish = buildDish(14, "糖醋排骨", "SIDE", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 4);
+        Dish vegDish = buildDish(12, "清炒菜心", "VEGETABLE", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 2);
+        Dish riceDish = buildDish(15, "白米饭", "RICE_TYPE", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 5);
+        Dish soupDish = buildDish(13, "玉米排骨汤", "SOUP", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 3);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+        DishIngredientRelation sideIngredient = buildIngredient(14, "排骨");
+        DishIngredientRelation vegIngredient = buildIngredient(12, "菜心");
+        DishIngredientRelation riceIngredient = buildIngredient(15, "大米");
+        DishIngredientRelation soupIngredient = buildIngredient(13, "玉米");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, sideDish, vegDish, soupDish));
+        when(dishMapper.findAll(any())).thenReturn(Collections.singletonList(riceDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(mainIngredient, sideIngredient, vegIngredient, riceIngredient, soupIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getSuccessCount());
+        verify(mealPlanCustomerItemMapper, org.mockito.Mockito.times(5)).insert(any());
+
+        ArgumentCaptor<MealPlanCustomer> captor = ArgumentCaptor.forClass(MealPlanCustomer.class);
+        verify(mealPlanCustomerMapper).insert(captor.capture());
+        assertEquals(1, captor.getValue().getSupplementaryMainCount());
+    }
+
+    /**
+     * Test: mainCount=1 and sideCount=2 produces 1 MAIN + 1 SIDE dish, 额外 1 份记补副菜。
+     */
+    @Test
+    void testPickRequiredDishes_independentSideCount() {
+        CustomerOrder order = buildOrderWithDishCounts(1, 2, 0, 0, 0);
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
+        Dish sideDish1 = buildDish(14, "糖醋排骨", "SIDE", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 4);
+        Dish sideDish2 = buildDish(16, "红烧鱼", "SIDE", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 6);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+        DishIngredientRelation side1Ingredient = buildIngredient(14, "排骨");
+        DishIngredientRelation side2Ingredient = buildIngredient(16, "鱼");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, sideDish1, sideDish2));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(mainIngredient, side1Ingredient, side2Ingredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getSuccessCount());
+        verify(mealPlanCustomerItemMapper, org.mockito.Mockito.times(2)).insert(any());
+
+        ArgumentCaptor<MealPlanCustomer> captor = ArgumentCaptor.forClass(MealPlanCustomer.class);
+        verify(mealPlanCustomerMapper).insert(captor.capture());
+        assertEquals(1, captor.getValue().getSupplementarySideCount());
+    }
+
+    /**
+     * Test: soupCount=2 selects 1 SOUP dish, 额外 1 份记补汤。
+     */
+    @Test
+    void testPickOptionalDish_multipleSoupCount() {
+        CustomerOrder order = buildOrderWithDishCounts(0, 0, 0, 0, 2);
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish soupDish1 = buildDish(13, "玉米排骨汤", "SOUP", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 3);
+        Dish soupDish2 = buildDish(17, "紫菜蛋花汤", "SOUP", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 7);
+        DishIngredientRelation soup1Ingredient = buildIngredient(13, "玉米");
+        DishIngredientRelation soup2Ingredient = buildIngredient(17, "紫菜");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(soupDish1, soupDish2));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(soup1Ingredient, soup2Ingredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getSuccessCount());
+        verify(mealPlanCustomerItemMapper, org.mockito.Mockito.times(1)).insert(any());
+
+        ArgumentCaptor<MealPlanCustomer> captor = ArgumentCaptor.forClass(MealPlanCustomer.class);
+        verify(mealPlanCustomerMapper).insert(captor.capture());
+        assertEquals(1, captor.getValue().getSupplementarySoupCount());
+    }
+
+    /**
+     * Test: buildCustomerEntity snapshot uses order's mainDishCount/sideDishCount/vegCount/riceCount/soupCount fields.
+     */
+    @Test
+    void testBuildCustomerEntity_usesOrderFields() {
+        CustomerOrder order = buildOrderWithDishCounts(2, 2, 3, 2, 2);
+        order.setRiceType("白米饭");
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
+        Dish sideDish = buildDish(14, "糖醋排骨", "SIDE", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 4);
+        Dish vegDish = buildDish(12, "清炒菜心", "VEGETABLE", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 2);
+        Dish riceDish = buildDish(15, "白米饭", "RICE_TYPE", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 5);
+        Dish soupDish = buildDish(13, "玉米排骨汤", "SOUP", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 3);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+        DishIngredientRelation sideIngredient = buildIngredient(14, "排骨");
+        DishIngredientRelation vegIngredient = buildIngredient(12, "菜心");
+        DishIngredientRelation riceIngredient = buildIngredient(15, "大米");
+        DishIngredientRelation soupIngredient = buildIngredient(13, "玉米");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, sideDish, vegDish, soupDish));
+        when(dishMapper.findAll(any())).thenReturn(Collections.singletonList(riceDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(mainIngredient, sideIngredient, vegIngredient, riceIngredient, soupIngredient));
+
+        mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomer> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomer.class);
+        verify(mealPlanCustomerMapper).insert(captor.capture());
+        me.zhengjie.modules.meal.domain.MealPlanCustomer entity = captor.getValue();
+        assertEquals(2, entity.getMeatRequiredCount());
+        assertEquals(3, entity.getVegRequiredCount());
+        assertEquals(1, entity.getIncludeSoup());
+        assertEquals(1, entity.getIncludeRice());
+        assertEquals(1, entity.getSupplementaryMainCount()); // max(0, 2-1)
+        assertEquals(1, entity.getSupplementarySideCount()); // max(0, 2-1)
+        assertEquals(2, entity.getSupplementaryVegCount()); // max(0, 3-1)
+        assertEquals(1, entity.getSupplementaryRiceCount()); // max(0, 2-1)
+        assertEquals(1, entity.getSupplementarySoupCount()); // max(0, 2-1)
+    }
+
+    @Test
+    void shouldPickRiceFromDishArchiveByRiceType() {
+        CustomerOrder order = buildOrderWithDishCounts(0, 0, 0, 1, 0);
+        order.setRiceType("三色糙米");
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish riceDish = buildDish(15, "三色糙米", "RICE_TYPE", Arrays.asList("LUNCH"), Arrays.asList("1"), Collections.emptyList(), 1);
+        Dish backupRiceDish = buildDish(16, "白米饭", "RICE_TYPE", Arrays.asList("LUNCH"), Arrays.asList("1"), Collections.emptyList(), 2);
+        DishIngredientRelation riceIngredient = buildIngredient(15, "糙米");
+        DishIngredientRelation backupRiceIngredient = buildIngredient(16, "大米");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
+        when(dishMapper.findAll(any())).thenReturn(Arrays.asList(riceDish, backupRiceDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(riceIngredient, backupRiceIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getSuccessCount());
+        ArgumentCaptor<DishQueryCriteria> criteriaCaptor = ArgumentCaptor.forClass(DishQueryCriteria.class);
+        verify(dishMapper).findAll(criteriaCaptor.capture());
+        assertEquals("RICE_TYPE", criteriaCaptor.getValue().getDishType());
+        ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomerItem> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomerItem.class);
         verify(mealPlanCustomerItemMapper).insert(captor.capture());
-        assertEquals(12, captor.getValue().getDishId());
+        assertEquals("三色糙米", captor.getValue().getDishName());
+        assertEquals("RICE", captor.getValue().getDishType());
+        assertEquals(true, captor.getValue().getIsReplaced());
+        assertEquals(Integer.valueOf(15), captor.getValue().getOriginalDishId());
+        assertEquals("三色糙米", captor.getValue().getOriginalDishName());
+        assertEquals("客户选择替换", captor.getValue().getReplaceReason());
+    }
+
+    @Test
+    void shouldTreatDefaultRiceTypeAsUnspecifiedWhenGeneratingMealPlan() {
+        CustomerOrder order = buildOrderWithDishCounts(0, 0, 0, 1, 0);
+        order.setRiceType("默认");
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish riceDish = buildDish(15, "三色糙米", "RICE_TYPE", Arrays.asList("LUNCH"), Arrays.asList("1"), Collections.emptyList(), 1);
+        Dish backupRiceDish = buildDish(16, "白米饭", "RICE_TYPE", Arrays.asList("LUNCH"), Arrays.asList("1"), Collections.emptyList(), 2);
+        DishIngredientRelation riceIngredient = buildIngredient(15, "糙米");
+        DishIngredientRelation backupRiceIngredient = buildIngredient(16, "大米");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
+        when(dishMapper.findAll(any())).thenReturn(Arrays.asList(riceDish, backupRiceDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(riceIngredient, backupRiceIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getSuccessCount());
+        ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomerItem> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomerItem.class);
+        verify(mealPlanCustomerItemMapper).insert(captor.capture());
+        assertEquals("三色糙米", captor.getValue().getDishName());
+        assertEquals("RICE", captor.getValue().getDishType());
+        assertEquals(null, captor.getValue().getIsReplaced());
+    }
+
+    @Test
+    void shouldMarkRiceAsCustomerReplacementWhenSpecifiedRiceFallsBack() {
+        CustomerOrder order = buildOrderWithDishCounts(0, 0, 0, 1, 0);
+        order.setRiceType("杂粮1:1米饭");
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish riceDish = buildDish(15, "三色糙米", "RICE_TYPE", Arrays.asList("LUNCH"), Arrays.asList("1"), Collections.emptyList(), 1);
+        Dish backupRiceDish = buildDish(16, "白米饭", "RICE_TYPE", Arrays.asList("LUNCH"), Arrays.asList("1"), Collections.emptyList(), 2);
+        DishIngredientRelation riceIngredient = buildIngredient(15, "糙米");
+        DishIngredientRelation backupRiceIngredient = buildIngredient(16, "大米");
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
+        when(dishMapper.findAll(any())).thenReturn(Arrays.asList(riceDish, backupRiceDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(riceIngredient, backupRiceIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getSuccessCount());
+        ArgumentCaptor<me.zhengjie.modules.meal.domain.MealPlanCustomerItem> captor = ArgumentCaptor.forClass(me.zhengjie.modules.meal.domain.MealPlanCustomerItem.class);
+        verify(mealPlanCustomerItemMapper).insert(captor.capture());
+        assertEquals("白米饭", captor.getValue().getDishName());
+        assertEquals(true, captor.getValue().getIsReplaced());
+        assertEquals(Integer.valueOf(15), captor.getValue().getOriginalDishId());
+        assertEquals("三色糙米", captor.getValue().getOriginalDishName());
+        assertEquals("客户选择替换", captor.getValue().getReplaceReason());
+    }
+
+    @Test
+    void shouldMarkFirstMealOfOrderWhenQueryMealPlanDetail() {
+        MealPlan mealPlan = new MealPlan();
+        mealPlan.setId(1L);
+        mealPlan.setRecordDate(LocalDate.of(2026, 5, 6));
+        mealPlan.setMealType("LUNCH");
+        mealPlan.setStatus("SUCCESS");
+
+        MealPlanCustomer firstCustomer = new MealPlanCustomer();
+        firstCustomer.setId(101L);
+        firstCustomer.setCustomerId(11L);
+        firstCustomer.setCustomerCode("A001");
+        firstCustomer.setCustomerName("张三");
+        firstCustomer.setOrderId(1001L);
+        firstCustomer.setStatus(1);
+
+        MealPlanCustomer normalCustomer = new MealPlanCustomer();
+        normalCustomer.setId(102L);
+        normalCustomer.setCustomerId(12L);
+        normalCustomer.setCustomerCode("A002");
+        normalCustomer.setCustomerName("李四");
+        normalCustomer.setOrderId(1002L);
+        normalCustomer.setStatus(1);
+
+        when(mealPlanMapper.selectById(1L)).thenReturn(mealPlan);
+        when(mealPlanCustomerMapper.selectByMealPlanId(1L)).thenReturn(Arrays.asList(firstCustomer, normalCustomer));
+        when(mealPlanCustomerMapper.selectFirstSuccessfulCustomerPlanIds(Arrays.asList(101L, 102L)))
+                .thenReturn(Collections.singletonList(101L));
+        when(mealPlanCustomerItemMapper.selectByCustomerPlanIds(Arrays.asList(101L, 102L)))
+                .thenReturn(Collections.emptyList());
+
+        MealPlanDetailVO detail = mealPlanService.queryMealPlanDetail(1L);
+
+        assertEquals(2, detail.getCustomers().size());
+        assertEquals(Boolean.TRUE, detail.getCustomers().get(0).getFirstMealOfOrder());
+        assertEquals(Boolean.FALSE, detail.getCustomers().get(1).getFirstMealOfOrder());
+    }
+
+    @Test
+    void shouldReturnFalseForFailedCustomerEvenIfIdIsInFirstSet() {
+        MealPlan mealPlan = new MealPlan();
+        mealPlan.setId(1L);
+        mealPlan.setRecordDate(LocalDate.of(2026, 5, 6));
+        mealPlan.setMealType("DINNER");
+        mealPlan.setStatus("FAILED");
+
+        MealPlanCustomer failedCustomer = new MealPlanCustomer();
+        failedCustomer.setId(201L);
+        failedCustomer.setCustomerId(21L);
+        failedCustomer.setCustomerCode("B001");
+        failedCustomer.setCustomerName("王五");
+        failedCustomer.setOrderId(2001L);
+        failedCustomer.setStatus(0);
+
+        when(mealPlanMapper.selectById(1L)).thenReturn(mealPlan);
+        when(mealPlanCustomerMapper.selectByMealPlanId(1L)).thenReturn(Collections.singletonList(failedCustomer));
+        when(mealPlanCustomerMapper.selectFirstSuccessfulCustomerPlanIds(Collections.singletonList(201L)))
+                .thenReturn(Collections.singletonList(201L));
+        when(mealPlanCustomerItemMapper.selectByCustomerPlanIds(Collections.singletonList(201L)))
+                .thenReturn(Collections.emptyList());
+
+        MealPlanDetailVO detail = mealPlanService.queryMealPlanDetail(1L);
+
+        assertEquals(Boolean.FALSE, detail.getCustomers().get(0).getFirstMealOfOrder());
+    }
+
+    @Test
+    void testAssembleCustomerDetail_setsDishCounts() throws Exception {
+        Method method = MealPlanServiceImpl.class.getDeclaredMethod(
+                "assembleCustomerDetail", MealPlanCustomer.class, java.util.Map.class, java.util.Map.class, java.util.Set.class);
+        method.setAccessible(true);
+
+        MealPlanCustomer customer = new MealPlanCustomer();
+        customer.setId(1L);
+        customer.setCustomerId(2L);
+        customer.setCustomerName("张三");
+        customer.setPhone("13800138000");
+        customer.setCustomerCode("C001");
+        customer.setOrderId(3L);
+        customer.setParentPackageId(4L);
+        customer.setChildPackageId(5L);
+        customer.setSupplementaryMainCount(1);
+        customer.setSupplementarySideCount(0);
+        customer.setSupplementaryVegCount(2);
+        customer.setSupplementaryRiceCount(1);
+        customer.setSupplementarySoupCount(1);
+
+        MealPlanDetailVO.CustomerPlanDetail detail = (MealPlanDetailVO.CustomerPlanDetail) method.invoke(
+                mealPlanService, customer, Collections.emptyMap(), Collections.emptyMap(), Collections.emptySet());
+
+        assertEquals(Integer.valueOf(1), detail.getSupplementaryMainCount());
+        assertEquals(Integer.valueOf(0), detail.getSupplementarySideCount());
+        assertEquals(Integer.valueOf(2), detail.getSupplementaryVegCount());
+        assertEquals(Integer.valueOf(1), detail.getSupplementaryRiceCount());
+        assertEquals(Integer.valueOf(1), detail.getSupplementarySoupCount());
+    }
+
+    private CustomerOrder buildOrderWithDishCounts(int main, int side, int veg, int rice, int soup) {
+        CustomerOrder order = buildOrder();
+        order.setMainDishCount(main);
+        order.setSideDishCount(side);
+        order.setVegCount(veg);
+        order.setRiceCount(rice);
+        order.setSoupCount(soup);
+        return order;
     }
 
     private CustomerOrder buildOrder() {
@@ -215,7 +1505,30 @@ class MealPlanServiceImplTest {
         order.setEndDate(LocalDate.of(2026, 4, 30));
         order.setMealType("LUNCH");
         order.setScheduleMode("DAILY");
+        order.setLunchDinnerCount(5);
+        order.setBreakfastCount(5);
+        order.setMainDishCount(1);
+        order.setSideDishCount(0);
+        order.setVegCount(0);
+        order.setRiceCount(0);
+        order.setSoupCount(0);
         return order;
+    }
+
+    private OrderMealVerifiedCountDto buildVerifiedCount(Long orderId, String mealType, int verifiedCount) {
+        OrderMealVerifiedCountDto dto = new OrderMealVerifiedCountDto();
+        dto.setOrderId(orderId);
+        dto.setMealType(mealType);
+        dto.setVerifiedCount(verifiedCount);
+        return dto;
+    }
+
+    private OrderScheduledCountDto buildScheduledCount(Long orderId, String mealType, int scheduledCount) {
+        OrderScheduledCountDto dto = new OrderScheduledCountDto();
+        dto.setOrderId(orderId);
+        dto.setMealType(mealType);
+        dto.setScheduledCount(scheduledCount);
+        return dto;
     }
 
     private CustomerProfile buildCustomer() {
@@ -233,16 +1546,6 @@ class MealPlanServiceImplTest {
         parentPackage.setPackageCode("PKG001");
         parentPackage.setPackageName("月子餐");
         return parentPackage;
-    }
-
-    private SubPackage buildSubPackage(int meatCount, int vegCount, boolean includeSoup, boolean includeRice) {
-        SubPackage subPackage = new SubPackage();
-        subPackage.setId(2L);
-        subPackage.setMeatCount(meatCount);
-        subPackage.setVegCount(vegCount);
-        subPackage.setIncludeSoup(includeSoup);
-        subPackage.setIncludeRice(includeRice);
-        return subPackage;
     }
 
     private Dish buildDish(int id, String name, String dishType, List<String> mealTypes, List<String> mealPackages, List<String> schedule, int sort) {
