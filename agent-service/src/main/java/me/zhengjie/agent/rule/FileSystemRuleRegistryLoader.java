@@ -11,9 +11,11 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -21,6 +23,20 @@ import java.util.stream.Stream;
  */
 @Component
 public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
+
+    private static final Set<String> REGISTERED_TOOLS = Set.of(
+        "getCustomerProfile",
+        "listCustomerOrders",
+        "getMealPlan",
+        "getCandidateDishStats",
+        "getCustomerExcludeDates",
+        "getOrderMealBalance",
+        "getPackageSpec",
+        "getDishCandidateDetail",
+        "listVerificationLogs",
+        "listMealRefunds",
+        "getMealPlanGenerationSnapshot"
+    );
 
     private final Path ruleBasePath;
 
@@ -66,6 +82,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         registry.setScene(scene);
         registry.setVersionDigest(sha256(digestSource.toString()));
         registry.setRules(rules);
+        validateRegistry(registry);
         return registry;
     }
 
@@ -104,6 +121,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         registry.setScene(scene);
         registry.setVersionDigest(sha256(digestSource.toString()));
         registry.setRules(rules);
+        validateRegistry(registry);
         return registry;
     }
 
@@ -151,7 +169,8 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
     private void setScalarValue(DiagnosisRule rule, String line) {
         String key = line.substring(0, line.indexOf(':')).trim();
         String value = valueAfterColon(line);
-        switch (key) {
+            switch (key) {
+            case "reasonCode" -> rule.setReasonCode(value);
             case "version" -> rule.setVersion(Integer.valueOf(value));
             case "scene" -> rule.setScene(value);
             case "title" -> rule.setTitle(value);
@@ -164,13 +183,56 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
     }
 
     private void addListValue(DiagnosisRule rule, String listName, String value) {
-        if ("requiredData".equals(listName)) {
+        if ("triggerConditions".equals(listName)) {
+            rule.getTriggerConditions().add(value);
+        } else if ("requiredTools".equals(listName)) {
+            rule.getRequiredTools().add(value);
+        } else if ("requiredData".equals(listName)) {
             rule.getRequiredData().add(value);
         } else if ("decisionHints".equals(listName)) {
             rule.getDecisionHints().add(value);
         } else if ("evidenceFields".equals(listName)) {
             rule.getEvidenceFields().add(value);
+        } else if ("nextActions".equals(listName)) {
+            rule.getNextActions().add(value);
         }
+    }
+
+    private void validateRegistry(RuleRegistry registry) {
+        Set<String> ruleIds = new HashSet<>();
+        for (DiagnosisRule rule : registry.getRules()) {
+            if (isBlank(rule.getRuleId())) {
+                throw new IllegalStateException("ruleId must not be blank");
+            }
+            if (!ruleIds.add(rule.getRuleId())) {
+                throw new IllegalStateException("duplicate ruleId: " + rule.getRuleId());
+            }
+            if (isBlank(rule.getReasonCode())) {
+                throw new IllegalStateException("reasonCode must not be blank for ruleId: " + rule.getRuleId());
+            }
+            if (rule.getRequiredTools() == null || rule.getRequiredTools().isEmpty()) {
+                throw new IllegalStateException("requiredTools must not be empty for ruleId: " + rule.getRuleId());
+            }
+            for (String toolName : rule.getRequiredTools()) {
+                if (!REGISTERED_TOOLS.contains(toolName)) {
+                    throw new IllegalStateException("requiredTools contains unregistered tool " + toolName
+                        + " for ruleId: " + rule.getRuleId());
+                }
+            }
+            if (rule.getEvidenceFields() == null || rule.getEvidenceFields().isEmpty()) {
+                throw new IllegalStateException("evidenceFields must not be empty for ruleId: " + rule.getRuleId());
+            }
+            if (rule.getNextActions() == null || rule.getNextActions().isEmpty()) {
+                throw new IllegalStateException("nextActions must not be empty for ruleId: " + rule.getRuleId());
+            }
+            if (isBlank(rule.getOwner())) {
+                throw new IllegalStateException("owner must not be blank for ruleId: " + rule.getRuleId());
+            }
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     private String valueAfterColon(String line) {

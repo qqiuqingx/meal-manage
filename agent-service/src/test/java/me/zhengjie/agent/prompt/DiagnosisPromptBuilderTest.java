@@ -40,7 +40,7 @@ class DiagnosisPromptBuilderTest {
         registry.setVersionDigest("digest-1");
         registry.setRules(List.of(rule));
 
-        DiagnosisPromptBuilder builder = new DiagnosisPromptBuilder(new ObjectMapper());
+        DiagnosisPromptBuilder builder = new DiagnosisPromptBuilder(new ObjectMapper(), new DiagnosisPromptPolicyLoader());
 
         String prompt = builder.build(context, registry);
 
@@ -53,7 +53,12 @@ class DiagnosisPromptBuilderTest {
         assertTrue(prompt.contains("listCustomerOrders"));
         assertTrue(prompt.contains("getMealPlan"));
         assertTrue(prompt.contains("getCandidateDishStats"));
-        assertTrue(prompt.contains("字段只能使用 summary、reasons、modelName、fallback、ruleVersionDigest、customerId、customerName、recordDate、mealType、requestId"));
+        assertTrue(prompt.contains("Prompt Policy Version"));
+        assertTrue(prompt.contains("工具调用预算最多 8 次"));
+        assertTrue(prompt.contains("至少完成这些关键工具查询"));
+        assertTrue(prompt.contains("请明确输出 confidence 和 nextActions"));
+        assertTrue(prompt.contains("fallback=true"));
+        assertTrue(prompt.contains("summary、reasons、evidence、nextActions"));
         assertTrue(prompt.contains("reasons 至少包含 1 条"));
         assertTrue(prompt.contains("evidence 必须是对象数组"));
         assertFalse(prompt.contains("张三"));
@@ -81,7 +86,7 @@ class DiagnosisPromptBuilderTest {
         registry.setVersionDigest("digest-1");
         registry.setRules(null);
 
-        DiagnosisPromptBuilder builder = new DiagnosisPromptBuilder(new ObjectMapper());
+        DiagnosisPromptBuilder builder = new DiagnosisPromptBuilder(new ObjectMapper(), new DiagnosisPromptPolicyLoader());
 
         String prompt = builder.build(context, registry);
 
@@ -116,7 +121,7 @@ class DiagnosisPromptBuilderTest {
         registry.setVersionDigest("digest-1");
         registry.setRules(List.of(rule));
 
-        DiagnosisPromptBuilder builder = new DiagnosisPromptBuilder(new ObjectMapper());
+        DiagnosisPromptBuilder builder = new DiagnosisPromptBuilder(new ObjectMapper(), new DiagnosisPromptPolicyLoader());
 
         String prompt = builder.buildLegacyPrompt(context, registry);
 

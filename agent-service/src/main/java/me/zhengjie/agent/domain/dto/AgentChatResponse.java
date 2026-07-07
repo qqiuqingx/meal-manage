@@ -2,7 +2,10 @@ package me.zhengjie.agent.domain.dto;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
+import me.zhengjie.agent.domain.chat.MissingSlot;
 import me.zhengjie.agent.domain.chat.ChatStatus;
 
 /**
@@ -10,12 +13,24 @@ import me.zhengjie.agent.domain.chat.ChatStatus;
  */
 public class AgentChatResponse {
 
+    private String requestId;
     private String sessionId;
     private ChatStatus status;
     private String assistantMessage;
     private DiagnosisSlots slots;
+    private Map<String, String> slotConfidence = new LinkedHashMap<>();
+    private List<MissingSlot> missingSlots = new ArrayList<>();
     private DiagnosisResponse diagnosisResult;
     private List<String> quickReplies = new ArrayList<>();
+    private String conversationStage;
+
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
+    }
 
     public String getSessionId() {
         return sessionId;
@@ -49,6 +64,22 @@ public class AgentChatResponse {
         this.slots = slots;
     }
 
+    public Map<String, String> getSlotConfidence() {
+        return slotConfidence;
+    }
+
+    public void setSlotConfidence(Map<String, String> slotConfidence) {
+        this.slotConfidence = slotConfidence;
+    }
+
+    public List<MissingSlot> getMissingSlots() {
+        return missingSlots;
+    }
+
+    public void setMissingSlots(List<MissingSlot> missingSlots) {
+        this.missingSlots = missingSlots;
+    }
+
     public DiagnosisResponse getDiagnosisResult() {
         return diagnosisResult;
     }
@@ -63,5 +94,13 @@ public class AgentChatResponse {
 
     public void setQuickReplies(List<String> quickReplies) {
         this.quickReplies = quickReplies;
+    }
+
+    public String getConversationStage() {
+        return conversationStage;
+    }
+
+    public void setConversationStage(String conversationStage) {
+        this.conversationStage = conversationStage;
     }
 }

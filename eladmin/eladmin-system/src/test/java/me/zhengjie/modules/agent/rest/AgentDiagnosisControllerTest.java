@@ -21,6 +21,8 @@ class AgentDiagnosisControllerTest {
                 AgentDiagnosisResponse response = new AgentDiagnosisResponse();
                 response.setCustomerId(request.getCustomerId());
                 response.setSummary("AI 诊断结果");
+                response.setConfidence("HIGH");
+                response.setFallbackReason(null);
                 return response;
             }
 
@@ -41,6 +43,7 @@ class AgentDiagnosisControllerTest {
         assertNotNull(response.getBody());
         assertEquals(1001L, response.getBody().getCustomerId());
         assertEquals("AI 诊断结果", response.getBody().getSummary());
+        assertEquals("HIGH", response.getBody().getConfidence());
     }
 
     @Test
@@ -58,6 +61,9 @@ class AgentDiagnosisControllerTest {
                 response.setSessionId("session-1");
                 response.setStatus("NEED_MORE_INFO");
                 response.setAssistantMessage("请补充餐次：早餐、午餐还是晚餐？");
+                response.setSlotConfidence(java.util.Map.of("customer", "HIGH"));
+                response.setMissingSlots(java.util.List.of("MEAL_TYPE"));
+                response.setConversationStage("COLLECTING_SLOTS");
                 return response;
             }
         };
@@ -73,5 +79,8 @@ class AgentDiagnosisControllerTest {
         assertEquals("session-1", response.getBody().getSessionId());
         assertEquals("NEED_MORE_INFO", response.getBody().getStatus());
         assertEquals("请补充餐次：早餐、午餐还是晚餐？", response.getBody().getAssistantMessage());
+        assertEquals("HIGH", response.getBody().getSlotConfidence().get("customer"));
+        assertEquals("MEAL_TYPE", response.getBody().getMissingSlots().get(0));
+        assertEquals("COLLECTING_SLOTS", response.getBody().getConversationStage());
     }
 }

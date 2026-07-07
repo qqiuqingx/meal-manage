@@ -1,5 +1,6 @@
 package me.zhengjie.agent.service.impl;
 
+import me.zhengjie.agent.action.DiagnosisActionDraftService;
 import me.zhengjie.agent.context.DiagnosisContextBuilder;
 import me.zhengjie.agent.domain.dto.DiagnosisContextDto;
 import me.zhengjie.agent.domain.dto.DiagnosisRequest;
@@ -20,6 +21,7 @@ public class MealPlanDiagnosisServiceImpl implements MealPlanDiagnosisService {
 
     private final DiagnosisContextBuilder contextBuilder;
     private final MealPlanDiagnosisOrchestrator orchestrator;
+    private final DiagnosisActionDraftService actionDraftService;
     private final boolean toolModeEnabled;
 
     /**
@@ -27,9 +29,11 @@ public class MealPlanDiagnosisServiceImpl implements MealPlanDiagnosisService {
      */
     public MealPlanDiagnosisServiceImpl(DiagnosisContextBuilder contextBuilder,
                                         MealPlanDiagnosisOrchestrator orchestrator,
+                                        DiagnosisActionDraftService actionDraftService,
                                         @Value("${agent.diagnosis.tool-mode-enabled:true}") boolean toolModeEnabled) {
         this.contextBuilder = contextBuilder;
         this.orchestrator = orchestrator;
+        this.actionDraftService = actionDraftService;
         this.toolModeEnabled = toolModeEnabled;
     }
 
@@ -49,7 +53,7 @@ public class MealPlanDiagnosisServiceImpl implements MealPlanDiagnosisService {
             System.currentTimeMillis() - start);
         log.info("诊断阶段 stage=进入规则编排 requestId={} customerId={} recordDate={} mealType={}",
             MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType());
-        DiagnosisResponse response = orchestrator.orchestrate(context);
+        DiagnosisResponse response = actionDraftService.applyActionDrafts(orchestrator.orchestrate(context));
         response.setRequestId(MDC.get(REQUEST_ID_KEY));
         log.info("诊断阶段 stage=结果就绪 requestId={} customerId={} recordDate={} mealType={} fallback={} modelName={} reasonCount={}",
             response.getRequestId(), response.getCustomerId(), response.getRecordDate(), response.getMealType(),

@@ -554,6 +554,11 @@ export default {
         this.currentFirstOrderParentPackage.packageName.includes('试餐')
     }
   },
+  created() {
+    const { customerCode, customerName } = this.$route.query || {}
+    if (customerCode) this.query.customerCode = customerCode
+    if (customerName) this.query.customerName = customerName
+  },
   methods: {
     isTrialCreateMode() {
       return !!this.isTrialCreate

@@ -1,0 +1,101 @@
+package me.zhengjie.agent.domain.dto;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * 诊断结果衍生的动作草稿，只描述建议操作，不代表系统已经执行写入。
+ */
+public class DiagnosisActionDraftDto {
+
+    private String actionCode;
+    private String title;
+    private String description;
+    private String riskLevel;
+    private String targetType;
+    private String targetId;
+    private Map<String, Object> beforeSnapshot = new LinkedHashMap<>();
+    private Map<String, Object> afterPreview = new LinkedHashMap<>();
+    private String requiredPermission;
+    private String confirmApi;
+
+    public String getActionCode() {
+        return actionCode;
+    }
+
+    public void setActionCode(String actionCode) {
+        this.actionCode = actionCode;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public String getRiskLevel() {
+        return riskLevel;
+    }
+
+    public void setRiskLevel(String riskLevel) {
+        this.riskLevel = riskLevel;
+    }
+
+    public String getTargetType() {
+        return targetType;
+    }
+
+    public void setTargetType(String targetType) {
+        this.targetType = targetType;
+    }
+
+    public String getTargetId() {
+        return targetId;
+    }
+
+    public void setTargetId(String targetId) {
+        this.targetId = targetId;
+    }
+
+    public Map<String, Object> getBeforeSnapshot() {
+        return beforeSnapshot;
+    }
+
+    public void setBeforeSnapshot(Map<String, Object> beforeSnapshot) {
+        this.beforeSnapshot = beforeSnapshot;
+    }
+
+    public Map<String, Object> getAfterPreview() {
+        return afterPreview;
+    }
+
+    public void setAfterPreview(Map<String, Object> afterPreview) {
+        this.afterPreview = afterPreview;
+    }
+
+    public String getRequiredPermission() {
+        return requiredPermission;
+    }
+
+    public void setRequiredPermission(String requiredPermission) {
+        this.requiredPermission = requiredPermission;
+    }
+
+    public String getConfirmApi() {
+        return confirmApi;
+    }
+
+    public void setConfirmApi(String confirmApi) {
+        this.confirmApi = confirmApi;
+    }
+}

@@ -2,7 +2,7 @@
 <configuration scan="true" scanPeriod="30 seconds" debug="false">
     <contextName>agent-service</contextName>
     <property name="log.charset" value="utf-8" />
-    <property name="log.pattern" value="%contextName- %d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level requestId=%X{requestId} %logger{36} - %msg%n" />
+    <property name="log.pattern" value="%contextName- %d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level requestId=%X{requestId} sessionId=%X{sessionId} customerId=%X{customerId} customerCode=%X{customerCode} recordDate=%X{recordDate} mealType=%X{mealType} stage=%X{stage} fallback=%X{fallback} fallbackReason=%X{fallbackReason} %logger{36} - %msg%n" />
 
     <springProperty scope="context" name="log.path" source="logging.path" defaultValue="./logs"/>
 

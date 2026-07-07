@@ -37,6 +37,16 @@ public interface CustomerProfileService {
     CustomerMealScheduleAdjustmentResult saveMealScheduleAdjustments(CustomerMealScheduleAdjustmentRequest request);
 
     /**
+     * 恢复客户指定日期餐次配送，仅移除客户排除日期中的对应餐次，不影响同月人工新增记录。
+     *
+     * @param customerId 客户ID
+     * @param recordDate 配送日期，格式 yyyy-MM-dd
+     * @param mealType 餐次，支持 BREAKFAST / LUNCH / DINNER
+     * @return 调整结果
+     */
+    CustomerMealScheduleAdjustmentResult resumeCustomerDelivery(Long customerId, String recordDate, String mealType);
+
+    /**
      * 获取客户详情
      */
     CustomerProfileDetailDto getDetail(Long id);

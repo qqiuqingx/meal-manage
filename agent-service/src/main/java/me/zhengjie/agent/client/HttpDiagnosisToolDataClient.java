@@ -3,7 +3,10 @@ package me.zhengjie.agent.client;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCandidateDishStatsRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerLookupRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerOrdersRequest;
+import me.zhengjie.agent.domain.dto.DiagnosisToolMealRefundsRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolMealPlanLookupRequest;
+import me.zhengjie.agent.domain.dto.DiagnosisToolPackageSpecRequest;
+import me.zhengjie.agent.domain.dto.DiagnosisToolVerificationLogsRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -29,6 +32,13 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
     private static final String CUSTOMER_ORDERS_PATH = "/api/internal/agent/customer-orders";
     private static final String MEAL_PLAN_PATH = "/api/internal/agent/meal-plan";
     private static final String CANDIDATE_DISH_STATS_PATH = "/api/internal/agent/candidate-dish-stats";
+    private static final String CUSTOMER_EXCLUDE_DATES_PATH = "/api/internal/agent/customer-exclude-dates";
+    private static final String ORDER_MEAL_BALANCE_PATH = "/api/internal/agent/order-meal-balance";
+    private static final String PACKAGE_SPEC_PATH = "/api/internal/agent/package-spec";
+    private static final String DISH_CANDIDATE_DETAIL_PATH = "/api/internal/agent/dish-candidate-detail";
+    private static final String VERIFICATION_LOGS_PATH = "/api/internal/agent/verification-logs";
+    private static final String MEAL_REFUNDS_PATH = "/api/internal/agent/meal-refunds";
+    private static final String MEAL_PLAN_GENERATION_SNAPSHOT_PATH = "/api/internal/agent/meal-plan-generation-snapshot";
 
     private final RestClient restClient;
     private final String internalToken;
@@ -62,6 +72,41 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
     @Override
     public List<Map<String, Object>> getCandidateDishStats(DiagnosisToolCandidateDishStatsRequest request) {
         return postList(CANDIDATE_DISH_STATS_PATH, request, "getCandidateDishStats");
+    }
+
+    @Override
+    public Map<String, Object> getCustomerExcludeDates(DiagnosisToolCustomerLookupRequest request) {
+        return postMap(CUSTOMER_EXCLUDE_DATES_PATH, request, "getCustomerExcludeDates");
+    }
+
+    @Override
+    public Map<String, Object> getOrderMealBalance(DiagnosisToolCustomerOrdersRequest request) {
+        return postMap(ORDER_MEAL_BALANCE_PATH, request, "getOrderMealBalance");
+    }
+
+    @Override
+    public Map<String, Object> getPackageSpec(DiagnosisToolPackageSpecRequest request) {
+        return postMap(PACKAGE_SPEC_PATH, request, "getPackageSpec");
+    }
+
+    @Override
+    public List<Map<String, Object>> getDishCandidateDetail(DiagnosisToolCandidateDishStatsRequest request) {
+        return postList(DISH_CANDIDATE_DETAIL_PATH, request, "getDishCandidateDetail");
+    }
+
+    @Override
+    public List<Map<String, Object>> listVerificationLogs(DiagnosisToolVerificationLogsRequest request) {
+        return postList(VERIFICATION_LOGS_PATH, request, "listVerificationLogs");
+    }
+
+    @Override
+    public List<Map<String, Object>> listMealRefunds(DiagnosisToolMealRefundsRequest request) {
+        return postList(MEAL_REFUNDS_PATH, request, "listMealRefunds");
+    }
+
+    @Override
+    public Map<String, Object> getMealPlanGenerationSnapshot(DiagnosisToolMealPlanLookupRequest request) {
+        return postMap(MEAL_PLAN_GENERATION_SNAPSHOT_PATH, request, "getMealPlanGenerationSnapshot");
     }
 
     /**

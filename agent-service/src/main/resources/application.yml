@@ -26,6 +26,13 @@ agent:
   context-path: /api/internal/agent/meal-plan/context
   internal-token: ${AGENT_INTERNAL_TOKEN:}
   diagnosis:
+    phase2-enabled: ${AGENT_DIAGNOSIS_PHASE2_ENABLED:true}
     tool-mode-enabled: ${AGENT_DIAGNOSIS_TOOL_MODE_ENABLED:true}
+    max-tool-calls: ${AGENT_DIAGNOSIS_MAX_TOOL_CALLS:8}
+    trace-enabled: ${AGENT_DIAGNOSIS_TRACE_ENABLED:true}
+    suggestion-template-enabled: ${AGENT_DIAGNOSIS_SUGGESTION_TEMPLATE_ENABLED:true}
   ai:
     enabled: ${AGENT_AI_ENABLED:true}
+  chat:
+    max-turns: ${AGENT_CHAT_MAX_TURNS:10}
+    max-diagnosis-history: ${AGENT_CHAT_MAX_DIAGNOSIS_HISTORY:3}

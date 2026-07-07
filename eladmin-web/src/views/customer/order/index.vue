@@ -355,6 +355,10 @@ export default {
     }
   },
   created() {
+    const { customerCode, customerName, scheduleDate } = this.$route.query || {}
+    if (customerCode) this.query.customerCode = customerCode
+    if (customerName) this.query.customerName = customerName
+    if (scheduleDate) this.query.scheduleDate = scheduleDate
     this.loadCustomerSourceDict()
   },
   methods: {

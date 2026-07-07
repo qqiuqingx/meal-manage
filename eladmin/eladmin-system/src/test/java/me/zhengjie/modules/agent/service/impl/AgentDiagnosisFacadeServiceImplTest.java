@@ -5,6 +5,9 @@ import me.zhengjie.modules.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
+import me.zhengjie.modules.agent.domain.dto.AgentOperationStatsDto;
+import me.zhengjie.modules.agent.domain.dto.AgentOperationStatsQuery;
+import me.zhengjie.modules.agent.service.AgentOperationStatsService;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -21,6 +24,7 @@ class AgentDiagnosisFacadeServiceImplTest {
                 response.setRecordDate(request.getRecordDate());
                 response.setMealType(request.getMealType());
                 response.setSummary("AI 判断命中客户排除日期");
+                response.setConfidence("HIGH");
                 return response;
             }
 
@@ -29,7 +33,7 @@ class AgentDiagnosisFacadeServiceImplTest {
                 return new AgentChatResponse();
             }
         };
-        AgentDiagnosisFacadeServiceImpl service = new AgentDiagnosisFacadeServiceImpl(client);
+        AgentDiagnosisFacadeServiceImpl service = new AgentDiagnosisFacadeServiceImpl(client, noopStatsService());
 
         AgentDiagnosisRequest request = new AgentDiagnosisRequest();
         request.setCustomerId(1001L);
@@ -42,6 +46,7 @@ class AgentDiagnosisFacadeServiceImplTest {
         assertEquals("2026-05-17", response.getRecordDate());
         assertEquals("LUNCH", response.getMealType());
         assertEquals("AI 判断命中客户排除日期", response.getSummary());
+        assertEquals("HIGH", response.getConfidence());
     }
 
     @Test
@@ -59,10 +64,11 @@ class AgentDiagnosisFacadeServiceImplTest {
                 response.setStatus("NEED_MORE_INFO");
                 response.setAssistantMessage("请补充餐次：早餐、午餐还是晚餐？");
                 response.setRequestId(requestId);
+                response.setConversationStage("COLLECTING_SLOTS");
                 return response;
             }
         };
-        AgentDiagnosisFacadeServiceImpl service = new AgentDiagnosisFacadeServiceImpl(client);
+        AgentDiagnosisFacadeServiceImpl service = new AgentDiagnosisFacadeServiceImpl(client, noopStatsService());
 
         AgentChatRequest request = new AgentChatRequest();
         request.setMessage("查客户 C10001 今天");
@@ -73,5 +79,19 @@ class AgentDiagnosisFacadeServiceImplTest {
         assertEquals("NEED_MORE_INFO", response.getStatus());
         assertEquals("request-1", response.getRequestId());
         assertEquals("请补充餐次：早餐、午餐还是晚餐？", response.getAssistantMessage());
+        assertEquals("COLLECTING_SLOTS", response.getConversationStage());
+    }
+
+    private AgentOperationStatsService noopStatsService() {
+        return new AgentOperationStatsService() {
+            @Override
+            public void recordDiagnosis(AgentDiagnosisResponse response, String sessionId, long costMs) {
+            }
+
+            @Override
+            public AgentOperationStatsDto stats(AgentOperationStatsQuery query) {
+                return new AgentOperationStatsDto();
+            }
+        };
     }
 }

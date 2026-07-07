@@ -4,8 +4,6 @@ import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * 排餐诊断聊天会话。
@@ -14,9 +12,7 @@ public class MealPlanChatSession {
 
     private String sessionId;
     private DiagnosisSlots slots = new DiagnosisSlots();
-    private String lastUserMessage;
-    private DiagnosisResponse lastDiagnosisResult;
-    private List<String> recentMessages = new ArrayList<>();
+    private DiagnosisConversationState conversationState = DiagnosisConversationState.initialize();
     private Instant updatedAt;
 
     public String getSessionId() {
@@ -35,28 +31,33 @@ public class MealPlanChatSession {
         this.slots = slots;
     }
 
-    public String getLastUserMessage() {
-        return lastUserMessage;
+    public DiagnosisConversationState getConversationState() {
+        return conversationState;
     }
 
-    public void setLastUserMessage(String lastUserMessage) {
-        this.lastUserMessage = lastUserMessage;
+    public void setConversationState(DiagnosisConversationState conversationState) {
+        this.conversationState = conversationState;
     }
 
+    /**
+     * 兼容现有调用，返回最近一次可复用的诊断结果。
+     *
+     * @return 最近一次诊断结果
+     */
     public DiagnosisResponse getLastDiagnosisResult() {
-        return lastDiagnosisResult;
+        return conversationState == null ? null : conversationState.getLastDiagnosisResult();
     }
 
+    /**
+     * 兼容现有调用，更新最近一次可复用的诊断结果。
+     *
+     * @param lastDiagnosisResult 最近一次诊断结果
+     */
     public void setLastDiagnosisResult(DiagnosisResponse lastDiagnosisResult) {
-        this.lastDiagnosisResult = lastDiagnosisResult;
-    }
-
-    public List<String> getRecentMessages() {
-        return recentMessages;
-    }
-
-    public void setRecentMessages(List<String> recentMessages) {
-        this.recentMessages = recentMessages;
+        if (conversationState == null) {
+            conversationState = DiagnosisConversationState.initialize();
+        }
+        conversationState.setLastDiagnosisResult(lastDiagnosisResult);
     }
 
     public Instant getUpdatedAt() {

@@ -265,6 +265,70 @@ agent-service
 
 ---
 
+## 8. 二期增量设计
+
+二期在一期“单轮诊断 + 结构化结果”的基础上，补充以下设计点：
+
+### 8.1 多轮会话
+
+- 会话阶段增加 `COLLECTING_SLOTS`、`READY_TO_DIAGNOSE`、`DIAGNOSING`、`DIAGNOSED`、`FOLLOWING_UP`、`RESET`、`ERROR`
+- 会话保存最近轮次、最近诊断摘要、当前槽位和槽位置信度
+- 支持“换成晚餐”“重新排查”“清空会话”等局部覆盖和重置语义
+
+### 8.2 槽位置信度
+
+- 明确命中值时标记为 `HIGH`
+- 继承上一轮上下文时标记为 `MEDIUM`
+- 歧义输入时标记为 `LOW`，优先发起确认，不直接触发诊断
+
+### 8.3 工具调用稳定性
+
+- 单次诊断引入工具调用预算，默认 8 次
+- 同一工具 + 相同入参摘要可复用缓存结果
+- 关键工具失败或超预算时，直接返回 `fallback=true`
+- 工具日志与返回摘要只保留 digest、数量、耗时和错误摘要，不记录原始敏感内容
+
+### 8.4 提示词策略化
+
+- `prompt-policy.yaml` 维护输出字段、forbidden claims、tool policy 和 evidence policy
+- PromptBuilder 每次构建工具模式提示词时都会加载并校验 policy
+- policy version 会进入最终 prompt，便于回溯模型输出口径
+
+### 8.5 结构化输出与建议模板
+
+- 结果级字段增加 `confidence`、`fallbackReason`、`nextActions`、`diagnosisTrace`、`toolCallSummary`
+- 原因级字段增加 `ruleIds`、`confidence`、`nextActions`
+- `suggestion-template.yaml` 按 `reason.code` 固化建议和客服动作，减少 AI 文案漂移
+
+### 8.6 可观测性
+
+- agent-service 和 eladmin-system 日志统一带 `requestId`、`sessionId`、`customerId`、`customerCode`、`recordDate`、`mealType`、`stage`、`fallback`、`fallbackReason`
+- 诊断结果中附带 `diagnosisTrace` 和 `toolCallSummary`，供客服与技术定位问题
+
+### 8.7 配置开关
+
+建议通过以下配置控制二期行为：
+
+```yaml
+agent:
+  diagnosis:
+    phase2-enabled: true
+    max-tool-calls: 8
+    trace-enabled: true
+    suggestion-template-enabled: true
+  chat:
+    max-turns: 10
+    max-diagnosis-history: 3
+```
+
+其中：
+
+- `phase2-enabled=false` 时允许系统回退到较保守的一期路径
+- `max-tool-calls` 控制单次诊断的工具预算
+- `trace-enabled` 和 `suggestion-template-enabled` 控制可观测性与模板化补齐能力
+
+---
+
 ## 8. 第一阶段 rule registry 清单
 
 第一阶段建议最少维护以下 9 类规则项，由 `agent-service` 统一加载后交给 AI 使用。

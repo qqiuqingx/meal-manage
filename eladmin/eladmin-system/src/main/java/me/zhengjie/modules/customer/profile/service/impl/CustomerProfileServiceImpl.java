@@ -269,6 +269,42 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         return result;
     }
 
+    /**
+     * 恢复客户指定日期餐次配送，只移除排除日期中的对应餐次，不同步人工新增列表。
+     *
+     * @param customerId 客户ID
+     * @param recordDate 配送日期，格式 yyyy-MM-dd
+     * @param mealType 餐次，支持 BREAKFAST / LUNCH / DINNER
+     * @return 调整结果
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CustomerMealScheduleAdjustmentResult resumeCustomerDelivery(Long customerId, String recordDate, String mealType) {
+        if (customerId == null) {
+            throw new BadRequestException("客户ID不能为空");
+        }
+        LocalDate parsedDate = parseLocalDate(recordDate, "配送日期格式错误");
+        if (!isSupportedMealType(mealType)) {
+            throw new BadRequestException("不支持的餐次：" + mealType);
+        }
+        CustomerProfile profile = profileMapper.selectById(customerId);
+        if (profile == null) {
+            throw new BadRequestException("客户不存在");
+        }
+        List<ExcludedDateDto> updatedExcludedDates = removeExcludedMeal(profile.getExcludedDates(), parsedDate.toString(), mealType);
+        profile.setExcludedDates(updatedExcludedDates);
+        profile.setUpdateBy(getCurrentUsername());
+        profileMapper.updateById(profile);
+        CustomerMealScheduleAdjustmentResult result = new CustomerMealScheduleAdjustmentResult();
+        result.setCustomerId(customerId);
+        result.setExcludedMealCount(countExcludedMeals(updatedExcludedDates));
+        result.setAdditionMealCount(0);
+        result.setDeletedUnverifiedPlanCount(0);
+        SCHEDULE_ADJUSTMENT_LOG.info("客户恢复配送完成 - 客户ID: {}, 日期: {}, 餐次: {}, 剩余排除餐次数: {}",
+                customerId, parsedDate, mealType, result.getExcludedMealCount());
+        return result;
+    }
+
     private List<CustomerMealStatsScheduleUtil.ScheduleDay> mergeScheduleDays(List<CustomerMealStatsRowDto> rows) {
         if (rows == null || rows.isEmpty()) {
             return Collections.emptyList();
@@ -1506,6 +1542,38 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             dto.setDate(entry.getKey());
             dto.setMealTypes(entry.getValue());
             result.add(dto);
+        }
+        return result;
+    }
+
+    /**
+     * 从排除日期列表中移除指定日期餐次，保留其他日期和同日其他餐次。
+     */
+    private List<ExcludedDateDto> removeExcludedMeal(List<ExcludedDateDto> excludedDates, String recordDate, String mealType) {
+        List<ExcludedDateDto> normalized = normalizeExcludedDates(excludedDates);
+        if (normalized.isEmpty()) {
+            return normalized;
+        }
+        List<ExcludedDateDto> result = new ArrayList<>();
+        for (ExcludedDateDto excludedDate : normalized) {
+            if (excludedDate == null || !recordDate.equals(excludedDate.getDate())) {
+                result.add(excludedDate);
+                continue;
+            }
+            List<String> mealTypes = new ArrayList<>();
+            if (excludedDate.getMealTypes() != null) {
+                for (String currentMealType : excludedDate.getMealTypes()) {
+                    if (!mealType.equals(currentMealType)) {
+                        mealTypes.add(currentMealType);
+                    }
+                }
+            }
+            if (!mealTypes.isEmpty()) {
+                ExcludedDateDto retained = new ExcludedDateDto();
+                retained.setDate(excludedDate.getDate());
+                retained.setMealTypes(mealTypes);
+                result.add(retained);
+            }
         }
         return result;
     }

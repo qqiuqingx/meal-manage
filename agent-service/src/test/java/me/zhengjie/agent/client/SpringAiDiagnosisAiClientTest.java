@@ -5,10 +5,12 @@ import me.zhengjie.agent.domain.dto.DiagnosisContextDto;
 import me.zhengjie.agent.domain.dto.DiagnosisEvidenceDto;
 import me.zhengjie.agent.domain.dto.DiagnosisReasonDto;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
+import me.zhengjie.agent.observability.DiagnosisTraceCollector;
 import me.zhengjie.agent.observability.DiagnosisToolCallLoggingAdvisor;
 import me.zhengjie.agent.prompt.DiagnosisPromptBuilder;
 import me.zhengjie.agent.rule.DiagnosisRule;
 import me.zhengjie.agent.rule.RuleRegistry;
+import me.zhengjie.agent.summary.FileSystemDiagnosisSuggestionTemplateService;
 import me.zhengjie.agent.tool.AgentToolRegistry;
 import me.zhengjie.agent.validator.DiagnosisResultValidator;
 import org.junit.jupiter.api.Test;
@@ -31,14 +33,17 @@ class SpringAiDiagnosisAiClientTest {
     @Test
     void shouldRegisterToolsAndUseToolPromptWhenToolModeEnabled() {
         RecordingChatClient recording = new RecordingChatClient();
-        AgentToolRegistry agentToolRegistry = toolRegistry();
+        DiagnosisTraceCollector traceCollector = new DiagnosisTraceCollector();
+        AgentToolRegistry agentToolRegistry = toolRegistry(traceCollector);
         SpringAiDiagnosisAiClient client = new SpringAiDiagnosisAiClient(
             recording.builder(),
             new ObjectMapper(),
             new DiagnosisPromptBuilder(new ObjectMapper()),
             new DiagnosisResultValidator(),
+            traceCollector,
+            new FileSystemDiagnosisSuggestionTemplateService(),
             agentToolRegistry,
-            new DiagnosisToolCallLoggingAdvisor(),
+            new DiagnosisToolCallLoggingAdvisor(traceCollector),
             "gpt-4o-mini",
             true
         );
@@ -51,20 +56,24 @@ class SpringAiDiagnosisAiClientTest {
         assertTrue(recording.userPrompt().contains("getCustomerProfile"));
         assertTrue(recording.userPrompt().contains("listCustomerOrders"));
         assertFalse(recording.userPrompt().contains("业务上下文 JSON"));
-        assertFalse(recording.userPrompt().contains("excludeDates"));
+        assertTrue(recording.userPrompt().contains("evidenceFields"));
+        assertTrue(recording.userPrompt().contains("excludeDates"));
         assertFalse(recording.userPrompt().contains("张三"));
     }
 
     @Test
     void shouldSkipToolsAndUseLegacyPromptWhenToolModeDisabled() {
         RecordingChatClient recording = new RecordingChatClient();
+        DiagnosisTraceCollector traceCollector = new DiagnosisTraceCollector();
         SpringAiDiagnosisAiClient client = new SpringAiDiagnosisAiClient(
             recording.builder(),
             new ObjectMapper(),
             new DiagnosisPromptBuilder(new ObjectMapper()),
             new DiagnosisResultValidator(),
-            toolRegistry(),
-            new DiagnosisToolCallLoggingAdvisor(),
+            traceCollector,
+            new FileSystemDiagnosisSuggestionTemplateService(),
+            toolRegistry(traceCollector),
+            new DiagnosisToolCallLoggingAdvisor(traceCollector),
             "gpt-4o-mini",
             false
         );
@@ -83,14 +92,17 @@ class SpringAiDiagnosisAiClientTest {
     @Test
     void shouldParseFencedJsonAndNormalizeLevel() {
         RecordingChatClient recording = new RecordingChatClient();
-        recording.content = "```json\n{\"summary\":\"deepseek reasoning path\",\"reasons\":[{\"code\":\"CUSTOMER_EXCLUDE_DATE_HIT\",\"title\":\"命中客户排除日期\",\"level\":\"ERROR\",\"description\":\"目标日期不配送。\",\"suggestion\":\"请人工核对排除日期。\",\"evidence\":[{\"label\":\"excludeDates\",\"value\":\"2026-05-17\"}]}]}\n```";
+        recording.content = "```json\n{\"summary\":\"deepseek reasoning path\",\"confidence\":\"HIGH\",\"nextActions\":[\"核对客户排除日期\"],\"reasons\":[{\"code\":\"CUSTOMER_EXCLUDE_DATE_HIT\",\"title\":\"命中客户排除日期\",\"level\":\"ERROR\",\"confidence\":\"HIGH\",\"ruleIds\":[\"CUSTOMER_EXCLUDE_DATE_HIT\"],\"description\":\"目标日期不配送。\",\"suggestion\":\"请人工核对排除日期。\",\"nextActions\":[\"核对客户排除日期\"],\"evidence\":[{\"label\":\"excludeDates\",\"value\":\"2026-05-17\"}]}]}\n```";
+        DiagnosisTraceCollector traceCollector = new DiagnosisTraceCollector();
         SpringAiDiagnosisAiClient client = new SpringAiDiagnosisAiClient(
             recording.builder(),
             new ObjectMapper(),
             new DiagnosisPromptBuilder(new ObjectMapper()),
             new DiagnosisResultValidator(),
-            toolRegistry(),
-            new DiagnosisToolCallLoggingAdvisor(),
+            traceCollector,
+            new FileSystemDiagnosisSuggestionTemplateService(),
+            toolRegistry(traceCollector),
+            new DiagnosisToolCallLoggingAdvisor(traceCollector),
             "deepseek-v4-flash",
             true
         );
@@ -111,16 +123,19 @@ class SpringAiDiagnosisAiClientTest {
             1. 客户档案返回空对象。
 
             ```json
-            {"summary":"客户不存在且无可用订单。","reasons":[{"code":"CUSTOMER_NOT_FOUND","title":"客户不存在","level":"critical","description":"客户档案为空。","suggestion":"请人工核实客户编号。","evidence":[{"label":"客户编号","value":"B3302"}]}]}
+            {"summary":"客户不存在且无可用订单。","confidence":"LOW","nextActions":["人工核实客户编号"],"reasons":[{"code":"CUSTOMER_NOT_FOUND","title":"客户不存在","level":"critical","confidence":"LOW","ruleIds":["CUSTOMER_NOT_FOUND"],"description":"客户档案为空。","suggestion":"请人工核实客户编号。","nextActions":["人工核实客户编号"],"evidence":[{"label":"客户编号","value":"B3302"}]}]}
             ```
             """;
+        DiagnosisTraceCollector traceCollector = new DiagnosisTraceCollector();
         SpringAiDiagnosisAiClient client = new SpringAiDiagnosisAiClient(
             recording.builder(),
             new ObjectMapper(),
             new DiagnosisPromptBuilder(new ObjectMapper()),
             new DiagnosisResultValidator(),
-            toolRegistry(),
-            new DiagnosisToolCallLoggingAdvisor(),
+            traceCollector,
+            new FileSystemDiagnosisSuggestionTemplateService(),
+            toolRegistry(traceCollector),
+            new DiagnosisToolCallLoggingAdvisor(traceCollector),
             "deepseek-v4-flash",
             true
         );
@@ -145,19 +160,29 @@ class SpringAiDiagnosisAiClientTest {
     }
 
     private RuleRegistry registry() {
-        DiagnosisRule rule = new DiagnosisRule();
-        rule.setRuleId("CUSTOMER_EXCLUDE_DATE_HIT");
-        rule.setVersion(1);
-        rule.setTitle("命中客户排除日期");
-        rule.setDescription("客户档案配置了目标日期和餐次不配送。");
+        DiagnosisRule excludeDateRule = new DiagnosisRule();
+        excludeDateRule.setRuleId("CUSTOMER_EXCLUDE_DATE_HIT");
+        excludeDateRule.setReasonCode("CUSTOMER_EXCLUDE_DATE_HIT");
+        excludeDateRule.setVersion(1);
+        excludeDateRule.setTitle("命中客户排除日期");
+        excludeDateRule.setDescription("客户档案配置了目标日期和餐次不配送。");
+        excludeDateRule.setEvidenceFields(List.of("excludeDates"));
+
+        DiagnosisRule customerNotFoundRule = new DiagnosisRule();
+        customerNotFoundRule.setRuleId("CUSTOMER_NOT_FOUND");
+        customerNotFoundRule.setReasonCode("CUSTOMER_NOT_FOUND");
+        customerNotFoundRule.setVersion(1);
+        customerNotFoundRule.setTitle("客户不存在");
+        customerNotFoundRule.setDescription("客户ID或客户编号未命中客户档案。");
+        customerNotFoundRule.setEvidenceFields(List.of("客户编号"));
 
         RuleRegistry registry = new RuleRegistry();
         registry.setVersionDigest("digest-1");
-        registry.setRules(List.of(rule));
+        registry.setRules(List.of(excludeDateRule, customerNotFoundRule));
         return registry;
     }
 
-    private AgentToolRegistry toolRegistry() {
+    private AgentToolRegistry toolRegistry(DiagnosisTraceCollector traceCollector) {
         return new AgentToolRegistry(new DiagnosisToolDataClient() {
             @Override
             public Map<String, Object> getCustomerProfile(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerLookupRequest request) {
@@ -177,6 +202,61 @@ class SpringAiDiagnosisAiClientTest {
             @Override
             public List<Map<String, Object>> getCandidateDishStats(me.zhengjie.agent.domain.dto.DiagnosisToolCandidateDishStatsRequest request) {
                 return List.of();
+            }
+
+            @Override
+            public Map<String, Object> getCustomerExcludeDates(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerLookupRequest request) {
+                return Map.of();
+            }
+
+            @Override
+            public Map<String, Object> getOrderMealBalance(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerOrdersRequest request) {
+                return Map.of();
+            }
+
+            @Override
+            public Map<String, Object> getPackageSpec(me.zhengjie.agent.domain.dto.DiagnosisToolPackageSpecRequest request) {
+                return Map.of();
+            }
+
+            @Override
+            public List<Map<String, Object>> getDishCandidateDetail(me.zhengjie.agent.domain.dto.DiagnosisToolCandidateDishStatsRequest request) {
+                return List.of();
+            }
+
+            @Override
+            public List<Map<String, Object>> listVerificationLogs(me.zhengjie.agent.domain.dto.DiagnosisToolVerificationLogsRequest request) {
+                return List.of();
+            }
+
+            @Override
+            public List<Map<String, Object>> listMealRefunds(me.zhengjie.agent.domain.dto.DiagnosisToolMealRefundsRequest request) {
+                return List.of();
+            }
+
+            @Override
+            public Map<String, Object> getMealPlanGenerationSnapshot(me.zhengjie.agent.domain.dto.DiagnosisToolMealPlanLookupRequest request) {
+                return Map.of();
+            }
+        }, new ObjectMapper(), traceCollector, new AgentToolRegistry.LogSink() {
+            @Override
+            public void toolCallStarted(String toolName, String requestId, String inputDigest) {
+            }
+
+            @Override
+            public void toolCallCompleted(String toolName, String requestId, String inputDigest, int resultCount, long costMs) {
+            }
+
+            @Override
+            public void toolCallFailed(String toolName, String requestId, String inputDigest, long costMs, RuntimeException ex) {
+            }
+
+            @Override
+            public void toolCallCacheHit(String toolName, String requestId, String inputDigest) {
+            }
+
+            @Override
+            public void toolCallRejected(String toolName, String requestId, String inputDigest, RuntimeException ex) {
             }
         });
     }
@@ -199,7 +279,7 @@ class SpringAiDiagnosisAiClientTest {
     private static class RecordingChatClient {
 
         private String userPrompt;
-        private String content = "{\"summary\":\"命中客户排除日期。\",\"reasons\":[{\"code\":\"CUSTOMER_EXCLUDE_DATE_HIT\",\"title\":\"命中客户排除日期\",\"level\":\"HIGH\",\"description\":\"目标日期不配送。\",\"suggestion\":\"请人工核对排除日期。\",\"evidence\":[{\"label\":\"excludeDates\",\"value\":\"2026-05-17\"}]}]}";
+        private String content = "{\"summary\":\"命中客户排除日期。\",\"confidence\":\"HIGH\",\"nextActions\":[\"核对排除日期\"],\"reasons\":[{\"code\":\"CUSTOMER_EXCLUDE_DATE_HIT\",\"title\":\"命中客户排除日期\",\"level\":\"HIGH\",\"confidence\":\"HIGH\",\"ruleIds\":[\"CUSTOMER_EXCLUDE_DATE_HIT\"],\"description\":\"目标日期不配送。\",\"suggestion\":\"请人工核对排除日期。\",\"nextActions\":[\"核对排除日期\"],\"evidence\":[{\"label\":\"excludeDates\",\"value\":\"2026-05-17\"}]}]}";
         private Object[] tools;
         private Object[] advisors;
 

@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS `agent_diagnosis_feedback` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `request_id` varchar(128) DEFAULT NULL COMMENT '请求链路ID',
+  `session_id` varchar(128) DEFAULT NULL COMMENT '会话ID',
+  `customer_id` bigint DEFAULT NULL COMMENT '客户ID',
+  `customer_name` varchar(128) DEFAULT NULL COMMENT '客户名称',
+  `record_date` varchar(32) DEFAULT NULL COMMENT '诊断日期',
+  `meal_type` varchar(32) DEFAULT NULL COMMENT '餐次',
+  `predicted_reason_codes` text COMMENT 'AI预测原因码JSON数组',
+  `accepted` varchar(32) NOT NULL COMMENT '反馈结论：ACCEPTED/REJECTED/PARTIAL',
+  `actual_reason_code` varchar(128) DEFAULT NULL COMMENT '客服确认真实原因码',
+  `comment` varchar(512) DEFAULT NULL COMMENT '客服备注',
+  `operator` varchar(64) DEFAULT NULL COMMENT '操作人',
+  `create_time` datetime NOT NULL COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_agent_feedback_request` (`request_id`),
+  KEY `idx_agent_feedback_customer_date` (`customer_id`, `record_date`, `meal_type`),
+  KEY `idx_agent_feedback_accepted` (`accepted`),
+  KEY `idx_agent_feedback_actual_reason` (`actual_reason_code`),
+  KEY `idx_agent_feedback_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='智能排查诊断结果客服反馈表';

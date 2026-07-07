@@ -1,8 +1,13 @@
 - ruleId: ORDER_MISSING
+  reasonCode: ORDER_MISSING
   version: 1
   scene: MEAL_PLAN_NOT_GENERATED
   title: 缺少可用订单
   description: 客户在目标日期附近没有可用于排餐的订单。
+  triggerConditions:
+    - 客户订单列表为空或无有效订单
+  requiredTools:
+    - getOrderMealBalance
   requiredData:
     - orders
     - recordDate
@@ -12,13 +17,22 @@
   evidenceFields:
     - orders.orderId
     - orders.status
+  nextActions:
+    - 核对客户有效订单
+    - 核对订单录入状态
   severity: HIGH
   owner: meal-plan
 - ruleId: ORDER_NOT_EFFECTIVE
+  reasonCode: ORDER_NOT_EFFECTIVE
   version: 1
   scene: MEAL_PLAN_NOT_GENERATED
   title: 订单未在目标餐次生效
   description: 订单日期范围、餐次或首日生效餐次不满足目标排餐条件。
+  triggerConditions:
+    - 诊断日期不在订单起止日期内
+    - 诊断日期等于开始日期但首餐次晚于目标餐次
+  requiredTools:
+    - getOrderMealBalance
   requiredData:
     - orders.startDate
     - orders.endDate
@@ -34,13 +48,73 @@
     - orders.startDate
     - orders.endDate
     - orders.startMealType
+    - order.startDate
+    - order.endDate
+  nextActions:
+    - 核对订单生效时间
+    - 核对订单当前状态
+  severity: HIGH
+  owner: meal-plan
+- ruleId: ORDER_EXPIRED
+  reasonCode: ORDER_EXPIRED
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 订单已过有效期
+  description: 订单结束日期早于诊断日期，目标餐次不应继续排餐。
+  triggerConditions:
+    - 诊断日期晚于订单结束日期
+  requiredTools:
+    - listCustomerOrders
+  requiredData:
+    - orders.orderId
+    - orders.endDate
+    - recordDate
+  decisionHints:
+    - 如果 recordDate 晚于 endDate，优先判断订单已过期。
+  evidenceFields:
+    - orders.orderId
+    - orders.endDate
+    - order.endDate
+  nextActions:
+    - 核对订单结束日期
+    - 确认是否需要续单或新建订单
+  severity: HIGH
+  owner: meal-plan
+- ruleId: ORDER_MEAL_TYPE_MISMATCH
+  reasonCode: ORDER_MEAL_TYPE_MISMATCH
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 订单餐次类型不匹配
+  description: 订单配置的餐次类型不覆盖本次诊断餐次。
+  triggerConditions:
+    - 订单 mealType 不包含目标 mealType
+  requiredTools:
+    - listCustomerOrders
+  requiredData:
+    - orders.orderId
+    - orders.mealType
+    - mealType
+  decisionHints:
+    - 如果订单只购买早餐，则午餐或晚餐不应参与排餐。
+  evidenceFields:
+    - orders.orderId
+    - orders.mealType
+    - mealType
+  nextActions:
+    - 核对订单餐次类型
+    - 核对客户购买套餐内容
   severity: HIGH
   owner: meal-plan
 - ruleId: ORDER_REMAINING_COUNT_EMPTY
+  reasonCode: ORDER_REMAINING_COUNT_NOT_ENOUGH
   version: 1
   scene: MEAL_PLAN_NOT_GENERATED
   title: 订单剩余餐数不足
   description: 订单对应餐次没有剩余可排餐数。
+  triggerConditions:
+    - 目标餐次对应餐数池剩余数为0
+  requiredTools:
+    - listCustomerOrders
   requiredData:
     - orders.remainingCount
     - orders.usedCount
@@ -50,5 +124,9 @@
   evidenceFields:
     - orders.orderId
     - orders.remainingCount
+    - order.remainingCount
+  nextActions:
+    - 核对订单剩余餐数
+    - 核对核销记录
   severity: HIGH
   owner: meal-plan

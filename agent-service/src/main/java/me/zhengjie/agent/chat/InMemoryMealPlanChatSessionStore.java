@@ -59,6 +59,7 @@ public class InMemoryMealPlanChatSessionStore implements MealPlanChatSessionStor
         MealPlanChatSession session = new MealPlanChatSession();
         session.setSessionId(sessionId);
         session.setSlots(new DiagnosisSlots());
+        session.setConversationState(DiagnosisConversationState.initialize());
         session.setUpdatedAt(clock.instant());
         return session;
     }

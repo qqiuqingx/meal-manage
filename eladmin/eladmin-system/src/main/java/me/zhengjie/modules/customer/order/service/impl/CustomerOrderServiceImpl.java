@@ -2,9 +2,12 @@ package me.zhengjie.modules.customer.order.service.impl;
 
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderBalanceRecalculateResult;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
+import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderEffectiveDateAdjustResult;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
+import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.order.service.CustomerOrderService;
 import me.zhengjie.modules.customer.order.util.CustomerOrderAmountPermissionUtil;
@@ -259,6 +262,91 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         syncProfileDietaryInfo(dto);
         softDeleteRules(dto.getId());
         saveReplaceRules(dto.getId(), dto.getReplaceRules());
+    }
+
+    /**
+     * 调整订单有效期，仅更新开始日期和结束日期，并复用订单冲突校验。
+     *
+     * @param orderId 订单ID
+     * @param newStartDate 新开始日期，格式 yyyy-MM-dd；为空保留原值
+     * @param newEndDate 新结束日期，格式 yyyy-MM-dd；为空保留原值
+     * @return 调整结果
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CustomerOrderEffectiveDateAdjustResult adjustEffectiveDate(Long orderId, String newStartDate, String newEndDate) {
+        if (orderId == null) {
+            throw new BadRequestException("订单ID不能为空");
+        }
+        CustomerOrder order = orderMapper.selectById(orderId);
+        if (order == null) {
+            throw new BadRequestException("订单不存在");
+        }
+        if (order.getStatus() != null && order.getStatus() != 1) {
+            throw new BadRequestException("仅进行中订单允许调整有效期");
+        }
+        LocalDate oldStartDate = order.getStartDate();
+        LocalDate oldEndDate = order.getEndDate();
+        LocalDate adjustedStartDate = StringUtils.isBlank(newStartDate) ? oldStartDate : LocalDate.parse(newStartDate);
+        LocalDate adjustedEndDate = StringUtils.isBlank(newEndDate) ? oldEndDate : LocalDate.parse(newEndDate);
+        validateOrderConflict(toConflictDto(order, adjustedStartDate), orderId);
+        order.setStartDate(adjustedStartDate);
+        order.setEndDate(adjustedEndDate);
+        order.setUpdateBy(getCurrentUsername());
+        orderMapper.updateById(order);
+
+        CustomerOrderEffectiveDateAdjustResult result = new CustomerOrderEffectiveDateAdjustResult();
+        result.setOrderId(orderId);
+        result.setOldStartDate(oldStartDate == null ? null : oldStartDate.toString());
+        result.setOldEndDate(oldEndDate == null ? null : oldEndDate.toString());
+        result.setNewStartDate(adjustedStartDate == null ? null : adjustedStartDate.toString());
+        result.setNewEndDate(adjustedEndDate == null ? null : adjustedEndDate.toString());
+        return result;
+    }
+
+    /**
+     * 按未删除核销日志重算订单核销餐数、核销金额、剩余餐数和餐费余额。
+     *
+     * @param orderId 订单ID
+     * @return 重算结果
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CustomerOrderBalanceRecalculateResult recalculateBalance(Long orderId) {
+        if (orderId == null) {
+            throw new BadRequestException("订单ID不能为空");
+        }
+        CustomerOrder order = orderMapper.selectById(orderId);
+        if (order == null) {
+            throw new BadRequestException("订单不存在");
+        }
+        CustomerOrderBalanceRecalculateResult result = buildBalanceResultBefore(order);
+        List<OrderVerifiedCountDto> verifiedCounts = orderMapper.sumVerifiedCountByOrderId(orderId);
+        int breakfastVerified = verifiedCount(verifiedCounts, "BREAKFAST");
+        int lunchVerified = verifiedCount(verifiedCounts, "LUNCH");
+        int dinnerVerified = verifiedCount(verifiedCounts, "DINNER");
+        int newVerifiedCount = breakfastVerified + lunchVerified + dinnerVerified;
+        BigDecimal newVerifiedAmount = safeMoney(order.getBreakfastPrice()).multiply(BigDecimal.valueOf(breakfastVerified))
+                .add(safeMoney(order.getLunchDinnerPrice()).multiply(BigDecimal.valueOf(lunchVerified + dinnerVerified)));
+        int totalCount = safeInt(order.getBreakfastCount()) + safeInt(order.getLunchDinnerCount());
+        int newRemainingCount = Math.max(totalCount - newVerifiedCount, 0);
+        BigDecimal newMealBalance = safeMoney(order.getFinalAmount()).subtract(newVerifiedAmount);
+        Integer newStatus = recalculateStatus(order.getStatus(), newRemainingCount);
+
+        order.setVerifiedCount(newVerifiedCount);
+        order.setVerifiedAmount(newVerifiedAmount);
+        order.setRemainingCount(newRemainingCount);
+        order.setMealBalance(newMealBalance);
+        order.setStatus(newStatus);
+        order.setUpdateBy(getCurrentUsername());
+        orderMapper.updateById(order);
+
+        result.setNewVerifiedCount(newVerifiedCount);
+        result.setNewRemainingCount(newRemainingCount);
+        result.setNewVerifiedAmount(newVerifiedAmount);
+        result.setNewMealBalance(newMealBalance);
+        result.setNewStatus(newStatus);
+        return result;
     }
 
     @Override
@@ -824,6 +912,62 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
                 }
             }
         }
+    }
+
+    /**
+     * 构造有效期调整所需的订单冲突校验 DTO，避免绕过已有订单互斥规则。
+     */
+    private CustomerOrderSaveDto toConflictDto(CustomerOrder order, LocalDate adjustedStartDate) {
+        CustomerOrderSaveDto dto = new CustomerOrderSaveDto();
+        dto.setId(order.getId());
+        dto.setCustomerId(order.getCustomerId());
+        dto.setStartDate(adjustedStartDate);
+        dto.setStartMealType(order.getStartMealType());
+        dto.setMealType(order.getMealType());
+        dto.setBreakfastCount(order.getBreakfastCount());
+        dto.setLunchDinnerCount(order.getLunchDinnerCount());
+        return dto;
+    }
+
+    /**
+     * 构造订单余额重算前快照。
+     */
+    private CustomerOrderBalanceRecalculateResult buildBalanceResultBefore(CustomerOrder order) {
+        CustomerOrderBalanceRecalculateResult result = new CustomerOrderBalanceRecalculateResult();
+        result.setOrderId(order.getId());
+        result.setOldVerifiedCount(order.getVerifiedCount());
+        result.setOldRemainingCount(order.getRemainingCount());
+        result.setOldVerifiedAmount(order.getVerifiedAmount());
+        result.setOldMealBalance(order.getMealBalance());
+        result.setOldStatus(order.getStatus());
+        return result;
+    }
+
+    private int verifiedCount(List<OrderVerifiedCountDto> counts, String mealType) {
+        if (counts == null || counts.isEmpty()) {
+            return 0;
+        }
+        for (OrderVerifiedCountDto count : counts) {
+            if (count != null && mealType.equals(count.getMealType())) {
+                return count.getVerifiedCount() == null ? 0 : count.getVerifiedCount();
+            }
+        }
+        return 0;
+    }
+
+    private Integer recalculateStatus(Integer currentStatus, int remainingCount) {
+        if (currentStatus == null || currentStatus == 1 || currentStatus == 2) {
+            return remainingCount == 0 ? 2 : 1;
+        }
+        return currentStatus;
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private BigDecimal safeMoney(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private String getCurrentUsername() {

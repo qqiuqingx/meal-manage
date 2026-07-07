@@ -1,0 +1,150 @@
+templates:
+  - code: CUSTOMER_NOT_FOUND
+    title: 客户不存在
+    defaultSuggestion: 请先核对客户编号或客户ID是否正确，再确认客户档案是否已创建。
+    nextActions:
+      - 核对客户编号或客户ID
+      - 核对客户档案是否存在
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: ORDER_MISSING
+    title: 未找到有效订单
+    defaultSuggestion: 请先核对客户是否存在目标餐次对应的有效订单，再确认订单是否已录入完成。
+    nextActions:
+      - 核对客户有效订单
+      - 核对订单录入状态
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: ORDER_NOT_EFFECTIVE
+    title: 订单未生效
+    defaultSuggestion: 请核对订单生效时间、结束时间和当前状态，确认该订单是否应参与本次排餐。
+    nextActions:
+      - 核对订单生效时间
+      - 核对订单当前状态
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: ORDER_EXPIRED
+    title: 订单已过有效期
+    defaultSuggestion: 请核对订单结束日期，确认是否需要续单或新建订单后再参与排餐。
+    nextActions:
+      - 核对订单结束日期
+      - 确认是否需要续单或新建订单
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: ORDER_MEAL_TYPE_MISMATCH
+    title: 订单餐次类型不匹配
+    defaultSuggestion: 请核对订单购买的餐次类型，确认目标餐次是否在客户购买范围内。
+    nextActions:
+      - 核对订单餐次类型
+      - 核对客户购买套餐内容
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: ORDER_REMAINING_COUNT_EMPTY
+    title: 订单剩余餐数不足
+    defaultSuggestion: 请核对订单餐数池和核销记录，确认目标餐次是否还有剩余餐数。
+    nextActions:
+      - 核对订单剩余餐数
+      - 核对核销记录
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: ORDER_REMAINING_COUNT_NOT_ENOUGH
+    title: 订单剩余餐数不足
+    defaultSuggestion: 请核对订单餐数池和核销记录，确认目标餐次是否还有剩余餐数。
+    nextActions:
+      - 核对订单剩余餐数
+      - 核对核销记录
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: SCHEDULE_MODE_NOT_MATCH
+    title: 排餐模式不匹配
+    defaultSuggestion: 请核对订单排餐模式与当前排餐任务配置，确认该订单是否应参与本次生成。
+    nextActions:
+      - 核对订单排餐模式
+      - 核对排餐任务配置
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: CUSTOMER_EXCLUDE_DATE_HIT
+    title: 命中客户停送日期
+    defaultSuggestion: 请先核对客户停送登记，如需恢复配送，按客户管理流程调整后重新生成排餐。
+    nextActions:
+      - 核对客户档案停送配置
+      - 确认是否需要恢复配送
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: CANDIDATE_DISH_EMPTY
+    title: 候选菜为空
+    defaultSuggestion: 请核对套餐规格、菜品排期和过滤条件，确认候选菜是否已被全部过滤。
+    nextActions:
+      - 核对套餐规格配置
+      - 核对菜品排期
+      - 核对过滤条件
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: PACKAGE_SPEC_MISSING
+    title: 套餐规格缺失
+    defaultSuggestion: 请核对父套餐、子套餐关系和子套餐菜品数量配置，补齐后再重新生成排餐。
+    nextActions:
+      - 核对套餐规格配置
+      - 补齐父套餐和子套餐关系
+      - 补齐子套餐菜品数量配置
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: REFUND_OR_STOP_MEAL_HIT
+    title: 命中退餐或停餐记录
+    defaultSuggestion: 请核对退餐、停餐或退款记录，确认该订单是否仍应参与目标餐次排餐。
+    nextActions:
+      - 核对退餐或停餐记录
+      - 核对订单剩余餐数是否已扣减
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: VERIFICATION_CONSUMED_COUNT
+    title: 核销记录已消耗餐数
+    defaultSuggestion: 请核对核销记录和订单餐数池余额，确认是否已消耗完对应餐数。
+    nextActions:
+      - 核对核销记录
+      - 核对订单餐数池余额
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: DISH_FILTERED_EMPTY
+    title: 菜品过滤后为空
+    defaultSuggestion: 请核对客户忌口、过敏和菜品过滤规则，确认是否把所有候选菜都过滤掉了。
+    nextActions:
+      - 核对客户忌口配置
+      - 核对过敏过滤规则
+      - 核对菜品过滤规则
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: MEAL_PLAN_GENERATED_FAILED
+    title: 排餐生成失败
+    defaultSuggestion: 请核对排餐生成日志和失败原因字段，确认任务是否在生成阶段报错。
+    nextActions:
+      - 核对排餐生成日志
+      - 核对失败原因字段
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: MEAL_PLAN_GENERATION_FAILED
+    title: 排餐生成失败
+    defaultSuggestion: 请核对排餐生成日志和失败原因字段，确认任务是否在生成阶段报错。
+    nextActions:
+      - 核对排餐生成日志
+      - 核对失败原因字段
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING
+    title: 排餐任务存在但客户缺失
+    defaultSuggestion: 请核对排餐任务客户清单、订单有效性和客户配送规则，确认客户为何未进入明细。
+    nextActions:
+      - 人工核对排餐任务和客户条件
+      - 核对客户是否被订单或配送规则过滤
+    customerVisible: false
+    requiresManualConfirm: true
+  - code: AI_RESULT_INVALID
+    title: AI诊断结果不可用
+    defaultSuggestion: 请按固定清单人工核对客户、订单、排餐记录和候选菜配置。
+    nextActions:
+      - 核对客户档案
+      - 核对订单有效性
+      - 核对排餐记录
+      - 核对候选菜配置
+    customerVisible: false
+    requiresManualConfirm: true

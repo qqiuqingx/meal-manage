@@ -32,7 +32,28 @@ class RuleRegistryLoaderTest {
         assertTrue(ruleIds.contains("ORDER_MISSING"));
         assertTrue(ruleIds.contains("MEAL_PLAN_GENERATED_FAILED"));
         assertTrue(registry.getRules().stream().allMatch(rule -> rule.getVersion() != null && rule.getVersion() > 0));
+        assertTrue(registry.getRules().stream().allMatch(rule -> rule.getReasonCode() != null && !rule.getReasonCode().isBlank()));
+        assertTrue(registry.getRules().stream().allMatch(rule -> rule.getTriggerConditions() != null && !rule.getTriggerConditions().isEmpty()));
+        assertTrue(registry.getRules().stream().allMatch(rule -> rule.getRequiredTools() != null && !rule.getRequiredTools().isEmpty()));
         assertTrue(registry.getRules().stream().allMatch(rule -> rule.getRequiredData() != null && !rule.getRequiredData().isEmpty()));
+        assertTrue(registry.getRules().stream().allMatch(rule -> rule.getEvidenceFields() != null && !rule.getEvidenceFields().isEmpty()));
+        assertTrue(registry.getRules().stream().allMatch(rule -> rule.getNextActions() != null && !rule.getNextActions().isEmpty()));
+        assertTrue(registry.getRules().stream().allMatch(rule -> rule.getOwner() != null && !rule.getOwner().isBlank()));
+        assertTrue(registry.getRules().stream()
+            .flatMap(rule -> rule.getRequiredTools().stream())
+            .allMatch(Set.of(
+                "getCustomerProfile",
+                "listCustomerOrders",
+                "getMealPlan",
+                "getCandidateDishStats",
+                "getCustomerExcludeDates",
+                "getOrderMealBalance",
+                "getPackageSpec",
+                "getDishCandidateDetail",
+                "listVerificationLogs",
+                "listMealRefunds",
+                "getMealPlanGenerationSnapshot"
+            )::contains));
     }
 
     @Test

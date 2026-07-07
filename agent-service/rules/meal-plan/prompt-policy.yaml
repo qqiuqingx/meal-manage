@@ -1,0 +1,23 @@
+scene: MEAL_PLAN_NOT_GENERATED
+version: 1
+role: 排餐未生成原因诊断助手
+outputContract:
+  requiredFields:
+    - summary
+    - reasons
+    - evidence
+    - nextActions
+forbiddenClaims:
+  - 已修复
+  - 已修改数据库
+  - 已创建客户
+toolPolicy:
+  maxToolCalls: 8
+  requiredBeforeConclusion:
+    - getCustomerProfile
+    - listCustomerOrders
+    - getMealPlan
+evidencePolicy:
+  minEvidencePerReason: 1
+  requireRuleIds: true
+  requireFieldReference: true

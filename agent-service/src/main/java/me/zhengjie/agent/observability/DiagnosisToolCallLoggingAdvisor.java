@@ -12,6 +12,7 @@ import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -27,16 +28,27 @@ public class DiagnosisToolCallLoggingAdvisor implements CallAdvisor {
     private static final String ROUND_CONTEXT_KEY = DiagnosisToolCallLoggingAdvisor.class.getName() + ".round";
     private static final int ORDER = ToolCallAdvisor.builder().build().getOrder() + 100;
 
+    private final DiagnosisTraceCollector traceCollector;
     private final LogSink logSink;
 
     /**
      * 默认走 slf4j 输出，测试里会注入自定义 sink 做行为校验。
      */
     public DiagnosisToolCallLoggingAdvisor() {
-        this(new Slf4jLogSink());
+        this(new DiagnosisTraceCollector(), new Slf4jLogSink());
+    }
+
+    @Autowired
+    public DiagnosisToolCallLoggingAdvisor(DiagnosisTraceCollector traceCollector) {
+        this(traceCollector, new Slf4jLogSink());
     }
 
     DiagnosisToolCallLoggingAdvisor(LogSink logSink) {
+        this(new DiagnosisTraceCollector(), logSink);
+    }
+
+    DiagnosisToolCallLoggingAdvisor(DiagnosisTraceCollector traceCollector, LogSink logSink) {
+        this.traceCollector = traceCollector;
         this.logSink = logSink;
     }
 
@@ -44,14 +56,18 @@ public class DiagnosisToolCallLoggingAdvisor implements CallAdvisor {
     public ChatClientResponse adviseCall(ChatClientRequest chatClientRequest, CallAdvisorChain callAdvisorChain) {
         int round = nextRound(chatClientRequest);
         long start = System.currentTimeMillis();
+        traceCollector.recordModelRoundStart(round);
         logSink.modelCallStart(round);
         try {
             ChatClientResponse response = callAdvisorChain.nextCall(chatClientRequest);
             ToolCallSummary summary = summarizeToolCalls(response);
+            traceCollector.recordModelRoundCompleted(round, summary.hasToolCalls(), summary.toolCallCount(), summary.toolNames(),
+                System.currentTimeMillis() - start);
             logSink.modelCallCompleted(round, summary.hasToolCalls(), summary.toolCallCount(), summary.toolNames(),
                 System.currentTimeMillis() - start);
             return response;
         } catch (RuntimeException ex) {
+            traceCollector.recordModelRoundFailed(round, ex, System.currentTimeMillis() - start);
             logSink.modelCallFailed(round, ex, System.currentTimeMillis() - start);
             throw ex;
         }

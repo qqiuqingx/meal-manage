@@ -17,9 +17,15 @@ public class AgentDiagnosisReasonDto {
 
     private String level;
 
+    private String confidence;
+
+    private List<String> ruleIds = new ArrayList<>();
+
     private String description;
 
     private String suggestion;
+
+    private List<String> nextActions = new ArrayList<>();
 
     private List<AgentDiagnosisEvidenceDto> evidence = new ArrayList<>();
 }

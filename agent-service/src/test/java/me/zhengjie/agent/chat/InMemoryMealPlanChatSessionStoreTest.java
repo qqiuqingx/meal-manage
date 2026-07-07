@@ -1,6 +1,6 @@
 package me.zhengjie.agent.chat;
 
-import me.zhengjie.agent.domain.dto.DiagnosisSlots;
+import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -9,14 +9,13 @@ import java.time.Instant;
 import java.time.ZoneId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class InMemoryMealPlanChatSessionStoreTest {
 
     @Test
-    void shouldCreateNewSessionWhenSessionIdIsBlank() {
+    void shouldCreateNewSessionWithDefaultConversationStage() {
         InMemoryMealPlanChatSessionStore store = new InMemoryMealPlanChatSessionStore(
             Clock.fixed(Instant.parse("2026-05-22T00:00:00Z"), ZoneId.of("UTC")),
             Duration.ofMinutes(30)
@@ -26,6 +25,8 @@ class InMemoryMealPlanChatSessionStoreTest {
 
         assertNotNull(session.getSessionId());
         assertNotNull(session.getSlots());
+        assertNotNull(session.getConversationState());
+        assertEquals(DiagnosisConversationState.COLLECTING_SLOTS, session.getConversationState().getStage());
         assertEquals(Instant.parse("2026-05-22T00:00:00Z"), session.getUpdatedAt());
     }
 
@@ -35,12 +36,14 @@ class InMemoryMealPlanChatSessionStoreTest {
         InMemoryMealPlanChatSessionStore store = new InMemoryMealPlanChatSessionStore(clock, Duration.ofMinutes(30));
         MealPlanChatSession session = store.getOrCreate("session-1");
         session.getSlots().setCustomerCode("C10001");
+        session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
         store.save(session);
 
         MealPlanChatSession loaded = store.getOrCreate("session-1");
 
         assertEquals("session-1", loaded.getSessionId());
         assertEquals("C10001", loaded.getSlots().getCustomerCode());
+        assertEquals(DiagnosisConversationState.DIAGNOSED, loaded.getConversationState().getStage());
     }
 
     @Test
@@ -49,6 +52,7 @@ class InMemoryMealPlanChatSessionStoreTest {
         InMemoryMealPlanChatSessionStore store = new InMemoryMealPlanChatSessionStore(clock, Duration.ofMinutes(30));
         MealPlanChatSession session = store.getOrCreate("session-1");
         session.getSlots().setCustomerCode("C10001");
+        session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
         store.save(session);
 
         clock.instant = Instant.parse("2026-05-22T00:31:00Z");
@@ -56,26 +60,29 @@ class InMemoryMealPlanChatSessionStoreTest {
 
         assertEquals("session-1", loaded.getSessionId());
         assertNull(loaded.getSlots().getCustomerCode());
+        assertEquals(DiagnosisConversationState.COLLECTING_SLOTS, loaded.getConversationState().getStage());
     }
 
     @Test
-    void shouldResetSessionSlotsAndDiagnosisResult() {
+    void shouldResetSessionSlotsAndConversationState() {
         InMemoryMealPlanChatSessionStore store = new InMemoryMealPlanChatSessionStore(
             Clock.fixed(Instant.parse("2026-05-22T00:00:00Z"), ZoneId.of("UTC")),
             Duration.ofMinutes(30)
         );
         MealPlanChatSession session = store.getOrCreate("session-1");
-        DiagnosisSlots slots = session.getSlots();
-        slots.setCustomerId(1001L);
-        session.setLastUserMessage("查客户");
+        session.getSlots().setCustomerId(1001L);
+        DiagnosisResponse diagnosis = new DiagnosisResponse();
+        diagnosis.setSummary("上次诊断");
+        session.getConversationState().addDiagnosisResult(diagnosis);
         store.save(session);
 
         MealPlanChatSession reset = store.reset("session-1");
 
         assertEquals("session-1", reset.getSessionId());
-        assertNotEquals(slots, reset.getSlots());
         assertNull(reset.getSlots().getCustomerId());
-        assertNull(reset.getLastUserMessage());
+        assertEquals(DiagnosisConversationState.COLLECTING_SLOTS, reset.getConversationState().getStage());
+        assertNull(reset.getConversationState().getLastDiagnosisResult());
+        assertEquals(0, reset.getConversationState().getRecentDiagnosisResults().size());
     }
 
     private static class MutableClock extends Clock {

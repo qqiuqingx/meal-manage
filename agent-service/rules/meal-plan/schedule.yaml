@@ -1,8 +1,13 @@
 - ruleId: SCHEDULE_MODE_NOT_MATCH
+  reasonCode: SCHEDULE_MODE_NOT_MATCH
   version: 1
   scene: MEAL_PLAN_NOT_GENERATED
   title: 排餐模式不匹配
   description: 订单或客户的排餐模式不允许目标日期配送。
+  triggerConditions:
+    - 订单排餐模式不覆盖目标日期或餐次
+  requiredTools:
+    - listCustomerOrders
   requiredData:
     - orders.scheduleMode
     - orders.deliveryDates
@@ -14,5 +19,8 @@
   evidenceFields:
     - orders.scheduleMode
     - orders.deliveryDates
+  nextActions:
+    - 核对订单排餐模式
+    - 核对排餐任务配置
   severity: MEDIUM
   owner: meal-plan

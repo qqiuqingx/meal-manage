@@ -1,5 +1,6 @@
 package me.zhengjie.agent.service.impl;
 
+import me.zhengjie.agent.action.RuleBasedDiagnosisActionDraftService;
 import me.zhengjie.agent.client.DiagnosisAiClient;
 import me.zhengjie.agent.context.DiagnosisContextBuilder;
 import me.zhengjie.agent.domain.dto.DiagnosisContextDto;
@@ -45,7 +46,7 @@ class MealPlanDiagnosisServiceImplTest {
             return response;
         };
         MealPlanDiagnosisOrchestrator orchestrator = new MealPlanDiagnosisOrchestrator(ruleRegistryLoader, aiClient);
-        MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator, true);
+        MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator, new RuleBasedDiagnosisActionDraftService(), true);
 
         DiagnosisRequest request = new DiagnosisRequest();
         request.setCustomerId(1001L);
@@ -59,6 +60,7 @@ class MealPlanDiagnosisServiceImplTest {
         assertEquals(1001L, response.getCustomerId());
         assertEquals("2026-05-17", response.getRecordDate());
         assertEquals("LUNCH", response.getMealType());
+        assertEquals("CREATE_MANUAL_RECHECK_TASK", response.getActionDrafts().get(0).getActionCode());
     }
 
     @Test
@@ -72,7 +74,7 @@ class MealPlanDiagnosisServiceImplTest {
             RuleRegistryLoader ruleRegistryLoader = scene -> new RuleRegistry();
             DiagnosisAiClient aiClient = (context, ruleRegistry) -> new DiagnosisResponse();
             MealPlanDiagnosisOrchestrator orchestrator = new MealPlanDiagnosisOrchestrator(ruleRegistryLoader, aiClient);
-            MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator, true);
+            MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator, new RuleBasedDiagnosisActionDraftService(), true);
 
             DiagnosisRequest request = new DiagnosisRequest();
             request.setCustomerId(1001L);
@@ -118,7 +120,7 @@ class MealPlanDiagnosisServiceImplTest {
             return response;
         };
         MealPlanDiagnosisOrchestrator orchestrator = new MealPlanDiagnosisOrchestrator(ruleRegistryLoader, aiClient);
-        MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator, false);
+        MealPlanDiagnosisServiceImpl service = new MealPlanDiagnosisServiceImpl(contextBuilder, orchestrator, new RuleBasedDiagnosisActionDraftService(), false);
 
         DiagnosisResponse response = service.diagnose(request);
 

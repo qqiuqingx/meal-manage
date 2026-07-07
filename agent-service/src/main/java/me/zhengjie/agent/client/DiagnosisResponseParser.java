@@ -81,8 +81,11 @@ public class DiagnosisResponseParser {
         reason.setCode(code);
         reason.setTitle(firstNonBlank(asString(rule.get("title")), code));
         reason.setLevel(firstNonBlank(asString(rule.get("level")), "LOW"));
+        reason.setConfidence(firstNonBlank(asString(rule.get("confidence")), normalizeLevel(reason.getLevel())));
+        reason.setRuleIds(List.of(code));
         reason.setDescription(firstNonBlank(asString(rule.get("description")), asString(evidenceSummary), "AI 返回了旧结构，请人工核对。"));
         reason.setSuggestion(firstNonBlank(asString(rule.get("suggestion")), asString(suggestion), "请人工核对。"));
+        reason.setNextActions(List.of(firstNonBlank(asString(suggestion), "请人工核对。")));
         reason.setEvidence(parseLegacyEvidence(rule.get("evidence"), code));
         if (reason.getEvidence().isEmpty()) {
             reason.setEvidence(List.of(new DiagnosisEvidenceDto("legacy", firstNonBlank(asString(evidenceSummary), "true"))));
@@ -95,8 +98,11 @@ public class DiagnosisResponseParser {
         reason.setCode("LEGACY_DIAGNOSIS_RESULT");
         reason.setTitle(firstNonBlank(asString(legacy.get("diagnosisResult")), "AI 诊断结果"));
         reason.setLevel("LOW");
+        reason.setConfidence("LOW");
+        reason.setRuleIds(List.of("LEGACY_DIAGNOSIS_RESULT"));
         reason.setDescription(firstNonBlank(asString(evidenceSummary), asString(legacy.get("diagnosisResult")), "AI 返回了旧结构，请人工核对。"));
         reason.setSuggestion(firstNonBlank(asString(suggestion), "请人工核对。"));
+        reason.setNextActions(List.of(firstNonBlank(asString(suggestion), "请人工核对。")));
         reason.setEvidence(List.of(new DiagnosisEvidenceDto("legacy", firstNonBlank(asString(evidenceSummary), "true"))));
         return reason;
     }
@@ -120,11 +126,35 @@ public class DiagnosisResponseParser {
         if (response == null || response.getReasons() == null) {
             return;
         }
+        response.setConfidence(firstNonBlank(response.getConfidence(), "LOW"));
+        if (response.getNextActions() == null || response.getNextActions().isEmpty()) {
+            response.setNextActions(inferNextActions(response.getReasons()));
+        }
         for (DiagnosisReasonDto reason : response.getReasons()) {
             if (reason != null) {
                 reason.setLevel(normalizeLevel(reason.getLevel()));
+                reason.setConfidence(firstNonBlank(reason.getConfidence(), reason.getLevel()));
+                if (reason.getRuleIds() == null || reason.getRuleIds().isEmpty()) {
+                    reason.setRuleIds(List.of(firstNonBlank(reason.getCode(), "AI_RESULT")));
+                }
+                if (reason.getNextActions() == null || reason.getNextActions().isEmpty()) {
+                    reason.setNextActions(List.of(firstNonBlank(reason.getSuggestion(), "请人工核对。")));
+                }
             }
         }
+    }
+
+    private List<String> inferNextActions(List<DiagnosisReasonDto> reasons) {
+        if (reasons == null || reasons.isEmpty()) {
+            return List.of();
+        }
+        List<String> nextActions = new ArrayList<>();
+        for (DiagnosisReasonDto reason : reasons) {
+            if (reason != null && reason.getNextActions() != null) {
+                nextActions.addAll(reason.getNextActions());
+            }
+        }
+        return nextActions.isEmpty() ? List.of("请人工核对。") : nextActions;
     }
 
     private String normalizeLevel(String level) {

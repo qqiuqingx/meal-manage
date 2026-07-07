@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS `agent_diagnosis_metric` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `request_id` varchar(128) DEFAULT NULL COMMENT '请求链路ID',
+  `session_id` varchar(128) DEFAULT NULL COMMENT '会话ID',
+  `customer_id` bigint DEFAULT NULL COMMENT '客户ID',
+  `record_date` varchar(32) DEFAULT NULL COMMENT '诊断日期',
+  `meal_type` varchar(32) DEFAULT NULL COMMENT '餐次',
+  `fallback` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否兜底结果',
+  `fallback_reason` varchar(512) DEFAULT NULL COMMENT '兜底原因',
+  `confidence` varchar(16) DEFAULT NULL COMMENT '可信度',
+  `model_name` varchar(128) DEFAULT NULL COMMENT '模型标识',
+  `reason_codes` text COMMENT '原因码JSON数组',
+  `action_draft_count` int DEFAULT 0 COMMENT '动作草稿数量',
+  `tool_call_count` int DEFAULT 0 COMMENT '工具调用次数',
+  `tool_failure_count` int DEFAULT 0 COMMENT '工具失败次数',
+  `diagnosis_cost_ms` bigint DEFAULT 0 COMMENT '诊断耗时毫秒',
+  `create_time` datetime NOT NULL COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_agent_metric_request` (`request_id`),
+  KEY `idx_agent_metric_customer_date` (`customer_id`, `record_date`, `meal_type`),
+  KEY `idx_agent_metric_fallback` (`fallback`),
+  KEY `idx_agent_metric_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='智能排查诊断运营指标表';

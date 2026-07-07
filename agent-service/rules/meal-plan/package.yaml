@@ -1,0 +1,26 @@
+- ruleId: PACKAGE_SPEC_MISSING
+  reasonCode: PACKAGE_SPEC_MISSING
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 套餐规格缺失
+  description: 父套餐或子套餐规格缺少排餐所需的菜品数量、米饭、汤品等配置。
+  triggerConditions:
+    - packageSpec.missingFields 非空
+  requiredTools:
+    - getPackageSpec
+  requiredData:
+    - packageSpec.parentPackage
+    - packageSpec.childPackage
+    - packageSpec.missingFields
+  decisionHints:
+    - 如果子套餐 meatCount、vegCount、includeSoup、includeRice 缺失，提示先补齐套餐规格。
+  evidenceFields:
+    - packageSpec.parentPackage
+    - packageSpec.childPackage
+    - packageSpec.missingFields
+  nextActions:
+    - 核对套餐规格配置
+    - 补齐父套餐和子套餐关系
+    - 补齐子套餐菜品数量配置
+  severity: HIGH
+  owner: meal-plan

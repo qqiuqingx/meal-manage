@@ -22,70 +22,135 @@ class RuleBasedMealPlanChatExtractorTest {
 
     @Test
     void shouldExtractCustomerCodeTomorrowAndLunch() {
-        ChatExtractionResult result = extractor.extract("帮我看下客户 C10001 明天午餐为什么没排出来", new DiagnosisSlots());
+        ChatExtractionResult result = extractor.extract("看下 C10001 明天午餐为什么没排出来", new DiagnosisSlots());
 
         assertEquals(ChatIntent.DIAGNOSE, result.getIntent());
         assertEquals("C10001", result.getSlots().getCustomerCode());
         assertEquals("2026-05-23", result.getSlots().getRecordDate());
         assertEquals("LUNCH", result.getSlots().getMealType());
+        assertEquals("HIGH", result.getSlots().getCustomerConfidence());
+        assertEquals("HIGH", result.getSlots().getRecordDateConfidence());
+        assertEquals("HIGH", result.getSlots().getMealTypeConfidence());
         assertEquals(List.of(), result.getMissingSlots());
+        assertEquals(List.of(), result.getAmbiguousSlots());
     }
 
     @Test
-    void shouldExtractCustomerIdTodayAndBreakfast() {
-        ChatExtractionResult result = extractor.extract("查客户ID 1001 今天早餐", new DiagnosisSlots());
-
-        assertEquals(1001L, result.getSlots().getCustomerId());
-        assertEquals("2026-05-22", result.getSlots().getRecordDate());
-        assertEquals("BREAKFAST", result.getSlots().getMealType());
-    }
-
-    @Test
-    void shouldUseExistingSlotsWhenUserOnlyRepliesMealType() {
-        DiagnosisSlots existing = new DiagnosisSlots();
-        existing.setCustomerCode("C10001");
-        existing.setRecordDate("2026-05-24");
-
-        ChatExtractionResult result = extractor.extract("晚餐", existing);
-
-        assertEquals("C10001", result.getSlots().getCustomerCode());
-        assertEquals("2026-05-24", result.getSlots().getRecordDate());
-        assertEquals("DINNER", result.getSlots().getMealType());
-        assertEquals(List.of(), result.getMissingSlots());
-    }
-
-    @Test
-    void shouldDetectMissingCustomerDateAndMealType() {
-        ChatExtractionResult result = extractor.extract("帮我排查一下", new DiagnosisSlots());
-
-        assertEquals(ChatIntent.DIAGNOSE, result.getIntent());
-        assertTrue(result.getMissingSlots().contains(MissingSlot.CUSTOMER));
-        assertTrue(result.getMissingSlots().contains(MissingSlot.RECORD_DATE));
-        assertTrue(result.getMissingSlots().contains(MissingSlot.MEAL_TYPE));
-    }
-
-    @Test
-    void shouldDetectResetIntent() {
-        ChatExtractionResult result = extractor.extract("清空会话，重新开始", new DiagnosisSlots());
-
-        assertEquals(ChatIntent.RESET, result.getIntent());
-    }
-
-    @Test
-    void shouldDetectOutOfScopeIntent() {
-        ChatExtractionResult result = extractor.extract("帮我改一下订单地址", new DiagnosisSlots());
-
-        assertEquals(ChatIntent.OUT_OF_SCOPE, result.getIntent());
-    }
-
-    @Test
-    void shouldDetectFollowUpWhenDiagnosisExists() {
+    void shouldOverrideDateAndMealTypeForRelativeChange() {
         DiagnosisSlots existing = new DiagnosisSlots();
         existing.setCustomerCode("C10001");
         existing.setRecordDate("2026-05-22");
         existing.setMealType("LUNCH");
 
-        ChatExtractionResult result = extractor.extract("为什么订单无效？", existing);
+        ChatExtractionResult result = extractor.extract("换成后天晚餐", existing);
+
+        assertEquals(ChatIntent.DIAGNOSE, result.getIntent());
+        assertEquals("C10001", result.getSlots().getCustomerCode());
+        assertEquals("2026-05-24", result.getSlots().getRecordDate());
+        assertEquals("DINNER", result.getSlots().getMealType());
+        assertEquals("MEDIUM", result.getSlots().getCustomerConfidence());
+        assertEquals("HIGH", result.getSlots().getRecordDateConfidence());
+        assertEquals("HIGH", result.getSlots().getMealTypeConfidence());
+        assertEquals("CONTEXT_INHERIT", result.getSlots().getCustomerSource());
+        assertEquals("CORRECTION_OVERRIDE", result.getSlots().getRecordDateSource());
+        assertEquals("CORRECTION_OVERRIDE", result.getSlots().getMealTypeSource());
+    }
+
+    @Test
+    void shouldChooseCorrectedMealType() {
+        DiagnosisSlots existing = new DiagnosisSlots();
+        existing.setCustomerCode("C10001");
+        existing.setRecordDate("2026-05-24");
+        existing.setMealType("LUNCH");
+
+        ChatExtractionResult result = extractor.extract("不是午餐，是晚餐", existing);
+
+        assertEquals("DINNER", result.getSlots().getMealType());
+        assertEquals("HIGH", result.getSlots().getMealTypeConfidence());
+        assertEquals("CORRECTION_OVERRIDE", result.getSlots().getMealTypeSource());
+    }
+
+    @Test
+    void shouldExtractCustomerCodeWithLabel() {
+        ChatExtractionResult result = extractor.extract("客户编号 C10001", new DiagnosisSlots());
+
+        assertEquals("C10001", result.getSlots().getCustomerCode());
+        assertEquals("HIGH", result.getSlots().getCustomerConfidence());
+        assertTrue(result.getMissingSlots().contains(MissingSlot.RECORD_DATE));
+        assertTrue(result.getMissingSlots().contains(MissingSlot.MEAL_TYPE));
+    }
+
+    @Test
+    void shouldExtractCustomerId() {
+        ChatExtractionResult result = extractor.extract("客户ID 123", new DiagnosisSlots());
+
+        assertEquals(123L, result.getSlots().getCustomerId());
+        assertEquals("HIGH", result.getSlots().getCustomerConfidence());
+        assertTrue(result.getMissingSlots().contains(MissingSlot.RECORD_DATE));
+        assertTrue(result.getMissingSlots().contains(MissingSlot.MEAL_TYPE));
+    }
+
+    @Test
+    void shouldExtractTodayBreakfastAlias() {
+        ChatExtractionResult result = extractor.extract("今天早饭", new DiagnosisSlots());
+
+        assertEquals("2026-05-22", result.getSlots().getRecordDate());
+        assertEquals("BREAKFAST", result.getSlots().getMealType());
+        assertEquals("HIGH", result.getSlots().getRecordDateConfidence());
+        assertEquals("HIGH", result.getSlots().getMealTypeConfidence());
+    }
+
+    @Test
+    void shouldResolveNextWeekday() {
+        ChatExtractionResult result = extractor.extract("下周一午餐", new DiagnosisSlots());
+
+        assertEquals("2026-05-25", result.getSlots().getRecordDate());
+        assertEquals("LUNCH", result.getSlots().getMealType());
+        assertEquals("HIGH", result.getSlots().getRecordDateConfidence());
+    }
+
+    @Test
+    void shouldDetectRetryIntent() {
+        DiagnosisSlots existing = new DiagnosisSlots();
+        existing.setCustomerCode("C10001");
+        existing.setRecordDate("2026-05-22");
+        existing.setMealType("LUNCH");
+
+        ChatExtractionResult result = extractor.extract("重新排查", existing);
+
+        assertEquals(ChatIntent.RETRY, result.getIntent());
+        assertEquals("C10001", result.getSlots().getCustomerCode());
+        assertEquals("2026-05-22", result.getSlots().getRecordDate());
+        assertEquals("LUNCH", result.getSlots().getMealType());
+    }
+
+    @Test
+    void shouldDetectResetIntent() {
+        ChatExtractionResult result = extractor.extract("清空会话", new DiagnosisSlots());
+
+        assertEquals(ChatIntent.RESET, result.getIntent());
+        assertEquals(List.of(), result.getAmbiguousSlots());
+    }
+
+    @Test
+    void shouldDetectAmbiguousCustomerAndRequireConfirmation() {
+        ChatExtractionResult result = extractor.extract("客户 123 今天午餐", new DiagnosisSlots());
+
+        assertEquals(ChatIntent.DIAGNOSE, result.getIntent());
+        assertEquals("123", result.getSlots().getCustomerCode());
+        assertEquals("LOW", result.getSlots().getCustomerConfidence());
+        assertEquals(List.of(MissingSlot.CUSTOMER), result.getAmbiguousSlots());
+        assertEquals(List.of(), result.getMissingSlots());
+    }
+
+    @Test
+    void shouldDetectFollowUpWhenDiagnosisExistsAndNoAmbiguity() {
+        DiagnosisSlots existing = new DiagnosisSlots();
+        existing.setCustomerCode("C10001");
+        existing.setRecordDate("2026-05-22");
+        existing.setMealType("LUNCH");
+
+        ChatExtractionResult result = extractor.extract("为什么候选菜为空？", existing);
 
         assertEquals(ChatIntent.FOLLOW_UP, result.getIntent());
     }

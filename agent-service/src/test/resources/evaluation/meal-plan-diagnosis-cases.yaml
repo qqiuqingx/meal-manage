@@ -1,0 +1,910 @@
+cases:
+  - caseId: MPD-001
+    userInput: "客户 C1001 2026-05-17 午餐为什么没排餐"
+    slots: { customerCode: C1001, recordDate: "2026-05-17", mealType: LUNCH }
+    expectedReasonCode: CUSTOMER_EXCLUDE_DATE_HIT
+    expectedRuleIds: [CUSTOMER_EXCLUDE_DATE_HIT]
+    expectedEvidenceFields: [customerProfile.excludeDates]
+    expectedNextActions: [核对客户档案停送配置]
+    allowFallback: false
+    note: "客户停送日期命中午餐"
+  - caseId: MPD-002
+    userInput: "客户 C1002 今天晚餐未生成"
+    slots: { customerCode: C1002, recordDate: "2026-05-17", mealType: DINNER }
+    expectedReasonCode: CUSTOMER_EXCLUDE_DATE_HIT
+    expectedRuleIds: [CUSTOMER_EXCLUDE_DATE_HIT]
+    expectedEvidenceFields: [customerProfile.excludeDates]
+    expectedNextActions: [确认是否需要恢复配送]
+    allowFallback: false
+    note: "客户请假覆盖晚餐"
+  - caseId: MPD-003
+    userInput: "1003 客户早餐没排"
+    slots: { customerId: 1003, recordDate: "2026-05-18", mealType: BREAKFAST }
+    expectedReasonCode: CUSTOMER_NOT_FOUND
+    expectedRuleIds: [CUSTOMER_NOT_FOUND]
+    expectedEvidenceFields: [customerId]
+    expectedNextActions: [核对客户编号或客户ID]
+    allowFallback: false
+    note: "客户ID不存在"
+  - caseId: MPD-004
+    userInput: "客户编号填 C-ERR，午餐没有排餐"
+    slots: { customerCode: C-ERR, recordDate: "2026-05-18", mealType: LUNCH }
+    expectedReasonCode: CUSTOMER_NOT_FOUND
+    expectedRuleIds: [CUSTOMER_NOT_FOUND]
+    expectedEvidenceFields: [customerCode]
+    expectedNextActions: [核对客户档案是否存在]
+    allowFallback: false
+    note: "客户编号错误"
+  - caseId: MPD-005
+    userInput: "C1005 5月20日早餐没排餐"
+    slots: { customerCode: C1005, recordDate: "2026-05-20", mealType: BREAKFAST }
+    expectedReasonCode: ORDER_MISSING
+    expectedRuleIds: [ORDER_MISSING]
+    expectedEvidenceFields: [orders.status]
+    expectedNextActions: [核对客户有效订单]
+    allowFallback: false
+    note: "客户无订单"
+  - caseId: MPD-006
+    userInput: "C1006 晚餐应该配送但没排"
+    slots: { customerCode: C1006, recordDate: "2026-05-20", mealType: DINNER }
+    expectedReasonCode: ORDER_MISSING
+    expectedRuleIds: [ORDER_MISSING]
+    expectedEvidenceFields: [orders.status]
+    expectedNextActions: [核对订单录入状态]
+    allowFallback: false
+    note: "订单已取消"
+  - caseId: MPD-007
+    userInput: "C1007 5月19日午餐未排"
+    slots: { customerCode: C1007, recordDate: "2026-05-19", mealType: LUNCH }
+    expectedReasonCode: ORDER_NOT_EFFECTIVE
+    expectedRuleIds: [ORDER_NOT_EFFECTIVE]
+    expectedEvidenceFields: [orders.startDate, orders.endDate]
+    expectedNextActions: [核对订单生效时间]
+    allowFallback: false
+    note: "订单开始日期晚于排餐日期"
+  - caseId: MPD-008
+    userInput: "C1008 首日早餐为什么没排"
+    slots: { customerCode: C1008, recordDate: "2026-05-20", mealType: BREAKFAST }
+    expectedReasonCode: ORDER_NOT_EFFECTIVE
+    expectedRuleIds: [ORDER_NOT_EFFECTIVE]
+    expectedEvidenceFields: [orders.startMealType]
+    expectedNextActions: [核对订单生效时间]
+    allowFallback: false
+    note: "首餐次从午餐开始"
+  - caseId: MPD-009
+    userInput: "C1009 结束后的晚餐还没排"
+    slots: { customerCode: C1009, recordDate: "2026-05-21", mealType: DINNER }
+    expectedReasonCode: ORDER_NOT_EFFECTIVE
+    expectedRuleIds: [ORDER_NOT_EFFECTIVE]
+    expectedEvidenceFields: [orders.endDate]
+    expectedNextActions: [核对订单当前状态]
+    allowFallback: false
+    note: "订单已过结束日期"
+  - caseId: MPD-010
+    userInput: "C1010 午餐没排，订单还有吗"
+    slots: { customerCode: C1010, recordDate: "2026-05-21", mealType: LUNCH }
+    expectedReasonCode: ORDER_REMAINING_COUNT_NOT_ENOUGH
+    expectedRuleIds: [ORDER_REMAINING_COUNT_EMPTY]
+    expectedEvidenceFields: [orders.remainingCount]
+    expectedNextActions: [核对订单剩余餐数]
+    allowFallback: false
+    note: "午晚餐餐数池为0"
+  - caseId: MPD-011
+    userInput: "C1011 早餐未生成"
+    slots: { customerCode: C1011, recordDate: "2026-05-22", mealType: BREAKFAST }
+    expectedReasonCode: ORDER_REMAINING_COUNT_NOT_ENOUGH
+    expectedRuleIds: [ORDER_REMAINING_COUNT_EMPTY]
+    expectedEvidenceFields: [orders.remainingCount]
+    expectedNextActions: [核对核销记录]
+    allowFallback: false
+    note: "早餐剩余数为0"
+  - caseId: MPD-012
+    userInput: "C1012 周末午餐为什么没有"
+    slots: { customerCode: C1012, recordDate: "2026-05-23", mealType: LUNCH }
+    expectedReasonCode: SCHEDULE_MODE_NOT_MATCH
+    expectedRuleIds: [SCHEDULE_MODE_NOT_MATCH]
+    expectedEvidenceFields: [orders.scheduleMode]
+    expectedNextActions: [核对订单排餐模式]
+    allowFallback: false
+    note: "工作日模式不覆盖周末"
+  - caseId: MPD-013
+    userInput: "C1013 排餐计划中没有晚餐"
+    slots: { customerCode: C1013, recordDate: "2026-05-24", mealType: DINNER }
+    expectedReasonCode: SCHEDULE_MODE_NOT_MATCH
+    expectedRuleIds: [SCHEDULE_MODE_NOT_MATCH]
+    expectedEvidenceFields: [orders.deliveryDates]
+    expectedNextActions: [核对排餐任务配置]
+    allowFallback: false
+    note: "指定配送日不含目标餐次"
+  - caseId: MPD-014
+    userInput: "C1014 午餐菜都没有所以没排吗"
+    slots: { customerCode: C1014, recordDate: "2026-05-24", mealType: LUNCH }
+    expectedReasonCode: CANDIDATE_DISH_EMPTY
+    expectedRuleIds: [CANDIDATE_DISH_EMPTY]
+    expectedEvidenceFields: [candidateDishStats.availableCount]
+    expectedNextActions: [核对菜品排期]
+    allowFallback: false
+    note: "候选菜池为空"
+  - caseId: MPD-015
+    userInput: "C1015 晚餐候选菜为0"
+    slots: { customerCode: C1015, recordDate: "2026-05-25", mealType: DINNER }
+    expectedReasonCode: CANDIDATE_DISH_EMPTY
+    expectedRuleIds: [CANDIDATE_DISH_EMPTY]
+    expectedEvidenceFields: [mealPlan.candidateDishStats]
+    expectedNextActions: [核对套餐规格配置]
+    allowFallback: false
+    note: "套餐过滤后无候选菜"
+  - caseId: MPD-016
+    userInput: "C1016 过敏过滤后午餐没菜"
+    slots: { customerCode: C1016, recordDate: "2026-05-25", mealType: LUNCH }
+    expectedReasonCode: DISH_FILTERED_BY_ALLERGY
+    expectedRuleIds: [DISH_FILTERED_EMPTY]
+    expectedEvidenceFields: [customerProfile.allergyTags, mealPlan.candidateDishStats]
+    expectedNextActions: [核对过敏过滤规则]
+    allowFallback: false
+    note: "过敏过滤清空候选菜"
+  - caseId: MPD-017
+    userInput: "C1017 忌口太多早餐没排"
+    slots: { customerCode: C1017, recordDate: "2026-05-26", mealType: BREAKFAST }
+    expectedReasonCode: DISH_FILTERED_BY_ALLERGY
+    expectedRuleIds: [DISH_FILTERED_EMPTY]
+    expectedEvidenceFields: [customerProfile.excludedDishIds]
+    expectedNextActions: [核对客户忌口配置]
+    allowFallback: false
+    note: "排除菜过滤为空"
+  - caseId: MPD-018
+    userInput: "C1018 排餐任务失败了？"
+    slots: { customerCode: C1018, recordDate: "2026-05-26", mealType: LUNCH }
+    expectedReasonCode: MEAL_PLAN_GENERATION_FAILED
+    expectedRuleIds: [MEAL_PLAN_GENERATED_FAILED]
+    expectedEvidenceFields: [customerPlans.status, customerPlans.failReason]
+    expectedNextActions: [核对失败原因字段]
+    allowFallback: false
+    note: "客户排餐记录失败"
+  - caseId: MPD-019
+    userInput: "C1019 晚餐生成报错"
+    slots: { customerCode: C1019, recordDate: "2026-05-27", mealType: DINNER }
+    expectedReasonCode: MEAL_PLAN_GENERATION_FAILED
+    expectedRuleIds: [MEAL_PLAN_GENERATED_FAILED]
+    expectedEvidenceFields: [mealPlan.failReason]
+    expectedNextActions: [核对排餐生成日志]
+    allowFallback: false
+    note: "主任务失败原因存在"
+  - caseId: MPD-020
+    userInput: "客户没填清楚，查一下为什么没排"
+    slots: { recordDate: "2026-05-27", mealType: LUNCH }
+    expectedReasonCode: DATA_INCOMPLETE_NEED_RECHECK
+    expectedRuleIds: []
+    expectedEvidenceFields: []
+    expectedNextActions: [补充客户编号或客户ID]
+    allowFallback: true
+    note: "缺少客户槽位"
+  - caseId: MPD-021
+    userInput: "C1021 日期不确定但没排"
+    slots: { customerCode: C1021, mealType: LUNCH }
+    expectedReasonCode: DATA_INCOMPLETE_NEED_RECHECK
+    expectedRuleIds: []
+    expectedEvidenceFields: []
+    expectedNextActions: [补充诊断日期]
+    allowFallback: true
+    note: "缺少日期槽位"
+  - caseId: MPD-022
+    userInput: "C1022 5月28日没排"
+    slots: { customerCode: C1022, recordDate: "2026-05-28" }
+    expectedReasonCode: DATA_INCOMPLETE_NEED_RECHECK
+    expectedRuleIds: []
+    expectedEvidenceFields: []
+    expectedNextActions: [补充餐次]
+    allowFallback: true
+    note: "缺少餐次槽位"
+  - caseId: MPD-023
+    userInput: "C1023 午餐未排，订单是早餐套餐"
+    slots: { customerCode: C1023, recordDate: "2026-05-28", mealType: LUNCH }
+    expectedReasonCode: ORDER_NOT_EFFECTIVE
+    expectedRuleIds: [ORDER_NOT_EFFECTIVE]
+    expectedEvidenceFields: [orders.startMealType]
+    expectedNextActions: [核对订单当前状态]
+    allowFallback: false
+    note: "餐次类型不匹配暂归订单不生效规则"
+  - caseId: MPD-024
+    userInput: "C1024 晚餐订单已核销完还没排"
+    slots: { customerCode: C1024, recordDate: "2026-05-29", mealType: DINNER }
+    expectedReasonCode: ORDER_REMAINING_COUNT_NOT_ENOUGH
+    expectedRuleIds: [ORDER_REMAINING_COUNT_EMPTY]
+    expectedEvidenceFields: [orders.remainingCount]
+    expectedNextActions: [核对核销记录]
+    allowFallback: false
+    note: "核销消耗完午晚餐池"
+  - caseId: MPD-025
+    userInput: "C1025 套餐规格没配早餐"
+    slots: { customerCode: C1025, recordDate: "2026-05-29", mealType: BREAKFAST }
+    expectedReasonCode: CANDIDATE_DISH_EMPTY
+    expectedRuleIds: [CANDIDATE_DISH_EMPTY]
+    expectedEvidenceFields: [mealPlan.candidateDishStats]
+    expectedNextActions: [核对套餐规格配置]
+    allowFallback: false
+    note: "套餐规格缺失导致无候选菜"
+  - caseId: MPD-026
+    userInput: "C1026 菜单没排期导致晚餐没生成"
+    slots: { customerCode: C1026, recordDate: "2026-05-30", mealType: DINNER }
+    expectedReasonCode: CANDIDATE_DISH_EMPTY
+    expectedRuleIds: [CANDIDATE_DISH_EMPTY]
+    expectedEvidenceFields: [candidateDishStats.availableCount]
+    expectedNextActions: [核对菜品排期]
+    allowFallback: false
+    note: "菜单排期缺失"
+  - caseId: MPD-027
+    userInput: "C1027 配送日不是今天为什么系统没排"
+    slots: { customerCode: C1027, recordDate: "2026-05-30", mealType: LUNCH }
+    expectedReasonCode: SCHEDULE_MODE_NOT_MATCH
+    expectedRuleIds: [SCHEDULE_MODE_NOT_MATCH]
+    expectedEvidenceFields: [orders.deliveryDates]
+    expectedNextActions: [核对订单排餐模式]
+    allowFallback: false
+    note: "隔日配送模式不匹配"
+  - caseId: MPD-028
+    userInput: "C1028 客户档案停餐但订单有效"
+    slots: { customerCode: C1028, recordDate: "2026-05-31", mealType: LUNCH }
+    expectedReasonCode: CUSTOMER_EXCLUDE_DATE_HIT
+    expectedRuleIds: [CUSTOMER_EXCLUDE_DATE_HIT]
+    expectedEvidenceFields: [customerProfile.excludeDates]
+    expectedNextActions: [确认是否需要恢复配送]
+    allowFallback: false
+    note: "客户维度停送优先"
+  - caseId: MPD-029
+    userInput: "C1029 有任务但客户没在排餐明细里"
+    slots: { customerCode: C1029, recordDate: "2026-05-31", mealType: DINNER }
+    expectedReasonCode: DATA_INCOMPLETE_NEED_RECHECK
+    expectedRuleIds: []
+    expectedEvidenceFields: []
+    expectedNextActions: [人工核对排餐任务和客户条件]
+    allowFallback: true
+    note: "现有规则缺口，进入人工核对"
+  - caseId: MPD-030
+    userInput: "C1030 工具都没查到有效数据"
+    slots: { customerCode: C1030, recordDate: "2026-06-01", mealType: BREAKFAST }
+    expectedReasonCode: DATA_INCOMPLETE_NEED_RECHECK
+    expectedRuleIds: []
+    expectedEvidenceFields: []
+    expectedNextActions: [核对客户档案, 核对订单有效性, 核对排餐记录]
+    allowFallback: true
+    note: "工具无数据需要人工核对"
+  - caseId: MPD-031
+    userInput: "C1031 订单过期了晚餐没排"
+    slots: { customerCode: C1031, recordDate: "2026-06-02", mealType: DINNER }
+    expectedReasonCode: ORDER_EXPIRED
+    expectedRuleIds: [ORDER_EXPIRED]
+    expectedEvidenceFields: [orders.endDate]
+    expectedNextActions: [核对订单结束日期]
+    allowFallback: false
+    note: "订单结束日期早于诊断日期"
+  - caseId: MPD-032
+    userInput: "C1032 早餐订单为什么午餐没排"
+    slots: { customerCode: C1032, recordDate: "2026-06-02", mealType: LUNCH }
+    expectedReasonCode: ORDER_MEAL_TYPE_MISMATCH
+    expectedRuleIds: [ORDER_MEAL_TYPE_MISMATCH]
+    expectedEvidenceFields: [orders.mealType]
+    expectedNextActions: [核对订单餐次类型]
+    allowFallback: false
+    note: "订单只覆盖早餐"
+  - caseId: MPD-033
+    userInput: "C1033 子套餐没配菜数导致没排"
+    slots: { customerCode: C1033, recordDate: "2026-06-03", mealType: LUNCH }
+    expectedReasonCode: PACKAGE_SPEC_MISSING
+    expectedRuleIds: [PACKAGE_SPEC_MISSING]
+    expectedEvidenceFields: [packageSpec.missingFields]
+    expectedNextActions: [核对套餐规格配置]
+    allowFallback: false
+    note: "子套餐缺少菜品数量配置"
+  - caseId: MPD-034
+    userInput: "C1034 父套餐没有子套餐关系"
+    slots: { customerCode: C1034, recordDate: "2026-06-03", mealType: DINNER }
+    expectedReasonCode: PACKAGE_SPEC_MISSING
+    expectedRuleIds: [PACKAGE_SPEC_MISSING]
+    expectedEvidenceFields: [packageSpec.parentPackage, packageSpec.missingFields]
+    expectedNextActions: [补齐父套餐和子套餐关系]
+    allowFallback: false
+    note: "父套餐 children 为空"
+  - caseId: MPD-035
+    userInput: "C1035 退餐后午餐没排"
+    slots: { customerCode: C1035, recordDate: "2026-06-04", mealType: LUNCH }
+    expectedReasonCode: REFUND_OR_STOP_MEAL_HIT
+    expectedRuleIds: [REFUND_OR_STOP_MEAL_HIT]
+    expectedEvidenceFields: [mealRefunds.refundReason]
+    expectedNextActions: [核对退餐或停餐记录]
+    allowFallback: false
+    note: "订单存在退餐记录"
+  - caseId: MPD-036
+    userInput: "C1036 停餐记录命中晚餐"
+    slots: { customerCode: C1036, recordDate: "2026-06-04", mealType: DINNER }
+    expectedReasonCode: REFUND_OR_STOP_MEAL_HIT
+    expectedRuleIds: [REFUND_OR_STOP_MEAL_HIT]
+    expectedEvidenceFields: [mealRefunds.orderId, mealRefunds.refundLunchDinnerCount]
+    expectedNextActions: [核对订单剩余餐数是否已扣减]
+    allowFallback: false
+    note: "午晚餐池退餐"
+  - caseId: MPD-037
+    userInput: "C1037 午餐核销完所以没排吗"
+    slots: { customerCode: C1037, recordDate: "2026-06-05", mealType: LUNCH }
+    expectedReasonCode: VERIFICATION_CONSUMED_COUNT
+    expectedRuleIds: [VERIFICATION_CONSUMED_COUNT]
+    expectedEvidenceFields: [verificationLogs.verificationCount, order.remainingCount]
+    expectedNextActions: [核对核销记录]
+    allowFallback: false
+    note: "核销日志消耗午晚餐池"
+  - caseId: MPD-038
+    userInput: "C1038 早餐核销后没剩余"
+    slots: { customerCode: C1038, recordDate: "2026-06-05", mealType: BREAKFAST }
+    expectedReasonCode: VERIFICATION_CONSUMED_COUNT
+    expectedRuleIds: [VERIFICATION_CONSUMED_COUNT]
+    expectedEvidenceFields: [verificationLogs.mealType, order.remainingCount]
+    expectedNextActions: [核对订单餐数池余额]
+    allowFallback: false
+    note: "早餐池被核销耗尽"
+  - caseId: MPD-039
+    userInput: "C1039 已经有排餐任务但客户不在里面"
+    slots: { customerCode: C1039, recordDate: "2026-06-06", mealType: LUNCH }
+    expectedReasonCode: MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING
+    expectedRuleIds: [MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING]
+    expectedEvidenceFields: [mealPlan.planId, customerCode]
+    expectedNextActions: [人工核对排餐任务和客户条件]
+    allowFallback: false
+    note: "排餐主任务存在但客户明细缺失"
+  - caseId: MPD-040
+    userInput: "C1040 排餐主表有总人数但查不到这个客户"
+    slots: { customerCode: C1040, recordDate: "2026-06-06", mealType: DINNER }
+    expectedReasonCode: MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING
+    expectedRuleIds: [MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING]
+    expectedEvidenceFields: [mealPlan.totalCustomers, customerCode]
+    expectedNextActions: [核对客户是否被订单或配送规则过滤]
+    allowFallback: false
+    note: "客户未进入排餐明细"
+  - caseId: MPD-041
+    userInput: "C1041 今天午餐是晚餐套餐"
+    slots: { customerCode: C1041, recordDate: "2026-06-07", mealType: LUNCH }
+    expectedReasonCode: ORDER_MEAL_TYPE_MISMATCH
+    expectedRuleIds: [ORDER_MEAL_TYPE_MISMATCH]
+    expectedEvidenceFields: [orders.mealType, mealType]
+    expectedNextActions: [核对客户购买套餐内容]
+    allowFallback: false
+    note: "订单餐次不覆盖午餐"
+  - caseId: MPD-042
+    userInput: "C1042 订单昨天结束了早餐没排"
+    slots: { customerCode: C1042, recordDate: "2026-06-07", mealType: BREAKFAST }
+    expectedReasonCode: ORDER_EXPIRED
+    expectedRuleIds: [ORDER_EXPIRED]
+    expectedEvidenceFields: [orders.orderId, orders.endDate]
+    expectedNextActions: [确认是否需要续单或新建订单]
+    allowFallback: false
+    note: "订单过期"
+  - caseId: MPD-043
+    userInput: "C1043 子套餐没配置米饭"
+    slots: { customerCode: C1043, recordDate: "2026-06-08", mealType: LUNCH }
+    expectedReasonCode: PACKAGE_SPEC_MISSING
+    expectedRuleIds: [PACKAGE_SPEC_MISSING]
+    expectedEvidenceFields: [packageSpec.childPackage, packageSpec.missingFields]
+    expectedNextActions: [补齐子套餐菜品数量配置]
+    allowFallback: false
+    note: "includeRice 缺失"
+  - caseId: MPD-044
+    userInput: "C1044 套餐编码缺失导致没候选"
+    slots: { customerCode: C1044, recordDate: "2026-06-08", mealType: DINNER }
+    expectedReasonCode: PACKAGE_SPEC_MISSING
+    expectedRuleIds: [PACKAGE_SPEC_MISSING]
+    expectedEvidenceFields: [packageSpec.parentPackage, packageSpec.missingFields]
+    expectedNextActions: [核对套餐规格配置]
+    allowFallback: false
+    note: "父套餐编码缺失"
+  - caseId: MPD-045
+    userInput: "C1045 退款后晚餐没生成"
+    slots: { customerCode: C1045, recordDate: "2026-06-09", mealType: DINNER }
+    expectedReasonCode: REFUND_OR_STOP_MEAL_HIT
+    expectedRuleIds: [REFUND_OR_STOP_MEAL_HIT]
+    expectedEvidenceFields: [mealRefunds.refundReason, mealRefunds.refundLunchDinnerCount]
+    expectedNextActions: [核对退餐或停餐记录]
+    allowFallback: false
+    note: "退款记录影响排餐"
+  - caseId: MPD-046
+    userInput: "C1046 早餐退餐后不排"
+    slots: { customerCode: C1046, recordDate: "2026-06-09", mealType: BREAKFAST }
+    expectedReasonCode: REFUND_OR_STOP_MEAL_HIT
+    expectedRuleIds: [REFUND_OR_STOP_MEAL_HIT]
+    expectedEvidenceFields: [mealRefunds.refundBreakfastCount]
+    expectedNextActions: [核对订单剩余餐数是否已扣减]
+    allowFallback: false
+    note: "早餐退餐"
+  - caseId: MPD-047
+    userInput: "C1047 昨天核销晚餐后今天午餐没排"
+    slots: { customerCode: C1047, recordDate: "2026-06-10", mealType: LUNCH }
+    expectedReasonCode: VERIFICATION_CONSUMED_COUNT
+    expectedRuleIds: [VERIFICATION_CONSUMED_COUNT]
+    expectedEvidenceFields: [verificationLogs.orderId, verificationLogs.mealType]
+    expectedNextActions: [核对核销记录]
+    allowFallback: false
+    note: "晚餐核销消耗午晚餐池"
+  - caseId: MPD-048
+    userInput: "C1048 午晚餐池核销为0"
+    slots: { customerCode: C1048, recordDate: "2026-06-10", mealType: DINNER }
+    expectedReasonCode: VERIFICATION_CONSUMED_COUNT
+    expectedRuleIds: [VERIFICATION_CONSUMED_COUNT]
+    expectedEvidenceFields: [verificationLogs.verificationCount, order.remainingCount]
+    expectedNextActions: [核对订单餐数池余额]
+    allowFallback: false
+    note: "午晚餐池余额为0"
+  - caseId: MPD-049
+    userInput: "C1049 排餐任务成功但没有这个客户"
+    slots: { customerCode: C1049, recordDate: "2026-06-11", mealType: LUNCH }
+    expectedReasonCode: MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING
+    expectedRuleIds: [MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING]
+    expectedEvidenceFields: [mealPlan.planId, mealPlan.totalCustomers]
+    expectedNextActions: [人工核对排餐任务和客户条件]
+    allowFallback: false
+    note: "任务成功但客户缺失"
+  - caseId: MPD-050
+    userInput: "C1050 订单餐次是午餐为什么早餐没排"
+    slots: { customerCode: C1050, recordDate: "2026-06-11", mealType: BREAKFAST }
+    expectedReasonCode: ORDER_MEAL_TYPE_MISMATCH
+    expectedRuleIds: [ORDER_MEAL_TYPE_MISMATCH]
+    expectedEvidenceFields: [orders.mealType]
+    expectedNextActions: [核对订单餐次类型]
+    allowFallback: false
+    note: "早餐不在购买范围"
+  - caseId: MPD-051
+    userInput: "C1051 订单超过服务期还排不了"
+    slots: { customerCode: C1051, recordDate: "2026-06-12", mealType: LUNCH }
+    expectedReasonCode: ORDER_EXPIRED
+    expectedRuleIds: [ORDER_EXPIRED]
+    expectedEvidenceFields: [order.endDate]
+    expectedNextActions: [核对订单结束日期]
+    allowFallback: false
+    note: "过服务期"
+  - caseId: MPD-052
+    userInput: "C1052 父套餐停用吗导致未排"
+    slots: { customerCode: C1052, recordDate: "2026-06-12", mealType: DINNER }
+    expectedReasonCode: PACKAGE_SPEC_MISSING
+    expectedRuleIds: [PACKAGE_SPEC_MISSING]
+    expectedEvidenceFields: [packageSpec.parentPackage]
+    expectedNextActions: [核对套餐规格配置]
+    allowFallback: false
+    note: "父套餐配置异常"
+  - caseId: MPD-053
+    userInput: "C1053 查不到子套餐规格"
+    slots: { customerCode: C1053, recordDate: "2026-06-13", mealType: LUNCH }
+    expectedReasonCode: PACKAGE_SPEC_MISSING
+    expectedRuleIds: [PACKAGE_SPEC_MISSING]
+    expectedEvidenceFields: [packageSpec.childPackage, packageSpec.missingFields]
+    expectedNextActions: [补齐父套餐和子套餐关系]
+    allowFallback: false
+    note: "子套餐不存在"
+  - caseId: MPD-054
+    userInput: "C1054 停餐记录覆盖早餐"
+    slots: { customerCode: C1054, recordDate: "2026-06-13", mealType: BREAKFAST }
+    expectedReasonCode: REFUND_OR_STOP_MEAL_HIT
+    expectedRuleIds: [REFUND_OR_STOP_MEAL_HIT]
+    expectedEvidenceFields: [mealRefunds.orderId, mealRefunds.refundBreakfastCount]
+    expectedNextActions: [核对退餐或停餐记录]
+    allowFallback: false
+    note: "早餐停餐"
+  - caseId: MPD-055
+    userInput: "C1055 退午餐后晚餐也没排"
+    slots: { customerCode: C1055, recordDate: "2026-06-14", mealType: DINNER }
+    expectedReasonCode: REFUND_OR_STOP_MEAL_HIT
+    expectedRuleIds: [REFUND_OR_STOP_MEAL_HIT]
+    expectedEvidenceFields: [mealRefunds.refundLunchDinnerCount]
+    expectedNextActions: [核对订单剩余餐数是否已扣减]
+    allowFallback: false
+    note: "午晚餐共享池退餐"
+  - caseId: MPD-056
+    userInput: "C1056 核销日志异常导致没排"
+    slots: { customerCode: C1056, recordDate: "2026-06-14", mealType: LUNCH }
+    expectedReasonCode: VERIFICATION_CONSUMED_COUNT
+    expectedRuleIds: [VERIFICATION_CONSUMED_COUNT]
+    expectedEvidenceFields: [verificationLogs.orderId, verificationLogs.verificationCount]
+    expectedNextActions: [核对核销记录]
+    allowFallback: false
+    note: "核销数量超出预期"
+  - caseId: MPD-057
+    userInput: "C1057 排餐批次有但客户被过滤"
+    slots: { customerCode: C1057, recordDate: "2026-06-15", mealType: DINNER }
+    expectedReasonCode: MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING
+    expectedRuleIds: [MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING]
+    expectedEvidenceFields: [mealPlan.totalCustomers, customerCode]
+    expectedNextActions: [核对客户是否被订单或配送规则过滤]
+    allowFallback: false
+    note: "客户被过滤出排餐批次"
+  - caseId: MPD-058
+    userInput: "C1058 客户、订单、退餐记录互相矛盾"
+    slots: { customerCode: C1058, recordDate: "2026-06-15", mealType: LUNCH }
+    expectedReasonCode: DATA_INCOMPLETE_NEED_RECHECK
+    expectedRuleIds: []
+    expectedEvidenceFields: []
+    expectedNextActions: [人工核对排餐任务和客户条件]
+    allowFallback: true
+    note: "多工具证据冲突，需要人工核对"
+  - caseId: MPD-059
+    userInput: "C1059 工具调用失败，帮我看为什么没排"
+    slots: { customerCode: C1059, recordDate: "2026-06-16", mealType: DINNER }
+    expectedReasonCode: DATA_INCOMPLETE_NEED_RECHECK
+    expectedRuleIds: []
+    expectedEvidenceFields: []
+    expectedNextActions: [核对客户档案, 核对订单有效性]
+    allowFallback: true
+    note: "关键工具失败需要兜底"
+  - caseId: MPD-060
+    userInput: "C1060 规则里没有覆盖的异常"
+    slots: { customerCode: C1060, recordDate: "2026-06-16", mealType: BREAKFAST }
+    expectedReasonCode: DATA_INCOMPLETE_NEED_RECHECK
+    expectedRuleIds: []
+    expectedEvidenceFields: []
+    expectedNextActions: [核对客户档案, 核对订单有效性, 核对排餐记录]
+    allowFallback: true
+    note: "未知原因进入人工核对"
+  - caseId: MPD-061
+    userInput: "C1061 电话反馈客户档案不存在"
+    slots: { customerCode: C1061, recordDate: "2026-06-17", mealType: LUNCH }
+    expectedReasonCode: CUSTOMER_NOT_FOUND
+    expectedRuleIds: [CUSTOMER_NOT_FOUND]
+    expectedEvidenceFields: [customerCode]
+    expectedNextActions: [核对客户档案是否存在]
+    allowFallback: false
+    note: "客服反馈补充客户不存在样本"
+  - caseId: MPD-062
+    userInput: "客户 1062 晚餐查不到档案"
+    slots: { customerId: 1062, recordDate: "2026-06-17", mealType: DINNER }
+    expectedReasonCode: CUSTOMER_NOT_FOUND
+    expectedRuleIds: [CUSTOMER_NOT_FOUND]
+    expectedEvidenceFields: [customerId]
+    expectedNextActions: [核对客户编号或客户ID]
+    allowFallback: false
+    note: "客户ID未命中"
+  - caseId: MPD-063
+    userInput: "C1063 今天午餐请假没排"
+    slots: { customerCode: C1063, recordDate: "2026-06-18", mealType: LUNCH }
+    expectedReasonCode: CUSTOMER_EXCLUDE_DATE_HIT
+    expectedRuleIds: [CUSTOMER_EXCLUDE_DATE_HIT]
+    expectedEvidenceFields: [customerProfile.excludeDates]
+    expectedNextActions: [核对客户档案停送配置]
+    allowFallback: false
+    note: "请假记录命中午餐"
+  - caseId: MPD-064
+    userInput: "C1064 早餐停送还没恢复"
+    slots: { customerCode: C1064, recordDate: "2026-06-18", mealType: BREAKFAST }
+    expectedReasonCode: CUSTOMER_EXCLUDE_DATE_HIT
+    expectedRuleIds: [CUSTOMER_EXCLUDE_DATE_HIT]
+    expectedEvidenceFields: [customerProfile.excludeDates]
+    expectedNextActions: [确认是否需要恢复配送]
+    allowFallback: false
+    note: "停送配置覆盖早餐"
+  - caseId: MPD-065
+    userInput: "C1065 没有订单但客户存在"
+    slots: { customerCode: C1065, recordDate: "2026-06-19", mealType: LUNCH }
+    expectedReasonCode: ORDER_MISSING
+    expectedRuleIds: [ORDER_MISSING]
+    expectedEvidenceFields: [orders.status]
+    expectedNextActions: [核对客户有效订单]
+    allowFallback: false
+    note: "客户有效订单为空"
+  - caseId: MPD-066
+    userInput: "C1066 订单作废后晚餐没排"
+    slots: { customerCode: C1066, recordDate: "2026-06-19", mealType: DINNER }
+    expectedReasonCode: ORDER_MISSING
+    expectedRuleIds: [ORDER_MISSING]
+    expectedEvidenceFields: [orders.orderId, orders.status]
+    expectedNextActions: [核对订单录入状态]
+    allowFallback: false
+    note: "订单状态不可排餐"
+  - caseId: MPD-067
+    userInput: "C1067 明天才开始，今天午餐没排"
+    slots: { customerCode: C1067, recordDate: "2026-06-20", mealType: LUNCH }
+    expectedReasonCode: ORDER_NOT_EFFECTIVE
+    expectedRuleIds: [ORDER_NOT_EFFECTIVE]
+    expectedEvidenceFields: [orders.startDate, orders.orderId]
+    expectedNextActions: [核对订单生效时间]
+    allowFallback: false
+    note: "订单开始日期未到"
+  - caseId: MPD-068
+    userInput: "C1068 首餐晚餐，所以午餐没排吗"
+    slots: { customerCode: C1068, recordDate: "2026-06-20", mealType: LUNCH }
+    expectedReasonCode: ORDER_NOT_EFFECTIVE
+    expectedRuleIds: [ORDER_NOT_EFFECTIVE]
+    expectedEvidenceFields: [orders.startMealType]
+    expectedNextActions: [核对订单当前状态]
+    allowFallback: false
+    note: "首餐次晚于目标餐次"
+  - caseId: MPD-069
+    userInput: "C1069 订单到期后早餐未排"
+    slots: { customerCode: C1069, recordDate: "2026-06-21", mealType: BREAKFAST }
+    expectedReasonCode: ORDER_EXPIRED
+    expectedRuleIds: [ORDER_EXPIRED]
+    expectedEvidenceFields: [orders.endDate]
+    expectedNextActions: [核对订单结束日期]
+    allowFallback: false
+    note: "订单结束日期早于诊断日期"
+  - caseId: MPD-070
+    userInput: "C1070 午餐订单过期未续"
+    slots: { customerCode: C1070, recordDate: "2026-06-21", mealType: LUNCH }
+    expectedReasonCode: ORDER_EXPIRED
+    expectedRuleIds: [ORDER_EXPIRED]
+    expectedEvidenceFields: [orders.orderId, order.endDate]
+    expectedNextActions: [确认是否需要续单或新建订单]
+    allowFallback: false
+    note: "续单缺失"
+  - caseId: MPD-071
+    userInput: "C1071 只买早餐但查午餐"
+    slots: { customerCode: C1071, recordDate: "2026-06-22", mealType: LUNCH }
+    expectedReasonCode: ORDER_MEAL_TYPE_MISMATCH
+    expectedRuleIds: [ORDER_MEAL_TYPE_MISMATCH]
+    expectedEvidenceFields: [orders.mealType, mealType]
+    expectedNextActions: [核对订单餐次类型]
+    allowFallback: false
+    note: "订单不覆盖午餐"
+  - caseId: MPD-072
+    userInput: "C1072 晚餐套餐为什么早餐没排"
+    slots: { customerCode: C1072, recordDate: "2026-06-22", mealType: BREAKFAST }
+    expectedReasonCode: ORDER_MEAL_TYPE_MISMATCH
+    expectedRuleIds: [ORDER_MEAL_TYPE_MISMATCH]
+    expectedEvidenceFields: [orders.mealType]
+    expectedNextActions: [核对客户购买套餐内容]
+    allowFallback: false
+    note: "购买餐次和诊断餐次不一致"
+  - caseId: MPD-073
+    userInput: "C1073 午晚餐剩余餐数不足"
+    slots: { customerCode: C1073, recordDate: "2026-06-23", mealType: DINNER }
+    expectedReasonCode: ORDER_REMAINING_COUNT_NOT_ENOUGH
+    expectedRuleIds: [ORDER_REMAINING_COUNT_EMPTY]
+    expectedEvidenceFields: [orders.remainingCount]
+    expectedNextActions: [核对订单剩余餐数]
+    allowFallback: false
+    note: "午晚餐池剩余为0"
+  - caseId: MPD-074
+    userInput: "C1074 早餐餐数没有了"
+    slots: { customerCode: C1074, recordDate: "2026-06-23", mealType: BREAKFAST }
+    expectedReasonCode: ORDER_REMAINING_COUNT_NOT_ENOUGH
+    expectedRuleIds: [ORDER_REMAINING_COUNT_EMPTY]
+    expectedEvidenceFields: [order.remainingCount]
+    expectedNextActions: [核对核销记录]
+    allowFallback: false
+    note: "早餐餐数池耗尽"
+  - caseId: MPD-075
+    userInput: "C1075 工作日模式周末午餐没排"
+    slots: { customerCode: C1075, recordDate: "2026-06-24", mealType: LUNCH }
+    expectedReasonCode: SCHEDULE_MODE_NOT_MATCH
+    expectedRuleIds: [SCHEDULE_MODE_NOT_MATCH]
+    expectedEvidenceFields: [orders.scheduleMode]
+    expectedNextActions: [核对订单排餐模式]
+    allowFallback: false
+    note: "排餐模式不覆盖周末"
+  - caseId: MPD-076
+    userInput: "C1076 指定配送日不含今天晚餐"
+    slots: { customerCode: C1076, recordDate: "2026-06-24", mealType: DINNER }
+    expectedReasonCode: SCHEDULE_MODE_NOT_MATCH
+    expectedRuleIds: [SCHEDULE_MODE_NOT_MATCH]
+    expectedEvidenceFields: [orders.deliveryDates]
+    expectedNextActions: [核对排餐任务配置]
+    allowFallback: false
+    note: "配送日期不匹配"
+  - caseId: MPD-077
+    userInput: "C1077 菜品排期为空"
+    slots: { customerCode: C1077, recordDate: "2026-06-25", mealType: LUNCH }
+    expectedReasonCode: CANDIDATE_DISH_EMPTY
+    expectedRuleIds: [CANDIDATE_DISH_EMPTY]
+    expectedEvidenceFields: [candidateDishStats.availableCount]
+    expectedNextActions: [核对菜品排期]
+    allowFallback: false
+    note: "候选菜数量为0"
+  - caseId: MPD-078
+    userInput: "C1078 套餐过滤后晚餐没有菜"
+    slots: { customerCode: C1078, recordDate: "2026-06-25", mealType: DINNER }
+    expectedReasonCode: CANDIDATE_DISH_EMPTY
+    expectedRuleIds: [CANDIDATE_DISH_EMPTY]
+    expectedEvidenceFields: [mealPlan.candidateDishStats]
+    expectedNextActions: [核对套餐规格配置]
+    allowFallback: false
+    note: "套餐维度候选菜为空"
+  - caseId: MPD-079
+    userInput: "C1079 过敏过滤后早餐没菜"
+    slots: { customerCode: C1079, recordDate: "2026-06-26", mealType: BREAKFAST }
+    expectedReasonCode: DISH_FILTERED_BY_ALLERGY
+    expectedRuleIds: [DISH_FILTERED_EMPTY]
+    expectedEvidenceFields: [customerProfile.allergyTags, mealPlan.candidateDishStats]
+    expectedNextActions: [核对过敏过滤规则]
+    allowFallback: false
+    note: "过敏标签过滤空候选"
+  - caseId: MPD-080
+    userInput: "C1080 忌口排除所有午餐菜"
+    slots: { customerCode: C1080, recordDate: "2026-06-26", mealType: LUNCH }
+    expectedReasonCode: DISH_FILTERED_BY_ALLERGY
+    expectedRuleIds: [DISH_FILTERED_EMPTY]
+    expectedEvidenceFields: [customerProfile.excludedDishIds]
+    expectedNextActions: [核对客户忌口配置]
+    allowFallback: false
+    note: "排除菜配置过多"
+  - caseId: MPD-081
+    userInput: "C1081 父套餐规格缺菜"
+    slots: { customerCode: C1081, recordDate: "2026-06-27", mealType: LUNCH }
+    expectedReasonCode: PACKAGE_SPEC_MISSING
+    expectedRuleIds: [PACKAGE_SPEC_MISSING]
+    expectedEvidenceFields: [packageSpec.parentPackage, packageSpec.missingFields]
+    expectedNextActions: [核对套餐规格配置]
+    allowFallback: false
+    note: "父套餐规格不完整"
+  - caseId: MPD-082
+    userInput: "C1082 子套餐饭汤配置缺失"
+    slots: { customerCode: C1082, recordDate: "2026-06-27", mealType: DINNER }
+    expectedReasonCode: PACKAGE_SPEC_MISSING
+    expectedRuleIds: [PACKAGE_SPEC_MISSING]
+    expectedEvidenceFields: [packageSpec.childPackage, packageSpec.missingFields]
+    expectedNextActions: [补齐子套餐菜品数量配置]
+    allowFallback: false
+    note: "子套餐规格缺失"
+  - caseId: MPD-083
+    userInput: "C1083 退餐记录命中午餐"
+    slots: { customerCode: C1083, recordDate: "2026-06-28", mealType: LUNCH }
+    expectedReasonCode: REFUND_OR_STOP_MEAL_HIT
+    expectedRuleIds: [REFUND_OR_STOP_MEAL_HIT]
+    expectedEvidenceFields: [mealRefunds.orderId, mealRefunds.refundLunchDinnerCount]
+    expectedNextActions: [核对退餐或停餐记录]
+    allowFallback: false
+    note: "午晚餐退餐记录"
+  - caseId: MPD-084
+    userInput: "C1084 退款后早餐没排"
+    slots: { customerCode: C1084, recordDate: "2026-06-28", mealType: BREAKFAST }
+    expectedReasonCode: REFUND_OR_STOP_MEAL_HIT
+    expectedRuleIds: [REFUND_OR_STOP_MEAL_HIT]
+    expectedEvidenceFields: [mealRefunds.refundReason, mealRefunds.refundBreakfastCount]
+    expectedNextActions: [核对订单剩余餐数是否已扣减]
+    allowFallback: false
+    note: "早餐退餐退款"
+  - caseId: MPD-085
+    userInput: "C1085 午餐核销记录消耗完"
+    slots: { customerCode: C1085, recordDate: "2026-06-29", mealType: LUNCH }
+    expectedReasonCode: VERIFICATION_CONSUMED_COUNT
+    expectedRuleIds: [VERIFICATION_CONSUMED_COUNT]
+    expectedEvidenceFields: [verificationLogs.orderId, verificationLogs.verificationCount]
+    expectedNextActions: [核对核销记录]
+    allowFallback: false
+    note: "核销数量导致余额不足"
+  - caseId: MPD-086
+    userInput: "C1086 早餐核销日志显示为0"
+    slots: { customerCode: C1086, recordDate: "2026-06-29", mealType: BREAKFAST }
+    expectedReasonCode: VERIFICATION_CONSUMED_COUNT
+    expectedRuleIds: [VERIFICATION_CONSUMED_COUNT]
+    expectedEvidenceFields: [verificationLogs.mealType, order.remainingCount]
+    expectedNextActions: [核对订单餐数池余额]
+    allowFallback: false
+    note: "早餐核销消耗完"
+  - caseId: MPD-087
+    userInput: "C1087 生成快照里这个客户失败"
+    slots: { customerCode: C1087, recordDate: "2026-06-30", mealType: DINNER }
+    expectedReasonCode: MEAL_PLAN_GENERATION_FAILED
+    expectedRuleIds: [MEAL_PLAN_GENERATED_FAILED]
+    expectedEvidenceFields: [mealPlan.planId, customerPlans.failReason]
+    expectedNextActions: [核对排餐生成日志]
+    allowFallback: false
+    note: "生成快照失败客户"
+  - caseId: MPD-088
+    userInput: "C1088 主任务失败导致午餐没排"
+    slots: { customerCode: C1088, recordDate: "2026-06-30", mealType: LUNCH }
+    expectedReasonCode: MEAL_PLAN_GENERATION_FAILED
+    expectedRuleIds: [MEAL_PLAN_GENERATED_FAILED]
+    expectedEvidenceFields: [mealPlan.failReason]
+    expectedNextActions: [核对失败原因字段]
+    allowFallback: false
+    note: "排餐主任务失败"
+  - caseId: MPD-089
+    userInput: "C1089 有排餐批次但客户没进入明细"
+    slots: { customerCode: C1089, recordDate: "2026-07-01", mealType: LUNCH }
+    expectedReasonCode: MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING
+    expectedRuleIds: [MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING]
+    expectedEvidenceFields: [mealPlan.planId, customerCode]
+    expectedNextActions: [人工核对排餐任务和客户条件]
+    allowFallback: false
+    note: "已有主任务但客户缺失"
+  - caseId: MPD-090
+    userInput: "C1090 排餐总人数有但没这个客户"
+    slots: { customerCode: C1090, recordDate: "2026-07-01", mealType: DINNER }
+    expectedReasonCode: MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING
+    expectedRuleIds: [MEAL_PLAN_ALREADY_EXISTS_BUT_CUSTOMER_MISSING]
+    expectedEvidenceFields: [mealPlan.totalCustomers, customerCode]
+    expectedNextActions: [核对客户是否被订单或配送规则过滤]
+    allowFallback: false
+    note: "客户被过滤出明细"
+  - caseId: MPD-091
+    userInput: "C1091 反馈真实原因是退餐但模型说订单"
+    slots: { customerCode: C1091, recordDate: "2026-07-02", mealType: LUNCH }
+    expectedReasonCode: REFUND_OR_STOP_MEAL_HIT
+    expectedRuleIds: [REFUND_OR_STOP_MEAL_HIT]
+    expectedEvidenceFields: [mealRefunds.refundReason]
+    expectedNextActions: [核对退餐或停餐记录]
+    allowFallback: false
+    note: "反馈闭环补充退餐真实原因"
+  - caseId: MPD-092
+    userInput: "C1092 反馈真实原因是套餐规格"
+    slots: { customerCode: C1092, recordDate: "2026-07-02", mealType: DINNER }
+    expectedReasonCode: PACKAGE_SPEC_MISSING
+    expectedRuleIds: [PACKAGE_SPEC_MISSING]
+    expectedEvidenceFields: [packageSpec.missingFields]
+    expectedNextActions: [补齐父套餐和子套餐关系]
+    allowFallback: false
+    note: "反馈闭环补充套餐规格缺口"
+  - caseId: MPD-093
+    userInput: "C1093 高频未知问题需要人工复核"
+    slots: { customerCode: C1093, recordDate: "2026-07-03", mealType: BREAKFAST }
+    expectedReasonCode: DATA_INCOMPLETE_NEED_RECHECK
+    expectedRuleIds: []
+    expectedEvidenceFields: []
+    expectedNextActions: [创建人工复核任务]
+    allowFallback: true
+    note: "运营看板高频未知问题样本"
+  - caseId: MPD-094
+    userInput: "C1094 多个工具都没返回数据"
+    slots: { customerCode: C1094, recordDate: "2026-07-03", mealType: LUNCH }
+    expectedReasonCode: DATA_INCOMPLETE_NEED_RECHECK
+    expectedRuleIds: []
+    expectedEvidenceFields: []
+    expectedNextActions: [核对客户档案, 核对订单有效性]
+    allowFallback: true
+    note: "工具无数据需要人工核对"
+  - caseId: MPD-095
+    userInput: "C1095 反馈说模型原因部分正确"
+    slots: { customerCode: C1095, recordDate: "2026-07-04", mealType: DINNER }
+    expectedReasonCode: VERIFICATION_CONSUMED_COUNT
+    expectedRuleIds: [VERIFICATION_CONSUMED_COUNT]
+    expectedEvidenceFields: [verificationLogs.verificationCount, order.remainingCount]
+    expectedNextActions: [核对核销记录]
+    allowFallback: false
+    note: "部分正确反馈对应核销证据"
+  - caseId: MPD-096
+    userInput: "C1096 动作草稿建议恢复配送"
+    slots: { customerCode: C1096, recordDate: "2026-07-04", mealType: BREAKFAST }
+    expectedReasonCode: CUSTOMER_EXCLUDE_DATE_HIT
+    expectedRuleIds: [CUSTOMER_EXCLUDE_DATE_HIT]
+    expectedEvidenceFields: [customerProfile.excludeDates]
+    expectedNextActions: [确认是否需要恢复配送]
+    allowFallback: false
+    note: "动作草稿恢复配送样本"
+  - caseId: MPD-097
+    userInput: "C1097 动作草稿建议重算订单余额"
+    slots: { customerCode: C1097, recordDate: "2026-07-05", mealType: LUNCH }
+    expectedReasonCode: ORDER_REMAINING_COUNT_NOT_ENOUGH
+    expectedRuleIds: [ORDER_REMAINING_COUNT_EMPTY]
+    expectedEvidenceFields: [orders.remainingCount]
+    expectedNextActions: [核对订单剩余餐数]
+    allowFallback: false
+    note: "动作草稿重算余额样本"
+  - caseId: MPD-098
+    userInput: "C1098 动作草稿建议补候选菜"
+    slots: { customerCode: C1098, recordDate: "2026-07-05", mealType: DINNER }
+    expectedReasonCode: CANDIDATE_DISH_EMPTY
+    expectedRuleIds: [CANDIDATE_DISH_EMPTY]
+    expectedEvidenceFields: [candidateDishStats.availableCount]
+    expectedNextActions: [核对菜品排期]
+    allowFallback: false
+    note: "动作草稿补候选菜样本"
+  - caseId: MPD-099
+    userInput: "C1099 动作草稿建议重新生成排餐"
+    slots: { customerCode: C1099, recordDate: "2026-07-06", mealType: LUNCH }
+    expectedReasonCode: MEAL_PLAN_GENERATION_FAILED
+    expectedRuleIds: [MEAL_PLAN_GENERATED_FAILED]
+    expectedEvidenceFields: [customerPlans.status, customerPlans.failReason]
+    expectedNextActions: [核对排餐生成日志]
+    allowFallback: false
+    note: "动作草稿重新生成排餐样本"
+  - caseId: MPD-100
+    userInput: "C1100 运维看板统计 fallback 样本"
+    slots: { customerCode: C1100, recordDate: "2026-07-06", mealType: BREAKFAST }
+    expectedReasonCode: DATA_INCOMPLETE_NEED_RECHECK
+    expectedRuleIds: []
+    expectedEvidenceFields: []
+    expectedNextActions: [核对客户档案, 核对订单有效性, 核对排餐记录]
+    allowFallback: true
+    note: "运营统计 fallback 率样本"
+  - caseId: MPD-101
+    userInput: "C1101 规则维护缺口需要补充"
+    slots: { customerCode: C1101, recordDate: "2026-07-07", mealType: DINNER }
+    expectedReasonCode: DATA_INCOMPLETE_NEED_RECHECK
+    expectedRuleIds: []
+    expectedEvidenceFields: []
+    expectedNextActions: [记录规则缺口, 创建人工复核任务]
+    allowFallback: true
+    note: "高频错误反向进入规则维护样本"

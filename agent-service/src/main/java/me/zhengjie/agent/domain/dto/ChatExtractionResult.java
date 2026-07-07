@@ -14,6 +14,7 @@ public class ChatExtractionResult {
     private ChatIntent intent;
     private DiagnosisSlots slots;
     private List<MissingSlot> missingSlots = new ArrayList<>();
+    private List<MissingSlot> ambiguousSlots = new ArrayList<>();
     private String reply;
 
     public ChatIntent getIntent() {
@@ -38,6 +39,14 @@ public class ChatExtractionResult {
 
     public void setMissingSlots(List<MissingSlot> missingSlots) {
         this.missingSlots = missingSlots;
+    }
+
+    public List<MissingSlot> getAmbiguousSlots() {
+        return ambiguousSlots;
+    }
+
+    public void setAmbiguousSlots(List<MissingSlot> ambiguousSlots) {
+        this.ambiguousSlots = ambiguousSlots;
     }
 
     public String getReply() {

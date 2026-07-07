@@ -11,8 +11,11 @@ public class DiagnosisReasonDto {
     private String code;
     private String title;
     private String level;
+    private String confidence;
+    private List<String> ruleIds = new ArrayList<>();
     private String description;
     private String suggestion;
+    private List<String> nextActions = new ArrayList<>();
     private List<DiagnosisEvidenceDto> evidence = new ArrayList<>();
 
     public String getCode() {
@@ -39,6 +42,22 @@ public class DiagnosisReasonDto {
         this.level = level;
     }
 
+    public String getConfidence() {
+        return confidence;
+    }
+
+    public void setConfidence(String confidence) {
+        this.confidence = confidence;
+    }
+
+    public List<String> getRuleIds() {
+        return ruleIds;
+    }
+
+    public void setRuleIds(List<String> ruleIds) {
+        this.ruleIds = ruleIds;
+    }
+
     public String getDescription() {
         return description;
     }
@@ -53,6 +72,14 @@ public class DiagnosisReasonDto {
 
     public void setSuggestion(String suggestion) {
         this.suggestion = suggestion;
+    }
+
+    public List<String> getNextActions() {
+        return nextActions;
+    }
+
+    public void setNextActions(List<String> nextActions) {
+        this.nextActions = nextActions;
     }
 
     public List<DiagnosisEvidenceDto> getEvidence() {

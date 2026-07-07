@@ -1,6 +1,8 @@
 package me.zhengjie.modules.customer.order.service;
 
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
+import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderBalanceRecalculateResult;
+import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderEffectiveDateAdjustResult;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
 import me.zhengjie.utils.PageResult;
@@ -32,6 +34,24 @@ public interface CustomerOrderService {
      * 更新订单
      */
     void update(CustomerOrderSaveDto dto);
+
+    /**
+     * 调整订单有效期，只修改订单开始日期和结束日期。
+     *
+     * @param orderId 订单ID
+     * @param newStartDate 新开始日期，格式 yyyy-MM-dd；为空则保留原值
+     * @param newEndDate 新结束日期，格式 yyyy-MM-dd；为空则保留原值
+     * @return 调整结果
+     */
+    CustomerOrderEffectiveDateAdjustResult adjustEffectiveDate(Long orderId, String newStartDate, String newEndDate);
+
+    /**
+     * 按核销日志重算订单已核销餐数、核销金额、剩余餐数和餐费余额。
+     *
+     * @param orderId 订单ID
+     * @return 重算结果
+     */
+    CustomerOrderBalanceRecalculateResult recalculateBalance(Long orderId);
 
     /**
      * 删除订单

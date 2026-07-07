@@ -30,6 +30,6 @@ public class FallbackDiagnosisAiClient implements DiagnosisAiClient {
     public DiagnosisResponse diagnose(DiagnosisContextDto context, RuleRegistry ruleRegistry) {
         log.info("fallback ai client used requestId={} customerId={} recordDate={} mealType={} aiEnabled=false",
             MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType());
-        return resultValidator.validateOrFallback(null, context, ruleRegistry.getVersionDigest());
+        return resultValidator.validateOrFallback(null, context, ruleRegistry);
     }
 }

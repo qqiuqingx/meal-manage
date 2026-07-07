@@ -16,6 +16,9 @@ application.pid
 .planning/
 .superpowers/
 
+### Local runtime secrets ###
+eladmin/eladmin-system/.env.local
+
 ### Build and runtime output ###
 **/target/
 **/logs/

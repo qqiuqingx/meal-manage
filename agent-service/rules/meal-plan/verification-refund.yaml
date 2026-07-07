@@ -1,0 +1,52 @@
+- ruleId: REFUND_OR_STOP_MEAL_HIT
+  reasonCode: REFUND_OR_STOP_MEAL_HIT
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 命中退餐或停餐记录
+  description: 客户或订单存在退餐、停餐、退款记录，可能导致目标餐次不再参与排餐。
+  triggerConditions:
+    - mealRefunds 存在目标订单或客户相关记录
+  requiredTools:
+    - listMealRefunds
+  requiredData:
+    - mealRefunds.orderId
+    - mealRefunds.refundReason
+  decisionHints:
+    - 如果退餐日志覆盖目标订单，提示核对退餐原因和退餐数量。
+  evidenceFields:
+    - mealRefunds.orderId
+    - mealRefunds.refundReason
+    - mealRefunds.refundBreakfastCount
+    - mealRefunds.refundLunchDinnerCount
+  nextActions:
+    - 核对退餐或停餐记录
+    - 核对订单剩余餐数是否已扣减
+  severity: HIGH
+  owner: meal-plan
+- ruleId: VERIFICATION_CONSUMED_COUNT
+  reasonCode: VERIFICATION_CONSUMED_COUNT
+  version: 1
+  scene: MEAL_PLAN_NOT_GENERATED
+  title: 核销记录已消耗餐数
+  description: 目标订单的核销记录已消耗对应餐数池，导致当前餐次剩余不足。
+  triggerConditions:
+    - verificationLogs 统计数量导致对应餐数池剩余为0
+  requiredTools:
+    - listVerificationLogs
+    - getOrderMealBalance
+  requiredData:
+    - verificationLogs.orderId
+    - verificationLogs.mealType
+    - order.remainingCount
+  decisionHints:
+    - 如果午餐和晚餐共享餐数池被核销耗尽，提示核对核销日志和剩余餐数。
+  evidenceFields:
+    - verificationLogs.orderId
+    - verificationLogs.mealType
+    - verificationLogs.verificationCount
+    - order.remainingCount
+  nextActions:
+    - 核对核销记录
+    - 核对订单餐数池余额
+  severity: HIGH
+  owner: meal-plan

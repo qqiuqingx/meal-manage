@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.modules.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
+import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisActionDraftDto;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +17,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.LinkedHashMap;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -124,7 +129,55 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         response.setMealType(request.getMealType());
         response.setFallback(true);
         response.setSummary("智能排查服务暂不可用，请先按客户、订单、排餐记录和菜单配置人工核对。");
+        response.setFallbackReason("agent-service 不可用或调用失败，需人工核对。");
+        response.setConfidence("LOW");
+        response.setNextActions(Arrays.asList("核对客户档案", "核对订单有效性", "核对排餐记录", "核对候选菜配置"));
+        response.setActionDrafts(Collections.singletonList(manualRecheckDraft(request)));
         return response;
+    }
+
+    /**
+     * agent-service 不可用时生成只用于展示的人工复核动作草稿。
+     */
+    private AgentDiagnosisActionDraftDto manualRecheckDraft(AgentDiagnosisRequest request) {
+        AgentDiagnosisActionDraftDto draft = new AgentDiagnosisActionDraftDto();
+        draft.setActionCode("CREATE_MANUAL_RECHECK_TASK");
+        draft.setTitle("创建人工复核任务");
+        draft.setDescription("诊断服务不可用时，创建人工复核任务并附带当前请求上下文。");
+        draft.setRiskLevel("LOW");
+        draft.setTargetType("RECHECK_TASK");
+        draft.setTargetId((request.getRecordDate() == null ? "" : request.getRecordDate()) + "|" + (request.getMealType() == null ? "" : request.getMealType()));
+        draft.setBeforeSnapshot(fallbackSnapshot(request));
+        draft.setAfterPreview(fallbackPreview(request));
+        draft.setRequiredPermission("agentDiagnosis:confirm");
+        draft.setConfirmApi("/api/agent/action-drafts/confirm");
+        return draft;
+    }
+
+    /**
+     * 生成兜底动作草稿的请求快照。
+     */
+    private Map<String, Object> fallbackSnapshot(AgentDiagnosisRequest request) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("source", "eladmin-fallback");
+        snapshot.put("customerId", request.getCustomerId());
+        snapshot.put("customerCode", request.getCustomerCode());
+        snapshot.put("recordDate", request.getRecordDate());
+        snapshot.put("mealType", request.getMealType());
+        return snapshot;
+    }
+
+    /**
+     * 生成兜底动作草稿的人工确认预览。
+     */
+    private Map<String, Object> fallbackPreview(AgentDiagnosisRequest request) {
+        Map<String, Object> preview = new LinkedHashMap<>();
+        preview.put("customerId", request.getCustomerId());
+        preview.put("recordDate", request.getRecordDate());
+        preview.put("mealType", request.getMealType());
+        preview.put("executeMode", "MANUAL_CONFIRM_REQUIRED");
+        preview.put("taskType", "MEAL_PLAN_DIAGNOSIS_RECHECK");
+        return preview;
     }
 
     private AgentChatResponse chatFallback(AgentChatRequest request, String requestId) {
@@ -133,7 +186,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         response.setSessionId(request.getSessionId());
         response.setStatus("ERROR");
         response.setAssistantMessage("智能排查服务暂不可用，请先按客户、订单、排餐记录和菜单配置人工核对。");
-        response.setQuickReplies(java.util.List.of("重新排查", "清空会话"));
+        response.setQuickReplies(Arrays.asList("重新排查", "清空会话"));
         return response;
     }
 }

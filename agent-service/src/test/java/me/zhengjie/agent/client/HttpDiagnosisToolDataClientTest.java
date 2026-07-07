@@ -3,7 +3,10 @@ package me.zhengjie.agent.client;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCandidateDishStatsRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerLookupRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerOrdersRequest;
+import me.zhengjie.agent.domain.dto.DiagnosisToolMealRefundsRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolMealPlanLookupRequest;
+import me.zhengjie.agent.domain.dto.DiagnosisToolPackageSpecRequest;
+import me.zhengjie.agent.domain.dto.DiagnosisToolVerificationLogsRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -138,6 +141,153 @@ class HttpDiagnosisToolDataClientTest {
 
         assertEquals(1, result.size());
         assertEquals("PKG001", result.get(0).get("packageCode"));
+        server.verify();
+    }
+
+    @Test
+    void shouldFetchCustomerExcludeDates() {
+        DiagnosisToolCustomerLookupRequest request = new DiagnosisToolCustomerLookupRequest();
+        request.setCustomerCode("C1001");
+
+        server.expect(requestTo("http://localhost:8000/api/internal/agent/customer-exclude-dates"))
+            .andExpect(method(POST))
+            .andExpect(header("X-Request-Id", ""))
+            .andExpect(header("X-Agent-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(content().json("{\"customerCode\":\"C1001\"}", false))
+            .andRespond(withSuccess("{\"present\":true,\"customerCode\":\"C1001\"}", APPLICATION_JSON));
+
+        Map<String, Object> result = client.getCustomerExcludeDates(request);
+
+        assertEquals(true, result.get("present"));
+        assertEquals("C1001", result.get("customerCode"));
+        server.verify();
+    }
+
+    @Test
+    void shouldFetchOrderMealBalance() {
+        DiagnosisToolCustomerOrdersRequest request = new DiagnosisToolCustomerOrdersRequest();
+        request.setCustomerId(1001L);
+        request.setPage(1);
+        request.setSize(10);
+
+        server.expect(requestTo("http://localhost:8000/api/internal/agent/order-meal-balance"))
+            .andExpect(method(POST))
+            .andExpect(header("X-Request-Id", ""))
+            .andExpect(header("X-Agent-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(content().json("{\"customerId\":1001,\"page\":1,\"size\":10}", false))
+            .andRespond(withSuccess("{\"orderCount\":1}", APPLICATION_JSON));
+
+        Map<String, Object> result = client.getOrderMealBalance(request);
+
+        assertEquals(1, result.get("orderCount"));
+        server.verify();
+    }
+
+    @Test
+    void shouldFetchPackageSpec() {
+        DiagnosisToolPackageSpecRequest request = new DiagnosisToolPackageSpecRequest();
+        request.setCustomerId(1001L);
+        request.setParentPackageId(3001L);
+        request.setChildPackageId(4001L);
+
+        server.expect(requestTo("http://localhost:8000/api/internal/agent/package-spec"))
+            .andExpect(method(POST))
+            .andExpect(header("X-Request-Id", ""))
+            .andExpect(header("X-Agent-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(content().json("{\"customerId\":1001,\"parentPackageId\":3001,\"childPackageId\":4001}", false))
+            .andRespond(withSuccess("{\"present\":true,\"parentPackageId\":3001,\"childPackageId\":4001}", APPLICATION_JSON));
+
+        Map<String, Object> result = client.getPackageSpec(request);
+
+        assertEquals(true, result.get("present"));
+        assertEquals(3001, result.get("parentPackageId"));
+        server.verify();
+    }
+
+    @Test
+    void shouldFetchDishCandidateDetail() {
+        DiagnosisToolCandidateDishStatsRequest request = new DiagnosisToolCandidateDishStatsRequest();
+        request.setRecordDate("2026-05-17");
+
+        server.expect(requestTo("http://localhost:8000/api/internal/agent/dish-candidate-detail"))
+            .andExpect(method(POST))
+            .andExpect(header("X-Request-Id", ""))
+            .andExpect(header("X-Agent-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(content().json("{\"recordDate\":\"2026-05-17\"}", false))
+            .andRespond(withSuccess("[{\"candidateCount\":8}]", APPLICATION_JSON));
+
+        List<Map<String, Object>> result = client.getDishCandidateDetail(request);
+
+        assertEquals(1, result.size());
+        assertEquals(8, result.get(0).get("candidateCount"));
+        server.verify();
+    }
+
+    @Test
+    void shouldListVerificationLogs() {
+        DiagnosisToolVerificationLogsRequest request = new DiagnosisToolVerificationLogsRequest();
+        request.setOrderId(2001L);
+        request.setRecordDateStart("2026-05-17");
+        request.setRecordDateEnd("2026-05-18");
+        request.setMealType("LUNCH");
+
+        server.expect(requestTo("http://localhost:8000/api/internal/agent/verification-logs"))
+            .andExpect(method(POST))
+            .andExpect(header("X-Request-Id", ""))
+            .andExpect(header("X-Agent-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(content().json("{\"orderId\":2001,\"recordDateStart\":\"2026-05-17\",\"recordDateEnd\":\"2026-05-18\",\"mealType\":\"LUNCH\"}", false))
+            .andRespond(withSuccess("[{\"orderId\":2001,\"mealType\":\"LUNCH\"}]", APPLICATION_JSON));
+
+        List<Map<String, Object>> result = client.listVerificationLogs(request);
+
+        assertEquals(1, result.size());
+        assertEquals(2001, result.get(0).get("orderId"));
+        server.verify();
+    }
+
+    @Test
+    void shouldListMealRefunds() {
+        DiagnosisToolMealRefundsRequest request = new DiagnosisToolMealRefundsRequest();
+        request.setOrderId(2001L);
+
+        server.expect(requestTo("http://localhost:8000/api/internal/agent/meal-refunds"))
+            .andExpect(method(POST))
+            .andExpect(header("X-Request-Id", ""))
+            .andExpect(header("X-Agent-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(content().json("{\"orderId\":2001}", false))
+            .andRespond(withSuccess("[{\"orderId\":2001,\"refundLunchDinnerCount\":3}]", APPLICATION_JSON));
+
+        List<Map<String, Object>> result = client.listMealRefunds(request);
+
+        assertEquals(1, result.size());
+        assertEquals(2001, result.get(0).get("orderId"));
+        server.verify();
+    }
+
+    @Test
+    void shouldFetchMealPlanGenerationSnapshot() {
+        DiagnosisToolMealPlanLookupRequest request = new DiagnosisToolMealPlanLookupRequest();
+        request.setRecordDate("2026-05-17");
+        request.setMealType("DINNER");
+
+        server.expect(requestTo("http://localhost:8000/api/internal/agent/meal-plan-generation-snapshot"))
+            .andExpect(method(POST))
+            .andExpect(header("X-Request-Id", ""))
+            .andExpect(header("X-Agent-Internal-Token", INTERNAL_TOKEN))
+            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+            .andExpect(content().json("{\"recordDate\":\"2026-05-17\",\"mealType\":\"DINNER\"}", false))
+            .andRespond(withSuccess("{\"present\":true,\"failCount\":2}", APPLICATION_JSON));
+
+        Map<String, Object> result = client.getMealPlanGenerationSnapshot(request);
+
+        assertEquals(true, result.get("present"));
+        assertEquals(2, result.get("failCount"));
         server.verify();
     }
 }
