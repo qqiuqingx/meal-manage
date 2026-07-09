@@ -32,9 +32,9 @@ public class RuleBasedMealPlanChatExtractor implements MealPlanChatExtractor {
     private static final String SOURCE_OVERRIDE = "CORRECTION_OVERRIDE";
     private static final String SOURCE_AMBIGUOUS = "AMBIGUOUS_INPUT";
 
-    private static final Pattern CUSTOMER_CODE_PATTERN = Pattern.compile("(?i)\\bC\\d{3,}\\b");
+    private static final Pattern CUSTOMER_CODE_PATTERN = Pattern.compile("(?i)\\b[A-Z]\\d{3,}\\b");
     private static final Pattern CUSTOMER_ID_PATTERN = Pattern.compile("(?:客户ID|客户id|客户Id)\\s*(\\d{1,})");
-    private static final Pattern CUSTOMER_CODE_WITH_LABEL_PATTERN = Pattern.compile("(?i)(?:客户编号|编号)\\s*(C\\d{3,})");
+    private static final Pattern CUSTOMER_CODE_WITH_LABEL_PATTERN = Pattern.compile("(?i)(?:客户编号|编号)\\s*([A-Z]\\d{3,})");
     private static final Pattern AMBIGUOUS_CUSTOMER_PATTERN = Pattern.compile("(?i)(?:客户|编号)\\s*(\\d{3,})");
     private static final Pattern DATE_PATTERN = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
     private static final Pattern NEXT_WEEKDAY_PATTERN = Pattern.compile("下周([一二三四五六日天])");

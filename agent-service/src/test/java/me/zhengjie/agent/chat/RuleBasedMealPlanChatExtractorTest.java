@@ -81,6 +81,16 @@ class RuleBasedMealPlanChatExtractorTest {
     }
 
     @Test
+    void shouldExtractNonCPrefixCustomerCode() {
+        ChatExtractionResult result = extractor.extract("B3303 这个客户还剩多少餐数", new DiagnosisSlots());
+
+        assertEquals("B3303", result.getSlots().getCustomerCode());
+        assertEquals("HIGH", result.getSlots().getCustomerConfidence());
+        assertTrue(result.getMissingSlots().contains(MissingSlot.RECORD_DATE));
+        assertTrue(result.getMissingSlots().contains(MissingSlot.MEAL_TYPE));
+    }
+
+    @Test
     void shouldExtractCustomerId() {
         ChatExtractionResult result = extractor.extract("客户ID 123", new DiagnosisSlots());
 
