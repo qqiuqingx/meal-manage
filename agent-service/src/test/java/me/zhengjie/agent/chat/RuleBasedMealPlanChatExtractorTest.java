@@ -174,6 +174,18 @@ class RuleBasedMealPlanChatExtractorTest {
     }
 
     @Test
+    void shouldDetectMealBalanceIntentForTotalMealQuestionWithContextCustomer() {
+        DiagnosisSlots existing = new DiagnosisSlots();
+        existing.setCustomerCode("B2201");
+
+        ChatExtractionResult result = extractor.extract("他一共多少餐？", existing);
+
+        assertEquals(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY, result.getIntent());
+        assertEquals("B2201", result.getSlots().getCustomerCode());
+        assertEquals("MEDIUM", result.getSlots().getCustomerConfidence());
+    }
+
+    @Test
     void shouldDetectOrderIntentAndActiveOrderFilter() {
         ChatExtractionResult result = extractor.extract("B3303 有哪些进行中订单", new DiagnosisSlots());
 

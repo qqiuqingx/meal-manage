@@ -327,6 +327,57 @@ class MealPlanChatServiceImplTest {
         assertEquals("CUSTOMER_ORDER_SUMMARY", response.getResponseType());
     }
 
+    @Test
+    void shouldUseContextCustomerForTotalMealQuestionWithoutAskingDate() {
+        InMemoryMealPlanChatSessionStore store = store();
+        MealPlanChatExtractor extractor = new RuleBasedMealPlanChatExtractor(
+            Clock.fixed(Instant.parse("2026-05-22T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
+        );
+        AtomicReference<String> capturedCustomerCode = new AtomicReference<>();
+        MealPlanChatServiceImpl service = service(store, extractor, request -> new DiagnosisResponse(),
+            new StubDiagnosisToolDataClient() {
+                @Override
+                public Map<String, Object> getCustomerVerificationSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightVerificationRequest request) {
+                    return Map.of(
+                        "present", true,
+                        "customerCode", "B2201",
+                        "totalVerified", 8,
+                        "totalVerifiedBreakfast", 1,
+                        "totalVerifiedLunch", 4,
+                        "totalVerifiedDinner", 3,
+                        "recentVerifications", List.of()
+                    );
+                }
+
+                @Override
+                public Map<String, Object> getCustomerMealSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightMealRequest request) {
+                    capturedCustomerCode.set(request.getCustomerCode());
+                    return Map.of(
+                        "present", true,
+                        "customerCode", "B2201",
+                        "customerName", "李四",
+                        "activeOrderCount", 1,
+                        "remainingBreakfast", 2,
+                        "remainingLunchDinner", 10,
+                        "totalRemaining", 12,
+                        "verifiedBreakfast", 1,
+                        "verifiedLunch", 4,
+                        "verifiedDinner", 3
+                    );
+                }
+            });
+
+        AgentChatResponse first = service.chat(request("session-1", "B2201 看下这个客户核销了多少餐"));
+        AgentChatResponse second = service.chat(request("session-1", "他一共多少餐？"));
+
+        assertEquals("CUSTOMER_VERIFICATION_SUMMARY", first.getResponseType());
+        assertEquals(ChatStatus.ANSWERED, second.getStatus());
+        assertEquals("CUSTOMER_MEAL_SUMMARY", second.getResponseType());
+        assertEquals("B2201", capturedCustomerCode.get());
+        assertEquals(List.of(), second.getMissingSlots());
+        assertTrue(second.getAssistantMessage().contains("当前有效订单总餐数 20 餐"));
+    }
+
     private MealPlanChatServiceImpl service(InMemoryMealPlanChatSessionStore store,
                                             MealPlanChatExtractor extractor,
                                             MealPlanDiagnosisService diagnosisService) {

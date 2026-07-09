@@ -315,14 +315,18 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         Integer verifiedBreakfast = (Integer) result.get("verifiedBreakfast");
         Integer verifiedLunch = (Integer) result.get("verifiedLunch");
         Integer verifiedDinner = (Integer) result.get("verifiedDinner");
+        int totalMealCount = (totalRemaining != null ? totalRemaining : 0)
+            + (verifiedBreakfast != null ? verifiedBreakfast : 0)
+            + (verifiedLunch != null ? verifiedLunch : 0)
+            + (verifiedDinner != null ? verifiedDinner : 0);
 
         if (activeOrderCount == null || activeOrderCount == 0) {
             return String.format("%s 当前没有有效进行中订单，因此没有可继续核销的剩余餐数。历史订单和核销记录已列在下方供核对。", customerCode);
         }
         return String.format(
-            "%s（%s）当前有效订单共 %d 笔。剩余早餐 %d 餐，剩余午晚餐 %d 餐，合计剩余 %d 餐。已核销早餐 %d 餐，午餐 %d 餐，晚餐 %d 餐。数据按未删除核销日志实时汇总。",
+            "%s（%s）当前有效订单共 %d 笔，当前有效订单总餐数 %d 餐。剩余早餐 %d 餐，剩余午晚餐 %d 餐，合计剩余 %d 餐。已核销早餐 %d 餐，午餐 %d 餐，晚餐 %d 餐。数据按未删除核销日志实时汇总。",
             customerCode, customerName != null ? customerName : "",
-            activeOrderCount,
+            activeOrderCount, totalMealCount,
             remainingBreakfast != null ? remainingBreakfast : 0,
             remainingLunchDinner != null ? remainingLunchDinner : 0,
             totalRemaining != null ? totalRemaining : 0,

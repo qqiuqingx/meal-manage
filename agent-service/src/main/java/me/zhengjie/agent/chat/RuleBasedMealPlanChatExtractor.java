@@ -41,7 +41,7 @@ public class RuleBasedMealPlanChatExtractor implements MealPlanChatExtractor {
 
     // 客户餐数余额查询关键词
     private static final Pattern MEAL_BALANCE_PATTERN = Pattern.compile(
-            "还剩多少|剩多少|剩余多少|剩余餐数|餐数余额|还能吃几餐|还剩几餐|还有多少餐|还有几餐|餐数还剩|剩余.*早餐|剩余.*午餐|剩余.*晚餐|早餐.*剩|午晚餐.*剩|午餐.*剩|晚餐.*剩",
+            "还剩多少|剩多少|剩余多少|剩余餐数|餐数余额|还能吃几餐|还剩几餐|还有多少餐|还有几餐|餐数还剩|一共多少餐|总共多少餐|总餐数|一共几餐|总共几餐|总共有多少餐|剩余.*早餐|剩余.*午餐|剩余.*晚餐|早餐.*剩|午晚餐.*剩|午餐.*剩|晚餐.*剩",
             Pattern.CASE_INSENSITIVE
     );
 
