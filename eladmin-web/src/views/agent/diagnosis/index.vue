@@ -7,12 +7,52 @@
           <div class="subtitle">AI 基于当前业务数据和规则生成诊断建议，请结合证据人工确认。</div>
         </div>
         <div class="header-actions">
+          <el-button size="small" plain icon="el-icon-plus" :loading="sessionCreating" @click="clearSession">新建会话</el-button>
+          <el-button size="small" plain :disabled="!activeSessionId" :loading="sessionRenameLoading" @click="renameCurrentSession">改名</el-button>
+          <el-button size="small" plain :disabled="!activeSessionId" @click="archiveCurrentSession">归档会话</el-button>
           <el-button size="small" plain @click="sendQuickReply('重新排查')">重新排查</el-button>
-          <el-button size="small" plain icon="el-icon-delete" @click="clearSession">清空会话</el-button>
+          <el-button size="small" plain icon="el-icon-refresh" :loading="sessionsLoading" @click="loadSessions(false)">刷新会话</el-button>
         </div>
       </div>
 
       <div class="workspace-body">
+        <aside class="session-panel">
+          <div class="session-toolbar">
+            <el-input
+              v-model="sessionKeyword"
+              size="small"
+              clearable
+              placeholder="搜索客户编号或标题"
+            >
+              <i slot="prefix" class="el-input__icon el-icon-search" />
+            </el-input>
+          </div>
+          <div class="session-list">
+            <div
+              v-for="session in filteredSessions"
+              :key="session.sessionId"
+              class="session-item"
+              :class="{ 'session-item-active': session.sessionId === activeSessionId }"
+              @click="handleSessionChange(session.sessionId)"
+            >
+              <div class="session-item-head">
+                <span class="session-item-title">{{ session.title || sessionOptionLabel(session) }}</span>
+                <el-tag size="mini" type="info">{{ stageText(session.stage) }}</el-tag>
+              </div>
+              <div class="session-item-meta">
+                <span>{{ session.customerCode || '-' }}</span>
+                <span>{{ mealTypeText(session.mealType) }}</span>
+              </div>
+              <div class="session-item-meta">
+                <span>{{ session.recordDate || '-' }}</span>
+                <span>{{ formatSessionTime(session.lastMessageTime) }}</span>
+              </div>
+              <div v-if="session.lastSummary" class="session-item-summary">{{ session.lastSummary }}</div>
+            </div>
+            <el-empty v-if="!sessionsLoading && !filteredSessions.length" description="暂无会话" :image-size="64" />
+          </div>
+        </aside>
+
         <div class="chat-panel">
           <div ref="messageList" class="message-list">
             <div
@@ -220,28 +260,30 @@
             </div>
           </div>
 
-          <div class="quick-replies">
-            <el-button
-              v-for="reply in quickReplies"
-              :key="reply"
-              size="mini"
-              plain
-              @click="sendQuickReply(reply)"
-            >
-              {{ reply }}
-            </el-button>
-          </div>
+          <div class="chat-footer">
+            <div class="quick-replies">
+              <el-button
+                v-for="reply in quickReplies"
+                :key="reply"
+                size="mini"
+                plain
+                @click="sendQuickReply(reply)"
+              >
+                {{ reply }}
+              </el-button>
+            </div>
 
-          <div class="composer">
-            <el-input
-              v-model="inputMessage"
-              type="textarea"
-              :autosize="{ minRows: 2, maxRows: 4 }"
-              resize="none"
-              placeholder="例如：帮我看下客户 C10001 明天午餐为什么没排出来"
-              @keyup.enter.native.exact.prevent="sendMessage"
-            />
-            <el-button type="primary" :loading="loading" icon="el-icon-s-promotion" @click="sendMessage">发送</el-button>
+            <div class="composer">
+              <el-input
+                v-model="inputMessage"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 4 }"
+                resize="none"
+                placeholder="例如：帮我看下客户 C10001 明天午餐为什么没排出来"
+                @keyup.enter.native.exact.prevent="sendMessage"
+              />
+              <el-button type="primary" :loading="loading" icon="el-icon-s-promotion" @click="sendMessage">发送</el-button>
+            </div>
           </div>
         </div>
 
@@ -363,6 +405,20 @@
               <div v-if="topReasonCodes.length" class="ops-list">
                 <div class="block-title">原因码分布</div>
                 <div v-for="item in topReasonCodes" :key="item.code" class="ops-reason-row">
+                  <span>{{ item.code }}</span>
+                  <strong>{{ item.count }}</strong>
+                </div>
+              </div>
+              <div v-if="topFailureTypes.length" class="ops-list">
+                <div class="block-title">失败类型</div>
+                <div v-for="item in topFailureTypes" :key="item.code" class="ops-reason-row">
+                  <span>{{ item.code }}</span>
+                  <strong>{{ item.count }}</strong>
+                </div>
+              </div>
+              <div v-if="topFallbackSources.length" class="ops-list">
+                <div class="block-title">兜底来源</div>
+                <div v-for="item in topFallbackSources" :key="item.code" class="ops-reason-row">
                   <span>{{ item.code }}</span>
                   <strong>{{ item.count }}</strong>
                 </div>
@@ -513,12 +569,17 @@
 
 <script>
 import {
+  archiveChatSession,
   chatMealPlan,
   confirmActionDraft,
-  queryActionAudits,
-  submitDiagnosisFeedback,
+  createChatSession,
+  getChatSession,
   queryAgentOperationStats,
+  queryActionAudits,
+  queryChatSessions,
   queryAgentRuleGaps,
+  submitDiagnosisFeedback,
+  updateChatSessionTitle,
   updateAgentRuleGapStatus
 } from '@/api/agentDiagnosis'
 
@@ -540,6 +601,12 @@ export default {
     return {
       loading: false,
       sessionId: null,
+      activeSessionId: null,
+      sessions: [],
+      sessionsLoading: false,
+      sessionCreating: false,
+      sessionRenameLoading: false,
+      sessionKeyword: '',
       inputMessage: '',
       slots: {},
       slotConfidence: {},
@@ -594,26 +661,151 @@ export default {
         .map(code => ({ code, count: distribution[code] }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 5)
+    },
+    topFailureTypes() {
+      const distribution = this.operationStats.failureTypeDistribution || {}
+      return Object.keys(distribution)
+        .map(code => ({ code, count: distribution[code] }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
+    },
+    topFallbackSources() {
+      const distribution = this.operationStats.fallbackSourceDistribution || {}
+      return Object.keys(distribution)
+        .map(code => ({ code, count: distribution[code] }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
+    },
+    filteredSessions() {
+      const keyword = (this.sessionKeyword || '').trim().toLowerCase()
+      if (!keyword) {
+        return this.sessions || []
+      }
+      return (this.sessions || []).filter(session => {
+        const title = (session.title || '').toLowerCase()
+        const customerCode = (session.customerCode || '').toLowerCase()
+        const summary = (session.lastSummary || '').toLowerCase()
+        return title.includes(keyword) || customerCode.includes(keyword) || summary.includes(keyword)
+      })
     }
   },
   mounted() {
+    this.loadSessions(true)
     this.loadOperationStats()
     this.loadRuleGaps()
   },
   methods: {
+    async loadSessions(selectCurrent) {
+      this.sessionsLoading = true
+      try {
+        const response = await queryChatSessions({ archived: false, page: 0, size: 20 })
+        this.sessions = this.extractPageContent(response)
+        if (selectCurrent) {
+          if (this.activeSessionId && this.sessions.some(item => item.sessionId === this.activeSessionId)) {
+            await this.handleSessionChange(this.activeSessionId)
+          } else if (this.sessions.length) {
+            await this.handleSessionChange(this.sessions[0].sessionId)
+          } else {
+            this.resetSessionState()
+          }
+        }
+      } catch (e) {
+        this.sessions = this.sessions || []
+      } finally {
+        this.sessionsLoading = false
+      }
+    },
+    async handleSessionChange(sessionId) {
+      if (!sessionId) {
+        this.resetSessionState()
+        return
+      }
+      this.sessionsLoading = true
+      try {
+        const detail = await getChatSession(sessionId)
+        this.applySessionDetail(detail)
+        this.loadActionAudits()
+      } catch (e) {
+        this.$message.error('会话加载失败')
+      } finally {
+        this.sessionsLoading = false
+      }
+    },
+    async createSession() {
+      this.sessionCreating = true
+      try {
+        const session = await createChatSession({})
+        if (session && session.sessionId) {
+          this.sessions = [session].concat((this.sessions || []).filter(item => item.sessionId !== session.sessionId))
+          this.activeSessionId = session.sessionId
+          this.sessionId = session.sessionId
+          this.resetSessionState(session.sessionId)
+        } else {
+          this.resetSessionState()
+        }
+      } catch (e) {
+        this.$message.error('新建会话失败')
+      } finally {
+        this.sessionCreating = false
+      }
+    },
+    async archiveCurrentSession() {
+      if (!this.activeSessionId) {
+        return
+      }
+      try {
+        await archiveChatSession(this.activeSessionId, true)
+        this.$message.success('会话已归档')
+        this.activeSessionId = null
+        this.sessionId = null
+        await this.loadSessions(true)
+      } catch (e) {
+        this.$message.error('会话归档失败')
+      }
+    },
+    async renameCurrentSession() {
+      if (!this.activeSessionId) {
+        return
+      }
+      const current = (this.sessions || []).find(item => item.sessionId === this.activeSessionId) || {}
+      try {
+        const result = await this.$prompt('请输入会话标题', '会话改名', {
+          confirmButtonText: '确认',
+          cancelButtonText: '取消',
+          inputValue: current.title || this.sessionOptionLabel(current),
+          inputPattern: /\S+/,
+          inputErrorMessage: '会话标题不能为空'
+        })
+        this.sessionRenameLoading = true
+        await updateChatSessionTitle(this.activeSessionId, { title: result.value })
+        this.$message.success('会话标题已更新')
+        await this.loadSessions(false)
+      } catch (e) {
+        if (e && e.value !== undefined) {
+          this.$message.error('会话改名失败')
+        }
+      } finally {
+        this.sessionRenameLoading = false
+      }
+    },
     async sendMessage() {
       const message = (this.inputMessage || '').trim()
       if (!message) {
         this.$message.warning('请输入排查诉求')
         return
       }
+      if (!this.activeSessionId) {
+        await this.createSession()
+      }
+      const clientMessageId = this.generateClientMessageId()
       this.messages.push({ role: 'user', content: message })
       this.inputMessage = ''
       this.loading = true
       this.scrollToBottom()
       try {
-        const response = await chatMealPlan({ sessionId: this.sessionId, message })
+        const response = await chatMealPlan({ sessionId: this.activeSessionId, clientMessageId, message })
         this.addAssistantResponse(response)
+        this.loadSessions(false)
         if (response && response.diagnosisResult) {
           this.loadOperationStats()
         }
@@ -640,7 +832,8 @@ export default {
       return this.sendMessage()
     },
     addAssistantResponse(response) {
-      this.sessionId = response.sessionId || this.sessionId
+      this.activeSessionId = response.sessionId || this.activeSessionId
+      this.sessionId = this.activeSessionId
       this.slots = response.slots || this.slots || {}
       this.slotConfidence = response.slotConfidence || (response.slots && response.slots.slotConfidence) || {}
       this.missingSlots = response.missingSlots || []
@@ -661,8 +854,12 @@ export default {
       })
       this.loadActionAudits()
     },
-    clearSession() {
-      this.sessionId = null
+    async clearSession() {
+      await this.createSession()
+    },
+    resetSessionState(sessionId) {
+      this.activeSessionId = sessionId || null
+      this.sessionId = sessionId || null
       this.inputMessage = ''
       this.slots = {}
       this.slotConfidence = {}
@@ -675,6 +872,99 @@ export default {
       this.actionAudits = []
       this.messages = [welcomeMessage()]
       this.scrollToBottom()
+    },
+    applySessionDetail(detail) {
+      this.activeSessionId = detail && detail.sessionId ? detail.sessionId : this.activeSessionId
+      this.sessionId = this.activeSessionId
+      this.slots = (detail && detail.currentSlots) || {}
+      this.slotConfidence = (detail && detail.currentSlots && detail.currentSlots.slotConfidence) || {}
+      this.missingSlots = []
+      this.conversationStage = (detail && detail.stage) || 'COLLECTING_SLOTS'
+      this.currentDiagnosis = (detail && detail.latestDiagnosisResult) || null
+      this.quickReplies = this.currentDiagnosis ? ['重新排查', '清空会话'] : DEFAULT_QUICK_REPLIES
+      this.messages = this.restoreSessionMessages(detail)
+      this.scrollToBottom()
+    },
+    restoreSessionMessages(detail) {
+      const mappedMessages = this.mapSessionMessages(detail && detail.messages)
+      const latestDiagnosisResult = detail && detail.latestDiagnosisResult
+      if (!latestDiagnosisResult) {
+        return mappedMessages
+      }
+      if (mappedMessages.some(message => !!message.result)) {
+        return mappedMessages
+      }
+      const matchedMessage = this.findDiagnosisMessage(mappedMessages, latestDiagnosisResult)
+      if (matchedMessage) {
+        matchedMessage.result = matchedMessage.result || latestDiagnosisResult
+        return mappedMessages
+      }
+      return mappedMessages.concat([{
+        role: 'assistant',
+        content: latestDiagnosisResult.summary || '已恢复最近一次诊断结果。',
+        status: 'ANSWERED',
+        stage: (detail && detail.stage) || 'DIAGNOSED',
+        missingSlots: [],
+        slotConfidence: {},
+        slots: (detail && detail.currentSlots) || {},
+        result: latestDiagnosisResult
+      }])
+    },
+    findDiagnosisMessage(messages, latestDiagnosisResult) {
+      if (!messages || !messages.length || !latestDiagnosisResult) {
+        return null
+      }
+      const diagnosisRequestId = latestDiagnosisResult.requestId
+      if (diagnosisRequestId) {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const message = messages[i]
+          if (message.role === 'assistant' && message.requestId === diagnosisRequestId) {
+            return message
+          }
+        }
+      }
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i]
+        if (message.role === 'assistant') {
+          return message
+        }
+      }
+      return null
+    },
+    mapSessionMessages(messages) {
+      if (!messages || !messages.length) {
+        return [welcomeMessage()]
+      }
+      return messages.map(message => ({
+        requestId: message.requestId,
+        role: (message.role || '').toLowerCase() === 'user' ? 'user' : 'assistant',
+        content: message.content,
+        status: message.status,
+        stage: message.conversationStage,
+        missingSlots: [],
+        slotConfidence: (message.slots && message.slots.slotConfidence) || {},
+        slots: message.slots,
+        result: message.diagnosisResult
+      }))
+    },
+    sessionOptionLabel(session) {
+      if (!session) {
+        return ''
+      }
+      if (session.title) {
+        return session.title
+      }
+      const parts = [session.customerCode, session.recordDate, this.mealTypeText(session.mealType)].filter(Boolean)
+      return parts.length ? parts.join(' / ') : session.sessionId
+    },
+    generateClientMessageId() {
+      return `msg-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
+    },
+    formatSessionTime(value) {
+      if (!value) {
+        return '-'
+      }
+      return String(value).slice(5, 16).replace('T', ' ')
     },
     togglePanel(key) {
       this[key] = !this[key]
@@ -795,6 +1085,8 @@ export default {
         this.actionConfirmResult = response
         if (response && response.success) {
           this.$message.success(response.message || '动作确认已记录')
+        } else if (response && response.status === 'STALE_DRAFT') {
+          this.handleStaleDraftResponse(response)
         } else {
           this.$message.warning((response && (response.failureReason || response.message)) || '动作确认未执行')
         }
@@ -805,6 +1097,21 @@ export default {
       } finally {
         this.actionConfirmLoading = false
       }
+    },
+    handleStaleDraftResponse(response) {
+      this.$message.warning(response.message || '业务数据已变化，请重新排查后再确认动作。')
+      this.quickReplies = ['重新排查', '清空会话']
+      this.messages.push({
+        role: 'assistant',
+        content: response.message || '业务数据已变化，请重新排查后再确认动作。',
+        status: 'STALE_DRAFT',
+        stage: this.conversationStage,
+        missingSlots: [],
+        slotConfidence: this.slotConfidence,
+        slots: this.slots
+      })
+      this.actionConfirmDialogVisible = false
+      this.scrollToBottom()
     },
     buildIdempotencyKey(draft) {
       const result = this.selectedDiagnosisResult || {}
@@ -993,6 +1300,7 @@ export default {
     },
     auditStatusTag(status) {
       if (status === 'EXECUTED' || status === 'CONFIRMED') return 'success'
+      if (status === 'STALE_DRAFT') return 'warning'
       if (status === 'NEED_SECOND_CONFIRM') return 'warning'
       if (status === 'PERMISSION_DENIED' || status === 'VALIDATION_FAILED' || status === 'EXECUTION_FAILED') return 'danger'
       return 'info'
@@ -1053,6 +1361,7 @@ export default {
   flex-direction: column;
   height: calc(100vh - 116px);
   min-height: 640px;
+  overflow: hidden;
   background: #fff;
   border: 1px solid #ebeef5;
   border-radius: 6px;
@@ -1068,26 +1377,110 @@ export default {
 
 .header-actions {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .workspace-body {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.9fr);
+  grid-template-columns: 280px minmax(0, 1.5fr) minmax(280px, 0.9fr);
   min-height: 0;
+  overflow: hidden;
+}
+
+.session-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  border-right: 1px solid #ebeef5;
+  background: #fafbfd;
+}
+
+.session-toolbar {
+  padding: 14px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.session-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+}
+
+.session-item {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.session-item + .session-item {
+  margin-top: 10px;
+}
+
+.session-item-active {
+  border-color: #409eff;
+  box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.08);
+}
+
+.session-item-head,
+.session-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.session-item-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.session-item-meta {
+  margin-top: 6px;
+  color: #909399;
+  font-size: 12px;
+}
+
+.session-item-summary {
+  margin-top: 8px;
+  color: #606266;
+  font-size: 12px;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .chat-panel {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
   border-right: 1px solid #ebeef5;
 }
 
 .side-panel {
+  height: 100%;
+  min-height: 0;
   min-width: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 20px 18px;
   background: #fafbfd;
 }
@@ -1323,9 +1716,16 @@ export default {
 
 .message-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 20px;
   background: #f7f8fa;
+}
+
+.chat-footer {
+  background: #fff;
+  border-top: 1px solid #ebeef5;
+  box-shadow: 0 -8px 24px rgba(17, 24, 39, 0.06);
 }
 
 .message-row {
@@ -1561,7 +1961,6 @@ export default {
   flex-wrap: wrap;
   gap: 8px;
   padding: 12px 20px 0;
-  border-top: 1px solid #ebeef5;
 }
 
 .composer {
@@ -1601,6 +2000,10 @@ export default {
 
   .message-bubble {
     max-width: 100%;
+  }
+
+  .chat-footer {
+    box-shadow: 0 -6px 16px rgba(17, 24, 39, 0.05);
   }
 
   .composer {

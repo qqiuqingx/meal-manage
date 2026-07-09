@@ -38,4 +38,8 @@ public class AgentOperationStatsDto {
     private Map<String, Long> actualReasonDistribution = new LinkedHashMap<>();
 
     private Map<String, Long> highFrequencyUnknownReasons = new LinkedHashMap<>();
+
+    private Map<String, Long> fallbackSourceDistribution = new LinkedHashMap<>();
+
+    private Map<String, Long> failureTypeDistribution = new LinkedHashMap<>();
 }

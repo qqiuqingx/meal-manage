@@ -38,6 +38,12 @@ public class AgentDiagnosisMetric {
     /** 兜底原因。 */
     private String fallbackReason;
 
+    /** 兜底来源。 */
+    private String fallbackSource;
+
+    /** 失败类型。 */
+    private String failureType;
+
     /** 可信度。 */
     private String confidence;
 

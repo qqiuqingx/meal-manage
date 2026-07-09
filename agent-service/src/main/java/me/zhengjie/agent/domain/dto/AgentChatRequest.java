@@ -9,6 +9,8 @@ public class AgentChatRequest {
 
     private String sessionId;
 
+    private String clientMessageId;
+
     @NotBlank
     private String message;
 
@@ -18,6 +20,14 @@ public class AgentChatRequest {
 
     public void setSessionId(String sessionId) {
         this.sessionId = sessionId;
+    }
+
+    public String getClientMessageId() {
+        return clientMessageId;
+    }
+
+    public void setClientMessageId(String clientMessageId) {
+        this.clientMessageId = clientMessageId;
     }
 
     public String getMessage() {

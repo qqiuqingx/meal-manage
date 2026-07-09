@@ -16,6 +16,9 @@ public class DiagnosisActionDraftDto {
     private String targetId;
     private Map<String, Object> beforeSnapshot = new LinkedHashMap<>();
     private Map<String, Object> afterPreview = new LinkedHashMap<>();
+    private String draftDigest;
+    private String snapshotDigest;
+    private Long snapshotTime;
     private String requiredPermission;
     private String confirmApi;
 
@@ -81,6 +84,30 @@ public class DiagnosisActionDraftDto {
 
     public void setAfterPreview(Map<String, Object> afterPreview) {
         this.afterPreview = afterPreview;
+    }
+
+    public String getDraftDigest() {
+        return draftDigest;
+    }
+
+    public void setDraftDigest(String draftDigest) {
+        this.draftDigest = draftDigest;
+    }
+
+    public String getSnapshotDigest() {
+        return snapshotDigest;
+    }
+
+    public void setSnapshotDigest(String snapshotDigest) {
+        this.snapshotDigest = snapshotDigest;
+    }
+
+    public Long getSnapshotTime() {
+        return snapshotTime;
+    }
+
+    public void setSnapshotTime(Long snapshotTime) {
+        this.snapshotTime = snapshotTime;
     }
 
     public String getRequiredPermission() {

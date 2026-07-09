@@ -52,4 +52,12 @@ public class AgentDiagnosisFeedback {
 
     /** 创建时间。 */
     private Timestamp createTime;
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public Timestamp getCreateTime() {
+        return createTime;
+    }
 }

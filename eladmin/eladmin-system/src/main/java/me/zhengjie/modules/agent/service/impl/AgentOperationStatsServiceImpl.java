@@ -54,6 +54,8 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
         metric.setMealType(response.getMealType());
         metric.setFallback(response.isFallback());
         metric.setFallbackReason(response.getFallbackReason());
+        metric.setFallbackSource(response.getFallbackSource());
+        metric.setFailureType(response.getFailureType());
         metric.setConfidence(response.getConfidence());
         metric.setModelName(response.getModelName());
         metric.setReasonCodes(JSON.toJSONString(reasonCodes(response)));
@@ -94,6 +96,8 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
         stats.setReasonCodeDistribution(reasonDistribution(metrics));
         stats.setActualReasonDistribution(actualReasonDistribution(feedbacks));
         stats.setHighFrequencyUnknownReasons(unknownReasonDistribution(stats.getReasonCodeDistribution()));
+        stats.setFallbackSourceDistribution(fallbackSourceDistribution(metrics));
+        stats.setFailureTypeDistribution(failureTypeDistribution(metrics));
         return stats;
     }
 
@@ -193,6 +197,18 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
             }
         }
         return result;
+    }
+
+    private Map<String, Long> fallbackSourceDistribution(List<AgentDiagnosisMetric> metrics) {
+        return metrics.stream()
+            .filter(item -> !isBlank(item.getFallbackSource()))
+            .collect(Collectors.groupingBy(AgentDiagnosisMetric::getFallbackSource, LinkedHashMap::new, Collectors.counting()));
+    }
+
+    private Map<String, Long> failureTypeDistribution(List<AgentDiagnosisMetric> metrics) {
+        return metrics.stream()
+            .filter(item -> !isBlank(item.getFailureType()))
+            .collect(Collectors.groupingBy(AgentDiagnosisMetric::getFailureType, LinkedHashMap::new, Collectors.counting()));
     }
 
     private List<String> parseCodes(String value) {

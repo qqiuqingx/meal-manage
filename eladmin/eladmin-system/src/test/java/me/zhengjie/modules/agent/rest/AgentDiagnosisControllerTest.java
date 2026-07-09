@@ -5,8 +5,16 @@ import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
 import me.zhengjie.modules.agent.service.AgentDiagnosisFacadeService;
+import me.zhengjie.modules.agent.session.domain.dto.AgentChatSessionCreateRequest;
+import me.zhengjie.modules.agent.session.domain.dto.AgentChatSessionDetailDto;
+import me.zhengjie.modules.agent.session.domain.dto.AgentChatSessionQueryCriteria;
+import me.zhengjie.modules.agent.session.domain.dto.AgentChatSessionSummaryDto;
+import me.zhengjie.modules.agent.session.service.AgentChatSessionService;
+import me.zhengjie.utils.PageResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
+
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -31,7 +39,8 @@ class AgentDiagnosisControllerTest {
                 return new AgentChatResponse();
             }
         };
-        AgentDiagnosisController controller = new AgentDiagnosisController(service);
+        AgentChatSessionService chatSessionService = noOpChatSessionService();
+        AgentDiagnosisController controller = new AgentDiagnosisController(service, chatSessionService);
 
         AgentDiagnosisRequest request = new AgentDiagnosisRequest();
         request.setCustomerId(1001L);
@@ -56,6 +65,35 @@ class AgentDiagnosisControllerTest {
 
             @Override
             public AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId) {
+                return new AgentChatResponse();
+            }
+        };
+        AgentChatSessionService chatSessionService = new AgentChatSessionService() {
+            @Override
+            public AgentChatSessionSummaryDto createSession(AgentChatSessionCreateRequest request) {
+                return new AgentChatSessionSummaryDto();
+            }
+
+            @Override
+            public PageResult<AgentChatSessionSummaryDto> querySessions(AgentChatSessionQueryCriteria criteria) {
+                return new PageResult<>(Collections.emptyList(), 0);
+            }
+
+            @Override
+            public AgentChatSessionDetailDto getSession(String sessionId) {
+                return new AgentChatSessionDetailDto();
+            }
+
+            @Override
+            public void updateTitle(String sessionId, String title) {
+            }
+
+            @Override
+            public void updateArchiveStatus(String sessionId, boolean archived) {
+            }
+
+            @Override
+            public AgentChatResponse chat(AgentChatRequest request, String requestId) {
                 AgentChatResponse response = new AgentChatResponse();
                 response.setRequestId(requestId);
                 response.setSessionId("session-1");
@@ -67,7 +105,7 @@ class AgentDiagnosisControllerTest {
                 return response;
             }
         };
-        AgentDiagnosisController controller = new AgentDiagnosisController(service);
+        AgentDiagnosisController controller = new AgentDiagnosisController(service, chatSessionService);
 
         AgentChatRequest request = new AgentChatRequest();
         request.setMessage("查客户 C10001 今天");
@@ -82,5 +120,37 @@ class AgentDiagnosisControllerTest {
         assertEquals("HIGH", response.getBody().getSlotConfidence().get("customer"));
         assertEquals("MEAL_TYPE", response.getBody().getMissingSlots().get(0));
         assertEquals("COLLECTING_SLOTS", response.getBody().getConversationStage());
+    }
+
+    private AgentChatSessionService noOpChatSessionService() {
+        return new AgentChatSessionService() {
+            @Override
+            public AgentChatSessionSummaryDto createSession(AgentChatSessionCreateRequest request) {
+                return new AgentChatSessionSummaryDto();
+            }
+
+            @Override
+            public PageResult<AgentChatSessionSummaryDto> querySessions(AgentChatSessionQueryCriteria criteria) {
+                return new PageResult<>(Collections.emptyList(), 0);
+            }
+
+            @Override
+            public AgentChatSessionDetailDto getSession(String sessionId) {
+                return new AgentChatSessionDetailDto();
+            }
+
+            @Override
+            public void updateTitle(String sessionId, String title) {
+            }
+
+            @Override
+            public void updateArchiveStatus(String sessionId, boolean archived) {
+            }
+
+            @Override
+            public AgentChatResponse chat(AgentChatRequest request, String requestId) {
+                return new AgentChatResponse();
+            }
+        };
     }
 }

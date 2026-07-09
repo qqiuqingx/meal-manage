@@ -113,6 +113,7 @@ class MealPlanDiagnosisControllerTest {
                 .header("X-Request-Id", "request-1")
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.requestId").value("request-1"))
             .andExpect(jsonPath("$.sessionId").value("session-1"))
             .andExpect(jsonPath("$.status").value("NEED_MORE_INFO"))
             .andExpect(jsonPath("$.assistantMessage").value("请补充餐次：早餐、午餐还是晚餐？"))

@@ -225,6 +225,32 @@ class AgentDiagnosisContextServiceImplTest {
     }
 
     @Test
+    void shouldResolveOrdersByCustomerCodeWhenCustomerIdIsZero() {
+        CustomerProfile profileEntity = new CustomerProfile();
+        profileEntity.setId(1004L);
+        profileEntity.setCustomerCode("C1004");
+        when(customerProfileService.queryAll(any(CustomerProfileQueryCriteria.class), any(Page.class)))
+                .thenReturn(new PageResult<>(Collections.singletonList(profileEntity), 1L));
+
+        CustomerProfileDetailDto detail = new CustomerProfileDetailDto();
+        detail.setId(1004L);
+        detail.setCustomerCode("C1004");
+        when(customerProfileService.getDetail(1004L)).thenReturn(detail);
+
+        CustomerOrderDetailDto order = new CustomerOrderDetailDto();
+        order.setId(2004L);
+        order.setCustomerId(1004L);
+        when(customerOrderService.getOrdersByCustomerId(1004L, 1, 10))
+                .thenReturn((PageResult) new PageResult<>(Collections.singletonList(order), 1L));
+
+        java.util.List<CustomerOrderDetailDto> result = service.resolveOrders(0L, "C1004", 1, 10);
+
+        assertEquals(1, result.size());
+        assertEquals(2004L, result.get(0).getId());
+        verify(customerOrderService).getOrdersByCustomerId(1004L, 1, 10);
+    }
+
+    @Test
     void shouldConvertCustomerOrderEntitiesWhenResolvingOrders() {
         CustomerOrder order = new CustomerOrder();
         order.setId(70L);

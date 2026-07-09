@@ -74,6 +74,8 @@ class AgentOperationStatsServiceImplTest {
         assertEquals(1L, stats.getReasonCodeDistribution().get("ORDER_EXPIRED"));
         assertEquals(1L, stats.getHighFrequencyUnknownReasons().get("AI_RESULT_INVALID"));
         assertEquals(1L, stats.getActualReasonDistribution().get("ORDER_EXPIRED"));
+        assertEquals(1L, stats.getFallbackSourceDistribution().get("ELADMIN_CLIENT"));
+        assertEquals(1L, stats.getFailureTypeDistribution().get("AGENT_SERVICE_TIMEOUT"));
 
         verify(actionAuditMapper).selectList(any());
     }
@@ -101,6 +103,8 @@ class AgentOperationStatsServiceImplTest {
         AgentDiagnosisMetric metric = new AgentDiagnosisMetric();
         metric.setRequestId(requestId);
         metric.setFallback(fallback);
+        metric.setFallbackSource(fallback ? "ELADMIN_CLIENT" : null);
+        metric.setFailureType(fallback ? "AGENT_SERVICE_TIMEOUT" : null);
         metric.setReasonCodes(reasonCodes);
         metric.setActionDraftCount(actionDraftCount);
         metric.setToolCallCount(toolCallCount);

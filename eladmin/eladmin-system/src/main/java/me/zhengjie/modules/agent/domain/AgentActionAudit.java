@@ -26,6 +26,9 @@ public class AgentActionAudit {
     /** 幂等键，同一动作确认请求必须唯一。 */
     private String idempotencyKey;
 
+    /** 动作草稿摘要。 */
+    private String draftDigest;
+
     /** 动作码。 */
     private String actionCode;
 
@@ -62,6 +65,12 @@ public class AgentActionAudit {
     /** 失败原因或待处理原因。 */
     private String failureReason;
 
+    /** 草稿过期校验结果。 */
+    private String staleCheckResult;
+
+    /** 草稿过期校验详情。 */
+    private String staleCheckDetail;
+
     /** 正式执行结果 JSON。 */
     private String executionResult;
 
@@ -76,4 +85,28 @@ public class AgentActionAudit {
 
     /** 更新时间。 */
     private Timestamp updateTime;
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public String getStaleCheckResult() {
+        return staleCheckResult;
+    }
+
+    public void setStaleCheckResult(String staleCheckResult) {
+        this.staleCheckResult = staleCheckResult;
+    }
+
+    public String getStaleCheckDetail() {
+        return staleCheckDetail;
+    }
+
+    public void setStaleCheckDetail(String staleCheckDetail) {
+        this.staleCheckDetail = staleCheckDetail;
+    }
+
+    public Timestamp getCreateTime() {
+        return createTime;
+    }
 }

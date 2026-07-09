@@ -1,6 +1,7 @@
 package me.zhengjie.modules.customer.order.util;
 
 import me.zhengjie.utils.SecurityUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
@@ -36,8 +37,15 @@ public final class CustomerOrderAmountPermissionUtil {
         return hasAnyAuthority(ADMIN, AMOUNT_EDIT);
     }
 
+    /**
+     * 判断当前请求对应的登录用户是否具备任一指定权限。
+     * 匿名请求、内部调用或缺少 JWT 的场景统一按无权限处理，避免金额脱敏逻辑反向依赖登录态抛异常。
+     *
+     * @param authorities 目标权限编码
+     * @return true-具备任一权限，false-未登录或无权限
+     */
     private static boolean hasAnyAuthority(String... authorities) {
-        UserDetails currentUser = SecurityUtils.getCurrentUser();
+        UserDetails currentUser = resolveCurrentUser();
         if (currentUser == null || currentUser.getAuthorities() == null) {
             return false;
         }
@@ -54,5 +62,23 @@ public final class CustomerOrderAmountPermissionUtil {
             }
         }
         return false;
+    }
+
+    /**
+     * 解析当前登录用户。
+     * 无请求上下文、无 JWT 或 token 非法时返回 null，由调用方按无权限处理。
+     *
+     * @return 当前登录用户；不存在时返回 null
+     */
+    private static UserDetails resolveCurrentUser() {
+        try {
+            String token = SecurityUtils.getToken();
+            if (StringUtils.isBlank(token)) {
+                return null;
+            }
+            return SecurityUtils.getCurrentUser();
+        } catch (RuntimeException ex) {
+            return null;
+        }
     }
 }

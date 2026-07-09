@@ -11,11 +11,17 @@ import me.zhengjie.modules.agent.domain.dto.AgentActionConfirmResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisActionDraftDto;
 import me.zhengjie.modules.agent.mapper.AgentActionAuditMapper;
 import me.zhengjie.modules.agent.service.AgentActionConfirmService;
+import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderBalanceRecalculateResult;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderEffectiveDateAdjustResult;
+import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.order.service.CustomerOrderService;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentResult;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
+import me.zhengjie.modules.meal.mapper.MealPlanMapper;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
 import me.zhengjie.modules.meal.service.MealPlanService;
 import me.zhengjie.utils.PageResult;
@@ -26,12 +32,17 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.lang.reflect.Field;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 /**
  * 智能排查动作草稿人工确认服务实现。
@@ -52,6 +63,9 @@ public class AgentActionConfirmServiceImpl implements AgentActionConfirmService 
     private final MealPlanService mealPlanService;
     private final CustomerProfileService customerProfileService;
     private final CustomerOrderService customerOrderService;
+    private final CustomerOrderMapper customerOrderMapper;
+    private final CustomerProfileMapper customerProfileMapper;
+    private final MealPlanMapper mealPlanMapper;
 
     /**
      * 校验并确认动作草稿，命中幂等键时直接返回历史审计结果。
@@ -66,11 +80,20 @@ public class AgentActionConfirmServiceImpl implements AgentActionConfirmService 
             return toResponse(existing, true);
         }
         AgentDiagnosisActionDraftDto draft = request.getActionDraft();
+        enrichDraftDigest(draft);
         AgentActionAudit audit = buildAudit(request, draft);
         validateDraft(audit, draft, request);
         actionAuditMapper.insert(audit);
+        boolean needsUpdate = false;
+        if ("PENDING".equals(audit.getStatus())) {
+            checkStaleDraft(audit, draft);
+            needsUpdate = !"PENDING".equals(audit.getStatus());
+        }
         if ("PENDING".equals(audit.getStatus())) {
             executeDraft(audit, draft);
+            needsUpdate = true;
+        }
+        if (needsUpdate) {
             audit.setUpdateTime(new Timestamp(System.currentTimeMillis()));
             actionAuditMapper.updateById(audit);
         }
@@ -122,6 +145,7 @@ public class AgentActionConfirmServiceImpl implements AgentActionConfirmService 
         audit.setRequestId(request.getRequestId());
         audit.setSessionId(request.getSessionId());
         audit.setIdempotencyKey(request.getIdempotencyKey());
+        audit.setDraftDigest(draft.getDraftDigest());
         audit.setActionCode(draft.getActionCode());
         audit.setActionTitle(draft.getTitle());
         audit.setRiskLevel(draft.getRiskLevel());
@@ -138,6 +162,24 @@ public class AgentActionConfirmServiceImpl implements AgentActionConfirmService 
         audit.setCreateTime(now);
         audit.setUpdateTime(now);
         return audit;
+    }
+
+    /**
+     * 补齐动作草稿摘要，保证审计和前端重复提交命中相同的草稿指纹。
+     */
+    private void enrichDraftDigest(AgentDiagnosisActionDraftDto draft) {
+        if (draft == null) {
+            return;
+        }
+        if (isBlank(draft.getDraftDigest())) {
+            draft.setDraftDigest(digest(normalizeDraftDigestSource(draft)));
+        }
+        if (isBlank(draft.getSnapshotDigest())) {
+            draft.setSnapshotDigest(digest(JSON.toJSONString(draft.getBeforeSnapshot())));
+        }
+        if (draft.getSnapshotTime() == null) {
+            draft.setSnapshotTime(System.currentTimeMillis());
+        }
     }
 
     /**
@@ -163,6 +205,152 @@ public class AgentActionConfirmServiceImpl implements AgentActionConfirmService 
         if (HIGH_RISK_LEVELS.contains(normalize(draft.getRiskLevel())) && !Boolean.TRUE.equals(request.getSecondConfirmed())) {
             markFailed(audit, "NEED_SECOND_CONFIRM", "高风险动作必须完成二次确认");
         }
+    }
+
+    /**
+     * 确认前重新读取业务数据，阻止基于过期诊断结果继续执行写操作。
+     */
+    private void checkStaleDraft(AgentActionAudit audit, AgentDiagnosisActionDraftDto draft) {
+        if (draft == null || isBlank(draft.getActionCode())) {
+            return;
+        }
+        if ("RESUME_CUSTOMER_DELIVERY".equals(draft.getActionCode())) {
+            staleCheckResumeCustomerDelivery(audit, draft);
+            return;
+        }
+        if ("ADJUST_ORDER_EFFECTIVE_DATE".equals(draft.getActionCode())) {
+            staleCheckOrderEffectiveDate(audit, draft);
+            return;
+        }
+        if ("RECALCULATE_ORDER_BALANCE".equals(draft.getActionCode())) {
+            staleCheckOrderBalance(audit, draft);
+            return;
+        }
+        if ("REGENERATE_MEAL_PLAN".equals(draft.getActionCode())) {
+            staleCheckRegenerateMealPlan(audit, draft);
+            return;
+        }
+        audit.setStaleCheckResult("SKIPPED");
+        audit.setStaleCheckDetail(null);
+    }
+
+    /**
+     * 恢复配送前确认目标日期餐次仍在客户排除日期中，否则说明草稿已过期。
+     */
+    private void staleCheckResumeCustomerDelivery(AgentActionAudit audit, AgentDiagnosisActionDraftDto draft) {
+        Long customerId = readLong(draft.getAfterPreview(), "customerId");
+        if (customerId == null) {
+            customerId = readLong(draft.getTargetId());
+        }
+        String recordDate = readString(draft.getAfterPreview(), "recordDate");
+        String mealType = readString(draft.getAfterPreview(), "mealType");
+        if (customerId == null || isBlank(recordDate) || isBlank(mealType)) {
+            audit.setStaleCheckResult("SKIPPED");
+            return;
+        }
+        CustomerProfile profile = customerProfileMapper.selectByIdWithJson(customerId);
+        if (profile == null) {
+            markStale(audit, "CUSTOMER_PROFILE_CHANGED", "业务数据已变化，请重新排查后再确认动作。", "诊断草稿生成后客户档案已不存在");
+            return;
+        }
+        List<ExcludedDateDto> excludedDates = readExcludedDates(profile);
+        if (!containsExcludedMeal(excludedDates, recordDate, mealType)) {
+            markStale(audit, "CUSTOMER_DELIVERY_ALREADY_RESUMED", "业务数据已变化，请重新排查后再确认动作。", "诊断草稿生成后该客户日期餐次的排除配置已被移除");
+            return;
+        }
+        audit.setStaleCheckResult("PASSED");
+        audit.setStaleCheckDetail(null);
+    }
+
+    /**
+     * 调整订单有效期前确认订单当前起止日期和状态仍与草稿生成时一致。
+     */
+    private void staleCheckOrderEffectiveDate(AgentActionAudit audit, AgentDiagnosisActionDraftDto draft) {
+        Long orderId = readLong(draft.getAfterPreview(), "orderId");
+        if (orderId == null) {
+            orderId = readLong(draft.getTargetId());
+        }
+        if (orderId == null) {
+            audit.setStaleCheckResult("SKIPPED");
+            return;
+        }
+        CustomerOrder order = customerOrderMapper.selectById(orderId);
+        if (order == null) {
+            markStale(audit, "ORDER_MISSING", "业务数据已变化，请重新排查后再确认动作。", "诊断草稿生成后订单已不存在");
+            return;
+        }
+        String currentStartDate = readString(draft.getAfterPreview(), "currentStartDate");
+        String currentEndDate = readString(draft.getAfterPreview(), "currentEndDate");
+        String actualStartDate = localDateToString(readField(order, "startDate", LocalDate.class));
+        String actualEndDate = localDateToString(readField(order, "endDate", LocalDate.class));
+        Integer status = readField(order, "status", Integer.class);
+        if (String.valueOf(1).equals(readString(draft.getAfterPreview(), "currentStatus")) && status != null && status != 1) {
+            markStale(audit, "ORDER_STATUS_CHANGED", "业务数据已变化，请重新排查后再确认动作。", "诊断草稿生成后订单状态已变化");
+            return;
+        }
+        if (!sameNullableText(currentStartDate, actualStartDate) || !sameNullableText(currentEndDate, actualEndDate)) {
+            markStale(audit, "ORDER_EFFECTIVE_DATE_CHANGED", "业务数据已变化，请重新排查后再确认动作。", "诊断草稿生成后订单有效期已变化");
+            return;
+        }
+        if (status != null && status != 1) {
+            markStale(audit, "ORDER_STATUS_CHANGED", "业务数据已变化，请重新排查后再确认动作。", "诊断草稿生成后订单状态已变化");
+            return;
+        }
+        audit.setStaleCheckResult("PASSED");
+        audit.setStaleCheckDetail(null);
+    }
+
+    /**
+     * 重算订单余额前确认订单核销和余额关键字段仍与草稿一致。
+     */
+    private void staleCheckOrderBalance(AgentActionAudit audit, AgentDiagnosisActionDraftDto draft) {
+        Long orderId = readLong(draft.getAfterPreview(), "orderId");
+        if (orderId == null) {
+            orderId = readLong(draft.getTargetId());
+        }
+        if (orderId == null) {
+            audit.setStaleCheckResult("SKIPPED");
+            return;
+        }
+        CustomerOrder order = customerOrderMapper.selectById(orderId);
+        if (order == null) {
+            markStale(audit, "ORDER_MISSING", "业务数据已变化，请重新排查后再确认动作。", "诊断草稿生成后订单已不存在");
+            return;
+        }
+        boolean changed = false;
+        changed = compareIntegerSnapshot(draft, "currentVerifiedCount", readField(order, "verifiedCount", Integer.class)) || changed;
+        changed = compareIntegerSnapshot(draft, "currentRemainingCount", readField(order, "remainingCount", Integer.class)) || changed;
+        changed = compareTextSnapshot(draft, "currentMealBalance", decimalToString(readField(order, "mealBalance", java.math.BigDecimal.class))) || changed;
+        changed = compareIntegerSnapshot(draft, "currentStatus", readField(order, "status", Integer.class)) || changed;
+        if (changed) {
+            markStale(audit, "ORDER_BALANCE_CHANGED", "业务数据已变化，请重新排查后再确认动作。", "诊断草稿生成后订单核销或余额数据已变化");
+            return;
+        }
+        audit.setStaleCheckResult("PASSED");
+        audit.setStaleCheckDetail(null);
+    }
+
+    /**
+     * 重新排餐前确认目标日期餐次当前没有已生成的有效排餐记录。
+     */
+    private void staleCheckRegenerateMealPlan(AgentActionAudit audit, AgentDiagnosisActionDraftDto draft) {
+        String recordDate = readString(draft.getAfterPreview(), "recordDate");
+        String mealType = readString(draft.getAfterPreview(), "mealType");
+        if (isBlank(recordDate) || isBlank(mealType)) {
+            String[] targetParts = splitTargetId(draft.getTargetId());
+            recordDate = isBlank(recordDate) ? targetParts[0] : recordDate;
+            mealType = isBlank(mealType) ? targetParts[1] : mealType;
+        }
+        if (isBlank(recordDate) || isBlank(mealType)) {
+            audit.setStaleCheckResult("SKIPPED");
+            return;
+        }
+        if (mealPlanMapper.findActiveByDateAndMealType(LocalDate.parse(recordDate), mealType) != null) {
+            markStale(audit, "MEAL_PLAN_ALREADY_GENERATED", "业务数据已变化，请重新排查后再确认动作。", "诊断草稿生成后该日期餐次的排餐已生成");
+            return;
+        }
+        audit.setStaleCheckResult("PASSED");
+        audit.setStaleCheckDetail(null);
     }
 
     /**
@@ -304,6 +492,20 @@ public class AgentActionConfirmServiceImpl implements AgentActionConfirmService 
     }
 
     /**
+     * 标记草稿已过期，并将原因写入审计，要求客服重新排查。
+     */
+    private void markStale(AgentActionAudit audit, String staleCheckResult, String message, String detail) {
+        audit.setStatus("STALE_DRAFT");
+        audit.setSuccess(false);
+        audit.setFailureReason(detail);
+        audit.setStaleCheckResult(staleCheckResult);
+        audit.setStaleCheckDetail(detail);
+        if (isBlank(message)) {
+            return;
+        }
+    }
+
+    /**
      * 转换审计记录为接口响应。
      */
     private AgentActionConfirmResponse toResponse(AgentActionAudit audit, boolean idempotentHit) {
@@ -315,7 +517,7 @@ public class AgentActionConfirmServiceImpl implements AgentActionConfirmService 
         response.setIdempotentHit(idempotentHit);
         response.setFailureReason(audit.getFailureReason());
         response.setExecutionResult(parseExecutionResult(audit.getExecutionResult()));
-        response.setMessage(Boolean.TRUE.equals(audit.getSuccess()) ? successMessage(audit) : audit.getFailureReason());
+        response.setMessage(responseMessage(audit));
         return response;
     }
 
@@ -340,6 +542,16 @@ public class AgentActionConfirmServiceImpl implements AgentActionConfirmService 
     private String readString(Map<String, Object> map, String key) {
         Object value = map == null ? null : map.get(key);
         return value == null ? null : String.valueOf(value);
+    }
+
+    private String responseMessage(AgentActionAudit audit) {
+        if (Boolean.TRUE.equals(audit.getSuccess())) {
+            return successMessage(audit);
+        }
+        if ("STALE_DRAFT".equals(audit.getStatus())) {
+            return "业务数据已变化，请重新排查后再确认动作。";
+        }
+        return audit.getFailureReason();
     }
 
     private Long readLong(Map<String, Object> map, String key) {
@@ -370,6 +582,132 @@ public class AgentActionConfirmServiceImpl implements AgentActionConfirmService 
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toUpperCase();
+    }
+
+    private boolean compareIntegerSnapshot(AgentDiagnosisActionDraftDto draft, String key, Integer currentValue) {
+        String expected = firstNonBlank(readString(draft.getAfterPreview(), key), readString(draft.getBeforeSnapshot(), key));
+        if (isBlank(expected)) {
+            return false;
+        }
+        Integer expectedValue = readInteger(expected);
+        return expectedValue != null && !expectedValue.equals(currentValue);
+    }
+
+    private boolean compareTextSnapshot(AgentDiagnosisActionDraftDto draft, String key, String currentValue) {
+        String expected = firstNonBlank(readString(draft.getAfterPreview(), key), readString(draft.getBeforeSnapshot(), key));
+        return !isBlank(expected) && !sameNullableText(expected, currentValue);
+    }
+
+    private Integer readInteger(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        if (value == null || String.valueOf(value).trim().isEmpty()) {
+            return null;
+        }
+        return Integer.valueOf(String.valueOf(value));
+    }
+
+    private String firstNonBlank(String first, String second) {
+        return isBlank(first) ? second : first;
+    }
+
+    private boolean sameNullableText(String expected, String actual) {
+        return normalizeNullable(expected).equals(normalizeNullable(actual));
+    }
+
+    private String normalizeNullable(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private String decimalToString(java.math.BigDecimal value) {
+        return value == null ? null : value.stripTrailingZeros().toPlainString();
+    }
+
+    private String localDateToString(LocalDate value) {
+        return value == null ? null : value.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<ExcludedDateDto> readExcludedDates(CustomerProfile profile) {
+        Object value = readRawField(profile, "excludedDates");
+        return value instanceof List ? (List<ExcludedDateDto>) value : null;
+    }
+
+    private boolean containsExcludedMeal(List<ExcludedDateDto> excludedDates, String recordDate, String mealType) {
+        if (excludedDates == null || excludedDates.isEmpty()) {
+            return false;
+        }
+        for (ExcludedDateDto excludedDate : excludedDates) {
+            if (excludedDate == null) {
+                continue;
+            }
+            if (!sameNullableText(recordDate, excludedDate.getDate())) {
+                continue;
+            }
+            if (excludedDate.getMealTypes() != null && excludedDate.getMealTypes().contains(mealType)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String normalizeDraftDigestSource(AgentDiagnosisActionDraftDto draft) {
+        return (draft.getActionCode() == null ? "" : draft.getActionCode()) + "|"
+            + (draft.getTargetType() == null ? "" : draft.getTargetType()) + "|"
+            + (draft.getTargetId() == null ? "" : draft.getTargetId()) + "|"
+            + JSON.toJSONString(draft.getAfterPreview());
+    }
+
+    private String digest(String value) {
+        try {
+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = messageDigest.digest((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder();
+            for (byte item : bytes) {
+                builder.append(String.format("%02x", item));
+            }
+            return builder.toString();
+        } catch (Exception ex) {
+            return Integer.toHexString(value == null ? 0 : value.hashCode());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T readField(Object target, String fieldName, Class<T> expectedType) {
+        Object value = readRawField(target, fieldName);
+        if (value == null) {
+            return null;
+        }
+        return expectedType.isInstance(value) ? (T) value : null;
+    }
+
+    private Object readRawField(Object target, String fieldName) {
+        if (target == null || isBlank(fieldName)) {
+            return null;
+        }
+        Field field = findField(target.getClass(), fieldName);
+        if (field == null) {
+            return null;
+        }
+        try {
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (IllegalAccessException ex) {
+            return null;
+        }
+    }
+
+    private Field findField(Class<?> type, String fieldName) {
+        Class<?> current = type;
+        while (current != null && current != Object.class) {
+            try {
+                return current.getDeclaredField(fieldName);
+            } catch (NoSuchFieldException ex) {
+                current = current.getSuperclass();
+            }
+        }
+        return null;
     }
 
     private boolean isBlank(String value) {

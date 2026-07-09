@@ -6,6 +6,8 @@ import me.zhengjie.agent.domain.dto.DiagnosisReasonDto;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -187,9 +189,22 @@ public class RuleBasedDiagnosisActionDraftService implements DiagnosisActionDraf
         draft.setTargetId(targetId);
         draft.setBeforeSnapshot(evidenceSnapshot(reason));
         draft.setAfterPreview(afterPreview);
+        enrichDraftDigest(draft);
         draft.setRequiredPermission(requiredPermission);
         draft.setConfirmApi(CONFIRM_API);
         return draft;
+    }
+
+    /**
+     * 生成动作草稿和快照摘要，便于主系统幂等和过期校验复用同一指纹。
+     */
+    private void enrichDraftDigest(DiagnosisActionDraftDto draft) {
+        draft.setDraftDigest(digest((draft.getActionCode() == null ? "" : draft.getActionCode()) + "|"
+            + (draft.getTargetType() == null ? "" : draft.getTargetType()) + "|"
+            + (draft.getTargetId() == null ? "" : draft.getTargetId()) + "|"
+            + toJson(draft.getAfterPreview())));
+        draft.setSnapshotDigest(digest(toJson(draft.getBeforeSnapshot())));
+        draft.setSnapshotTime(System.currentTimeMillis());
     }
 
     /**
@@ -258,5 +273,23 @@ public class RuleBasedDiagnosisActionDraftService implements DiagnosisActionDraf
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private String toJson(Object value) {
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private String digest(String value) {
+        try {
+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = messageDigest.digest((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder();
+            for (byte item : bytes) {
+                builder.append(String.format("%02x", item));
+            }
+            return builder.toString();
+        } catch (Exception ex) {
+            return Integer.toHexString(value == null ? 0 : value.hashCode());
+        }
     }
 }

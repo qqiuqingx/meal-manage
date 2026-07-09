@@ -122,7 +122,7 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
 
     @Override
     public List<CustomerOrderDetailDto> resolveOrders(Long customerId, String customerCode, Integer page, Integer size) {
-        Long resolvedCustomerId = customerId;
+        Long resolvedCustomerId = normalizeCustomerId(customerId);
         if (resolvedCustomerId == null) {
             CustomerProfileDetailDto customerProfile = resolveCustomerProfile(null, customerCode);
             resolvedCustomerId = customerProfile == null ? null : customerProfile.getId();
@@ -152,6 +152,17 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
                     ex.getClass().getSimpleName(), ex.getMessage(), ex);
             return Collections.emptyList();
         }
+    }
+
+    /**
+     * 归一化客户 ID。
+     * 诊断链路中将空值、0 和负数统一视为未传，避免阻断按客户编号兜底查询。
+     *
+     * @param customerId 原始客户 ID
+     * @return 归一化后的客户 ID；无效时返回 null
+     */
+    private Long normalizeCustomerId(Long customerId) {
+        return customerId != null && customerId > 0 ? customerId : null;
     }
 
     private CustomerOrderDetailDto toOrderDetailDto(CustomerOrder order) {

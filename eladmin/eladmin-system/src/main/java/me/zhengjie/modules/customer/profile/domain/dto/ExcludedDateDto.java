@@ -37,4 +37,20 @@ public class ExcludedDateDto implements Serializable {
      * 排除的餐次类型列表：BREAKFAST、LUNCH、DINNER
      */
     private java.util.List<String> mealTypes;
+
+    public String getDate() {
+        return date;
+    }
+
+    public void setDate(String date) {
+        this.date = date;
+    }
+
+    public java.util.List<String> getMealTypes() {
+        return mealTypes;
+    }
+
+    public void setMealTypes(java.util.List<String> mealTypes) {
+        this.mealTypes = mealTypes;
+    }
 }

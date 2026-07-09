@@ -7,11 +7,17 @@ import me.zhengjie.modules.agent.domain.dto.AgentActionConfirmRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentActionConfirmResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisActionDraftDto;
 import me.zhengjie.modules.agent.mapper.AgentActionAuditMapper;
+import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderBalanceRecalculateResult;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderEffectiveDateAdjustResult;
+import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.order.service.CustomerOrderService;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentResult;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
+import me.zhengjie.modules.meal.mapper.MealPlanMapper;
 import me.zhengjie.modules.meal.domain.dto.MealPlanGenerateResult;
 import me.zhengjie.modules.meal.service.MealPlanService;
 import me.zhengjie.utils.PageResult;
@@ -26,9 +32,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDate;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,6 +62,15 @@ class AgentActionConfirmServiceImplTest {
 
     @Mock
     private CustomerOrderService customerOrderService;
+
+    @Mock
+    private CustomerOrderMapper customerOrderMapper;
+
+    @Mock
+    private CustomerProfileMapper customerProfileMapper;
+
+    @Mock
+    private MealPlanMapper mealPlanMapper;
 
     @InjectMocks
     private AgentActionConfirmServiceImpl service;
@@ -106,6 +124,13 @@ class AgentActionConfirmServiceImplTest {
         adjustmentResult.setAdditionMealCount(0);
         adjustmentResult.setDeletedUnverifiedPlanCount(0);
         when(customerProfileService.resumeCustomerDelivery(1001L, "2026-07-08", "LUNCH")).thenReturn(adjustmentResult);
+        CustomerProfile profile = new CustomerProfile();
+        ReflectionTestUtils.setField(profile, "id", 1001L);
+        ExcludedDateDto excludedDate = new ExcludedDateDto();
+        excludedDate.setDate("2026-07-08");
+        excludedDate.setMealTypes(List.of("LUNCH"));
+        ReflectionTestUtils.setField(profile, "excludedDates", List.of(excludedDate));
+        when(customerProfileMapper.selectByIdWithJson(1001L)).thenReturn(profile);
 
         AgentActionConfirmResponse response = service.confirm(request(resumeDeliveryDraft("2026-07-08", "LUNCH", 1001L)));
 
@@ -140,6 +165,12 @@ class AgentActionConfirmServiceImplTest {
         adjustResult.setOldEndDate("2026-07-07");
         adjustResult.setNewEndDate("2026-07-08");
         when(customerOrderService.adjustEffectiveDate(2001L, null, "2026-07-08")).thenReturn(adjustResult);
+        CustomerOrder order = new CustomerOrder();
+        ReflectionTestUtils.setField(order, "id", 2001L);
+        ReflectionTestUtils.setField(order, "startDate", LocalDate.parse("2026-07-01"));
+        ReflectionTestUtils.setField(order, "endDate", LocalDate.parse("2026-07-07"));
+        ReflectionTestUtils.setField(order, "status", 1);
+        when(customerOrderMapper.selectById(2001L)).thenReturn(order);
 
         AgentActionConfirmRequest request = request(orderEffectiveDateDraft(2001L, null, "2026-07-08"));
         request.setSecondConfirmed(true);
@@ -170,6 +201,34 @@ class AgentActionConfirmServiceImplTest {
     }
 
     @Test
+    void shouldReturnStaleDraftWhenOrderEffectiveDateChangedBeforeConfirmation() {
+        stubInsertId();
+        CustomerOrder order = new CustomerOrder();
+        ReflectionTestUtils.setField(order, "id", 2001L);
+        ReflectionTestUtils.setField(order, "startDate", LocalDate.parse("2026-07-01"));
+        ReflectionTestUtils.setField(order, "endDate", LocalDate.parse("2026-07-10"));
+        ReflectionTestUtils.setField(order, "status", 1);
+        when(customerOrderMapper.selectById(2001L)).thenReturn(order);
+
+        AgentDiagnosisActionDraftDto draft = orderEffectiveDateDraft(2001L, null, "2026-07-08");
+        draft.getAfterPreview().put("currentStartDate", "2026-07-01");
+        draft.getAfterPreview().put("currentEndDate", "2026-07-07");
+        AgentActionConfirmRequest request = request(draft);
+        request.setSecondConfirmed(true);
+
+        AgentActionConfirmResponse response = service.confirm(request);
+
+        ArgumentCaptor<AgentActionAudit> captor = ArgumentCaptor.forClass(AgentActionAudit.class);
+        verify(actionAuditMapper).updateById(captor.capture());
+        assertEquals("STALE_DRAFT", captor.getValue().getStatus());
+        assertEquals("ORDER_EFFECTIVE_DATE_CHANGED", captor.getValue().getStaleCheckResult());
+        assertEquals("STALE_DRAFT", response.getStatus());
+        assertEquals("业务数据已变化，请重新排查后再确认动作。", response.getMessage());
+        assertEquals("诊断草稿生成后订单有效期已变化", response.getFailureReason());
+        verify(customerOrderService, never()).adjustEffectiveDate(any(), any(), any());
+    }
+
+    @Test
     void shouldExecuteRecalculateOrderBalanceAfterSecondConfirmation() {
         stubInsertId();
         CustomerOrderBalanceRecalculateResult recalculateResult = new CustomerOrderBalanceRecalculateResult();
@@ -177,6 +236,11 @@ class AgentActionConfirmServiceImplTest {
         recalculateResult.setNewVerifiedCount(3);
         recalculateResult.setNewRemainingCount(17);
         when(customerOrderService.recalculateBalance(2001L)).thenReturn(recalculateResult);
+        CustomerOrder order = new CustomerOrder();
+        ReflectionTestUtils.setField(order, "id", 2001L);
+        ReflectionTestUtils.setField(order, "verifiedCount", 3);
+        ReflectionTestUtils.setField(order, "remainingCount", 17);
+        when(customerOrderMapper.selectById(2001L)).thenReturn(order);
 
         AgentActionConfirmRequest request = request(orderBalanceDraft(2001L));
         request.setSecondConfirmed(true);
@@ -207,6 +271,31 @@ class AgentActionConfirmServiceImplTest {
     }
 
     @Test
+    void shouldReturnStaleDraftWhenOrderBalanceChangedBeforeConfirmation() {
+        stubInsertId();
+        CustomerOrder order = new CustomerOrder();
+        ReflectionTestUtils.setField(order, "id", 2001L);
+        ReflectionTestUtils.setField(order, "verifiedCount", 4);
+        ReflectionTestUtils.setField(order, "remainingCount", 16);
+        when(customerOrderMapper.selectById(2001L)).thenReturn(order);
+
+        AgentDiagnosisActionDraftDto draft = orderBalanceDraft(2001L);
+        draft.getAfterPreview().put("currentVerifiedCount", 3);
+        draft.getAfterPreview().put("currentRemainingCount", 17);
+        AgentActionConfirmRequest request = request(draft);
+        request.setSecondConfirmed(true);
+
+        AgentActionConfirmResponse response = service.confirm(request);
+
+        ArgumentCaptor<AgentActionAudit> captor = ArgumentCaptor.forClass(AgentActionAudit.class);
+        verify(actionAuditMapper).updateById(captor.capture());
+        assertEquals("STALE_DRAFT", captor.getValue().getStatus());
+        assertEquals("ORDER_BALANCE_CHANGED", captor.getValue().getStaleCheckResult());
+        assertEquals("STALE_DRAFT", response.getStatus());
+        verify(customerOrderService, never()).recalculateBalance(any());
+    }
+
+    @Test
     void shouldRejectRegenerateMealPlanWhenDateAndMealTypeMissing() {
         stubInsertId();
         AgentDiagnosisActionDraftDto draft = regenerateDraft(null, null, 1001L);
@@ -218,6 +307,40 @@ class AgentActionConfirmServiceImplTest {
         verify(actionAuditMapper).updateById(captor.capture());
         assertEquals("VALIDATION_FAILED", captor.getValue().getStatus());
         assertEquals("VALIDATION_FAILED", response.getStatus());
+        verify(mealPlanService, never()).generateMealPlan(any(), any(), any());
+    }
+
+    @Test
+    void shouldReturnStaleDraftWhenCustomerDeliveryAlreadyResumed() {
+        stubInsertId();
+        CustomerProfile profile = new CustomerProfile();
+        ReflectionTestUtils.setField(profile, "id", 1001L);
+        ReflectionTestUtils.setField(profile, "excludedDates", Collections.emptyList());
+        when(customerProfileMapper.selectByIdWithJson(1001L)).thenReturn(profile);
+
+        AgentActionConfirmResponse response = service.confirm(request(resumeDeliveryDraft("2026-07-08", "LUNCH", 1001L)));
+
+        ArgumentCaptor<AgentActionAudit> captor = ArgumentCaptor.forClass(AgentActionAudit.class);
+        verify(actionAuditMapper).updateById(captor.capture());
+        assertEquals("STALE_DRAFT", captor.getValue().getStatus());
+        assertEquals("CUSTOMER_DELIVERY_ALREADY_RESUMED", captor.getValue().getStaleCheckResult());
+        assertEquals("STALE_DRAFT", response.getStatus());
+        verify(customerProfileService, never()).resumeCustomerDelivery(any(), any(), any());
+    }
+
+    @Test
+    void shouldReturnStaleDraftWhenMealPlanAlreadyGeneratedBeforeRegeneration() {
+        stubInsertId();
+        when(mealPlanMapper.findActiveByDateAndMealType(LocalDate.parse("2026-07-08"), "LUNCH"))
+            .thenReturn(new me.zhengjie.modules.meal.domain.MealPlan());
+
+        AgentActionConfirmResponse response = service.confirm(request(regenerateDraft("2026-07-08", "LUNCH", 1001L)));
+
+        ArgumentCaptor<AgentActionAudit> captor = ArgumentCaptor.forClass(AgentActionAudit.class);
+        verify(actionAuditMapper).updateById(captor.capture());
+        assertEquals("STALE_DRAFT", captor.getValue().getStatus());
+        assertEquals("MEAL_PLAN_ALREADY_GENERATED", captor.getValue().getStaleCheckResult());
+        assertEquals("STALE_DRAFT", response.getStatus());
         verify(mealPlanService, never()).generateMealPlan(any(), any(), any());
     }
 
@@ -395,6 +518,14 @@ class AgentActionConfirmServiceImplTest {
         afterPreview.put("mealType", mealType);
         afterPreview.put("customerId", customerId);
         draft.setAfterPreview(afterPreview);
+        if (recordDate != null && mealType != null) {
+            ExcludedDateDto excludedDate = new ExcludedDateDto();
+            excludedDate.setDate(recordDate);
+            excludedDate.setMealTypes(List.of(mealType));
+            Map<String, Object> beforeSnapshot = new LinkedHashMap<>();
+            beforeSnapshot.put("excludedDates", List.of(excludedDate));
+            draft.setBeforeSnapshot(beforeSnapshot);
+        }
         return draft;
     }
 
@@ -410,6 +541,9 @@ class AgentActionConfirmServiceImplTest {
         afterPreview.put("orderId", orderId);
         afterPreview.put("newStartDate", newStartDate);
         afterPreview.put("newEndDate", newEndDate);
+        afterPreview.put("currentStartDate", "2026-07-01");
+        afterPreview.put("currentEndDate", "2026-07-07");
+        afterPreview.put("currentStatus", 1);
         draft.setAfterPreview(afterPreview);
         return draft;
     }
@@ -424,6 +558,8 @@ class AgentActionConfirmServiceImplTest {
         draft.setRequiredPermission("customerOrder:edit");
         Map<String, Object> afterPreview = new LinkedHashMap<>();
         afterPreview.put("orderId", orderId);
+        afterPreview.put("currentVerifiedCount", 3);
+        afterPreview.put("currentRemainingCount", 17);
         draft.setAfterPreview(afterPreview);
         return draft;
     }

@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS `agent_chat_message` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `session_id` varchar(64) NOT NULL COMMENT '会话ID',
+  `request_id` varchar(64) DEFAULT NULL COMMENT '请求ID',
+  `client_message_id` varchar(64) DEFAULT NULL COMMENT '前端消息幂等ID',
+  `role` varchar(16) NOT NULL COMMENT '消息角色(USER/ASSISTANT/SYSTEM)',
+  `content` text COMMENT '消息内容',
+  `status` varchar(32) DEFAULT NULL COMMENT '聊天响应状态',
+  `conversation_stage` varchar(32) DEFAULT NULL COMMENT '消息产生后的会话阶段',
+  `slots_json` text COMMENT '槽位快照JSON',
+  `diagnosis_result_json` mediumtext COMMENT '诊断结果JSON',
+  `tool_summary_json` text COMMENT '工具调用摘要JSON',
+  `create_by` varchar(64) DEFAULT NULL COMMENT '创建人',
+  `update_by` varchar(64) DEFAULT NULL COMMENT '更新人',
+  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_agent_chat_msg_session_time` (`session_id`, `create_time`),
+  KEY `idx_agent_chat_msg_request` (`request_id`),
+  UNIQUE KEY `uk_agent_chat_msg_client` (`session_id`, `client_message_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='智能排查聊天消息表';

@@ -6,6 +6,7 @@ import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
 import me.zhengjie.modules.agent.service.AgentDiagnosisFacadeService;
+import me.zhengjie.modules.agent.session.service.AgentChatSessionService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AgentDiagnosisController {
 
     private final AgentDiagnosisFacadeService diagnosisFacadeService;
+    private final AgentChatSessionService chatSessionService;
 
     @PostMapping("/diagnose")
     @PreAuthorize("@el.check('agentDiagnosis:list')")
@@ -35,6 +37,6 @@ public class AgentDiagnosisController {
     @PreAuthorize("@el.check('agentDiagnosis:list')")
     public ResponseEntity<AgentChatResponse> chatMealPlan(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
                                                           @Validated @RequestBody AgentChatRequest request) {
-        return ResponseEntity.ok(diagnosisFacadeService.chatMealPlan(request, requestId));
+        return ResponseEntity.ok(chatSessionService.chat(request, requestId));
     }
 }
