@@ -1,6 +1,9 @@
 package me.zhengjie.agent.client;
 
 import me.zhengjie.agent.domain.dto.DiagnosisToolCandidateDishStatsRequest;
+import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightMealRequest;
+import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightOrderRequest;
+import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightVerificationRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerLookupRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerOrdersRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolMealRefundsRequest;
@@ -34,4 +37,21 @@ public interface DiagnosisToolDataClient {
     List<Map<String, Object>> listMealRefunds(DiagnosisToolMealRefundsRequest request);
 
     Map<String, Object> getMealPlanGenerationSnapshot(DiagnosisToolMealPlanLookupRequest request);
+
+    // ==================== 客户信息查询 ====================
+
+    /**
+     * 获取客户餐数汇总
+     */
+    Map<String, Object> getCustomerMealSummary(DiagnosisToolCustomerInsightMealRequest request);
+
+    /**
+     * 获取客户核销统计
+     */
+    Map<String, Object> getCustomerVerificationSummary(DiagnosisToolCustomerInsightVerificationRequest request);
+
+    /**
+     * 获取客户订单列表
+     */
+    Map<String, Object> getCustomerOrderSummary(DiagnosisToolCustomerInsightOrderRequest request);
 }

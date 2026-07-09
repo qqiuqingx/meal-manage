@@ -12,6 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.annotation.rest.AnonymousPostMapping;
 import me.zhengjie.modules.agent.domain.dto.MealPlanDiagnosisContextDto;
 import me.zhengjie.modules.agent.domain.dto.MealPlanDiagnosisContextRequest;
+import me.zhengjie.modules.agent.domain.dto.insight.AgentCustomerInsightRequest;
+import me.zhengjie.modules.agent.domain.dto.insight.AgentCustomerMealSummaryResponse;
+import me.zhengjie.modules.agent.domain.dto.insight.AgentCustomerOrderSummaryResponse;
+import me.zhengjie.modules.agent.domain.dto.insight.AgentCustomerVerificationSummaryResponse;
+import me.zhengjie.modules.agent.service.AgentCustomerInsightService;
 import me.zhengjie.modules.agent.service.AgentDiagnosisContextService;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
@@ -48,6 +53,7 @@ public class InternalAgentDiagnosisContextController {
     private static final String INTERNAL_TOKEN_HEADER = "X-Agent-Internal-Token";
 
     private final AgentDiagnosisContextService contextService;
+    private final AgentCustomerInsightService customerInsightService;
 
     @Value("${agent.internal-token}")
     private String internalToken;
@@ -279,6 +285,63 @@ public class InternalAgentDiagnosisContextController {
             log.info("诊断阶段 stage=内部排餐生成快照查询完成 requestId={} recordDate={} mealType={} present={} costMs={}",
                     MDC.get(REQUEST_ID_KEY), request.getRecordDate(), request.getMealType(),
                     result != null && Boolean.TRUE.equals(result.get("present")), System.currentTimeMillis() - start);
+            return ResponseEntity.ok(result);
+        } finally {
+            MDC.remove(REQUEST_ID_KEY);
+        }
+    }
+
+    // ==================== 客户信息查询接口 ====================
+
+    @AnonymousPostMapping("/customer-insight/meal-summary")
+    public ResponseEntity<AgentCustomerMealSummaryResponse> getCustomerMealSummary(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
+                                                                                    @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String agentToken,
+                                                                                    @Validated @RequestBody AgentCustomerInsightRequest request) {
+        verifyInternalToken(agentToken);
+        bindRequestId(requestId);
+        long start = System.currentTimeMillis();
+        try {
+            AgentCustomerMealSummaryResponse result = customerInsightService.getMealSummary(request);
+            log.info("诊断阶段 stage=内部客户餐数汇总查询完成 requestId={} customerId={} customerCode={} present={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(),
+                    result != null && result.isPresent(), System.currentTimeMillis() - start);
+            return ResponseEntity.ok(result);
+        } finally {
+            MDC.remove(REQUEST_ID_KEY);
+        }
+    }
+
+    @AnonymousPostMapping("/customer-insight/verification-summary")
+    public ResponseEntity<AgentCustomerVerificationSummaryResponse> getCustomerVerificationSummary(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
+                                                                                                      @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String agentToken,
+                                                                                                      @Validated @RequestBody AgentCustomerInsightRequest request) {
+        verifyInternalToken(agentToken);
+        bindRequestId(requestId);
+        long start = System.currentTimeMillis();
+        try {
+            AgentCustomerVerificationSummaryResponse result = customerInsightService.getVerificationSummary(request);
+            log.info("诊断阶段 stage=内部客户核销统计查询完成 requestId={} customerId={} customerCode={} present={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(),
+                    result != null && result.isPresent(), System.currentTimeMillis() - start);
+            return ResponseEntity.ok(result);
+        } finally {
+            MDC.remove(REQUEST_ID_KEY);
+        }
+    }
+
+    @AnonymousPostMapping("/customer-insight/order-summary")
+    public ResponseEntity<AgentCustomerOrderSummaryResponse> getCustomerOrderSummary(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
+                                                                                      @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String agentToken,
+                                                                                      @Validated @RequestBody AgentCustomerInsightRequest request) {
+        verifyInternalToken(agentToken);
+        bindRequestId(requestId);
+        long start = System.currentTimeMillis();
+        try {
+            AgentCustomerOrderSummaryResponse result = customerInsightService.getOrderSummary(request);
+            log.info("诊断阶段 stage=内部客户订单列表查询完成 requestId={} customerId={} customerCode={} orders={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(),
+                    result != null && result.getOrders() != null ? result.getOrders().size() : 0,
+                    System.currentTimeMillis() - start);
             return ResponseEntity.ok(result);
         } finally {
             MDC.remove(REQUEST_ID_KEY);

@@ -6,6 +6,11 @@ import me.zhengjie.modules.agent.domain.dto.AgentCustomerOrdersRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentMealPlanLookupRequest;
 import me.zhengjie.modules.agent.domain.dto.MealPlanDiagnosisContextDto;
 import me.zhengjie.modules.agent.domain.dto.MealPlanDiagnosisContextRequest;
+import me.zhengjie.modules.agent.domain.dto.insight.AgentCustomerInsightRequest;
+import me.zhengjie.modules.agent.domain.dto.insight.AgentCustomerMealSummaryResponse;
+import me.zhengjie.modules.agent.domain.dto.insight.AgentCustomerOrderSummaryResponse;
+import me.zhengjie.modules.agent.domain.dto.insight.AgentCustomerVerificationSummaryResponse;
+import me.zhengjie.modules.agent.service.AgentCustomerInsightService;
 import me.zhengjie.modules.agent.service.AgentDiagnosisContextService;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
@@ -38,6 +43,9 @@ class InternalAgentDiagnosisContextControllerTest {
 
     @Mock
     private AgentDiagnosisContextService contextService;
+
+    @Mock
+    private AgentCustomerInsightService customerInsightService;
 
     @InjectMocks
     private InternalAgentDiagnosisContextController controller;
@@ -182,5 +190,66 @@ class InternalAgentDiagnosisContextControllerTest {
         assertNotNull(response.getBody());
         assertEquals(1, response.getBody().size());
         verify(contextService).resolveCandidateDishStats("2026-05-17");
+    }
+
+    @Test
+    void shouldDelegateCustomerMealSummary() {
+        AgentCustomerInsightRequest request = new AgentCustomerInsightRequest();
+        request.setCustomerCode("B3303");
+        AgentCustomerMealSummaryResponse summary = new AgentCustomerMealSummaryResponse();
+        summary.setCustomerCode("B3303");
+        summary.setPresent(true);
+        when(customerInsightService.getMealSummary(request)).thenReturn(summary);
+
+        ResponseEntity<AgentCustomerMealSummaryResponse> response =
+                controller.getCustomerMealSummary("rid-1", INTERNAL_TOKEN, request);
+
+        assertNotNull(response.getBody());
+        assertEquals("B3303", response.getBody().getCustomerCode());
+        verify(customerInsightService).getMealSummary(request);
+    }
+
+    @Test
+    void shouldDelegateCustomerVerificationSummary() {
+        AgentCustomerInsightRequest request = new AgentCustomerInsightRequest();
+        request.setCustomerCode("B3303");
+        AgentCustomerVerificationSummaryResponse summary = new AgentCustomerVerificationSummaryResponse();
+        summary.setCustomerCode("B3303");
+        when(customerInsightService.getVerificationSummary(request)).thenReturn(summary);
+
+        ResponseEntity<AgentCustomerVerificationSummaryResponse> response =
+                controller.getCustomerVerificationSummary("rid-1", INTERNAL_TOKEN, request);
+
+        assertNotNull(response.getBody());
+        assertEquals("B3303", response.getBody().getCustomerCode());
+        verify(customerInsightService).getVerificationSummary(request);
+    }
+
+    @Test
+    void shouldDelegateCustomerOrderSummary() {
+        AgentCustomerInsightRequest request = new AgentCustomerInsightRequest();
+        request.setCustomerCode("B3303");
+        AgentCustomerOrderSummaryResponse summary = new AgentCustomerOrderSummaryResponse();
+        summary.setCustomerCode("B3303");
+        when(customerInsightService.getOrderSummary(request)).thenReturn(summary);
+
+        ResponseEntity<AgentCustomerOrderSummaryResponse> response =
+                controller.getCustomerOrderSummary("rid-1", INTERNAL_TOKEN, request);
+
+        assertNotNull(response.getBody());
+        assertEquals("B3303", response.getBody().getCustomerCode());
+        verify(customerInsightService).getOrderSummary(request);
+    }
+
+    @Test
+    void shouldRejectCustomerInsightWhenTokenInvalid() {
+        AgentCustomerInsightRequest request = new AgentCustomerInsightRequest();
+        request.setCustomerCode("B3303");
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> controller.getCustomerMealSummary("rid-1", "wrong-token", request));
+
+        assertEquals(403, exception.getStatus().value());
+        verify(customerInsightService, never()).getMealSummary(any(AgentCustomerInsightRequest.class));
     }
 }

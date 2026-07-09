@@ -238,6 +238,21 @@ class SpringAiDiagnosisAiClientTest {
             public Map<String, Object> getMealPlanGenerationSnapshot(me.zhengjie.agent.domain.dto.DiagnosisToolMealPlanLookupRequest request) {
                 return Map.of();
             }
+
+            @Override
+            public Map<String, Object> getCustomerMealSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightMealRequest request) {
+                return Map.of();
+            }
+
+            @Override
+            public Map<String, Object> getCustomerVerificationSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightVerificationRequest request) {
+                return Map.of();
+            }
+
+            @Override
+            public Map<String, Object> getCustomerOrderSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightOrderRequest request) {
+                return Map.of();
+            }
         }, new ObjectMapper(), traceCollector, new AgentToolRegistry.LogSink() {
             @Override
             public void toolCallStarted(String toolName, String requestId, String inputDigest) {

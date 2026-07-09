@@ -39,6 +39,25 @@ public class RuleBasedMealPlanChatExtractor implements MealPlanChatExtractor {
     private static final Pattern DATE_PATTERN = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
     private static final Pattern NEXT_WEEKDAY_PATTERN = Pattern.compile("下周([一二三四五六日天])");
 
+    // 客户餐数余额查询关键词
+    private static final Pattern MEAL_BALANCE_PATTERN = Pattern.compile(
+            "还剩多少|剩多少|剩余多少|剩余餐数|餐数余额|还能吃几餐|还剩几餐|还有多少餐|还有几餐|餐数还剩|剩余.*早餐|剩余.*午餐|剩余.*晚餐|早餐.*剩|午晚餐.*剩|午餐.*剩|晚餐.*剩",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    // 核销查询关键词
+    private static final Pattern VERIFICATION_PATTERN = Pattern.compile(
+            "核销了多少|已核销|核销记录|最近核销|用了多少餐|消耗多少餐|核销情况|核销统计",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    // 订单查询关键词
+    private static final Pattern ORDER_PATTERN = Pattern.compile(
+            "有哪些订单|订单情况|进行中订单|订单状态|买了什么套餐|.*订单.*有哪|.*订单.*什么|.*订单.*情况",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern ACTIVE_ORDER_PATTERN = Pattern.compile("进行中订单|有效订单", Pattern.CASE_INSENSITIVE);
+
     private final Clock clock;
 
     public RuleBasedMealPlanChatExtractor() {
@@ -80,14 +99,39 @@ public class RuleBasedMealPlanChatExtractor implements MealPlanChatExtractor {
         mergeCustomer(text, merged, result);
         mergeDate(text, merged, result);
         mergeMealType(text, merged, result);
+        mergeOrderStatus(text, merged);
 
         result.setSlots(merged);
         result.setMissingSlots(missingSlots(merged));
         result.setAmbiguousSlots(ambiguousSlots(merged));
-        result.setIntent(isFollowUp(text, existingSlots, result.getMissingSlots(), result.getAmbiguousSlots())
-            ? ChatIntent.FOLLOW_UP
-            : ChatIntent.DIAGNOSE);
+
+        // 优先级：客户信息查询 > 追问 > 诊断
+        ChatIntent insightIntent = detectCustomerInsightIntent(text);
+        if (insightIntent != null) {
+            result.setIntent(insightIntent);
+        } else {
+            result.setIntent(isFollowUp(text, existingSlots, result.getMissingSlots(), result.getAmbiguousSlots())
+                ? ChatIntent.FOLLOW_UP
+                : ChatIntent.DIAGNOSE);
+        }
         return result;
+    }
+
+    /**
+     * 检测客户信息查询意图，优先级高于追问和诊断。
+     * 先检查 reset/retry/out_of_scope，再检查客户信息查询，最后回退诊断。
+     */
+    private ChatIntent detectCustomerInsightIntent(String text) {
+        if (MEAL_BALANCE_PATTERN.matcher(text).find()) {
+            return ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY;
+        }
+        if (VERIFICATION_PATTERN.matcher(text).find()) {
+            return ChatIntent.CUSTOMER_VERIFICATION_QUERY;
+        }
+        if (ORDER_PATTERN.matcher(text).find()) {
+            return ChatIntent.CUSTOMER_ORDER_QUERY;
+        }
+        return null;
     }
 
     /**
@@ -197,6 +241,18 @@ public class RuleBasedMealPlanChatExtractor implements MealPlanChatExtractor {
     }
 
     /**
+     * 提取订单状态槽位，当前仅识别“进行中/有效订单”。
+     *
+     * @param text 用户输入
+     * @param slots 当前槽位
+     */
+    private void mergeOrderStatus(String text, DiagnosisSlots slots) {
+        if (ACTIVE_ORDER_PATTERN.matcher(text).find()) {
+            slots.setOrderStatus(1);
+        }
+    }
+
+    /**
      * 根据当前槽位计算仍然缺失的关键槽位。
      *
      * @param slots 当前槽位
@@ -284,6 +340,7 @@ public class RuleBasedMealPlanChatExtractor implements MealPlanChatExtractor {
         target.setCustomerCode(source.getCustomerCode());
         target.setRecordDate(source.getRecordDate());
         target.setMealType(source.getMealType());
+        target.setOrderStatus(source.getOrderStatus());
         if (source.getCustomerId() != null || !isBlank(source.getCustomerCode())) {
             target.setCustomerConfidence(CONFIDENCE_MEDIUM);
             target.setCustomerSource(SOURCE_CONTEXT);
@@ -317,9 +374,11 @@ public class RuleBasedMealPlanChatExtractor implements MealPlanChatExtractor {
      */
     private List<MealToken> mealTokens(String text) {
         List<MealToken> tokens = new ArrayList<>();
-        addMealTokens(tokens, text, "BREAKFAST", "早餐", "早饭");
-        addMealTokens(tokens, text, "LUNCH", "午餐", "中餐", "午饭");
-        addMealTokens(tokens, text, "DINNER", "晚餐", "晚饭");
+        addMealTokens(tokens, text, "LUNCH_DINNER", "午晚餐");
+        String normalized = text.replace("午晚餐", "   ");
+        addMealTokens(tokens, normalized, "BREAKFAST", "早餐", "早饭");
+        addMealTokens(tokens, normalized, "LUNCH", "午餐", "中餐", "午饭");
+        addMealTokens(tokens, normalized, "DINNER", "晚餐", "晚饭");
         tokens.sort(Comparator.comparingInt(MealToken::position));
         return tokens;
     }

@@ -12,6 +12,7 @@ public class DiagnosisSlots {
     private String customerCode;
     private String recordDate;
     private String mealType;
+    private Integer orderStatus;
     private Map<String, String> slotConfidence = new LinkedHashMap<>();
     private Map<String, String> slotSource = new LinkedHashMap<>();
 
@@ -45,6 +46,14 @@ public class DiagnosisSlots {
 
     public void setMealType(String mealType) {
         this.mealType = mealType;
+    }
+
+    public Integer getOrderStatus() {
+        return orderStatus;
+    }
+
+    public void setOrderStatus(Integer orderStatus) {
+        this.orderStatus = orderStatus;
     }
 
     public Map<String, String> getSlotConfidence() {

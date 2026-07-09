@@ -84,10 +84,10 @@ class RuleBasedMealPlanChatExtractorTest {
     void shouldExtractNonCPrefixCustomerCode() {
         ChatExtractionResult result = extractor.extract("B3303 这个客户还剩多少餐数", new DiagnosisSlots());
 
+        assertEquals(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY, result.getIntent());
         assertEquals("B3303", result.getSlots().getCustomerCode());
         assertEquals("HIGH", result.getSlots().getCustomerConfidence());
-        assertTrue(result.getMissingSlots().contains(MissingSlot.RECORD_DATE));
-        assertTrue(result.getMissingSlots().contains(MissingSlot.MEAL_TYPE));
+        assertTrue(result.getMissingSlots().contains(MissingSlot.CUSTOMER) == false);
     }
 
     @Test
@@ -163,5 +163,22 @@ class RuleBasedMealPlanChatExtractorTest {
         ChatExtractionResult result = extractor.extract("为什么候选菜为空？", existing);
 
         assertEquals(ChatIntent.FOLLOW_UP, result.getIntent());
+    }
+
+    @Test
+    void shouldDetectVerificationIntent() {
+        ChatExtractionResult result = extractor.extract("B3303 核销了多少餐", new DiagnosisSlots());
+
+        assertEquals(ChatIntent.CUSTOMER_VERIFICATION_QUERY, result.getIntent());
+        assertEquals("B3303", result.getSlots().getCustomerCode());
+    }
+
+    @Test
+    void shouldDetectOrderIntentAndActiveOrderFilter() {
+        ChatExtractionResult result = extractor.extract("B3303 有哪些进行中订单", new DiagnosisSlots());
+
+        assertEquals(ChatIntent.CUSTOMER_ORDER_QUERY, result.getIntent());
+        assertEquals("B3303", result.getSlots().getCustomerCode());
+        assertEquals(1, result.getSlots().getOrderStatus());
     }
 }

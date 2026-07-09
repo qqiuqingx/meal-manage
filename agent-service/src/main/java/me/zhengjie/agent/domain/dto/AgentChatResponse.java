@@ -24,6 +24,26 @@ public class AgentChatResponse {
     private List<String> quickReplies = new ArrayList<>();
     private String conversationStage;
 
+    // 客户信息查询响应
+    private String responseType;
+    private Map<String, Object> insightResult = new LinkedHashMap<>();
+
+    public String getResponseType() {
+        return responseType;
+    }
+
+    public void setResponseType(String responseType) {
+        this.responseType = responseType;
+    }
+
+    public Map<String, Object> getInsightResult() {
+        return insightResult;
+    }
+
+    public void setInsightResult(Map<String, Object> insightResult) {
+        this.insightResult = insightResult;
+    }
+
     public String getRequestId() {
         return requestId;
     }

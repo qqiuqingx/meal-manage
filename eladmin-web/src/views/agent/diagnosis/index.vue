@@ -250,6 +250,16 @@
                     </el-table>
                   </div>
                 </div>
+                <!-- 客户信息查询结果卡片 -->
+                <div v-if="message.responseType === 'CUSTOMER_MEAL_SUMMARY' && message.insightResult" class="insight-section">
+                  <customer-meal-summary-card :result="message.insightResult" :message-text="message.content" />
+                </div>
+                <div v-if="message.responseType === 'CUSTOMER_VERIFICATION_SUMMARY' && message.insightResult" class="insight-section">
+                  <customer-verification-summary-card :result="message.insightResult" :message-text="message.content" />
+                </div>
+                <div v-if="message.responseType === 'CUSTOMER_ORDER_SUMMARY' && message.insightResult" class="insight-section">
+                  <customer-order-summary-card :result="message.insightResult" :message-text="message.content" />
+                </div>
               </div>
             </div>
             <div v-if="loading" class="message-row message-row-assistant">
@@ -582,6 +592,9 @@ import {
   updateChatSessionTitle,
   updateAgentRuleGapStatus
 } from '@/api/agentDiagnosis'
+import CustomerMealSummaryCard from './components/customerMealSummaryCard'
+import CustomerVerificationSummaryCard from './components/customerVerificationSummaryCard'
+import CustomerOrderSummaryCard from './components/customerOrderSummaryCard'
 
 const DEFAULT_QUICK_REPLIES = ['今天', '明天', '早餐', '午餐', '晚餐', '重新排查']
 
@@ -597,6 +610,11 @@ function welcomeMessage() {
 
 export default {
   name: 'AgentDiagnosis',
+  components: {
+    CustomerMealSummaryCard,
+    CustomerVerificationSummaryCard,
+    CustomerOrderSummaryCard
+  },
   data() {
     return {
       loading: false,
@@ -850,7 +868,9 @@ export default {
         missingSlots: response.missingSlots || [],
         slotConfidence: response.slotConfidence || (response.slots && response.slots.slotConfidence) || {},
         slots: response.slots,
-        result: response.diagnosisResult
+        result: response.diagnosisResult,
+        responseType: response.responseType,
+        insightResult: response.insightResult
       })
       this.loadActionAudits()
     },
@@ -1787,6 +1807,14 @@ export default {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid #ebeef5;
+}
+
+.insight-section {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  border: 1px solid #ebeef5;
 }
 
 .result-header {

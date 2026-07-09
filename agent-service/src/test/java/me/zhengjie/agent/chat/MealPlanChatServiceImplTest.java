@@ -12,6 +12,7 @@ import me.zhengjie.agent.domain.dto.DiagnosisRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.domain.dto.DiagnosisReasonDto;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
+import me.zhengjie.agent.client.DiagnosisToolDataClient;
 import me.zhengjie.agent.service.MealPlanDiagnosisService;
 import org.junit.jupiter.api.Test;
 
@@ -21,6 +22,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -251,16 +253,91 @@ class MealPlanChatServiceImplTest {
 
         assertEquals(ChatStatus.RESET, response.getStatus());
         assertEquals(DiagnosisConversationState.RESET, response.getConversationStage());
-        assertEquals(List.of(MissingSlot.CUSTOMER, MissingSlot.RECORD_DATE, MissingSlot.MEAL_TYPE), response.getMissingSlots());
+        assertEquals(List.of(MissingSlot.CUSTOMER), response.getMissingSlots());
         assertNull(saved.getSlots().getCustomerCode());
         assertNull(saved.getConversationState().getLastDiagnosisResult());
         assertEquals(1, saved.getConversationState().getRecentTurns().size());
     }
 
+    @Test
+    void shouldAnswerCustomerMealSummaryWithoutAskingDateAndMealType() {
+        InMemoryMealPlanChatSessionStore store = store();
+        StubExtractor extractor = new StubExtractor(result(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY,
+            slots(null, "B3303", null, null), List.of()));
+        MealPlanChatServiceImpl service = service(store, extractor, request -> new DiagnosisResponse(),
+            new StubDiagnosisToolDataClient() {
+                @Override
+                public Map<String, Object> getCustomerMealSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightMealRequest request) {
+                    return Map.of(
+                        "present", true,
+                        "customerCode", "B3303",
+                        "customerName", "张三",
+                        "activeOrderCount", 2,
+                        "remainingBreakfast", 3,
+                        "remainingLunchDinner", 18,
+                        "totalRemaining", 21,
+                        "verifiedBreakfast", 7,
+                        "verifiedLunch", 12,
+                        "verifiedDinner", 10
+                    );
+                }
+            });
+
+        AgentChatResponse response = service.chat(request("session-1", "B3303 这个客户还剩多少餐数"));
+
+        assertEquals(ChatStatus.ANSWERED, response.getStatus());
+        assertEquals("CUSTOMER_MEAL_SUMMARY", response.getResponseType());
+        assertEquals(List.of(), response.getMissingSlots());
+        assertTrue(response.getAssistantMessage().contains("合计剩余 21 餐"));
+    }
+
+    @Test
+    void shouldAskOnlyForCustomerWhenInsightSlotsMissing() {
+        InMemoryMealPlanChatSessionStore store = store();
+        StubExtractor extractor = new StubExtractor(result(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY, new DiagnosisSlots(), List.of()));
+        MealPlanChatServiceImpl service = service(store, extractor, request -> new DiagnosisResponse());
+
+        AgentChatResponse response = service.chat(request("session-1", "还剩多少餐"));
+
+        assertEquals(ChatStatus.NEED_MORE_INFO, response.getStatus());
+        assertEquals(List.of(MissingSlot.CUSTOMER), response.getMissingSlots());
+        assertEquals("SLOT_REQUIRED", response.getResponseType());
+        assertEquals("请提供客户编号，例如：C10001。", response.getAssistantMessage());
+    }
+
+    @Test
+    void shouldPassActiveOrderFilterForCustomerOrderQuery() {
+        InMemoryMealPlanChatSessionStore store = store();
+        DiagnosisSlots slots = slots(null, "B3303", null, null);
+        slots.setOrderStatus(1);
+        StubExtractor extractor = new StubExtractor(result(ChatIntent.CUSTOMER_ORDER_QUERY, slots, List.of()));
+        AtomicReference<Integer> capturedOrderStatus = new AtomicReference<>();
+        MealPlanChatServiceImpl service = service(store, extractor, request -> new DiagnosisResponse(),
+            new StubDiagnosisToolDataClient() {
+                @Override
+                public Map<String, Object> getCustomerOrderSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightOrderRequest request) {
+                    capturedOrderStatus.set(request.getOrderStatus());
+                    return Map.of("present", true, "customerCode", "B3303", "orders", List.of(Map.of("status", 1)));
+                }
+            });
+
+        AgentChatResponse response = service.chat(request("session-1", "B3303 有哪些进行中订单"));
+
+        assertEquals(Integer.valueOf(1), capturedOrderStatus.get());
+        assertEquals("CUSTOMER_ORDER_SUMMARY", response.getResponseType());
+    }
+
     private MealPlanChatServiceImpl service(InMemoryMealPlanChatSessionStore store,
                                             MealPlanChatExtractor extractor,
                                             MealPlanDiagnosisService diagnosisService) {
-        return new MealPlanChatServiceImpl(store, extractor, diagnosisService, new MealPlanFollowUpServiceImpl());
+        return service(store, extractor, diagnosisService, new StubDiagnosisToolDataClient());
+    }
+
+    private MealPlanChatServiceImpl service(InMemoryMealPlanChatSessionStore store,
+                                            MealPlanChatExtractor extractor,
+                                            MealPlanDiagnosisService diagnosisService,
+                                            DiagnosisToolDataClient dataClient) {
+        return new MealPlanChatServiceImpl(store, extractor, diagnosisService, new MealPlanFollowUpServiceImpl(), dataClient);
     }
 
     private InMemoryMealPlanChatSessionStore store() {
@@ -304,6 +381,78 @@ class MealPlanChatServiceImplTest {
         @Override
         public ChatExtractionResult extract(String message, DiagnosisSlots existingSlots) {
             return results.remove(0);
+        }
+    }
+
+    private static class StubDiagnosisToolDataClient implements DiagnosisToolDataClient {
+        @Override
+        public Map<String, Object> getCustomerProfile(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerLookupRequest request) {
+            return Map.of();
+        }
+
+        @Override
+        public List<Map<String, Object>> listCustomerOrders(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerOrdersRequest request) {
+            return List.of();
+        }
+
+        @Override
+        public Map<String, Object> getMealPlan(me.zhengjie.agent.domain.dto.DiagnosisToolMealPlanLookupRequest request) {
+            return Map.of();
+        }
+
+        @Override
+        public List<Map<String, Object>> getCandidateDishStats(me.zhengjie.agent.domain.dto.DiagnosisToolCandidateDishStatsRequest request) {
+            return List.of();
+        }
+
+        @Override
+        public Map<String, Object> getCustomerExcludeDates(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerLookupRequest request) {
+            return Map.of();
+        }
+
+        @Override
+        public Map<String, Object> getOrderMealBalance(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerOrdersRequest request) {
+            return Map.of();
+        }
+
+        @Override
+        public Map<String, Object> getPackageSpec(me.zhengjie.agent.domain.dto.DiagnosisToolPackageSpecRequest request) {
+            return Map.of();
+        }
+
+        @Override
+        public List<Map<String, Object>> getDishCandidateDetail(me.zhengjie.agent.domain.dto.DiagnosisToolCandidateDishStatsRequest request) {
+            return List.of();
+        }
+
+        @Override
+        public List<Map<String, Object>> listVerificationLogs(me.zhengjie.agent.domain.dto.DiagnosisToolVerificationLogsRequest request) {
+            return List.of();
+        }
+
+        @Override
+        public List<Map<String, Object>> listMealRefunds(me.zhengjie.agent.domain.dto.DiagnosisToolMealRefundsRequest request) {
+            return List.of();
+        }
+
+        @Override
+        public Map<String, Object> getMealPlanGenerationSnapshot(me.zhengjie.agent.domain.dto.DiagnosisToolMealPlanLookupRequest request) {
+            return Map.of();
+        }
+
+        @Override
+        public Map<String, Object> getCustomerMealSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightMealRequest request) {
+            return Map.of();
+        }
+
+        @Override
+        public Map<String, Object> getCustomerVerificationSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightVerificationRequest request) {
+            return Map.of();
+        }
+
+        @Override
+        public Map<String, Object> getCustomerOrderSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightOrderRequest request) {
+            return Map.of();
         }
     }
 }

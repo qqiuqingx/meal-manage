@@ -1,6 +1,9 @@
 package me.zhengjie.agent.client;
 
 import me.zhengjie.agent.domain.dto.DiagnosisToolCandidateDishStatsRequest;
+import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightMealRequest;
+import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightOrderRequest;
+import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightVerificationRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerLookupRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerOrdersRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolMealRefundsRequest;
@@ -39,6 +42,9 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
     private static final String VERIFICATION_LOGS_PATH = "/api/internal/agent/verification-logs";
     private static final String MEAL_REFUNDS_PATH = "/api/internal/agent/meal-refunds";
     private static final String MEAL_PLAN_GENERATION_SNAPSHOT_PATH = "/api/internal/agent/meal-plan-generation-snapshot";
+    private static final String CUSTOMER_MEAL_SUMMARY_PATH = "/api/internal/agent/customer-insight/meal-summary";
+    private static final String CUSTOMER_VERIFICATION_SUMMARY_PATH = "/api/internal/agent/customer-insight/verification-summary";
+    private static final String CUSTOMER_ORDER_SUMMARY_PATH = "/api/internal/agent/customer-insight/order-summary";
 
     private final RestClient restClient;
     private final String internalToken;
@@ -107,6 +113,21 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
     @Override
     public Map<String, Object> getMealPlanGenerationSnapshot(DiagnosisToolMealPlanLookupRequest request) {
         return postMap(MEAL_PLAN_GENERATION_SNAPSHOT_PATH, request, "getMealPlanGenerationSnapshot");
+    }
+
+    @Override
+    public Map<String, Object> getCustomerMealSummary(DiagnosisToolCustomerInsightMealRequest request) {
+        return postMap(CUSTOMER_MEAL_SUMMARY_PATH, request, "getCustomerMealSummary");
+    }
+
+    @Override
+    public Map<String, Object> getCustomerVerificationSummary(DiagnosisToolCustomerInsightVerificationRequest request) {
+        return postMap(CUSTOMER_VERIFICATION_SUMMARY_PATH, request, "getCustomerVerificationSummary");
+    }
+
+    @Override
+    public Map<String, Object> getCustomerOrderSummary(DiagnosisToolCustomerInsightOrderRequest request) {
+        return postMap(CUSTOMER_ORDER_SUMMARY_PATH, request, "getCustomerOrderSummary");
     }
 
     /**

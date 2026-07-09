@@ -8,5 +8,10 @@ public enum ChatIntent {
     FOLLOW_UP,
     RETRY,
     RESET,
-    OUT_OF_SCOPE
+    OUT_OF_SCOPE,
+
+    // 客户信息查询类意图
+    CUSTOMER_MEAL_BALANCE_QUERY,
+    CUSTOMER_VERIFICATION_QUERY,
+    CUSTOMER_ORDER_QUERY
 }
