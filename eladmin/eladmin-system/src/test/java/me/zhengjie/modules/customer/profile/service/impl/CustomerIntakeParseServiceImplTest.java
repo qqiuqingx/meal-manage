@@ -37,16 +37,16 @@ class CustomerIntakeParseServiceImplTest {
     @Test
     void parseBasicCustomerFieldsShouldFillProfileAndAddress() {
         CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
-        request.setText("联系人：陈女士\n电话：17760193876\n地址：成都市天府新区天府合印5栋1单元\n来源：小红书");
+        request.setText("联系人：测试客户甲\n电话：13800138001\n地址：成都市高新区示例路88号1栋1单元\n来源：小红书");
 
         CustomerIntakeParseResult result = service.parse(request);
         CustomerProfileSaveDto draft = result.getDraft();
 
-        assertEquals("陈女士", draft.getCustomerName());
-        assertEquals("17760193876", draft.getPhone());
+        assertEquals("测试客户甲", draft.getCustomerName());
+        assertEquals("13800138001", draft.getPhone());
         assertEquals(1, draft.getAddresses().size());
         assertEquals("DEFAULT", draft.getAddresses().get(0).getAddressType());
-        assertEquals("成都市天府新区天府合印5栋1单元", draft.getAddresses().get(0).getAddressDetail());
+        assertEquals("成都市高新区示例路88号1栋1单元", draft.getAddresses().get(0).getAddressDetail());
         assertEquals("小红书", draft.getOrderInfo().getCustomerSource());
     }
 
