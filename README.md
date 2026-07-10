@@ -4,6 +4,69 @@
 
 > 原 ELADMIN 通用后台能力仍保留，包括用户、角色、菜单、部门、字典、日志、SQL 监控、定时任务、代码生成、文件存储等。
 
+## 智能排查 Agent
+
+面向“客户某日某餐为什么没有生成排餐”等问题，智能排查 Agent 将主系统中的订单、排餐、套餐、菜品、停送/排除日期、核销和退餐等证据按需汇集，结合诊断规则与大模型输出可核验的原因和下一步处理建议。诊断结果仅作为辅助建议，仍需由客服或运营人员结合证据确认。
+
+### 架构图
+
+```mermaid
+flowchart LR
+    U["运营人员"] --> W["ELADMIN Web\n智能排查页面"]
+    W -->|"鉴权后的诊断/对话请求"| B["ELADMIN 后端 :8000"]
+    B -->|"转发请求"| A["agent-service :18081\nSpring Boot 3 + Spring AI"]
+    A --> R["诊断规则与提示词\n订单 / 排餐 / 套餐 / 菜品规则"]
+    A -->|"按需 Tool Calling\nX-Agent-Internal-Token"| I["主系统内部诊断接口"]
+    I --> D[("MySQL / Redis\n业务数据")]
+    A -->|"受控上下文 + 工具结果"| L["DeepSeek / OpenAI 兼容模型"]
+    L --> A
+    A -->|"原因、证据、建议、追踪 ID"| B
+    B --> W
+```
+
+### 一次真实诊断流程
+
+> 截图待补：请将真实诊断流程截图放在 `doc/images/agent-diagnosis-flow.png`，再把下方注释替换为图片引用。
+
+<!-- ![智能排查 Agent 一次真实诊断流程](doc/images/agent-diagnosis-flow.png) -->
+
+典型流程为：运营人员输入客户和日期/餐次 → 主系统完成权限校验并转发 → Agent 优先读取基础上下文，再按诊断需要调用订单余额、客户停送日期、排餐详情、候选菜池、套餐规格、核销或退餐记录等工具 → 模型基于规则和证据输出原因、置信度与建议动作；全链路可通过 `X-Request-Id` 关联日志追踪。
+
+### 工具调用说明
+
+工具仅能读取主系统提供的受 Token 保护的内部诊断数据，不直接写入业务数据。模型会根据问题选择调用，且单次诊断默认最多调用 8 次；相同输入会复用本次链路中的结果，避免重复查询。
+
+| 工具 | 用途 |
+| --- | --- |
+| `getCustomerProfile` / `getCustomerExcludeDates` | 查询客户档案、配送要求、停送日期和排除餐次 |
+| `listCustomerOrders` / `getOrderMealBalance` | 判断订单有效性、套餐信息及早餐/午晚餐剩余餐数 |
+| `getMealPlan` / `getMealPlanGenerationSnapshot` | 查询指定日期餐次的排餐明细、生成快照与失败原因 |
+| `getCandidateDishStats` / `getDishCandidateDetail` | 定位候选菜数量、套餐过滤和过敏/忌口过滤结果 |
+| `getPackageSpec` | 校验父子套餐、餐品规格及启用状态 |
+| `listVerificationLogs` / `listMealRefunds` | 核对核销、退餐、停餐或退款是否影响餐数与排餐 |
+
+### 本地启动
+
+智能排查由主系统和独立的 `agent-service` 协同运行：先启动主系统，再启动 Agent 服务。主系统仍使用 JDK 8；`agent-service` 需要 JDK 17。
+
+```bash
+# 终端 1：启动主系统（JDK 8）
+cd eladmin/eladmin-system
+JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home \
+PATH=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/bin:$PATH \
+mvn spring-boot:run -Dspring-boot.run.profiles=dev -DskipTests
+```
+
+```bash
+# 终端 2：启动智能排查服务（JDK 17）
+cd agent-service
+export AGENT_INTERNAL_TOKEN='请设置与主系统 agent.internal-token 相同的随机密钥'
+export AGENT_DEEPSEEK_API_KEY='你的模型 API Key'
+mvn spring-boot:run
+```
+
+默认地址：主系统 `http://localhost:8000`，Agent 服务 `http://localhost:18081`，健康检查 `http://localhost:18081/api/agent/health`。如使用 OpenAI 兼容服务，可通过 `AGENT_OPENAI_API_KEY`、`AGENT_OPENAI_BASE_URL`、`AGENT_OPENAI_MODEL` 覆盖模型配置；也可使用对应的 `AGENT_DEEPSEEK_*` 环境变量。`AGENT_INTERNAL_TOKEN` 不能为空，且必须与主系统配置保持一致。
+
 ## 系统定位
 
 系统围绕餐食交付链路组织业务：
