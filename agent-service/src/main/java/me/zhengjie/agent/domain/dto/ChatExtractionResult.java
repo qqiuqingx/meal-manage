@@ -16,6 +16,11 @@ public class ChatExtractionResult {
     private List<MissingSlot> missingSlots = new ArrayList<>();
     private List<MissingSlot> ambiguousSlots = new ArrayList<>();
     private String reply;
+    private String intentSource;
+    private Double intentConfidence;
+    private String intentReason;
+    private String ruleIntent;
+    private boolean llmTriggered;
 
     public ChatIntent getIntent() {
         return intent;
@@ -56,4 +61,36 @@ public class ChatExtractionResult {
     public void setReply(String reply) {
         this.reply = reply;
     }
+
+    public String getIntentSource() {
+        return intentSource;
+    }
+
+    public void setIntentSource(String intentSource) {
+        this.intentSource = intentSource;
+    }
+
+    public Double getIntentConfidence() {
+        return intentConfidence;
+    }
+
+    public void setIntentConfidence(Double intentConfidence) {
+        this.intentConfidence = intentConfidence;
+    }
+
+    public String getIntentReason() {
+        return intentReason;
+    }
+
+    public void setIntentReason(String intentReason) {
+        this.intentReason = intentReason;
+    }
+
+    public String getRuleIntent() { return ruleIntent; }
+
+    public void setRuleIntent(String ruleIntent) { this.ruleIntent = ruleIntent; }
+
+    public boolean isLlmTriggered() { return llmTriggered; }
+
+    public void setLlmTriggered(boolean llmTriggered) { this.llmTriggered = llmTriggered; }
 }

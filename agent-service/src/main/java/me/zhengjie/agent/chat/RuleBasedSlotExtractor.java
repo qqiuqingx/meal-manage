@@ -19,10 +19,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 稳定的规则抽取器，优先覆盖常见聊天输入。
+ * 稳定的规则槽位提取器，优先覆盖常见聊天输入。
  */
 @Component
-public class RuleBasedMealPlanChatExtractor implements MealPlanChatExtractor {
+public class RuleBasedSlotExtractor {
 
     private static final String CONFIDENCE_HIGH = "HIGH";
     private static final String CONFIDENCE_MEDIUM = "MEDIUM";
@@ -60,15 +60,14 @@ public class RuleBasedMealPlanChatExtractor implements MealPlanChatExtractor {
 
     private final Clock clock;
 
-    public RuleBasedMealPlanChatExtractor() {
+    public RuleBasedSlotExtractor() {
         this(Clock.system(ZoneId.of("Asia/Shanghai")));
     }
 
-    RuleBasedMealPlanChatExtractor(Clock clock) {
+    public RuleBasedSlotExtractor(Clock clock) {
         this.clock = clock;
     }
 
-    @Override
     public ChatExtractionResult extract(String message, DiagnosisSlots existingSlots) {
         String text = message == null ? "" : message.trim();
         DiagnosisSlots merged = copyFromContext(existingSlots);

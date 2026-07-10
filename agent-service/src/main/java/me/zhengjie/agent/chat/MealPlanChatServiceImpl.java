@@ -65,7 +65,9 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
     public AgentChatResponse chat(AgentChatRequest request) {
         MealPlanChatSession session = sessionStore.getOrCreate(request.getSessionId());
         long start = System.currentTimeMillis();
-        ChatExtractionResult extraction = extractor.extract(request.getMessage(), session.getSlots());
+        ChatExtractionResult extraction = extractor.extract(
+            request.getMessage(), session.getSlots(), session.getConversationState()
+        );
         if (extraction.getIntent() == ChatIntent.RESET) {
             MealPlanChatSession reset = sessionStore.reset(session.getSessionId());
             reset.getConversationState().setStage(DiagnosisConversationState.RESET);
@@ -609,8 +611,8 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
     private void logChat(MealPlanChatSession session, ChatExtractionResult extraction, boolean diagnosisTriggered, long start) {
         List<MissingSlot> missing = missingSlots(session.getSlots(), extraction.getIntent());
         putChatMdc(session);
-        log.info("聊天诊断阶段 requestId={} sessionId={} intent={} conversationStage={} slots.customerId={} slots.customerCode={} slots.recordDate={} slots.mealType={} missingSlots={} diagnosisTriggered={} costMs={}",
-            MDC.get(REQUEST_ID_KEY), session.getSessionId(), extraction.getIntent(), session.getConversationState().getStage(),
+        log.info("聊天诊断阶段 requestId={} sessionId={} intentSource={} ruleIntent={} intent={} intentConfidence={} intentReason={} llmTriggered={} conversationStage={} slots.customerId={} slots.customerCode={} slots.recordDate={} slots.mealType={} missingSlots={} diagnosisTriggered={} costMs={}",
+            MDC.get(REQUEST_ID_KEY), session.getSessionId(), extraction.getIntentSource(), extraction.getRuleIntent(), extraction.getIntent(), extraction.getIntentConfidence(), extraction.getIntentReason(), extraction.isLlmTriggered(), session.getConversationState().getStage(),
             session.getSlots().getCustomerId(), session.getSlots().getCustomerCode(), session.getSlots().getRecordDate(), session.getSlots().getMealType(),
             missing, diagnosisTriggered, System.currentTimeMillis() - start);
     }

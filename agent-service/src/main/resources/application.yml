@@ -36,3 +36,5 @@ agent:
   chat:
     max-turns: ${AGENT_CHAT_MAX_TURNS:10}
     max-diagnosis-history: ${AGENT_CHAT_MAX_DIAGNOSIS_HISTORY:3}
+    intent-classifier:
+      mode: ${AGENT_CHAT_INTENT_CLASSIFIER_MODE:hybrid}
