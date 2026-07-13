@@ -60,7 +60,7 @@ class MealPlanDiagnosisServiceImplTest {
         assertEquals(1001L, response.getCustomerId());
         assertEquals("2026-05-17", response.getRecordDate());
         assertEquals("LUNCH", response.getMealType());
-        assertEquals("CREATE_MANUAL_RECHECK_TASK", response.getActionDrafts().get(0).getActionCode());
+        assertTrue(response.getActionDrafts().isEmpty());
     }
 
     @Test

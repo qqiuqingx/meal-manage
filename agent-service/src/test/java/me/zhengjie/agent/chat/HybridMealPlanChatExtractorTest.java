@@ -28,7 +28,8 @@ class HybridMealPlanChatExtractorTest {
 
         ChatExtractionResult result = extractor.extract("B2201 核销了多少餐", new DiagnosisSlots());
 
-        assertEquals(ChatIntent.CUSTOMER_VERIFICATION_QUERY, result.getIntent());
+        assertEquals(ChatIntent.BUSINESS_QUERY, result.getIntent());
+        assertEquals(ChatIntent.CUSTOMER_VERIFICATION_QUERY.name(), result.getRuleIntent());
         assertEquals("RULE", result.getIntentSource());
         assertFalse(result.isLlmTriggered());
     }
@@ -44,7 +45,8 @@ class HybridMealPlanChatExtractorTest {
 
         ChatExtractionResult result = extractor.extract("他一共多少餐", existing);
 
-        assertEquals(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY, result.getIntent());
+        assertEquals(ChatIntent.BUSINESS_QUERY, result.getIntent());
+        assertEquals(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY.name(), result.getRuleIntent());
         assertEquals("LLM", result.getIntentSource());
         assertTrue(result.isLlmTriggered());
     }
@@ -60,7 +62,8 @@ class HybridMealPlanChatExtractorTest {
 
         ChatExtractionResult result = extractor.extract("他一共多少餐", existing);
 
-        assertEquals(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY, result.getIntent());
+        assertEquals(ChatIntent.BUSINESS_QUERY, result.getIntent());
+        assertEquals(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY.name(), result.getRuleIntent());
         assertEquals("HYBRID", result.getIntentSource());
         assertTrue(result.isLlmTriggered());
     }

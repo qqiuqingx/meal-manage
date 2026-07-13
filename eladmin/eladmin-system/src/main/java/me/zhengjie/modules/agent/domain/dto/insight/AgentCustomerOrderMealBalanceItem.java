@@ -3,7 +3,6 @@ package me.zhengjie.modules.agent.domain.dto.insight;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -45,9 +44,6 @@ public class AgentCustomerOrderMealBalanceItem {
 
     /** 剩余午晚餐 */
     private int remainingLunchDinner;
-
-    /** 订单金额 */
-    private BigDecimal orderAmount;
 
     /** 订单开始日期 */
     private LocalDate startDate;

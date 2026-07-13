@@ -37,6 +37,9 @@ public class AgentChatMessageDto {
 
     private List<Map<String, Object>> toolSummary = new ArrayList<>();
 
+    /** 受控业务查询卡片快照，刷新历史会话时用于恢复结构化展示。 */
+    private Map<String, Object> businessResult;
+
     private String createBy;
 
     private Timestamp createTime;
@@ -127,6 +130,14 @@ public class AgentChatMessageDto {
 
     public void setToolSummary(List<Map<String, Object>> toolSummary) {
         this.toolSummary = toolSummary;
+    }
+
+    public Map<String, Object> getBusinessResult() {
+        return businessResult;
+    }
+
+    public void setBusinessResult(Map<String, Object> businessResult) {
+        this.businessResult = businessResult;
     }
 
     public String getCreateBy() {

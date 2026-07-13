@@ -46,6 +46,9 @@ public class AgentChatMessage extends BaseEntity {
     /** 工具调用摘要JSON。 */
     private String toolSummaryJson;
 
+    /** 受控业务查询卡片快照JSON，不保存金额字段或原始工具响应。 */
+    private String businessResultJson;
+
     public Long getId() {
         return id;
     }
@@ -132,5 +135,13 @@ public class AgentChatMessage extends BaseEntity {
 
     public void setToolSummaryJson(String toolSummaryJson) {
         this.toolSummaryJson = toolSummaryJson;
+    }
+
+    public String getBusinessResultJson() {
+        return businessResultJson;
+    }
+
+    public void setBusinessResultJson(String businessResultJson) {
+        this.businessResultJson = businessResultJson;
     }
 }

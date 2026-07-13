@@ -96,4 +96,16 @@
         where order_id = #{orderId}
     </update>
 
+    <!-- 按订单统计有效核销记录，已软删除记录不计入。 -->
+    <select id="countActiveByOrderIds" resultType="me.zhengjie.modules.meal.domain.dto.OrderAssociatedRecordCountDto">
+        select order_id as orderId, count(*) as recordCount
+        from meal_verification_log
+        where (deleted = 0 or deleted is null)
+          and order_id in
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+        group by order_id
+    </select>
+
 </mapper>

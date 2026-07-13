@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import me.zhengjie.modules.agent.domain.AgentActionAudit;
 import me.zhengjie.modules.agent.domain.AgentDiagnosisFeedback;
 import me.zhengjie.modules.agent.domain.AgentDiagnosisMetric;
+import me.zhengjie.modules.agent.domain.dto.AgentBusinessQueryAuditCriteria;
+import me.zhengjie.modules.agent.domain.dto.AgentBusinessQueryAuditStatsDto;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisReasonDto;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentOperationStatsDto;
@@ -13,6 +15,7 @@ import me.zhengjie.modules.agent.domain.dto.AgentOperationStatsQuery;
 import me.zhengjie.modules.agent.mapper.AgentActionAuditMapper;
 import me.zhengjie.modules.agent.mapper.AgentDiagnosisFeedbackMapper;
 import me.zhengjie.modules.agent.mapper.AgentDiagnosisMetricMapper;
+import me.zhengjie.modules.agent.service.AgentBusinessQueryAuditService;
 import me.zhengjie.modules.agent.service.AgentOperationStatsService;
 import org.springframework.stereotype.Service;
 
@@ -40,6 +43,7 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
     private final AgentDiagnosisMetricMapper metricMapper;
     private final AgentActionAuditMapper actionAuditMapper;
     private final AgentDiagnosisFeedbackMapper feedbackMapper;
+    private final AgentBusinessQueryAuditService businessQueryAuditService;
 
     @Override
     public void recordDiagnosis(AgentDiagnosisResponse response, String sessionId, long costMs) {
@@ -98,7 +102,37 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
         stats.setHighFrequencyUnknownReasons(unknownReasonDistribution(stats.getReasonCodeDistribution()));
         stats.setFallbackSourceDistribution(fallbackSourceDistribution(metrics));
         stats.setFailureTypeDistribution(failureTypeDistribution(metrics));
+        applyBusinessQueryStats(stats, businessQueryAuditService.stats(businessQueryCriteria(safeQuery)));
         return stats;
+    }
+
+    /**
+     * 将业务只读查询指标并入运营看板，便于同一入口观察诊断和业务查询健康度。
+     */
+    private void applyBusinessQueryStats(AgentOperationStatsDto target, AgentBusinessQueryAuditStatsDto source) {
+        if (target == null || source == null) return;
+        target.setBusinessQueryCount(source.getQueryCount());
+        target.setBusinessQueryPartialCount(source.getPartialCount());
+        target.setBusinessQueryPartialRate(source.getPartialRate());
+        target.setBusinessQueryCachedCount(source.getCachedCount());
+        target.setBusinessQueryCachedRate(source.getCachedRate());
+        target.setBusinessQueryFailureCount(source.getFailureCount());
+        target.setBusinessQueryFailureRate(source.getFailureRate());
+        target.setBusinessQueryPermissionDeniedCount(source.getPermissionDeniedCount());
+        target.setAverageBusinessQueryCostMs(source.getAverageCostMs());
+        target.setBusinessQueryDomainDistribution(source.getDomainDistribution());
+        target.setBusinessQueryToolDistribution(source.getToolDistribution());
+        target.setBusinessQueryFailureTypeDistribution(source.getFailureTypeDistribution());
+    }
+
+    /**
+     * 将运营统计日期条件映射为业务查询审计创建时间范围。
+     */
+    private AgentBusinessQueryAuditCriteria businessQueryCriteria(AgentOperationStatsQuery query) {
+        AgentBusinessQueryAuditCriteria criteria = new AgentBusinessQueryAuditCriteria();
+        if (!isBlank(query.getRecordDateStart())) criteria.setCreateTimeStart(query.getRecordDateStart() + " 00:00:00");
+        if (!isBlank(query.getRecordDateEnd())) criteria.setCreateTimeEnd(query.getRecordDateEnd() + " 23:59:59");
+        return criteria;
     }
 
     /**

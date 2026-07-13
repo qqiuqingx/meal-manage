@@ -55,11 +55,9 @@ public class LlmIntentClassifier implements ChatIntentClassifier {
         String context = objectMapper.writeValueAsString(request);
         return "你是排餐客服的意图分类器，只做意图分类，不查库、不诊断、不回答用户。"
             + "必须只输出 JSON，字段为 intent、confidence、reason、fallbackSuggested。"
-            + "intent 只能是 DIAGNOSE、FOLLOW_UP、RETRY、RESET、OUT_OF_SCOPE、"
-            + "CUSTOMER_MEAL_BALANCE_QUERY、CUSTOMER_VERIFICATION_QUERY、CUSTOMER_ORDER_QUERY。"
+            + "intent 只能是 DIAGNOSE、FOLLOW_UP、RETRY、RESET、OUT_OF_SCOPE、BUSINESS_QUERY。"
             + "DIAGNOSE 表示查询某客户某日期某餐次的排餐；FOLLOW_UP 表示依赖最近诊断结果的原因、局部追问或改查；"
-            + "CUSTOMER_MEAL_BALANCE_QUERY 表示总餐数、剩余餐数或还能吃几餐；"
-            + "CUSTOMER_VERIFICATION_QUERY 表示核销/使用/消耗餐数；CUSTOMER_ORDER_QUERY 表示订单列表或订单状态。"
+            + "BUSINESS_QUERY 表示所有只读客户、订单、排餐、核销、退餐、套餐、菜品、规则或运营统计问题；具体领域由后续受控分析决定。"
             + "理解他、这个客户、这个订单、那午餐等指代，并优先使用已有槽位。"
             + "输入上下文：" + context;
     }

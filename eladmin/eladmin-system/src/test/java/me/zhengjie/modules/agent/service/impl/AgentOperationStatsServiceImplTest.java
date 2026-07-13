@@ -3,11 +3,13 @@ package me.zhengjie.modules.agent.service.impl;
 import me.zhengjie.modules.agent.domain.AgentActionAudit;
 import me.zhengjie.modules.agent.domain.AgentDiagnosisFeedback;
 import me.zhengjie.modules.agent.domain.AgentDiagnosisMetric;
+import me.zhengjie.modules.agent.domain.dto.AgentBusinessQueryAuditStatsDto;
 import me.zhengjie.modules.agent.domain.dto.AgentOperationStatsDto;
 import me.zhengjie.modules.agent.domain.dto.AgentOperationStatsQuery;
 import me.zhengjie.modules.agent.mapper.AgentActionAuditMapper;
 import me.zhengjie.modules.agent.mapper.AgentDiagnosisFeedbackMapper;
 import me.zhengjie.modules.agent.mapper.AgentDiagnosisMetricMapper;
+import me.zhengjie.modules.agent.service.AgentBusinessQueryAuditService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -36,6 +38,9 @@ class AgentOperationStatsServiceImplTest {
     @Mock
     private AgentDiagnosisFeedbackMapper feedbackMapper;
 
+    @Mock
+    private AgentBusinessQueryAuditService businessQueryAuditService;
+
     @InjectMocks
     private AgentOperationStatsServiceImpl service;
 
@@ -53,6 +58,7 @@ class AgentOperationStatsServiceImplTest {
             feedback("ACCEPTED", "ORDER_EXPIRED"),
             feedback("REJECTED", "CUSTOMER_EXCLUDE_DATE_HIT")
         ));
+        when(businessQueryAuditService.stats(any())).thenReturn(businessStats());
 
         AgentOperationStatsQuery query = new AgentOperationStatsQuery();
         query.setRecordDateStart("2026-07-01");
@@ -76,6 +82,14 @@ class AgentOperationStatsServiceImplTest {
         assertEquals(1L, stats.getActualReasonDistribution().get("ORDER_EXPIRED"));
         assertEquals(1L, stats.getFallbackSourceDistribution().get("ELADMIN_CLIENT"));
         assertEquals(1L, stats.getFailureTypeDistribution().get("AGENT_SERVICE_TIMEOUT"));
+        assertEquals(4L, stats.getBusinessQueryCount());
+        assertEquals(1L, stats.getBusinessQueryPartialCount());
+        assertEquals(0.25D, stats.getBusinessQueryPartialRate());
+        assertEquals(2L, stats.getBusinessQueryCachedCount());
+        assertEquals(0.5D, stats.getBusinessQueryCachedRate());
+        assertEquals(1L, stats.getBusinessQueryFailureCount());
+        assertEquals(250D, stats.getAverageBusinessQueryCostMs());
+        assertEquals(3L, stats.getBusinessQueryToolDistribution().get("customerOverview"));
 
         verify(actionAuditMapper).selectList(any());
     }
@@ -84,6 +98,7 @@ class AgentOperationStatsServiceImplTest {
     void shouldReturnZeroActionAuditsWhenNoMetricRequestIds() {
         when(metricMapper.selectList(any())).thenReturn(Collections.singletonList(metric(null, false, "[]", 1, 0, 0, 10L)));
         when(feedbackMapper.selectList(any())).thenReturn(Collections.emptyList());
+        when(businessQueryAuditService.stats(any())).thenReturn(new AgentBusinessQueryAuditStatsDto());
 
         AgentOperationStatsDto stats = service.stats(new AgentOperationStatsQuery());
 
@@ -125,5 +140,19 @@ class AgentOperationStatsServiceImplTest {
         feedback.setAccepted(accepted);
         feedback.setActualReasonCode(actualReasonCode);
         return feedback;
+    }
+
+    private AgentBusinessQueryAuditStatsDto businessStats() {
+        AgentBusinessQueryAuditStatsDto stats = new AgentBusinessQueryAuditStatsDto();
+        stats.setQueryCount(4L);
+        stats.setPartialCount(1L);
+        stats.setPartialRate(0.25D);
+        stats.setCachedCount(2L);
+        stats.setCachedRate(0.5D);
+        stats.setFailureCount(1L);
+        stats.setFailureRate(0.25D);
+        stats.setAverageCostMs(250D);
+        stats.getToolDistribution().put("customerOverview", 3L);
+        return stats;
     }
 }

@@ -15,6 +15,8 @@ import me.zhengjie.modules.agent.domain.dto.DiagnosisSlots;
 import me.zhengjie.modules.agent.mapper.AgentActionAuditMapper;
 import me.zhengjie.modules.agent.mapper.AgentDiagnosisFeedbackMapper;
 import me.zhengjie.modules.agent.service.AgentDiagnosisFacadeService;
+import me.zhengjie.modules.agent.service.AgentBusinessQueryAuditService;
+import me.zhengjie.modules.agent.security.AgentAccessContextService;
 import me.zhengjie.modules.agent.session.domain.AgentChatMessage;
 import me.zhengjie.modules.agent.session.domain.AgentChatSession;
 import me.zhengjie.modules.agent.session.domain.dto.AgentChatMessageDto;
@@ -55,6 +57,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
     private final AgentActionAuditMapper actionAuditMapper;
     private final AgentDiagnosisFeedbackMapper feedbackMapper;
     private final AgentDiagnosisFacadeService diagnosisFacadeService;
+    private final AgentAccessContextService accessContextService;
+    private final AgentBusinessQueryAuditService businessQueryAuditService;
 
     /**
      * 创建一个新的智能排查会话，允许前端显式预建空会话后再发送消息。
@@ -164,8 +168,12 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         downstreamRequest.setSessionId(session.getSessionId());
         downstreamRequest.setClientMessageId(clientMessageId);
         downstreamRequest.setMessage(safeRequest.getMessage());
-        AgentChatResponse response = diagnosisFacadeService.chatMealPlan(downstreamRequest, resolvedRequestId);
+        downstreamRequest.setContextSlots(toPersistedSlots(session));
+        String accessContext = accessContextService.issue(session.getSessionId(), resolvedRequestId);
+        long queryStart = System.currentTimeMillis();
+        AgentChatResponse response = diagnosisFacadeService.chatMealPlan(downstreamRequest, resolvedRequestId, accessContext);
         AgentChatResponse normalizedResponse = normalizeResponse(response, session.getSessionId(), resolvedRequestId, clientMessageId);
+        businessQueryAuditService.record(normalizedResponse, currentUsername(), System.currentTimeMillis() - queryStart);
         persistAssistantMessage(session, normalizedResponse);
         refreshSessionSummary(session, safeRequest, normalizedResponse, resolvedRequestId);
         return normalizedResponse;
@@ -208,7 +216,12 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         dto.setOperator(session.getOperator());
         dto.setCustomerId(session.getCustomerId());
         dto.setCustomerCode(session.getCustomerCode());
+        dto.setOrderId(session.getOrderId());
+        dto.setOrderCode(session.getOrderCode());
+        dto.setMealPlanRecordId(session.getMealPlanRecordId());
         dto.setRecordDate(session.getRecordDate());
+        dto.setQueryStartDate(session.getQueryStartDate());
+        dto.setQueryEndDate(session.getQueryEndDate());
         dto.setMealType(session.getMealType());
         dto.setStage(session.getStage());
         dto.setLastRequestId(session.getLastRequestId());
@@ -230,7 +243,12 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         dto.setOperator(session.getOperator());
         dto.setCustomerId(session.getCustomerId());
         dto.setCustomerCode(session.getCustomerCode());
+        dto.setOrderId(session.getOrderId());
+        dto.setOrderCode(session.getOrderCode());
+        dto.setMealPlanRecordId(session.getMealPlanRecordId());
         dto.setRecordDate(session.getRecordDate());
+        dto.setQueryStartDate(session.getQueryStartDate());
+        dto.setQueryEndDate(session.getQueryEndDate());
         dto.setMealType(session.getMealType());
         dto.setStage(session.getStage());
         dto.setLastRequestId(session.getLastRequestId());
@@ -272,6 +290,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         dto.setSlots(parseObject(message.getSlotsJson(), DiagnosisSlots.class));
         dto.setDiagnosisResult(parseObject(message.getDiagnosisResultJson(), AgentDiagnosisResponse.class));
         dto.setToolSummary(parseObjectList(message.getToolSummaryJson()));
+        dto.setBusinessResult(parseMap(message.getBusinessResultJson()));
         dto.setCreateBy(message.getCreateBy());
         dto.setCreateTime(message.getCreateTime());
         return dto;
@@ -298,6 +317,26 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         session.setCreateTime(now);
         session.setUpdateTime(now);
         return session;
+    }
+
+    /**
+     * 将已持久化会话焦点转换为下游可恢复的槽位；不传递原始业务查询结果。
+     *
+     * @param session 当前主系统会话
+     * @return 可传给 agent-service 的最小业务上下文
+     */
+    private DiagnosisSlots toPersistedSlots(AgentChatSession session) {
+        DiagnosisSlots slots = new DiagnosisSlots();
+        slots.setCustomerId(session.getCustomerId());
+        slots.setCustomerCode(session.getCustomerCode());
+        slots.setRecordDate(session.getRecordDate());
+        slots.setStartDate(session.getQueryStartDate());
+        slots.setEndDate(session.getQueryEndDate());
+        slots.setMealType(session.getMealType());
+        slots.setOrderId(session.getOrderId());
+        slots.setOrderCode(session.getOrderCode());
+        slots.setMealPlanRecordId(session.getMealPlanRecordId());
+        return slots;
     }
 
     /**
@@ -375,6 +414,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         response.setSlots(parseObject(assistantMessage.getSlotsJson(), DiagnosisSlots.class));
         response.setDiagnosisResult(parseObject(assistantMessage.getDiagnosisResultJson(), AgentDiagnosisResponse.class));
         response.setConversationStage(assistantMessage.getConversationStage());
+        restoreBusinessResponse(response, parseMap(assistantMessage.getBusinessResultJson()));
         return response;
     }
 
@@ -412,6 +452,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         message.setSlotsJson(toJson(response.getSlots()));
         message.setDiagnosisResultJson(toJson(response.getDiagnosisResult()));
         message.setToolSummaryJson(toJson(response.getDiagnosisResult() == null ? Collections.emptyList() : response.getDiagnosisResult().getToolCallSummary()));
+        message.setBusinessResultJson(toJson(buildBusinessSnapshot(response)));
         message.setCreateBy(currentUsername());
         message.setUpdateBy(currentUsername());
         message.setCreateTime(now);
@@ -430,11 +471,32 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         AgentDiagnosisResponse diagnosisResult = response.getDiagnosisResult();
         session.setLastRequestId(requestId);
         session.setStage(trimToNull(response.getConversationStage()) == null ? DEFAULT_STAGE : response.getConversationStage());
+        if ("RESET".equalsIgnoreCase(response.getStatus())) {
+            clearBusinessFocus(session);
+        }
         if (slots != null) {
+            boolean customerFocusChanged = customerFocusChanged(session, slots);
             session.setCustomerId(slots.getCustomerId());
             session.setCustomerCode(firstNonBlank(slots.getCustomerCode(), session.getCustomerCode()));
-            session.setRecordDate(firstNonBlank(slots.getRecordDate(), session.getRecordDate()));
+            if (StringUtils.isNotBlank(slots.getStartDate()) && StringUtils.isNotBlank(slots.getEndDate())) {
+                session.setRecordDate(null);
+                session.setQueryStartDate(slots.getStartDate());
+                session.setQueryEndDate(slots.getEndDate());
+            } else if (StringUtils.isNotBlank(slots.getRecordDate())) {
+                session.setRecordDate(slots.getRecordDate());
+                session.setQueryStartDate(null);
+                session.setQueryEndDate(null);
+            } else {
+                session.setRecordDate(firstNonBlank(slots.getRecordDate(), session.getRecordDate()));
+            }
             session.setMealType(firstNonBlank(normalize(slots.getMealType()), session.getMealType()));
+            // 客户切换后不得沿用旧客户的订单焦点；同一客户的追问则继续保留未重复提及的订单。
+            session.setOrderId(customerFocusChanged ? slots.getOrderId()
+                : (slots.getOrderId() == null ? session.getOrderId() : slots.getOrderId()));
+            session.setOrderCode(customerFocusChanged ? trimToNull(slots.getOrderCode())
+                : firstNonBlank(slots.getOrderCode(), session.getOrderCode()));
+            session.setMealPlanRecordId(customerFocusChanged ? null
+                : (slots.getMealPlanRecordId() == null ? session.getMealPlanRecordId() : slots.getMealPlanRecordId()));
         }
         if (diagnosisResult != null) {
             session.setCustomerId(diagnosisResult.getCustomerId() == null ? session.getCustomerId() : diagnosisResult.getCustomerId());
@@ -531,6 +593,68 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
     }
 
     /**
+     * 解析已持久化的受控业务查询卡片快照；异常或历史空数据按空值处理。
+     *
+     * @param json 卡片快照 JSON
+     * @return 卡片快照映射
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseMap(String json) {
+        if (StringUtils.isBlank(json)) {
+            return null;
+        }
+        try {
+            return JSON.parseObject(json, Map.class);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /**
+     * 构造可持久化的业务查询展示快照，只保留前端恢复卡片所需字段。
+     *
+     * @param response 当前助手响应
+     * @return 无业务查询时返回空值，否则返回受控展示字段
+     */
+    private Map<String, Object> buildBusinessSnapshot(AgentChatResponse response) {
+        if (response == null || StringUtils.isBlank(response.getResponseType())
+            || !response.getResponseType().startsWith("BUSINESS_QUERY")) {
+            return null;
+        }
+        Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
+        snapshot.put("responseType", response.getResponseType());
+        snapshot.put("insightResult", response.getInsightResult());
+        snapshot.put("facts", response.getFacts());
+        snapshot.put("warnings", response.getWarnings());
+        snapshot.put("cached", response.isCached());
+        snapshot.put("partial", response.isPartial());
+        snapshot.put("queriedAt", response.getQueriedAt());
+        snapshot.put("queryPlan", response.getQueryPlan());
+        return snapshot;
+    }
+
+    /**
+     * 将历史业务查询卡片快照回填到聊天响应，用于幂等重放和会话刷新。
+     *
+     * @param response 待回填响应
+     * @param snapshot 持久化卡片快照
+     */
+    @SuppressWarnings("unchecked")
+    private void restoreBusinessResponse(AgentChatResponse response, Map<String, Object> snapshot) {
+        if (response == null || snapshot == null) {
+            return;
+        }
+        response.setResponseType((String) snapshot.get("responseType"));
+        response.setInsightResult(snapshot.get("insightResult") instanceof Map ? (Map<String, Object>) snapshot.get("insightResult") : Collections.emptyMap());
+        response.setFacts(snapshot.get("facts") instanceof List ? (List<Map<String, Object>>) snapshot.get("facts") : Collections.emptyList());
+        response.setWarnings(snapshot.get("warnings") instanceof List ? (List<String>) snapshot.get("warnings") : Collections.emptyList());
+        response.setCached(Boolean.TRUE.equals(snapshot.get("cached")));
+        response.setPartial(Boolean.TRUE.equals(snapshot.get("partial")));
+        response.setQueriedAt((String) snapshot.get("queriedAt"));
+        response.setQueryPlan(snapshot.get("queryPlan") instanceof Map ? (Map<String, Object>) snapshot.get("queryPlan") : Collections.emptyMap());
+    }
+
+    /**
      * 将对象序列化为JSON字符串，空对象时返回空值便于压缩存储。
      */
     private String toJson(Object value) {
@@ -567,6 +691,41 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
 
     private String firstNonBlank(String first, String second) {
         return StringUtils.isNotBlank(first) ? first : second;
+    }
+
+    /**
+     * 判断本轮槽位是否显式切换了客户，避免把旧客户订单带入新客户查询。
+     *
+     * @param session 当前已持久化会话
+     * @param slots 本轮 agent 返回槽位
+     * @return 客户标识变化时返回 true
+     */
+    private boolean customerFocusChanged(AgentChatSession session, DiagnosisSlots slots) {
+        if (slots == null) {
+            return false;
+        }
+        if (slots.getCustomerId() != null && !slots.getCustomerId().equals(session.getCustomerId())) {
+            return true;
+        }
+        return StringUtils.isNotBlank(slots.getCustomerCode())
+            && !slots.getCustomerCode().equalsIgnoreCase(session.getCustomerCode());
+    }
+
+    /**
+     * 清空会话的全部业务焦点，确保后续请求不会从持久化上下文恢复旧客户、订单或排餐。
+     *
+     * @param session 当前会话
+     */
+    private void clearBusinessFocus(AgentChatSession session) {
+        session.setCustomerId(null);
+        session.setCustomerCode(null);
+        session.setOrderId(null);
+        session.setOrderCode(null);
+        session.setMealPlanRecordId(null);
+        session.setRecordDate(null);
+        session.setQueryStartDate(null);
+        session.setQueryEndDate(null);
+        session.setMealType(null);
     }
 
     private String limitTitle(String value) {

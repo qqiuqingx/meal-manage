@@ -75,11 +75,6 @@
           <el-table-column prop="verifiedBreakfast" label="已核销早餐" width="90" align="center" />
           <el-table-column prop="verifiedLunch" label="已核销午餐" width="90" align="center" />
           <el-table-column prop="verifiedDinner" label="已核销晚餐" width="90" align="center" />
-          <el-table-column prop="orderAmount" label="金额" width="100" align="right">
-            <template slot-scope="scope">
-              {{ scope.row.orderAmount ? '¥' + scope.row.orderAmount : '-' }}
-            </template>
-          </el-table-column>
           <el-table-column label="状态" width="70" align="center">
             <template slot-scope="scope">
               <el-tag :type="scope.row.status === 1 ? 'success' : 'info'" size="mini">

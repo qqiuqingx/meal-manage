@@ -6,10 +6,9 @@ module.exports = {
       'jest-transform-stub',
     '^.+\\.jsx?$': 'babel-jest'
   },
-  // Force babel-jest transformation of @babel/runtime-corejs2 helpers
-  // which contain ESM import statements that must be converted to CommonJS
+  // Transform ESM packages used by the legacy Jest 23 runtime into CommonJS.
   transformIgnorePatterns: [
-    '/node_modules/(?!(@babel/runtime-corejs2)/)'
+    '/node_modules/(?!(@babel/runtime-corejs2|axios)/)'
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',

@@ -42,4 +42,29 @@ public class AgentOperationStatsDto {
     private Map<String, Long> fallbackSourceDistribution = new LinkedHashMap<>();
 
     private Map<String, Long> failureTypeDistribution = new LinkedHashMap<>();
+
+    private Long businessQueryCount;
+
+    private Long businessQueryPartialCount;
+
+    private Double businessQueryPartialRate;
+
+    private Long businessQueryCachedCount;
+
+    private Double businessQueryCachedRate;
+
+    private Long businessQueryFailureCount;
+
+    private Double businessQueryFailureRate;
+
+    /** 业务查询权限或身份拒绝次数。 */
+    private Long businessQueryPermissionDeniedCount;
+
+    private Double averageBusinessQueryCostMs;
+
+    private Map<String, Long> businessQueryDomainDistribution = new LinkedHashMap<>();
+
+    private Map<String, Long> businessQueryToolDistribution = new LinkedHashMap<>();
+
+    private Map<String, Long> businessQueryFailureTypeDistribution = new LinkedHashMap<>();
 }

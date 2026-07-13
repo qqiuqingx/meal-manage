@@ -7,3 +7,6 @@
 */*.iml
 /.gradle/
 /application.pid
+
+### Local env ###
+.env.local

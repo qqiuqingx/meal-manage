@@ -20,8 +20,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.meal.domain.MealRefundLog;
 import me.zhengjie.modules.meal.domain.dto.MealRefundLogVO;
 import me.zhengjie.modules.meal.domain.dto.MealRefundQueryCriteria;
+import me.zhengjie.modules.meal.domain.dto.OrderAssociatedRecordCountDto;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 /**
  * 退餐日志Mapper
@@ -39,4 +42,12 @@ public interface MealRefundLogMapper extends BaseMapper<MealRefundLog> {
      */
     Page<MealRefundLogVO> selectPageByCriteria(@Param("criteria") MealRefundQueryCriteria criteria,
                                                 Page<MealRefundLogVO> page);
+
+    /**
+     * 按订单批量统计退餐记录，供 Agent 订单摘要使用。
+     *
+     * @param orderIds 订单 ID 列表
+     * @return 每笔订单的退餐记录数量
+     */
+    List<OrderAssociatedRecordCountDto> countByOrderIds(@Param("orderIds") List<Long> orderIds);
 }

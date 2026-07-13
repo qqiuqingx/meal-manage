@@ -17,6 +17,7 @@ package me.zhengjie.modules.meal.service;
 
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
+import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.meal.domain.dto.MealDepletionWarningDto;
 import me.zhengjie.modules.meal.domain.dto.MealPackageStatDto;
 import me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO;
@@ -37,6 +38,26 @@ import java.util.List;
  * @date 2026-03-31
  **/
 public interface MealPlanService {
+
+    /**
+     * 查询指定日期和餐次应服务的客户 ID。该方法复用排餐生成前的有效订单过滤口径，
+     * 包含订单有效性、开始餐次、配送模式、人工新增、客户排除日期和餐数池上限判断。
+     *
+     * @param recordDate 目标日期
+     * @param mealType 餐次，BREAKFAST/LUNCH/DINNER
+     * @return 按客户去重的应服务客户 ID 集合
+     */
+    java.util.Set<Long> findExpectedCustomerIds(java.time.LocalDate recordDate, String mealType);
+
+    /**
+     * 查询指定日期和餐次通过排餐生成前全部资格过滤的订单。
+     * 该结果仅供主系统受控聚合复用，调用方不得将订单金额或客户敏感字段传递到 Agent。
+     *
+     * @param recordDate 目标日期
+     * @param mealType 餐次，BREAKFAST/LUNCH/DINNER
+     * @return 已通过有效性、配送模式、排除配置和餐数池上限过滤的订单快照
+     */
+    List<CustomerOrder> findExpectedCustomerOrders(java.time.LocalDate recordDate, String mealType);
 
     /**
      * 根据排餐日期和餐次生成排餐计划。

@@ -35,6 +35,30 @@ public class AgentChatResponse {
 
     private String conversationStage;
 
+    /** 响应类型，例如 MEAL_PLAN_DIAGNOSIS 或 BUSINESS_QUERY。 */
+    private String responseType;
+
+    /** 受控业务查询的结构化结果，禁止存放金额字段。 */
+    private Map<String, Object> insightResult = new LinkedHashMap<>();
+
+    /** 可追溯事实，前端直接展示而不解析自然语言。 */
+    private List<Map<String, Object>> facts = new ArrayList<>();
+
+    /** 部分成功、截断和权限不足等展示告警。 */
+    private List<String> warnings = new ArrayList<>();
+
+    /** 是否命中同一轮业务查询缓存。 */
+    private boolean cached;
+
+    /** 是否仅返回部分业务查询结果。 */
+    private boolean partial;
+
+    /** 主系统时区下的查询时间。 */
+    private String queriedAt;
+
+    /** agent-service 生成并校验后的受控查询计划摘要。 */
+    private Map<String, Object> queryPlan = new LinkedHashMap<>();
+
     public String getRequestId() {
         return requestId;
     }
@@ -122,4 +146,21 @@ public class AgentChatResponse {
     public void setConversationStage(String conversationStage) {
         this.conversationStage = conversationStage;
     }
+
+    public String getResponseType() { return responseType; }
+    public void setResponseType(String responseType) { this.responseType = responseType; }
+    public Map<String, Object> getInsightResult() { return insightResult; }
+    public void setInsightResult(Map<String, Object> insightResult) { this.insightResult = insightResult; }
+    public List<Map<String, Object>> getFacts() { return facts; }
+    public void setFacts(List<Map<String, Object>> facts) { this.facts = facts; }
+    public List<String> getWarnings() { return warnings; }
+    public void setWarnings(List<String> warnings) { this.warnings = warnings; }
+    public boolean isCached() { return cached; }
+    public void setCached(boolean cached) { this.cached = cached; }
+    public boolean isPartial() { return partial; }
+    public void setPartial(boolean partial) { this.partial = partial; }
+    public String getQueriedAt() { return queriedAt; }
+    public void setQueriedAt(String queriedAt) { this.queriedAt = queriedAt; }
+    public Map<String, Object> getQueryPlan() { return queryPlan; }
+    public void setQueryPlan(Map<String, Object> queryPlan) { this.queryPlan = queryPlan; }
 }

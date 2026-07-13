@@ -3,8 +3,8 @@
     <div class="workspace-shell">
       <div class="workspace-header">
         <div>
-          <div class="title">智能排查助手</div>
-          <div class="subtitle">AI 基于当前业务数据和规则生成诊断建议，请结合证据人工确认。</div>
+          <div class="title">智能客服助手</div>
+          <div class="subtitle">支持客户、订单、排餐、核销和退餐只读查询；排餐诊断结论请结合证据人工确认。</div>
         </div>
         <div class="header-actions">
           <el-button size="small" plain icon="el-icon-plus" :loading="sessionCreating" @click="clearSession">新建会话</el-button>
@@ -160,42 +160,6 @@
                     </ul>
                   </div>
 
-                  <div v-if="message.result.actionDrafts && message.result.actionDrafts.length" class="draft-block">
-                    <div class="block-title">动作草稿</div>
-                    <el-alert
-                      class="draft-alert"
-                      title="动作草稿仅供人工确认，不会自动写入业务数据。"
-                      type="info"
-                      :closable="false"
-                      show-icon
-                    />
-                    <el-table :data="message.result.actionDrafts" size="mini" border>
-                      <el-table-column prop="title" label="动作" min-width="150" />
-                      <el-table-column prop="riskLevel" label="风险" width="90">
-                        <template slot-scope="{ row }">
-                          <el-tag size="mini" :type="riskTag(row.riskLevel)">{{ row.riskLevel || 'LOW' }}</el-tag>
-                        </template>
-                      </el-table-column>
-                      <el-table-column label="目标" min-width="160">
-                        <template slot-scope="{ row }">
-                          <span>{{ row.targetType || '-' }}：{{ row.targetId || '-' }}</span>
-                        </template>
-                      </el-table-column>
-                      <el-table-column prop="requiredPermission" label="权限" min-width="140" />
-                      <el-table-column prop="confirmApi" label="确认接口" min-width="180" />
-                      <el-table-column label="变更预览" min-width="220">
-                        <template slot-scope="{ row }">
-                          <div class="draft-preview">{{ compactJson(row.afterPreview) }}</div>
-                        </template>
-                      </el-table-column>
-                      <el-table-column label="确认" width="100" fixed="right">
-                        <template slot-scope="{ row }">
-                          <el-button size="mini" type="primary" plain @click="openActionConfirm(row, message.result)">确认</el-button>
-                        </template>
-                      </el-table-column>
-                    </el-table>
-                  </div>
-
                   <el-empty v-if="!message.result.reasons || message.result.reasons.length === 0" description="暂无原因明细" />
                   <el-collapse v-else>
                     <el-collapse-item v-for="reason in message.result.reasons" :key="reason.code" :name="reason.code">
@@ -260,6 +224,38 @@
                 <div v-if="message.responseType === 'CUSTOMER_ORDER_SUMMARY' && message.insightResult" class="insight-section">
                   <customer-order-summary-card :result="message.insightResult" :message-text="message.content" />
                 </div>
+                <div v-if="message.responseType && message.responseType.indexOf('BUSINESS_QUERY') === 0 && message.insightResult" class="insight-section business-query-card">
+                  <div class="block-title">业务查询结果</div>
+                  <customer-overview-card v-if="message.responseType === 'BUSINESS_QUERY_CUSTOMER'" :result="message.insightResult" />
+                  <customer-candidate-card v-if="message.responseType === 'BUSINESS_QUERY_CUSTOMER_CANDIDATES'" :result="message.insightResult" @select="selectCustomerCandidate" />
+                  <business-order-list-card v-if="message.responseType === 'BUSINESS_QUERY_ORDER'" :result="message.insightResult" />
+                  <business-meal-plan-card v-if="message.responseType === 'BUSINESS_QUERY_MEAL_PLAN'" :result="message.insightResult" />
+                  <business-history-card v-if="message.responseType === 'BUSINESS_QUERY_VERIFICATION'" :result="message.insightResult" type="verification" />
+                  <business-history-card v-if="message.responseType === 'BUSINESS_QUERY_REFUND'" :result="message.insightResult" type="refund" />
+                  <business-dish-card v-if="message.responseType === 'BUSINESS_QUERY_DISH'" :result="message.insightResult" />
+                  <business-dish-candidate-card v-if="message.responseType === 'BUSINESS_QUERY_DISH_CANDIDATES'" :result="message.insightResult" />
+                  <business-rule-card v-if="message.responseType === 'BUSINESS_QUERY_RULE'" :result="message.insightResult" />
+                  <business-package-card v-if="message.responseType === 'BUSINESS_QUERY_PACKAGE'" :result="message.insightResult" />
+                  <business-operation-stats-card v-if="message.responseType && message.responseType.indexOf('BUSINESS_QUERY_OPERATION_') === 0 && message.responseType !== 'BUSINESS_QUERY_OPERATION_CLARIFICATION'" :result="message.insightResult" />
+                  <el-alert
+                    v-if="message.partial || (message.warnings && message.warnings.length)"
+                    :title="queryWarningText(message)"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                  />
+                  <el-table v-if="message.facts && message.facts.length" :data="message.facts" size="mini" border>
+                    <el-table-column prop="factId" label="事实" width="70" />
+                    <el-table-column prop="label" label="指标" min-width="130" />
+                    <el-table-column label="值" min-width="140">
+                      <template slot-scope="{ row }">{{ row.value }}{{ row.unit || '' }}</template>
+                    </el-table-column>
+                    <el-table-column prop="sourceType" label="数据来源" min-width="150" />
+                    <el-table-column prop="sourceId" label="对象 ID" min-width="100" />
+                  </el-table>
+                  <div v-if="message.queriedAt" class="query-time">查询时间：{{ message.queriedAt }}</div>
+                  <div v-if="message.queryPlan && message.queryPlan.domain" class="query-time">查询计划：{{ message.queryPlan.domain }} / {{ message.queryPlan.action }}</div>
+                </div>
               </div>
             </div>
             <div v-if="loading" class="message-row message-row-assistant">
@@ -289,7 +285,7 @@
                 type="textarea"
                 :autosize="{ minRows: 2, maxRows: 4 }"
                 resize="none"
-                placeholder="例如：帮我看下客户 C10001 明天午餐为什么没排出来"
+                placeholder="例如：B3303 还有多少餐、今天午餐排了吗、这笔订单什么时候到期"
                 @keyup.enter.native.exact.prevent="sendMessage"
               />
               <el-button type="primary" :loading="loading" icon="el-icon-s-promotion" @click="sendMessage">发送</el-button>
@@ -356,34 +352,8 @@
               <ul v-if="currentDiagnosis.nextActions && currentDiagnosis.nextActions.length" class="action-list compact-list">
                 <li v-for="(action, actionIndex) in currentDiagnosis.nextActions" :key="actionIndex">{{ action }}</li>
               </ul>
-              <div v-if="currentDiagnosis.actionDrafts && currentDiagnosis.actionDrafts.length" class="draft-count">
-                动作草稿：{{ currentDiagnosis.actionDrafts.length }}
-              </div>
             </div>
             <el-empty v-else description="暂无诊断结果" :image-size="60" />
-          </section>
-
-          <section class="panel-section">
-            <div class="panel-title panel-title-row">
-              <span>动作确认记录</span>
-              <el-button size="mini" plain :loading="actionAuditLoading" @click="loadActionAudits">刷新</el-button>
-            </div>
-            <div class="audit-card">
-              <el-empty v-if="!actionAudits.length" description="暂无确认记录" :image-size="52" />
-              <template v-else>
-                <div v-for="audit in actionAudits" :key="audit.id || audit.idempotencyKey" class="audit-item">
-                  <div class="audit-head">
-                    <span>{{ audit.actionTitle || audit.actionCode }}</span>
-                    <el-tag size="mini" :type="auditStatusTag(audit.status)">{{ audit.status || '-' }}</el-tag>
-                  </div>
-                  <div class="audit-meta">
-                    <span>{{ audit.targetType || '-' }}：{{ audit.targetId || '-' }}</span>
-                    <span>{{ audit.operator || '-' }}</span>
-                  </div>
-                  <div v-if="audit.failureReason" class="audit-failure">{{ audit.failureReason }}</div>
-                </div>
-              </template>
-            </div>
           </section>
 
           <section class="panel-section">
@@ -469,69 +439,6 @@
     </div>
 
     <el-dialog
-      title="确认动作草稿"
-      :visible.sync="actionConfirmDialogVisible"
-      width="640px"
-      append-to-body
-    >
-      <div v-if="selectedActionDraft" class="confirm-dialog-body">
-        <div class="confirm-title">
-          <span>{{ selectedActionDraft.title || selectedActionDraft.actionCode }}</span>
-          <el-tag size="mini" :type="riskTag(selectedActionDraft.riskLevel)">{{ selectedActionDraft.riskLevel || 'LOW' }}</el-tag>
-        </div>
-        <div class="confirm-meta">
-          <span>目标：{{ selectedActionDraft.targetType || '-' }} / {{ selectedActionDraft.targetId || '-' }}</span>
-          <span>权限：{{ selectedActionDraft.requiredPermission || '-' }}</span>
-        </div>
-        <el-input
-          v-model="actionConfirmComment"
-          class="confirm-comment"
-          type="textarea"
-          :rows="2"
-          maxlength="200"
-          show-word-limit
-          placeholder="备注"
-        />
-        <div class="preview-grid">
-          <div>
-            <div class="block-title">变更前</div>
-            <pre>{{ prettyJson(selectedActionDraft.beforeSnapshot) }}</pre>
-          </div>
-          <div>
-            <div class="block-title">变更后</div>
-            <pre>{{ prettyJson(selectedActionDraft.afterPreview) }}</pre>
-          </div>
-        </div>
-        <el-checkbox v-if="isHighRisk(selectedActionDraft)" v-model="secondConfirmed">
-          已完成高风险动作二次确认
-        </el-checkbox>
-        <el-alert
-          v-if="actionConfirmResult"
-          class="confirm-result"
-          :title="actionConfirmResult.message || actionConfirmResult.failureReason"
-          :type="actionConfirmResult.success ? 'success' : 'warning'"
-          :closable="false"
-          show-icon
-        />
-        <div v-if="actionConfirmResult && actionConfirmResult.executionResult" class="execution-result">
-          <div class="block-title">执行结果</div>
-          <pre>{{ prettyJson(actionConfirmResult.executionResult) }}</pre>
-        </div>
-      </div>
-      <span slot="footer" class="dialog-footer">
-        <el-button @click="actionConfirmDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="actionConfirmLoading"
-          :disabled="isHighRisk(selectedActionDraft) && !secondConfirmed"
-          @click="submitActionConfirm"
-        >
-          提交确认
-        </el-button>
-      </span>
-    </el-dialog>
-
-    <el-dialog
       title="诊断反馈"
       :visible.sync="feedbackDialogVisible"
       width="560px"
@@ -581,7 +488,6 @@
 import {
   archiveChatSession,
   chatMealPlan,
-  confirmActionDraft,
   createChatSession,
   getChatSession,
   queryAgentOperationStats,
@@ -595,13 +501,23 @@ import {
 import CustomerMealSummaryCard from './components/customerMealSummaryCard'
 import CustomerVerificationSummaryCard from './components/customerVerificationSummaryCard'
 import CustomerOrderSummaryCard from './components/customerOrderSummaryCard'
+import CustomerOverviewCard from './components/customerOverviewCard'
+import CustomerCandidateCard from './components/customerCandidateCard'
+import BusinessOrderListCard from './components/businessOrderListCard'
+import BusinessMealPlanCard from './components/businessMealPlanCard'
+import BusinessHistoryCard from './components/businessHistoryCard'
+import BusinessDishCard from './components/businessDishCard'
+import BusinessDishCandidateCard from './components/businessDishCandidateCard'
+import BusinessRuleCard from './components/businessRuleCard'
+import BusinessPackageCard from './components/businessPackageCard'
+import BusinessOperationStatsCard from './components/businessOperationStatsCard'
 
-const DEFAULT_QUICK_REPLIES = ['今天', '明天', '早餐', '午餐', '晚餐', '重新排查']
+const DEFAULT_QUICK_REPLIES = ['B3303 目前什么情况？', 'B3303 有哪些订单？', 'B3303 今天午餐排了吗？', 'B3303 今天午餐哪些菜可以吃？', 'B3303 最近核销记录', '今天待核销客户有多少？', '重新排查']
 
 function welcomeMessage() {
   return {
     role: 'assistant',
-    content: '你好，我是智能排查助手。请描述要排查的客户、日期和餐次，例如：帮我看下客户 C10001 明天午餐为什么没排出来。',
+    content: '你好，我是智能客服助手。你可以查询客户、订单、排餐、核销、退餐或运营统计，例如“B3303 还有多少餐”或“今天待核销客户有多少？”。',
     status: 'ANSWERED',
     stage: 'COLLECTING_SLOTS',
     missingSlots: []
@@ -613,7 +529,17 @@ export default {
   components: {
     CustomerMealSummaryCard,
     CustomerVerificationSummaryCard,
-    CustomerOrderSummaryCard
+    CustomerOrderSummaryCard,
+    CustomerOverviewCard,
+    CustomerCandidateCard,
+    BusinessOrderListCard,
+    BusinessMealPlanCard,
+    BusinessHistoryCard,
+    BusinessDishCard,
+    BusinessDishCandidateCard,
+    BusinessRuleCard,
+    BusinessPackageCard,
+    BusinessOperationStatsCard
   },
   data() {
     return {
@@ -634,13 +560,6 @@ export default {
       toolSummaryExpanded: false,
       traceExpanded: false,
       quickReplies: DEFAULT_QUICK_REPLIES,
-      actionConfirmDialogVisible: false,
-      selectedActionDraft: null,
-      selectedDiagnosisResult: null,
-      secondConfirmed: false,
-      actionConfirmComment: '',
-      actionConfirmLoading: false,
-      actionConfirmResult: null,
       feedbackDialogVisible: false,
       feedbackLoading: false,
       feedbackResult: null,
@@ -849,6 +768,31 @@ export default {
       this.inputMessage = reply
       return this.sendMessage()
     },
+    selectCustomerCandidate(candidate) {
+      if (!candidate || (!candidate.customerCode && !candidate.customerId)) {
+        return Promise.resolve()
+      }
+      this.inputMessage = candidate.customerCode
+        ? `客户编号 ${candidate.customerCode}`
+        : `客户ID ${candidate.customerId}`
+      return this.sendMessage()
+    },
+    queryWarningText(message) {
+      const warnings = message.warnings || []
+      if (warnings.indexOf('TOOL_PERMISSION_DENIED') >= 0) {
+        return '当前账号缺少该类业务数据的查询权限，系统未返回对象是否存在或相关明细。'
+      }
+      if (warnings.indexOf('TOOL_BUDGET_EXCEEDED') >= 0) {
+        return '本轮查询达到安全调用上限，已返回可用部分结果。'
+      }
+      if (warnings.indexOf('TOOL_CALL_FAILED') >= 0 || warnings.indexOf('BUSINESS_QUERY_CLIENT_UNAVAILABLE') >= 0) {
+        return '部分业务查询暂不可用，当前结果不构成完整结论。'
+      }
+      if (message.partial) {
+        return '结果已按安全上限截断，请缩小查询范围后重试。'
+      }
+      return warnings.join('；')
+    },
     addAssistantResponse(response) {
       this.activeSessionId = response.sessionId || this.activeSessionId
       this.sessionId = this.activeSessionId
@@ -870,7 +814,13 @@ export default {
         slots: response.slots,
         result: response.diagnosisResult,
         responseType: response.responseType,
-        insightResult: response.insightResult
+        insightResult: response.insightResult,
+        facts: response.facts || [],
+        warnings: response.warnings || [],
+        cached: response.cached === true,
+        partial: response.partial === true,
+        queriedAt: response.queriedAt,
+        queryPlan: response.queryPlan
       })
       this.loadActionAudits()
     },
@@ -955,17 +905,28 @@ export default {
       if (!messages || !messages.length) {
         return [welcomeMessage()]
       }
-      return messages.map(message => ({
-        requestId: message.requestId,
-        role: (message.role || '').toLowerCase() === 'user' ? 'user' : 'assistant',
-        content: message.content,
-        status: message.status,
-        stage: message.conversationStage,
-        missingSlots: [],
-        slotConfidence: (message.slots && message.slots.slotConfidence) || {},
-        slots: message.slots,
-        result: message.diagnosisResult
-      }))
+      return messages.map(message => {
+        const business = message.businessResult || {}
+        return {
+          requestId: message.requestId,
+          role: (message.role || '').toLowerCase() === 'user' ? 'user' : 'assistant',
+          content: message.content,
+          status: message.status,
+          stage: message.conversationStage,
+          missingSlots: [],
+          slotConfidence: (message.slots && message.slots.slotConfidence) || {},
+          slots: message.slots,
+          result: message.diagnosisResult,
+          responseType: business.responseType,
+          insightResult: business.insightResult,
+          facts: business.facts || [],
+          warnings: business.warnings || [],
+          cached: business.cached === true,
+          partial: business.partial === true,
+          queriedAt: business.queriedAt,
+          queryPlan: business.queryPlan
+        }
+      })
     },
     sessionOptionLabel(session) {
       if (!session) {
@@ -1076,71 +1037,6 @@ export default {
       } catch (e) {
         return '-'
       }
-    },
-    isHighRisk(draft) {
-      return !!(draft && draft.riskLevel === 'HIGH')
-    },
-    openActionConfirm(draft, result) {
-      this.selectedActionDraft = draft
-      this.selectedDiagnosisResult = result
-      this.secondConfirmed = false
-      this.actionConfirmComment = ''
-      this.actionConfirmResult = null
-      this.actionConfirmDialogVisible = true
-    },
-    async submitActionConfirm() {
-      if (!this.selectedActionDraft) {
-        return
-      }
-      this.actionConfirmLoading = true
-      try {
-        const response = await confirmActionDraft({
-          requestId: this.selectedDiagnosisResult && this.selectedDiagnosisResult.requestId,
-          sessionId: this.sessionId,
-          idempotencyKey: this.buildIdempotencyKey(this.selectedActionDraft),
-          actionDraft: this.selectedActionDraft,
-          secondConfirmed: this.secondConfirmed,
-          comment: this.actionConfirmComment
-        })
-        this.actionConfirmResult = response
-        if (response && response.success) {
-          this.$message.success(response.message || '动作确认已记录')
-        } else if (response && response.status === 'STALE_DRAFT') {
-          this.handleStaleDraftResponse(response)
-        } else {
-          this.$message.warning((response && (response.failureReason || response.message)) || '动作确认未执行')
-        }
-        this.loadActionAudits()
-        this.loadOperationStats()
-      } catch (e) {
-        this.$message.error('动作确认失败')
-      } finally {
-        this.actionConfirmLoading = false
-      }
-    },
-    handleStaleDraftResponse(response) {
-      this.$message.warning(response.message || '业务数据已变化，请重新排查后再确认动作。')
-      this.quickReplies = ['重新排查', '清空会话']
-      this.messages.push({
-        role: 'assistant',
-        content: response.message || '业务数据已变化，请重新排查后再确认动作。',
-        status: 'STALE_DRAFT',
-        stage: this.conversationStage,
-        missingSlots: [],
-        slotConfidence: this.slotConfidence,
-        slots: this.slots
-      })
-      this.actionConfirmDialogVisible = false
-      this.scrollToBottom()
-    },
-    buildIdempotencyKey(draft) {
-      const result = this.selectedDiagnosisResult || {}
-      return [
-        result.requestId || this.sessionId || 'local',
-        draft.actionCode || 'ACTION',
-        draft.targetType || 'TARGET',
-        draft.targetId || result.customerId || result.recordDate || 'NONE'
-      ].join(':')
     },
     openFeedbackDialog(result, accepted) {
       this.feedbackDiagnosisResult = result
@@ -2001,6 +1897,16 @@ export default {
 
 .composer .el-button {
   height: 54px;
+}
+
+.business-query-card .el-table {
+  margin-top: 10px;
+}
+
+.query-time {
+  margin-top: 8px;
+  color: #909399;
+  font-size: 12px;
 }
 
 @media (max-width: 1080px) {

@@ -6,9 +6,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.dto.OrderMealBalanceDto;
 import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
 import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.customer.order.service.OrderMealBalanceCalculator;
 import me.zhengjie.modules.customer.order.util.CustomerOrderAmountPermissionUtil;
 import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
@@ -1956,37 +1958,46 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private void fillLatestOrderInfo(CustomerProfile profile) {
         List<CustomerOrder> activeOrders = customerOrderMapper.findActiveOrdersByCustomerId(profile.getId());
         if (activeOrders != null && !activeOrders.isEmpty()) {
-            // 汇总所有有效订单的总餐数
+            // 汇总所有有效订单的核销数据，并通过统一餐数余额计算器计算两套餐数池。
             int totalBreakfast = 0;
             int totalLunchDinner = 0;
-            for (CustomerOrder order : activeOrders) {
-                int breakfastCount = order.getBreakfastCount() != null ? order.getBreakfastCount() : 0;
-                int lunchDinnerCount = order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0;
-                totalBreakfast += breakfastCount;
-                totalLunchDinner += lunchDinnerCount;
-            }
-            profile.setBreakfastCount(totalBreakfast);
-            profile.setLunchDinnerCount(totalLunchDinner);
-
-            // 汇总所有有效订单的核销数据
             int breakfastVerified = 0;
             int lunchDinnerVerified = 0;
+            int remainingBreakfast = 0;
+            int remainingLunchDinner = 0;
             for (CustomerOrder order : activeOrders) {
                 List<OrderVerifiedCountDto> verifiedList = customerOrderMapper.sumVerifiedCountByOrderId(order.getId());
+                int verifiedBreakfast = 0;
+                int verifiedLunch = 0;
+                int verifiedDinner = 0;
                 if (verifiedList != null) {
                     for (OrderVerifiedCountDto item : verifiedList) {
                         String mealType = item.getMealType();
                         int verifiedCount = item.getVerifiedCount() != null ? item.getVerifiedCount() : 0;
                         if ("BREAKFAST".equals(mealType)) {
-                            breakfastVerified += verifiedCount;
+                            verifiedBreakfast += verifiedCount;
                         } else if ("LUNCH".equals(mealType) || "DINNER".equals(mealType)) {
-                            lunchDinnerVerified += verifiedCount;
+                            if ("LUNCH".equals(mealType)) {
+                                verifiedLunch += verifiedCount;
+                            } else {
+                                verifiedDinner += verifiedCount;
+                            }
                         }
                     }
                 }
+                OrderMealBalanceDto balance = OrderMealBalanceCalculator.calculate(order,
+                        verifiedBreakfast, verifiedLunch, verifiedDinner);
+                totalBreakfast += order.getBreakfastCount() == null ? 0 : order.getBreakfastCount();
+                totalLunchDinner += order.getLunchDinnerCount() == null ? 0 : order.getLunchDinnerCount();
+                breakfastVerified += balance.getVerifiedBreakfast();
+                lunchDinnerVerified += balance.getVerifiedLunch() + balance.getVerifiedDinner();
+                remainingBreakfast += balance.getRemainingBreakfast();
+                remainingLunchDinner += balance.getRemainingLunchDinner();
             }
-            profile.setRemainingBreakfastCount(Math.max(totalBreakfast - breakfastVerified, 0));
-            profile.setRemainingLunchDinnerCount(Math.max(totalLunchDinner - lunchDinnerVerified, 0));
+            profile.setBreakfastCount(totalBreakfast);
+            profile.setLunchDinnerCount(totalLunchDinner);
+            profile.setRemainingBreakfastCount(remainingBreakfast);
+            profile.setRemainingLunchDinnerCount(remainingLunchDinner);
 
             // 填充送餐模式（从最新订单获取）
             CustomerOrder latestOrder = customerOrderMapper.findLatestByCustomerId(profile.getId());

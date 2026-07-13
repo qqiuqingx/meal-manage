@@ -2,7 +2,6 @@
 jest.mock('@/api/agentDiagnosis', () => ({
   archiveChatSession: jest.fn(),
   chatMealPlan: jest.fn(),
-  confirmActionDraft: jest.fn(),
   createChatSession: jest.fn(),
   diagnoseMealPlan: jest.fn(),
   getChatSession: jest.fn(),
@@ -35,6 +34,8 @@ function createCtx() {
     addAssistantResponse: AgentDiagnosis.methods.addAssistantResponse,
     sendMessage: AgentDiagnosis.methods.sendMessage,
     sendQuickReply: AgentDiagnosis.methods.sendQuickReply,
+    selectCustomerCandidate: AgentDiagnosis.methods.selectCustomerCandidate,
+    queryWarningText: AgentDiagnosis.methods.queryWarningText,
     clearSession: AgentDiagnosis.methods.clearSession,
     resetSessionState: AgentDiagnosis.methods.resetSessionState,
     applySessionDetail: AgentDiagnosis.methods.applySessionDetail,
@@ -56,11 +57,6 @@ function createCtx() {
     shortDigest: AgentDiagnosis.methods.shortDigest,
     compactJson: AgentDiagnosis.methods.compactJson,
     prettyJson: AgentDiagnosis.methods.prettyJson,
-    isHighRisk: AgentDiagnosis.methods.isHighRisk,
-    openActionConfirm: AgentDiagnosis.methods.openActionConfirm,
-    submitActionConfirm: AgentDiagnosis.methods.submitActionConfirm,
-    handleStaleDraftResponse: AgentDiagnosis.methods.handleStaleDraftResponse,
-    buildIdempotencyKey: AgentDiagnosis.methods.buildIdempotencyKey,
     openFeedbackDialog: AgentDiagnosis.methods.openFeedbackDialog,
     submitFeedback: AgentDiagnosis.methods.submitFeedback,
     extractReasonCodes: AgentDiagnosis.methods.extractReasonCodes,
@@ -116,7 +112,6 @@ describe('AgentDiagnosis chat page logic', () => {
     api.queryChatSessions.mockReset()
     api.archiveChatSession.mockReset()
     api.updateChatSessionTitle.mockReset()
-    api.confirmActionDraft.mockReset()
     api.queryActionAudits.mockReset()
     api.queryAgentOperationStats.mockReset()
     api.queryAgentRuleGaps.mockReset()
@@ -130,7 +125,7 @@ describe('AgentDiagnosis chat page logic', () => {
 
     expect(ctx.messages).toHaveLength(1)
     expect(ctx.messages[0].role).toBe('assistant')
-    expect(ctx.messages[0].content).toContain('请描述要排查的客户、日期和餐次')
+    expect(ctx.messages[0].content).toContain('你可以查询客户、订单、排餐、核销、退餐或运营统计')
     expect(ctx.conversationStage).toBe('COLLECTING_SLOTS')
     expect(ctx.sessionId).toBe(null)
   })
@@ -230,7 +225,7 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(ctx.currentDiagnosis.diagnosisTrace).toHaveLength(1)
   })
 
-  test('keeps read-only action drafts in diagnosis result', async() => {
+  test('keeps historical action drafts out of the read-only query interaction', async() => {
     api.chatMealPlan.mockResolvedValue({
       sessionId: 'session-1',
       status: 'ANSWERED',
@@ -259,88 +254,9 @@ describe('AgentDiagnosis chat page logic', () => {
     await AgentDiagnosis.methods.sendMessage.call(ctx)
 
     expect(ctx.currentDiagnosis.actionDrafts).toHaveLength(1)
-    expect(ctx.currentDiagnosis.actionDrafts[0].actionCode).toBe('RESUME_CUSTOMER_DELIVERY')
-    expect(ctx.riskTag('MEDIUM')).toBe('warning')
-    expect(ctx.compactJson(ctx.currentDiagnosis.actionDrafts[0].afterPreview)).toContain('MANUAL_CONFIRM_REQUIRED')
+    expect(AgentDiagnosis.methods.openActionConfirm).toBeUndefined()
+    expect(api.confirmActionDraft).toBeUndefined()
     expect(api.chatMealPlan).toHaveBeenCalledTimes(1)
-  })
-
-  test('submits action draft confirmation with idempotency key', async() => {
-    api.confirmActionDraft.mockResolvedValue({
-      auditId: 1,
-      actionCode: 'CREATE_MANUAL_RECHECK_TASK',
-      status: 'CONFIRMED',
-      success: true,
-      message: '动作确认已记录'
-    })
-    const ctx = createCtx()
-    const draft = {
-      actionCode: 'CREATE_MANUAL_RECHECK_TASK',
-      title: '创建人工复核任务',
-      riskLevel: 'LOW',
-      targetType: 'RECHECK_TASK',
-      targetId: '2026-05-22|LUNCH',
-      afterPreview: { executeMode: 'MANUAL_CONFIRM_REQUIRED' }
-    }
-    const result = { requestId: 'req-1', customerId: 1001 }
-
-    AgentDiagnosis.methods.openActionConfirm.call(ctx, draft, result)
-    ctx.actionConfirmComment = '已电话核对'
-    await AgentDiagnosis.methods.submitActionConfirm.call(ctx)
-
-    expect(api.confirmActionDraft).toHaveBeenCalledWith({
-      requestId: 'req-1',
-      sessionId: null,
-      idempotencyKey: 'req-1:CREATE_MANUAL_RECHECK_TASK:RECHECK_TASK:2026-05-22|LUNCH',
-      actionDraft: draft,
-      secondConfirmed: false,
-      comment: '已电话核对'
-    })
-    expect(ctx.actionConfirmResult.success).toBe(true)
-    expect(ctx.$message.success).toHaveBeenCalledWith('动作确认已记录')
-    expect(api.queryActionAudits).not.toHaveBeenCalled()
-  })
-
-  test('shows stale draft warning and appends assistant prompt when action draft expired', async() => {
-    api.confirmActionDraft.mockResolvedValue({
-      auditId: 2,
-      actionCode: 'ADJUST_ORDER_EFFECTIVE_DATE',
-      status: 'STALE_DRAFT',
-      success: false,
-      message: '业务数据已变化，请重新排查后再确认动作。',
-      failureReason: '诊断草稿生成后订单有效期已变化'
-    })
-    const ctx = createCtx()
-    ctx.sessionId = 'session-1'
-    ctx.slots = { customerCode: 'C10001' }
-    const draft = {
-      actionCode: 'ADJUST_ORDER_EFFECTIVE_DATE',
-      title: '调整订单有效期',
-      riskLevel: 'HIGH',
-      targetType: 'ORDER',
-      targetId: '2001'
-    }
-
-    AgentDiagnosis.methods.openActionConfirm.call(ctx, draft, { requestId: 'req-3' })
-    ctx.secondConfirmed = true
-    await AgentDiagnosis.methods.submitActionConfirm.call(ctx)
-
-    expect(ctx.actionConfirmResult.status).toBe('STALE_DRAFT')
-    expect(ctx.$message.warning).toHaveBeenCalledWith('业务数据已变化，请重新排查后再确认动作。')
-    expect(ctx.quickReplies).toEqual(['重新排查', '清空会话'])
-    expect(ctx.messages[ctx.messages.length - 1].status).toBe('STALE_DRAFT')
-    expect(ctx.actionConfirmDialogVisible).toBe(false)
-  })
-
-  test('requires second confirmation for high risk action drafts', () => {
-    const ctx = createCtx()
-    const draft = { actionCode: 'ADJUST_ORDER_EFFECTIVE_DATE', riskLevel: 'HIGH', targetType: 'ORDER', targetId: '1001' }
-
-    AgentDiagnosis.methods.openActionConfirm.call(ctx, draft, { requestId: 'req-2' })
-
-    expect(ctx.isHighRisk(draft)).toBe(true)
-    expect(ctx.secondConfirmed).toBe(false)
-    expect(ctx.buildIdempotencyKey(draft)).toBe('req-2:ADJUST_ORDER_EFFECTIVE_DATE:ORDER:1001')
   })
 
   test('submits diagnosis feedback with predicted and actual reason codes', async() => {
@@ -446,6 +362,38 @@ describe('AgentDiagnosis chat page logic', () => {
 
     expect(api.chatMealPlan.mock.calls[0][0].sessionId).toBe('session-1')
     expect(api.chatMealPlan.mock.calls[0][0].message).toBe('午餐')
+  })
+
+  test('selecting customer candidate sends customer code', async() => {
+    api.chatMealPlan.mockResolvedValue({
+      sessionId: 'session-1',
+      status: 'ANSWERED',
+      assistantMessage: '客户已选择。',
+      quickReplies: ['还剩多少餐']
+    })
+    const ctx = createCtx()
+    ctx.activeSessionId = 'session-1'
+
+    await AgentDiagnosis.methods.selectCustomerCandidate.call(ctx, {
+      customerId: 1001,
+      customerCode: 'B1001',
+      customerName: '张三'
+    })
+
+    expect(api.chatMealPlan.mock.calls[0][0].sessionId).toBe('session-1')
+    expect(api.chatMealPlan.mock.calls[0][0].message).toBe('客户编号 B1001')
+  })
+
+  test('uses non-disclosing message for business query permission denial', () => {
+    const ctx = createCtx()
+
+    const message = AgentDiagnosis.methods.queryWarningText.call(ctx, {
+      partial: true,
+      warnings: ['TOOL_PERMISSION_DENIED']
+    })
+
+    expect(message).toContain('缺少该类业务数据的查询权限')
+    expect(message).toContain('未返回对象是否存在')
   })
 
   test('loads session detail and maps persisted messages back into page state', async() => {

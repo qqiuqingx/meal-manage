@@ -20,10 +20,12 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.meal.domain.MealVerificationLog;
 import me.zhengjie.modules.meal.domain.dto.MealVerificationLogQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.MealVerificationLogVO;
+import me.zhengjie.modules.meal.domain.dto.OrderAssociatedRecordCountDto;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.Date;
+import java.util.List;
 
 /**
  * 核销日志Mapper
@@ -55,4 +57,12 @@ public interface MealVerificationLogMapper extends BaseMapper<MealVerificationLo
      * @return 更新行数
      */
     int markAsRefunded(@Param("orderId") Long orderId);
+
+    /**
+     * 按订单批量统计未删除的核销记录，供 Agent 订单摘要使用。
+     *
+     * @param orderIds 订单 ID 列表
+     * @return 每笔订单的有效核销记录数量
+     */
+    List<OrderAssociatedRecordCountDto> countActiveByOrderIds(@Param("orderIds") List<Long> orderIds);
 }

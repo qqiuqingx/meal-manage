@@ -28,11 +28,6 @@
           <el-table-column prop="lunchDinnerCount" label="午晚餐数" width="80" align="center" />
           <el-table-column prop="remainingBreakfast" label="剩余早餐" width="80" align="center" />
           <el-table-column prop="remainingLunchDinner" label="剩余午晚餐" width="80" align="center" />
-          <el-table-column prop="orderAmount" label="金额" width="100" align="right">
-            <template slot-scope="scope">
-              {{ scope.row.orderAmount ? '¥' + scope.row.orderAmount : '-' }}
-            </template>
-          </el-table-column>
           <el-table-column label="开始日期" width="100" align="center">
             <template slot-scope="scope">
               {{ formatDate(scope.row.startDate) }}

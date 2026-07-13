@@ -16,7 +16,7 @@ public class RuleBasedIntentClassifier implements ChatIntentClassifier {
     private static final Pattern PRONOUN_OR_CONTEXT = Pattern.compile("他|她|这个客户|那午餐|那晚餐|这个订单|为什么|原因|解释|换成|改成");
     private static final Pattern RESET = Pattern.compile("清空|重新开始");
     private static final Pattern RETRY = Pattern.compile("重新排查|重新诊断|再查一次");
-    private static final Pattern OUT_OF_SCOPE = Pattern.compile("修改|改一下|下单|退款|地址");
+    private static final Pattern OUT_OF_SCOPE = Pattern.compile("修改|改一下|下单|申请退款|执行退款|退款一下|修改地址|订单金额|退款金额|优惠金额|已收金额|单价|多少钱|价格");
 
     /**
      * 对明确控制指令、客户查询和诊断请求进行规则分类。
@@ -43,7 +43,16 @@ public class RuleBasedIntentClassifier implements ChatIntentClassifier {
     private boolean isCustomerQuery(ChatIntent intent) {
         return intent == ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY
             || intent == ChatIntent.CUSTOMER_VERIFICATION_QUERY
-            || intent == ChatIntent.CUSTOMER_ORDER_QUERY;
+            || intent == ChatIntent.CUSTOMER_ORDER_QUERY
+            || intent == ChatIntent.CUSTOMER_REFUND_QUERY
+            || intent == ChatIntent.CUSTOMER_PACKAGE_QUERY
+            || intent == ChatIntent.MEAL_PLAN_QUERY
+            || intent == ChatIntent.DISH_INGREDIENT_QUERY
+            || intent == ChatIntent.MEAL_PLAN_UNVERIFIED_QUERY
+            || intent == ChatIntent.MEAL_BALANCE_NO_PLAN_QUERY
+            || intent == ChatIntent.MEAL_BALANCE_CHANGE_QUERY
+            || intent == ChatIntent.BUSINESS_RULE_QUERY
+            || intent == ChatIntent.OPERATION_STATISTICS_QUERY;
     }
 
     private ChatIntent parseCandidate(String candidate) {

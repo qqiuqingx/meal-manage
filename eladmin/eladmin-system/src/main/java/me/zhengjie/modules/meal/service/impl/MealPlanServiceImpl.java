@@ -390,7 +390,10 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
 
         List<CustomerOrder> candidateOrders = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
-        candidateOrders = mergeManualAdditionOrders(candidateOrders, targetDate, mealType);
+        List<CustomerMealScheduleAddition> manualAdditions =
+                customerMealScheduleAdditionMapper.selectActiveByDateMeal(targetDate, mealType);
+        Set<Long> manualAdditionOrderIds = manualAdditionOrderIds(manualAdditions);
+        candidateOrders = mergeManualAdditionOrders(candidateOrders, targetDate, mealType, manualAdditions);
         log.info("基础条件过滤后的候选订单 - 数量: {}", candidateOrders.size());
 
         // 批量查询各订单的已排餐数量
@@ -428,7 +431,7 @@ public class MealPlanServiceImpl implements MealPlanService {
                         order.getId(), order.getCustomerName()+"-"+order.getCustomerCode(), mealType, startMealTypeReason);
                 continue;
             }
-            boolean manualAddition = hasManualAddition(order.getId(), targetDate, mealType);
+            boolean manualAddition = manualAdditionOrderIds.contains(order.getId());
             String matchReason = manualAddition ? null : getScheduleModeMatchReason(order, mealType,targetDate);
             if (matchReason != null) {
                 log.info("订单被过滤 - 订单ID: {}, 客户名称+编号: {}, 餐次: {}, 配送模式: {}, 原因: {}",
@@ -467,6 +470,25 @@ public class MealPlanServiceImpl implements MealPlanService {
         return validOrders;
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public Set<Long> findExpectedCustomerIds(LocalDate recordDate, String mealType) {
+        return findExpectedCustomerOrders(recordDate, mealType).stream()
+            .map(CustomerOrder::getCustomerId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public List<CustomerOrder> findExpectedCustomerOrders(LocalDate recordDate, String mealType) {
+        if (recordDate == null) {
+            throw new IllegalArgumentException("目标日期不能为空");
+        }
+        String normalizedMealType = validateParams(mealType);
+        return new ArrayList<>(loadValidOrders(recordDate, normalizedMealType, null));
+    }
+
     /**
      * 加载指定日期餐次的人工新增订单，并合并进候选订单列表。
      *
@@ -477,22 +499,30 @@ public class MealPlanServiceImpl implements MealPlanService {
      */
     private List<CustomerOrder> mergeManualAdditionOrders(List<CustomerOrder> candidateOrders,
                                                           LocalDate targetDate,
-                                                          String mealType) {
-        List<CustomerMealScheduleAddition> additions =
-                customerMealScheduleAdditionMapper.selectActiveByDateMeal(targetDate, mealType);
+                                                          String mealType,
+                                                          List<CustomerMealScheduleAddition> additions) {
         if (additions == null || additions.isEmpty()) {
             return candidateOrders;
         }
         Map<Long, CustomerOrder> additionOrderMap = new LinkedHashMap<>();
+        Set<Long> additionOrderIds = manualAdditionOrderIds(additions);
+        if (!additionOrderIds.isEmpty()) {
+            List<CustomerOrder> additionOrders = customerOrderMapper.selectBatchIds(additionOrderIds);
+            if (additionOrders != null) {
+                for (CustomerOrder order : additionOrders) {
+                    if (order != null && order.getId() != null) {
+                        additionOrderMap.put(order.getId(), order);
+                    }
+                }
+            }
+        }
         List<String> additionCustomerDetails = new ArrayList<>();
         for (CustomerMealScheduleAddition addition : additions) {
             if (addition == null || addition.getOrderId() == null) {
                 additionCustomerDetails.add(formatManualAdditionCustomer(null, addition));
                 continue;
             }
-            CustomerOrder order = customerOrderMapper.selectById(addition.getOrderId());
-            additionOrderMap.put(addition.getOrderId(), order);
-            additionCustomerDetails.add(formatManualAdditionCustomer(order, addition));
+            additionCustomerDetails.add(formatManualAdditionCustomer(additionOrderMap.get(addition.getOrderId()), addition));
         }
         log.info("人工新增排餐记录查询完成 - 日期: {}, 餐次: {}, 记录数: {}, 客户明细: {}",
                 targetDate, mealType, additions.size(), additionCustomerDetails);
@@ -563,10 +593,21 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
-     * 判断订单指定日期餐次是否存在人工新增记录。
+     * 提取当前日期餐次的人工新增订单标识，用于循环内常数时间判断，避免逐订单查询。
+     *
+     * @param additions 当前日期餐次的有效人工新增记录
+     * @return 人工新增关联的订单 ID 集合
      */
-    private boolean hasManualAddition(Long orderId, LocalDate targetDate, String mealType) {
-        return customerMealScheduleAdditionMapper.selectActiveByOrderDateMeal(orderId, targetDate, mealType) != null;
+    private Set<Long> manualAdditionOrderIds(List<CustomerMealScheduleAddition> additions) {
+        Set<Long> orderIds = new HashSet<>();
+        if (additions != null) {
+            for (CustomerMealScheduleAddition addition : additions) {
+                if (addition != null && addition.getOrderId() != null) {
+                    orderIds.add(addition.getOrderId());
+                }
+            }
+        }
+        return orderIds;
     }
 
     private String getStartMealTypeMismatchReason(CustomerOrder order, String targetMealType, LocalDate targetDate) {

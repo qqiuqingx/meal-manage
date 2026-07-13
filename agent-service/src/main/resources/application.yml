@@ -25,6 +25,7 @@ agent:
   context-base-url: ${AGENT_CONTEXT_BASE_URL:http://localhost:8000}
   context-path: /api/internal/agent/meal-plan/context
   internal-token: ${AGENT_INTERNAL_TOKEN:}
+  business-query-timeout-ms: ${AGENT_BUSINESS_QUERY_TIMEOUT_MS:3000}
   diagnosis:
     phase2-enabled: ${AGENT_DIAGNOSIS_PHASE2_ENABLED:true}
     tool-mode-enabled: ${AGENT_DIAGNOSIS_TOOL_MODE_ENABLED:true}

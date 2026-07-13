@@ -93,6 +93,12 @@ public class HttpAgentServiceClient implements AgentServiceClient {
 
     @Override
     public AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId) {
+        return chatMealPlan(request, requestId, null);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId, String accessContext) {
         String resolvedRequestId = resolveRequestId(requestId);
         String url = buildUrl(chatPath);
         log.info("聊天诊断阶段 stage=调用agent-service开始 requestId={} url={} sessionId={}", resolvedRequestId, url, request.getSessionId());
@@ -100,7 +106,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         for (int attempt = 1; attempt <= attempts; attempt++) {
             long attemptStart = System.currentTimeMillis();
             try {
-                ResponseEntity<String> response = restTemplate().postForEntity(url, requestEntity(request, resolvedRequestId), String.class);
+                ResponseEntity<String> response = restTemplate().postForEntity(url, requestEntity(request, resolvedRequestId, accessContext), String.class);
                 AgentChatResponse chatResponse = parseChatResponse(response.getBody(), resolvedRequestId, request);
                 log.info("聊天诊断阶段 stage=调用agent-service完成 requestId={} url={} attempt={} status={} chatStatus={} sessionId={} costMs={}",
                     resolvedRequestId, url, attempt, response.getStatusCodeValue(), chatResponse.getStatus(),
@@ -121,9 +127,19 @@ public class HttpAgentServiceClient implements AgentServiceClient {
     }
 
     private HttpEntity<String> requestEntity(Object request, String requestId) {
+        return requestEntity(request, requestId, null);
+    }
+
+    /**
+     * 构建调用 agent-service 的请求，并仅通过 HTTP Header 透传短期客服访问上下文。
+     */
+    private HttpEntity<String> requestEntity(Object request, String requestId, String accessContext) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Request-Id", requestId);
+        if (accessContext != null && !accessContext.trim().isEmpty()) {
+            headers.set("X-Agent-Access-Context", accessContext);
+        }
         return new HttpEntity<>(JSON.toJSONString(request), headers);
     }
 
@@ -199,9 +215,6 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         response.setNextActions(failureType.retryable()
             ? Arrays.asList("核对客户档案", "核对订单有效性", "核对排餐记录", "核对候选菜配置")
             : Arrays.asList("检查客户、日期和餐次是否完整", "确认当前账号具备智能排查访问权限"));
-        if (failureType != AgentServiceFailureType.AGENT_SERVICE_4XX) {
-            response.setActionDrafts(Collections.singletonList(manualRecheckDraft(request, requestId, failureType)));
-        }
         return response;
     }
 

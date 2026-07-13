@@ -6,7 +6,9 @@ import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.modules.agent.domain.dto.insight.*;
 import me.zhengjie.modules.agent.service.AgentCustomerInsightService;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.dto.OrderMealBalanceDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.customer.order.service.OrderMealBalanceCalculator;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
@@ -51,7 +53,7 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
 
         List<CustomerOrder> allOrders = queryCustomerOrders(customer.getId(), null);
         List<CustomerOrder> activeOrders = allOrders.stream()
-                .filter(this::isActiveOrder)
+                .filter(OrderMealBalanceCalculator::isActiveOrder)
                 .collect(Collectors.toList());
         Map<Long, List<MealVerificationLog>> verificationByOrder = loadVerificationMap(activeOrders);
 
@@ -70,7 +72,7 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
 
         List<AgentCustomerOrderMealBalanceItem> orderItems = new ArrayList<>();
         for (CustomerOrder order : activeOrders) {
-            OrderMealStats orderStats = calculateOrderMealStats(order, verificationByOrder.getOrDefault(order.getId(), Collections.emptyList()));
+            OrderMealBalanceDto orderStats = calculateOrderMealStats(order, verificationByOrder.getOrDefault(order.getId(), Collections.emptyList()));
             AgentCustomerOrderMealBalanceItem item = buildOrderMealBalanceItem(order, orderStats);
             orderItems.add(item);
 
@@ -291,19 +293,6 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
     }
 
     /**
-     * 仅把进行中且剩余餐数大于 0 的订单视为当前有效订单。
-     *
-     * @param order 订单
-     * @return 是否为有效订单
-     */
-    private boolean isActiveOrder(CustomerOrder order) {
-        return order != null
-                && order.getStatus() != null
-                && order.getStatus() == 1
-                && safeInt(order.getRemainingCount()) > 0;
-    }
-
-    /**
      * 批量加载订单对应的未删除核销日志，保证所有聚合都限定在当前客户订单集合内。
      *
      * @param orders 订单列表
@@ -332,13 +321,11 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
      * @param orderVerifications 该订单核销日志
      * @return 订单餐数统计
      */
-    private OrderMealStats calculateOrderMealStats(CustomerOrder order, List<MealVerificationLog> orderVerifications) {
+    private OrderMealBalanceDto calculateOrderMealStats(CustomerOrder order, List<MealVerificationLog> orderVerifications) {
         int verifiedBf = sumVerificationCount(orderVerifications, "BREAKFAST");
         int verifiedLunch = sumVerificationCount(orderVerifications, "LUNCH");
         int verifiedDinner = sumVerificationCount(orderVerifications, "DINNER");
-        int remBf = Math.max(0, getBreakfastCount(order) - verifiedBf);
-        int remLd = Math.max(0, getLunchDinnerCount(order) - verifiedLunch - verifiedDinner);
-        return new OrderMealStats(verifiedBf, verifiedLunch, verifiedDinner, remBf, remLd);
+        return OrderMealBalanceCalculator.calculate(order, verifiedBf, verifiedLunch, verifiedDinner);
     }
 
     /**
@@ -348,7 +335,7 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
      * @param orderStats 订单餐数统计
      * @return 订单明细 DTO
      */
-    private AgentCustomerOrderMealBalanceItem buildOrderMealBalanceItem(CustomerOrder order, OrderMealStats orderStats) {
+    private AgentCustomerOrderMealBalanceItem buildOrderMealBalanceItem(CustomerOrder order, OrderMealBalanceDto orderStats) {
         AgentCustomerOrderMealBalanceItem item = new AgentCustomerOrderMealBalanceItem();
         item.setOrderId(order.getId());
         item.setOrderNo(order.getOrderCode());
@@ -360,7 +347,6 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
         item.setVerifiedDinner(orderStats.getVerifiedDinner());
         item.setRemainingBreakfast(orderStats.getRemainingBreakfast());
         item.setRemainingLunchDinner(orderStats.getRemainingLunchDinner());
-        item.setOrderAmount(order.getFinalAmount());
         item.setStartDate(order.getStartDate());
         item.setEndDate(order.getEndDate());
         item.setCreateTime(order.getCreateTime());
@@ -382,10 +368,6 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
         return new SimpleDateFormat("yyyy-MM-dd").format(date);
     }
 
-    private int safeInt(Integer value) {
-        return value == null ? 0 : value;
-    }
-
     private boolean isBreakfastOnly(String mealType) {
         return "BREAKFAST".equals(mealType);
     }
@@ -396,40 +378,4 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
                 || "LUNCH_DINNER".equals(mealType);
     }
 
-    private static class OrderMealStats {
-        private final int verifiedBreakfast;
-        private final int verifiedLunch;
-        private final int verifiedDinner;
-        private final int remainingBreakfast;
-        private final int remainingLunchDinner;
-
-        private OrderMealStats(int verifiedBreakfast, int verifiedLunch, int verifiedDinner,
-                               int remainingBreakfast, int remainingLunchDinner) {
-            this.verifiedBreakfast = verifiedBreakfast;
-            this.verifiedLunch = verifiedLunch;
-            this.verifiedDinner = verifiedDinner;
-            this.remainingBreakfast = remainingBreakfast;
-            this.remainingLunchDinner = remainingLunchDinner;
-        }
-
-        public int getVerifiedBreakfast() {
-            return verifiedBreakfast;
-        }
-
-        public int getVerifiedLunch() {
-            return verifiedLunch;
-        }
-
-        public int getVerifiedDinner() {
-            return verifiedDinner;
-        }
-
-        public int getRemainingBreakfast() {
-            return remainingBreakfast;
-        }
-
-        public int getRemainingLunchDinner() {
-            return remainingLunchDinner;
-        }
-    }
 }

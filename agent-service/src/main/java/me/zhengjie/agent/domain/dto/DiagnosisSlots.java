@@ -10,9 +10,18 @@ public class DiagnosisSlots {
 
     private Long customerId;
     private String customerCode;
+    private String customerName;
     private String recordDate;
+    /** 受控查询起始日期（yyyy-MM-dd），用于核销和退餐范围查询。 */
+    private String startDate;
+    /** 受控查询结束日期（yyyy-MM-dd），用于核销和退餐范围查询。 */
+    private String endDate;
     private String mealType;
     private Integer orderStatus;
+    private Long orderId;
+    private String orderCode;
+    /** 当前会话聚焦的排餐客户记录 ID。 */
+    private Long mealPlanRecordId;
     private Map<String, String> slotConfidence = new LinkedHashMap<>();
     private Map<String, String> slotSource = new LinkedHashMap<>();
 
@@ -31,6 +40,8 @@ public class DiagnosisSlots {
     public void setCustomerCode(String customerCode) {
         this.customerCode = customerCode;
     }
+    public String getCustomerName() { return customerName; }
+    public void setCustomerName(String customerName) { this.customerName = customerName; }
 
     public String getRecordDate() {
         return recordDate;
@@ -39,6 +50,10 @@ public class DiagnosisSlots {
     public void setRecordDate(String recordDate) {
         this.recordDate = recordDate;
     }
+    public String getStartDate() { return startDate; }
+    public void setStartDate(String startDate) { this.startDate = startDate; }
+    public String getEndDate() { return endDate; }
+    public void setEndDate(String endDate) { this.endDate = endDate; }
 
     public String getMealType() {
         return mealType;
@@ -55,6 +70,12 @@ public class DiagnosisSlots {
     public void setOrderStatus(Integer orderStatus) {
         this.orderStatus = orderStatus;
     }
+    public Long getOrderId() { return orderId; }
+    public void setOrderId(Long orderId) { this.orderId = orderId; }
+    public String getOrderCode() { return orderCode; }
+    public void setOrderCode(String orderCode) { this.orderCode = orderCode; }
+    public Long getMealPlanRecordId() { return mealPlanRecordId; }
+    public void setMealPlanRecordId(Long mealPlanRecordId) { this.mealPlanRecordId = mealPlanRecordId; }
 
     public Map<String, String> getSlotConfidence() {
         return slotConfidence;

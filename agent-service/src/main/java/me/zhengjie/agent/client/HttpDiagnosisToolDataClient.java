@@ -19,6 +19,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.web.client.RestClient;
+import me.zhengjie.agent.security.AgentAccessContextHolder;
 
 import java.util.Collections;
 import java.util.List;
@@ -143,6 +144,7 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
                 .contentType(MediaType.APPLICATION_JSON)
                 .header(REQUEST_ID_HEADER, requestId)
                 .header(INTERNAL_TOKEN_HEADER, internalToken)
+                .headers(this::appendAccessContext)
                 .body(request)
                 .retrieve()
                 .body(new ParameterizedTypeReference<Map<String, Object>>() {});
@@ -169,6 +171,7 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
                 .contentType(MediaType.APPLICATION_JSON)
                 .header(REQUEST_ID_HEADER, requestId)
                 .header(INTERNAL_TOKEN_HEADER, internalToken)
+                .headers(this::appendAccessContext)
                 .body(request)
                 .retrieve()
                 .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
@@ -188,5 +191,15 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
     private String requestId() {
         String requestId = MDC.get(REQUEST_ID_KEY);
         return requestId == null ? "" : requestId;
+    }
+
+    /**
+     * 仅原样透传主系统签发的上下文，agent-service 不解析、不扩展其中的权限信息。
+     */
+    private void appendAccessContext(org.springframework.http.HttpHeaders headers) {
+        String accessContext = AgentAccessContextHolder.accessContext();
+        String sessionId = AgentAccessContextHolder.sessionId();
+        if (accessContext != null) headers.set("X-Agent-Access-Context", accessContext);
+        if (sessionId != null) headers.set("X-Agent-Session-Id", sessionId);
     }
 }

@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS `agent_chat_message` (
   `slots_json` text COMMENT '槽位快照JSON',
   `diagnosis_result_json` mediumtext COMMENT '诊断结果JSON',
   `tool_summary_json` text COMMENT '工具调用摘要JSON',
+  `business_result_json` mediumtext COMMENT '受控业务查询卡片快照JSON（不含金额和原始工具响应）',
   `create_by` varchar(64) DEFAULT NULL COMMENT '创建人',
   `update_by` varchar(64) DEFAULT NULL COMMENT '更新人',
   `create_time` datetime DEFAULT NULL COMMENT '创建时间',

@@ -1,0 +1,195 @@
+package me.zhengjie.modules.agent.query.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import lombok.RequiredArgsConstructor;
+import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerAddressDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerCandidateDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerOverviewDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerPackageDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentListResultDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentOrderMealBalanceDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentOrderSummaryDto;
+import me.zhengjie.modules.agent.query.service.AgentCustomerQueryService;
+import me.zhengjie.modules.agent.query.service.AgentOrderQueryService;
+import me.zhengjie.modules.agent.query.service.AgentHistoryQueryService;
+import me.zhengjie.modules.agent.security.AgentCustomerDataScopeContext;
+import me.zhengjie.modules.agent.query.domain.dto.AgentHistoryQueryRequest;
+import me.zhengjie.modules.agent.query.domain.dto.AgentVerificationLogDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentRefundLogDto;
+import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
+import org.springframework.stereotype.Service;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/**
+ * Agent 客户只读查询实现。手机号、地址和超长特殊要求在离开主系统前完成脱敏或截断。
+ */
+@Service
+@RequiredArgsConstructor
+public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService {
+
+    private static final int MAX_CANDIDATES = 10;
+    private static final int MAX_SPECIAL_REQUIREMENT_LENGTH = 200;
+
+    private final CustomerProfileMapper customerProfileMapper;
+    private final CustomerProfileAddressMapper customerProfileAddressMapper;
+    private final AgentOrderQueryService agentOrderQueryService;
+    private final AgentHistoryQueryService agentHistoryQueryService;
+
+    /** {@inheritDoc} */
+    @Override
+    public AgentListResultDto<AgentCustomerCandidateDto> resolve(Long customerId, String customerCode, String customerName) {
+        AgentListResultDto<AgentCustomerCandidateDto> result = new AgentListResultDto<>();
+        LambdaQueryWrapper<CustomerProfile> wrapper = new LambdaQueryWrapper<>();
+        if (customerId != null && customerId > 0) wrapper.eq(CustomerProfile::getId, customerId);
+        else if (hasText(customerCode)) wrapper.eq(CustomerProfile::getCustomerCode, customerCode.trim());
+        else if (hasText(customerName)) wrapper.like(CustomerProfile::getCustomerName, customerName.trim());
+        else return result;
+        Set<Long> scopedCustomerIds = AgentCustomerDataScopeContext.customerIds();
+        if (scopedCustomerIds != null && scopedCustomerIds.isEmpty()) return result;
+        if (scopedCustomerIds != null) wrapper.in(CustomerProfile::getId, scopedCustomerIds);
+        List<CustomerProfile> profiles = customerProfileMapper.selectList(wrapper.orderByDesc(CustomerProfile::getId));
+        result.setTotal(profiles.size());
+        int size = Math.min(profiles.size(), MAX_CANDIDATES);
+        result.setTruncated(size < profiles.size());
+        result.setItems(profiles.subList(0, size).stream().map(this::candidate).collect(Collectors.toList()));
+        return result;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public AgentCustomerOverviewDto getOverview(Long customerId, String customerCode) {
+        AgentCustomerOverviewDto overview = new AgentCustomerOverviewDto();
+        AgentListResultDto<AgentCustomerCandidateDto> candidates = resolve(customerId, customerCode, null);
+        if (candidates.getTotal() != 1 || candidates.getItems().isEmpty()) return overview;
+        Long resolvedId = candidates.getItems().get(0).getCustomerId();
+        CustomerProfile profile = customerProfileMapper.selectByIdWithJson(resolvedId);
+        if (profile == null) return overview;
+        overview.setPresent(true);
+        overview.setCustomerId(profile.getId());
+        overview.setCustomerCode(profile.getCustomerCode());
+        overview.setCustomerName(profile.getCustomerName());
+        overview.setMaskedPhone(maskPhone(profile.getPhone()));
+        overview.setAllergyTags(profile.getAllergyTags() == null ? Collections.emptyList() : profile.getAllergyTags());
+        overview.setExcludedDishIds(profile.getExcludedDishIds() == null ? Collections.emptyList() : profile.getExcludedDishIds());
+        overview.setExcludedDates(profile.getExcludedDates() == null ? Collections.emptyList() : profile.getExcludedDates());
+        overview.setSpecialRequirements(truncate(profile.getSpecialRequirements()));
+        overview.setAddresses(loadAddresses(profile.getId()));
+        fillOrderSummary(overview);
+        fillRecentHistory(overview);
+        return overview;
+    }
+
+    /** 填充客户最近核销与退餐摘要，查询仍受客户 ID 约束且不读取金额字段。 */
+    private void fillRecentHistory(AgentCustomerOverviewDto overview) {
+        AgentHistoryQueryRequest request = new AgentHistoryQueryRequest();
+        request.setCustomerId(overview.getCustomerId());
+        request.setRecentLimit(1);
+        List<AgentVerificationLogDto> verifications = agentHistoryQueryService.listVerifications(request).getItems();
+        if (verifications != null && !verifications.isEmpty()) overview.setLatestVerification(verifications.get(0));
+        List<AgentRefundLogDto> refunds = agentHistoryQueryService.listRefunds(request).getItems();
+        if (refunds != null && !refunds.isEmpty()) overview.setLatestRefund(refunds.get(0));
+    }
+
+    private void fillOrderSummary(AgentCustomerOverviewDto overview) {
+        AgentListResultDto<AgentOrderSummaryDto> orders = agentOrderQueryService.listForOverview(overview.getCustomerId());
+        overview.setTotalOrderCount((int) Math.min(orders.getTotal(), Integer.MAX_VALUE));
+        overview.setActiveOrderCount((int) orders.getItems().stream()
+                .filter(order -> Integer.valueOf(1).equals(order.getStatusCode())).count());
+        AgentOrderMealBalanceDto total = new AgentOrderMealBalanceDto();
+        for (AgentOrderSummaryDto order : orders.getItems()) {
+            if (!Integer.valueOf(1).equals(order.getStatusCode()) || order.getMealBalance() == null) continue;
+            AgentOrderMealBalanceDto balance = order.getMealBalance();
+            total.setBreakfastCount(total.getBreakfastCount() + balance.getBreakfastCount());
+            total.setLunchDinnerCount(total.getLunchDinnerCount() + balance.getLunchDinnerCount());
+            total.setVerifiedBreakfast(total.getVerifiedBreakfast() + balance.getVerifiedBreakfast());
+            total.setVerifiedLunch(total.getVerifiedLunch() + balance.getVerifiedLunch());
+            total.setVerifiedDinner(total.getVerifiedDinner() + balance.getVerifiedDinner());
+            total.setRemainingBreakfast(total.getRemainingBreakfast() + balance.getRemainingBreakfast());
+            total.setRemainingLunchDinner(total.getRemainingLunchDinner() + balance.getRemainingLunchDinner());
+        }
+        overview.setMealBalance(total);
+        overview.setPackages(orders.getItems().stream().map(this::toPackage).collect(Collectors.toList()));
+    }
+
+    /**
+     * 将订单上的父子套餐关系转为客户概览可展示的非金额套餐摘要。
+     *
+     * @param order Agent 订单摘要
+     * @return 客户签约套餐摘要
+     */
+    private AgentCustomerPackageDto toPackage(AgentOrderSummaryDto order) {
+        AgentCustomerPackageDto dto = new AgentCustomerPackageDto();
+        dto.setOrderId(order.getOrderId());
+        dto.setParentPackageId(order.getParentPackageId());
+        dto.setParentPackageName(order.getParentPackageName());
+        dto.setChildPackageId(order.getChildPackageId());
+        dto.setChildPackageName(order.getChildPackageName());
+        dto.setActive(Integer.valueOf(1).equals(order.getStatusCode()));
+        return dto;
+    }
+
+    private List<AgentCustomerAddressDto> loadAddresses(Long customerId) {
+        return customerProfileAddressMapper.selectList(new LambdaQueryWrapper<CustomerProfileAddress>()
+                        .eq(CustomerProfileAddress::getCustomerId, customerId)
+                        .orderByAsc(CustomerProfileAddress::getId))
+                .stream().map(this::address).collect(Collectors.toList());
+    }
+
+    private AgentCustomerCandidateDto candidate(CustomerProfile profile) {
+        AgentCustomerCandidateDto dto = new AgentCustomerCandidateDto();
+        dto.setCustomerId(profile.getId());
+        dto.setCustomerCode(profile.getCustomerCode());
+        dto.setCustomerName(profile.getCustomerName());
+        dto.setMaskedPhone(maskPhone(profile.getPhone()));
+        return dto;
+    }
+
+    private AgentCustomerAddressDto address(CustomerProfileAddress source) {
+        AgentCustomerAddressDto dto = new AgentCustomerAddressDto();
+        dto.setAddressTypeCode(source.getAddressType());
+        dto.setAddressTypeName(addressTypeName(source.getAddressType()));
+        dto.setMaskedAddress(maskAddress(source.getAddressDetail()));
+        dto.setMaskedContactName(maskName(source.getContactName()));
+        dto.setMaskedContactPhone(maskPhone(source.getContactPhone()));
+        return dto;
+    }
+
+    private String maskPhone(String value) {
+        if (!hasText(value)) return null;
+        String text = value.trim();
+        return text.length() <= 4 ? "****" : text.substring(0, Math.min(3, text.length())) + "****" + text.substring(text.length() - 4);
+    }
+
+    private String maskAddress(String value) {
+        if (!hasText(value)) return null;
+        String text = value.trim();
+        return text.length() <= 6 ? "***" : text.substring(0, Math.min(6, text.length())) + "***";
+    }
+
+    private String maskName(String value) {
+        if (!hasText(value)) return null;
+        String text = value.trim();
+        return text.length() == 1 ? "*" : text.substring(0, 1) + "*";
+    }
+
+    private String truncate(String value) {
+        if (!hasText(value)) return null;
+        String text = value.trim();
+        return text.length() <= MAX_SPECIAL_REQUIREMENT_LENGTH ? text : text.substring(0, MAX_SPECIAL_REQUIREMENT_LENGTH) + "…";
+    }
+
+    private boolean hasText(String value) { return value != null && !value.trim().isEmpty(); }
+    private String addressTypeName(String code) {
+        if ("DEFAULT".equals(code)) return "默认地址";
+        if ("WORKDAY".equals(code)) return "工作日地址";
+        if ("WEEKEND".equals(code)) return "周末地址";
+        return "其他地址";
+    }
+}

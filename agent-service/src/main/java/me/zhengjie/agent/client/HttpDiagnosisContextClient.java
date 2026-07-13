@@ -3,6 +3,7 @@ package me.zhengjie.agent.client;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.domain.dto.DiagnosisContextDto;
 import me.zhengjie.agent.domain.dto.DiagnosisRequest;
+import me.zhengjie.agent.security.AgentAccessContextHolder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
@@ -56,6 +57,7 @@ public class HttpDiagnosisContextClient implements DiagnosisContextClient {
             .contentType(MediaType.APPLICATION_JSON)
             .header("X-Request-Id", requestId())
             .header(INTERNAL_TOKEN_HEADER, internalToken)
+            .headers(headers -> appendAccessContext(headers))
             .body(request)
             .retrieve()
             .body(new ParameterizedTypeReference<Map<String, Object>>() {});
@@ -73,5 +75,12 @@ public class HttpDiagnosisContextClient implements DiagnosisContextClient {
     private String requestId() {
         String requestId = MDC.get(REQUEST_ID_KEY);
         return requestId == null ? "" : requestId;
+    }
+
+    private void appendAccessContext(org.springframework.http.HttpHeaders headers) {
+        String accessContext = AgentAccessContextHolder.accessContext();
+        String sessionId = AgentAccessContextHolder.sessionId();
+        if (accessContext != null) headers.set("X-Agent-Access-Context", accessContext);
+        if (sessionId != null) headers.set("X-Agent-Session-Id", sessionId);
     }
 }

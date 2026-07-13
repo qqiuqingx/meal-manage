@@ -20,7 +20,22 @@ public class AgentChatSessionSummaryDto {
 
     private String customerCode;
 
+    /** 当前会话订单 ID，供客服快速识别订单焦点。 */
+    private Long orderId;
+
+    /** 当前会话订单编号，供客服快速识别订单焦点。 */
+    private String orderCode;
+
+    /** 当前会话排餐客户记录 ID。 */
+    private Long mealPlanRecordId;
+
     private String recordDate;
+
+    /** 当前会话受控查询起始日期。 */
+    private String queryStartDate;
+
+    /** 当前会话受控查询结束日期。 */
+    private String queryEndDate;
 
     private String mealType;
 
@@ -78,12 +93,48 @@ public class AgentChatSessionSummaryDto {
         this.customerCode = customerCode;
     }
 
+    /** 返回当前会话聚焦的订单 ID。 */
+    public Long getOrderId() {
+        return orderId;
+    }
+
+    /** 设置当前会话聚焦的订单 ID。 */
+    public void setOrderId(Long orderId) {
+        this.orderId = orderId;
+    }
+
+    /** 返回当前会话聚焦的订单编号。 */
+    public String getOrderCode() {
+        return orderCode;
+    }
+
+    /** 设置当前会话聚焦的订单编号。 */
+    public void setOrderCode(String orderCode) {
+        this.orderCode = orderCode;
+    }
+
     public String getRecordDate() {
         return recordDate;
     }
 
     public void setRecordDate(String recordDate) {
         this.recordDate = recordDate;
+    }
+
+    public String getQueryStartDate() {
+        return queryStartDate;
+    }
+
+    public void setQueryStartDate(String queryStartDate) {
+        this.queryStartDate = queryStartDate;
+    }
+
+    public String getQueryEndDate() {
+        return queryEndDate;
+    }
+
+    public void setQueryEndDate(String queryEndDate) {
+        this.queryEndDate = queryEndDate;
     }
 
     public String getMealType() {

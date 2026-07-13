@@ -62,4 +62,15 @@
         ORDER BY r.operate_time DESC, r.id DESC
     </select>
 
+    <!-- 按订单统计退餐记录；退餐日志表当前没有软删除字段。 -->
+    <select id="countByOrderIds" resultType="me.zhengjie.modules.meal.domain.dto.OrderAssociatedRecordCountDto">
+        select order_id as orderId, count(*) as recordCount
+        from meal_refund_log
+        where order_id in
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+        group by order_id
+    </select>
+
 </mapper>

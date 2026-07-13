@@ -8,6 +8,9 @@ import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentOperationStatsDto;
 import me.zhengjie.modules.agent.domain.dto.AgentOperationStatsQuery;
 import me.zhengjie.modules.agent.service.AgentOperationStatsService;
+import me.zhengjie.modules.agent.security.AgentAccessContext;
+import me.zhengjie.modules.agent.security.AgentAccessContextService;
+import me.zhengjie.modules.agent.security.AgentQueryPermissionService;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,7 +36,7 @@ class AgentDiagnosisFacadeServiceImplTest {
                 return new AgentChatResponse();
             }
         };
-        AgentDiagnosisFacadeServiceImpl service = new AgentDiagnosisFacadeServiceImpl(client, noopStatsService());
+        AgentDiagnosisFacadeServiceImpl service = service(client);
 
         AgentDiagnosisRequest request = new AgentDiagnosisRequest();
         request.setCustomerId(1001L);
@@ -68,7 +71,7 @@ class AgentDiagnosisFacadeServiceImplTest {
                 return response;
             }
         };
-        AgentDiagnosisFacadeServiceImpl service = new AgentDiagnosisFacadeServiceImpl(client, noopStatsService());
+        AgentDiagnosisFacadeServiceImpl service = service(client);
 
         AgentChatRequest request = new AgentChatRequest();
         request.setMessage("查客户 C10001 今天");
@@ -93,5 +96,18 @@ class AgentDiagnosisFacadeServiceImplTest {
                 return new AgentOperationStatsDto();
             }
         };
+    }
+
+    /** 创建只用于客户端委派测试的 Facade，避免依赖登录态。 */
+    private AgentDiagnosisFacadeServiceImpl service(AgentServiceClient client) {
+        AgentAccessContextService contextService = new AgentAccessContextService() {
+            @Override public String issue(String sessionId, String requestId) { return "token"; }
+            @Override public AgentAccessContext verify(String token, String sessionId, String requestId) { return new AgentAccessContext(); }
+        };
+        AgentQueryPermissionService permissionService = new AgentQueryPermissionService() {
+            @Override public void require(AgentAccessContext context, String... requiredPermissions) { }
+            @Override public java.util.List<String> availableToolNames(AgentAccessContext context) { return java.util.List.of(); }
+        };
+        return new AgentDiagnosisFacadeServiceImpl(client, noopStatsService(), contextService, permissionService);
     }
 }

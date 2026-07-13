@@ -88,7 +88,14 @@ public class HybridMealPlanChatExtractor implements MealPlanChatExtractor {
             selected = rule;
         }
         if (selected != null && selected.getIntent() != null) {
-            slots.setIntent(selected.getIntent());
+            ChatIntent selectedIntent = selected.getIntent();
+            if (isLegacyBusinessIntent(selectedIntent)) {
+                // 旧意图只作为兼容路由线索，对外统一进入业务查询顶层入口。
+                slots.setRuleIntent(selectedIntent.name());
+                slots.setIntent(ChatIntent.BUSINESS_QUERY);
+            } else {
+                slots.setIntent(selectedIntent);
+            }
             slots.setIntentConfidence(selected.getConfidence());
             slots.setIntentReason(selected.getReason());
         }
@@ -105,5 +112,23 @@ public class HybridMealPlanChatExtractor implements MealPlanChatExtractor {
 
     private boolean usable(IntentClassificationResult result) {
         return result != null && result.getIntent() != null && result.getConfidence() >= 0.8;
+    }
+
+    /** 判断旧版细粒度意图是否应归入顶层只读业务查询入口。 */
+    private boolean isLegacyBusinessIntent(ChatIntent intent) {
+        return intent == ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY
+            || intent == ChatIntent.CUSTOMER_VERIFICATION_QUERY
+            || intent == ChatIntent.CUSTOMER_ORDER_QUERY
+            || intent == ChatIntent.CUSTOMER_REFUND_QUERY
+            || intent == ChatIntent.CUSTOMER_PACKAGE_QUERY
+            || intent == ChatIntent.MEAL_PLAN_QUERY
+            || intent == ChatIntent.SCHEDULED_MENU_QUERY
+            || intent == ChatIntent.MEAL_PLAN_UNVERIFIED_QUERY
+            || intent == ChatIntent.MEAL_BALANCE_NO_PLAN_QUERY
+            || intent == ChatIntent.MEAL_BALANCE_CHANGE_QUERY
+            || intent == ChatIntent.DISH_INGREDIENT_QUERY
+            || intent == ChatIntent.DISH_CANDIDATE_QUERY
+            || intent == ChatIntent.BUSINESS_RULE_QUERY
+            || intent == ChatIntent.OPERATION_STATISTICS_QUERY;
     }
 }

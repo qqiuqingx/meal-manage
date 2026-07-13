@@ -53,7 +53,9 @@ public class MealPlanDiagnosisServiceImpl implements MealPlanDiagnosisService {
             System.currentTimeMillis() - start);
         log.info("诊断阶段 stage=进入规则编排 requestId={} customerId={} recordDate={} mealType={}",
             MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType());
-        DiagnosisResponse response = actionDraftService.applyActionDrafts(orchestrator.orchestrate(context));
+        DiagnosisResponse response = orchestrator.orchestrate(context);
+        // 智能客服本期严格只读：诊断仅提供证据与人工核对建议，不生成可确认或可执行的动作草稿。
+        response.setActionDrafts(java.util.List.of());
         response.setRequestId(MDC.get(REQUEST_ID_KEY));
         log.info("诊断阶段 stage=结果就绪 requestId={} customerId={} recordDate={} mealType={} fallback={} modelName={} reasonCount={}",
             response.getRequestId(), response.getCustomerId(), response.getRecordDate(), response.getMealType(),

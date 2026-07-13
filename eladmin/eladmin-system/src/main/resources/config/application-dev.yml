@@ -167,3 +167,8 @@ agent:
     retry-times: 1
     retry-backoff-ms: 300
   internal-token: ${AGENT_INTERNAL_TOKEN:}
+  access-context-secret: ${AGENT_ACCESS_CONTEXT_SECRET:}
+  access-context-ttl-seconds: ${AGENT_ACCESS_CONTEXT_TTL_SECONDS:120}
+  audit:
+    retention-days: ${AGENT_AUDIT_RETENTION_DAYS:180}
+    retention-cron: ${AGENT_AUDIT_RETENTION_CRON:0 15 3 * * ?}

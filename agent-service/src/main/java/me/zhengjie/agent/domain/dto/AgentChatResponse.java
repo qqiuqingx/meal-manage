@@ -7,6 +7,8 @@ import java.util.Map;
 
 import me.zhengjie.agent.domain.chat.MissingSlot;
 import me.zhengjie.agent.domain.chat.ChatStatus;
+import me.zhengjie.agent.query.domain.AgentQueryFact;
+import me.zhengjie.agent.query.domain.AgentQueryPlan;
 
 /**
  * 智能排查聊天响应。
@@ -27,6 +29,12 @@ public class AgentChatResponse {
     // 客户信息查询响应
     private String responseType;
     private Map<String, Object> insightResult = new LinkedHashMap<>();
+    private List<AgentQueryFact> facts = new ArrayList<>();
+    private List<String> warnings = new ArrayList<>();
+    private boolean cached;
+    private boolean partial;
+    private String queriedAt;
+    private AgentQueryPlan queryPlan;
 
     public String getResponseType() {
         return responseType;
@@ -43,6 +51,18 @@ public class AgentChatResponse {
     public void setInsightResult(Map<String, Object> insightResult) {
         this.insightResult = insightResult;
     }
+    public List<AgentQueryFact> getFacts() { return facts; }
+    public void setFacts(List<AgentQueryFact> facts) { this.facts = facts; }
+    public List<String> getWarnings() { return warnings; }
+    public void setWarnings(List<String> warnings) { this.warnings = warnings; }
+    public boolean isCached() { return cached; }
+    public void setCached(boolean cached) { this.cached = cached; }
+    public boolean isPartial() { return partial; }
+    public void setPartial(boolean partial) { this.partial = partial; }
+    public String getQueriedAt() { return queriedAt; }
+    public void setQueriedAt(String queriedAt) { this.queriedAt = queriedAt; }
+    public AgentQueryPlan getQueryPlan() { return queryPlan; }
+    public void setQueryPlan(AgentQueryPlan queryPlan) { this.queryPlan = queryPlan; }
 
     public String getRequestId() {
         return requestId;

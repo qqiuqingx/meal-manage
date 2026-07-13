@@ -10,6 +10,7 @@ import me.zhengjie.agent.domain.dto.LlmConnectivityRequest;
 import me.zhengjie.agent.domain.dto.LlmConnectivityResponse;
 import me.zhengjie.agent.service.LlmConnectivityService;
 import me.zhengjie.agent.service.MealPlanDiagnosisService;
+import me.zhengjie.agent.security.AgentAccessContextHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -88,6 +89,7 @@ public class MealPlanDiagnosisController {
      */
     @PostMapping("/chat")
     public AgentChatResponse chat(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
+                                  @RequestHeader(value = "X-Agent-Access-Context", required = false) String accessContext,
                                   @Valid @RequestBody AgentChatRequest request) {
         String traceId = resolveRequestId(requestId);
         MDC.put(REQUEST_ID_KEY, traceId);
@@ -95,6 +97,8 @@ public class MealPlanDiagnosisController {
         MDC.put(STAGE_KEY, "CHAT_CONTROLLER_RECEIVED");
         long start = System.currentTimeMillis();
         try {
+            AgentAccessContextHolder.bind(accessContext, request.getSessionId());
+            AgentAccessContextHolder.bindAvailableTools(request.getAvailableTools());
             log.info("聊天诊断阶段 stage=接收请求 requestId={} sessionId={}", traceId, request.getSessionId());
             AgentChatResponse response = chatService.chat(request);
             response.setRequestId(traceId);
@@ -111,6 +115,7 @@ public class MealPlanDiagnosisController {
                 traceId, request.getSessionId(), System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             throw ex;
         } finally {
+            AgentAccessContextHolder.clear();
             clearDiagnosticMdc();
         }
     }

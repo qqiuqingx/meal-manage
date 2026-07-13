@@ -1,0 +1,52 @@
+[
+  {
+    "ruleId": "ORDER_MEAL_BALANCE",
+    "topics": ["MEAL_BALANCE", "剩余餐数"],
+    "version": "1.0",
+    "title": "剩余餐数计算",
+    "content": "剩余早餐数 = 订单早餐数 - 未删除 BREAKFAST 核销数；剩余午晚餐数 = 订单午晚餐数 - 未删除 LUNCH 核销数 - 未删除 DINNER 核销数。午餐和晚餐共用午晚餐池，两个剩余值最小为 0。客户维度汇总所有进行中订单，排餐创建或删除不消耗餐数。",
+    "ownerModule": "customer-order / meal-verification",
+    "evidenceDocument": "doc/business/订单管理业务说明.md",
+    "updatedAt": "2026-07-13T00:00:00+08:00"
+  },
+  {
+    "ruleId": "ORDER_EFFECTIVE",
+    "topics": ["ORDER_EFFECTIVE", "订单有效性"],
+    "version": "1.0",
+    "title": "订单有效性",
+    "content": "状态为进行中的订单参与当前餐数与排餐候选判断；排餐时还需满足订单有效期、开始餐次、餐次类型、排餐模式和客户排除日期等条件。",
+    "ownerModule": "customer-order / meal-plan",
+    "evidenceDocument": "doc/business/订单管理业务说明.md",
+    "updatedAt": "2026-07-13T00:00:00+08:00"
+  },
+  {
+    "ruleId": "MEAL_PLAN_MATCH",
+    "topics": ["MEAL_PLAN_MATCH"],
+    "version": "1.0",
+    "title": "排餐模式与餐次匹配",
+    "content": "排餐候选订单必须处于进行中状态，且目标日期落在有效期内；订单开始餐次、餐次类型和排餐模式必须覆盖目标餐次。人工新增订单可以绕过排餐模式日期匹配，但仍须满足有效期、开始餐次、餐次类型、客户排除日期和餐数上限校验。",
+    "ownerModule": "meal-plan / customer-order",
+    "evidenceDocument": "doc/business/排餐管理业务说明.md",
+    "updatedAt": "2026-07-13T00:00:00+08:00"
+  },
+  {
+    "ruleId": "DIETARY_FILTER",
+    "topics": ["DIETARY_FILTER"],
+    "version": "1.0",
+    "title": "排除日期、过敏与忌口过滤",
+    "content": "目标日期命中客户排除日期时不参与排餐。候选菜按客户过敏标签和忌口过滤；过敏标签可按配料名、二级分类或一级分类匹配，命中后记录过滤原因。手工换菜优先级最高，已替换菜品不再参与后续过敏过滤。",
+    "ownerModule": "meal-plan / customer-profile",
+    "evidenceDocument": "doc/business/排餐管理业务说明.md",
+    "updatedAt": "2026-07-13T00:00:00+08:00"
+  },
+  {
+    "ruleId": "VERIFICATION_REFUND_EFFECT",
+    "topics": ["VERIFICATION_REFUND_EFFECT"],
+    "version": "1.0",
+    "title": "核销与退餐对餐数的影响",
+    "content": "核销以未删除核销日志为准：BREAKFAST 扣减早餐池，LUNCH 和 DINNER 均扣减午晚餐池。退餐只处理未核销餐，已核销餐不属于退餐范围；客服查询会分别展示订单餐数余额、核销记录和退餐记录，Agent 不自行推算未返回的业务数据。",
+    "ownerModule": "meal-verification / customer-order",
+    "evidenceDocument": "doc/business/核销管理业务说明.md",
+    "updatedAt": "2026-07-13T00:00:00+08:00"
+  }
+]

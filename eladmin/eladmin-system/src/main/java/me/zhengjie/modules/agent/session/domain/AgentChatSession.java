@@ -33,8 +33,23 @@ public class AgentChatSession extends BaseEntity {
     /** 当前会话客户编号。 */
     private String customerCode;
 
+    /** 当前会话订单 ID。 */
+    private Long orderId;
+
+    /** 当前会话订单编号。 */
+    private String orderCode;
+
+    /** 当前会话排餐客户记录 ID。 */
+    private Long mealPlanRecordId;
+
     /** 当前会话排查日期。 */
     private String recordDate;
+
+    /** 当前会话受控查询起始日期。 */
+    private String queryStartDate;
+
+    /** 当前会话受控查询结束日期。 */
+    private String queryEndDate;
 
     /** 当前会话餐次。 */
     private String mealType;
