@@ -7,6 +7,10 @@ import me.zhengjie.agent.query.domain.AgentQueryFact;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeParseException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -15,6 +19,11 @@ import java.util.Map;
 
 /** 组装受控业务查询响应，统一处理事实、话术安全校验、时间和 QueryPlan。 */
 public class BusinessQueryResponseFactory {
+    private static final DateTimeFormatter RECORD_DATE_FORMATTER = new DateTimeFormatterBuilder()
+        .append(DateTimeFormatter.ISO_LOCAL_DATE)
+        .optionalStart().appendLiteral(' ').append(DateTimeFormatter.ISO_LOCAL_TIME).optionalEnd()
+        .optionalStart().appendLiteral('T').append(DateTimeFormatter.ISO_LOCAL_TIME).optionalEnd()
+        .toFormatter();
     private final BusinessQueryPlanner planner = new BusinessQueryPlanner();
     private final BusinessAnswerValidator answerValidator;
     private final BusinessAnswerComposer answerComposer = new BusinessAnswerComposer();
@@ -73,7 +82,7 @@ public class BusinessQueryResponseFactory {
         Map<String, Object> item = firstItem(result);
         if (!matchesId(plan.getEntities().getCustomerId(), firstValue(result, item, "customerId"))) return false;
         if (!matchesId(plan.getEntities().getOrderId(), firstValue(result, item, "orderId"))) return false;
-        if (!matchesText(plan.getFilters().getRecordDate(), firstValue(result, item, "recordDate"))) return false;
+        if (!matchesRecordDate(plan.getFilters().getRecordDate(), firstValue(result, item, "recordDate"))) return false;
         return matchesText(plan.getFilters().getMealType(), firstValue(result, item, "mealTypeCode"));
     }
 
@@ -95,6 +104,28 @@ public class BusinessQueryResponseFactory {
     private boolean matchesText(String expected, Object actual) {
         if (expected == null || actual == null) return true;
         return expected.equalsIgnoreCase(String.valueOf(actual));
+    }
+
+    /**
+     * 按业务日期比较 QueryPlan 与工具结果，兼容主系统将 LocalDate 序列化为零点日期时间的格式。
+     * 无法解析的值继续按原始文本严格比较，避免异常日期绕过结果一致性校验。
+     */
+    private boolean matchesRecordDate(String expected, Object actual) {
+        if (expected == null || actual == null) return true;
+        LocalDate expectedDate = parseRecordDate(expected);
+        LocalDate actualDate = parseRecordDate(String.valueOf(actual));
+        if (expectedDate != null && actualDate != null) return expectedDate.equals(actualDate);
+        return matchesText(expected, actual);
+    }
+
+    /** 将受控日期或日期时间文本解析为业务日期，解析失败时返回 null。 */
+    private LocalDate parseRecordDate(String value) {
+        if (value == null || value.trim().isEmpty()) return null;
+        try {
+            return LocalDate.from(RECORD_DATE_FORMATTER.parse(value.trim()));
+        } catch (DateTimeParseException ignored) {
+            return null;
+        }
     }
 
     /** 构建每个可展示确定性数字的事实引用。 */

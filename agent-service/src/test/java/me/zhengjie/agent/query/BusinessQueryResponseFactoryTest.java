@@ -82,16 +82,31 @@ class BusinessQueryResponseFactoryTest {
     }
 
     @Test
-    void shouldBuildCustomerCodeBoundFactsForActualMealPlanAllergyFiltering() {
+    void shouldAcceptSameBusinessDateWhenMealPlanUsesDateTimeFormat() {
         DiagnosisSlots slots = new DiagnosisSlots(); slots.setRecordDate("2026-07-13"); slots.setMealType("LUNCH");
         var response = factory.create("session-1", slots, Map.of(), "DIAGNOSED", "BUSINESS_QUERY_MEAL_PLAN_ALLERGY",
             Map.of("scannedCount", 1, "items", List.of(Map.of("customerCode", "B3303", "customerMealPlanId", 89231L,
-                "recordDate", "2026-07-13", "mealTypeCode", "LUNCH", "dishes", List.of(Map.of("dishName", "香菇滑鸡",
+                "recordDate", "2026-07-13 00:00:00", "mealTypeCode", "LUNCH", "dishes", List.of(Map.of("dishName", "香菇滑鸡",
                     "allergyFiltered", true, "replaceReason", "ALLERGY", "allergyReasons", List.of("鸡肉"))))), "truncated", false),
             "指定日期和餐次的排餐中，以下客户存在实际过敏过滤：B3303：香菇滑鸡（过敏标签：鸡肉）。本次扫描 1 条排餐记录。", List.of());
 
         assertEquals("B3303", response.getFacts().get(0).getCustomerCode());
         assertEquals("89231", response.getFacts().get(0).getSourceRecordId());
+        assertTrue(response.getWarnings().isEmpty());
+        assertFalse(response.getInsightResult().isEmpty());
         assertTrue(response.getAssistantMessage().contains("F1"));
+    }
+
+    @Test
+    void shouldHideResultWhenReturnedBusinessDateDiffersFromQueryPlan() {
+        DiagnosisSlots slots = new DiagnosisSlots(); slots.setRecordDate("2026-07-13"); slots.setMealType("LUNCH");
+        var response = factory.create("session-1", slots, Map.of(), "DIAGNOSED", "BUSINESS_QUERY_MEAL_PLAN_ALLERGY",
+            Map.of("scannedCount", 1, "items", List.of(Map.of("customerCode", "B3303", "customerMealPlanId", 89231L,
+                "recordDate", "2026-07-14 00:00:00", "mealTypeCode", "LUNCH", "dishes", List.of(Map.of("dishName", "香菇滑鸡",
+                    "allergyFiltered", true, "replaceReason", "ALLERGY", "allergyReasons", List.of("鸡肉"))))), "truncated", false),
+            "指定日期和餐次的排餐中，以下客户存在实际过敏过滤：B3303：香菇滑鸡（过敏标签：鸡肉）。本次扫描 1 条排餐记录。", List.of());
+
+        assertTrue(response.getInsightResult().isEmpty());
+        assertTrue(response.getWarnings().contains("PLAN_RESULT_MISMATCH"));
     }
 }
