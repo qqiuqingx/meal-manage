@@ -11,6 +11,7 @@ public class AgentMealPlanSummaryDto {
     /** 排餐主单 ID。 */ private Long mealPlanId;
     /** 客户排餐记录 ID。 */ private Long customerMealPlanId;
     /** 客户 ID。 */ private Long customerId;
+    /** 客户业务编号，所有客户相关 Agent 证据的稳定识别信息。 */ private String customerCode;
     /** 订单 ID。 */ private Long orderId;
     /** 使用的父套餐 ID。 */ private Long parentPackageId;
     /** 使用的子套餐 ID。 */ private Long childPackageId;

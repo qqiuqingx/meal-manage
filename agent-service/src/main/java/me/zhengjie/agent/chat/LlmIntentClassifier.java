@@ -6,6 +6,8 @@ import me.zhengjie.agent.domain.dto.IntentClassificationResult;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 使用模型完成复杂多轮意图分类。模型只能返回受控意图，不参与诊断和业务查询。
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "agent.ai", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class LlmIntentClassifier implements ChatIntentClassifier {
 
+    private static final Logger log = LoggerFactory.getLogger(LlmIntentClassifier.class);
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
 
@@ -47,6 +50,7 @@ public class LlmIntentClassifier implements ChatIntentClassifier {
             result.setFallbackSuggested(result.getConfidence() < 0.8);
             return result;
         } catch (Exception ex) {
+            log.warn("聊天意图模型分类失败 errorType={} errorMessage={}", ex.getClass().getSimpleName(), ex.getMessage());
             return failed("模型分类失败: " + ex.getClass().getSimpleName());
         }
     }

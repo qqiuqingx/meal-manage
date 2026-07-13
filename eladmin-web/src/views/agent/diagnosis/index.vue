@@ -229,10 +229,11 @@
                   <customer-overview-card v-if="message.responseType === 'BUSINESS_QUERY_CUSTOMER'" :result="message.insightResult" />
                   <customer-candidate-card v-if="message.responseType === 'BUSINESS_QUERY_CUSTOMER_CANDIDATES'" :result="message.insightResult" @select="selectCustomerCandidate" />
                   <business-order-list-card v-if="message.responseType === 'BUSINESS_QUERY_ORDER'" :result="message.insightResult" />
-                  <business-meal-plan-card v-if="message.responseType === 'BUSINESS_QUERY_MEAL_PLAN'" :result="message.insightResult" />
+                  <business-meal-plan-card v-if="message.responseType === 'BUSINESS_QUERY_MEAL_PLAN' || message.responseType === 'BUSINESS_QUERY_MEAL_PLAN_ALLERGY'" :result="message.insightResult" />
                   <business-history-card v-if="message.responseType === 'BUSINESS_QUERY_VERIFICATION'" :result="message.insightResult" type="verification" />
                   <business-history-card v-if="message.responseType === 'BUSINESS_QUERY_REFUND'" :result="message.insightResult" type="refund" />
                   <business-dish-card v-if="message.responseType === 'BUSINESS_QUERY_DISH'" :result="message.insightResult" />
+                  <business-scheduled-menu-card v-if="message.responseType === 'BUSINESS_QUERY_SCHEDULED_MENU'" :result="message.insightResult" />
                   <business-dish-candidate-card v-if="message.responseType === 'BUSINESS_QUERY_DISH_CANDIDATES'" :result="message.insightResult" />
                   <business-rule-card v-if="message.responseType === 'BUSINESS_QUERY_RULE'" :result="message.insightResult" />
                   <business-package-card v-if="message.responseType === 'BUSINESS_QUERY_PACKAGE'" :result="message.insightResult" />
@@ -250,8 +251,11 @@
                     <el-table-column label="值" min-width="140">
                       <template slot-scope="{ row }">{{ row.value }}{{ row.unit || '' }}</template>
                     </el-table-column>
+                    <el-table-column prop="customerCode" label="客户编号" min-width="110">
+                      <template slot-scope="{ row }">{{ row.customerCode || '全局' }}</template>
+                    </el-table-column>
                     <el-table-column prop="sourceType" label="数据来源" min-width="150" />
-                    <el-table-column prop="sourceId" label="对象 ID" min-width="100" />
+                    <el-table-column prop="sourceRecordId" label="源记录" min-width="100" />
                   </el-table>
                   <div v-if="message.queriedAt" class="query-time">查询时间：{{ message.queriedAt }}</div>
                   <div v-if="message.queryPlan && message.queryPlan.domain" class="query-time">查询计划：{{ message.queryPlan.domain }} / {{ message.queryPlan.action }}</div>
@@ -507,6 +511,7 @@ import BusinessOrderListCard from './components/businessOrderListCard'
 import BusinessMealPlanCard from './components/businessMealPlanCard'
 import BusinessHistoryCard from './components/businessHistoryCard'
 import BusinessDishCard from './components/businessDishCard'
+import BusinessScheduledMenuCard from './components/businessScheduledMenuCard'
 import BusinessDishCandidateCard from './components/businessDishCandidateCard'
 import BusinessRuleCard from './components/businessRuleCard'
 import BusinessPackageCard from './components/businessPackageCard'
@@ -536,6 +541,7 @@ export default {
     BusinessMealPlanCard,
     BusinessHistoryCard,
     BusinessDishCard,
+    BusinessScheduledMenuCard,
     BusinessDishCandidateCard,
     BusinessRuleCard,
     BusinessPackageCard,
@@ -788,7 +794,17 @@ export default {
       if (warnings.indexOf('TOOL_CALL_FAILED') >= 0 || warnings.indexOf('BUSINESS_QUERY_CLIENT_UNAVAILABLE') >= 0) {
         return '部分业务查询暂不可用，当前结果不构成完整结论。'
       }
+      if (warnings.indexOf('MENU_RESULT_IMPLAUSIBLE') >= 0) {
+        return '查询结果仅包含米饭类型菜品，不能确认这是完整公共菜单；请核对排期配置或改查客户实际排餐。'
+      }
+      if (warnings.indexOf('PLAN_RESULT_MISMATCH') >= 0) {
+        return '返回结果与本轮受控查询条件不一致，系统已阻止将其作为完整结论展示。'
+      }
       if (message.partial) {
+        const result = message.insightResult || {}
+        if (result.scannedCount !== undefined && result.totalCount !== undefined) {
+          return `结果未完整，当前已扫描 ${result.scannedCount} 条记录，共 ${result.totalCount} 条。请缩小查询范围后重试。`
+        }
         return '结果已按安全上限截断，请缩小查询范围后重试。'
       }
       return warnings.join('；')

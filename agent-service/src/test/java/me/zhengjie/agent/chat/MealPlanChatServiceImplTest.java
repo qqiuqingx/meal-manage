@@ -1,5 +1,9 @@
 package me.zhengjie.agent.chat;
 
+import me.zhengjie.agent.analysis.BusinessQuestionAnalyzer;
+import me.zhengjie.agent.analysis.domain.BusinessQuestionAnalysis;
+import me.zhengjie.agent.analysis.domain.BusinessQueryTarget;
+import me.zhengjie.agent.analysis.domain.MealScope;
 import me.zhengjie.agent.chat.impl.MealPlanFollowUpServiceImpl;
 import me.zhengjie.agent.domain.chat.ChatIntent;
 import me.zhengjie.agent.domain.chat.ChatStatus;
@@ -18,6 +22,9 @@ import me.zhengjie.agent.query.client.dto.DishCandidatePreviewResponse;
 import me.zhengjie.agent.query.AgentQueryPlanValidationError;
 import me.zhengjie.agent.query.AgentQueryPlanValidationResult;
 import me.zhengjie.agent.query.AgentQueryPlanValidator;
+import me.zhengjie.agent.query.BusinessAnswerValidator;
+import me.zhengjie.agent.query.BusinessQueryPlanningService;
+import me.zhengjie.agent.query.domain.AgentQueryDomain;
 import me.zhengjie.agent.service.MealPlanDiagnosisService;
 import org.junit.jupiter.api.Test;
 
@@ -456,6 +463,7 @@ class MealPlanChatServiceImplTest {
         StubExtractor extractor = new StubExtractor(result(ChatIntent.SCHEDULED_MENU_QUERY,
             slots(null, null, "2026-05-22", null), List.of()));
         AtomicReference<String> capturedDate = new AtomicReference<>();
+        AtomicReference<List<String>> capturedMealTypes = new AtomicReference<>();
         BusinessQueryDataClient client = new BusinessQueryDataClient() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
@@ -466,10 +474,13 @@ class MealPlanChatServiceImplTest {
             @Override public Map<String, Object> listMealPlans(Long customerId, String recordDate, String mealType) { return Map.of(); }
             @Override public Map<String, Object> explainRule(String topic) { return Map.of(); }
             @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
-            @Override public Map<String, Object> listScheduledDishes(String recordDate, String mealType) {
+            @Override public Map<String, Object> listScheduledDishes(String recordDate, List<String> mealTypes) {
                 capturedDate.set(recordDate);
-                assertNull(mealType);
-                return Map.of("items", List.of(Map.of("dishName", "番茄炒蛋")));
+                capturedMealTypes.set(mealTypes);
+                return Map.of("recordDate", recordDate, "total", 1, "groups", List.of(
+                    Map.of("mealTypeCode", "LUNCH", "mealTypeName", "午餐", "total", 1,
+                        "items", List.of(Map.of("dishName", "番茄炒蛋"))),
+                    Map.of("mealTypeCode", "DINNER", "mealTypeName", "晚餐", "total", 0, "items", List.of())));
             }
         };
         MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store, extractor, request -> new DiagnosisResponse(),
@@ -480,8 +491,92 @@ class MealPlanChatServiceImplTest {
         assertEquals(ChatStatus.ANSWERED, response.getStatus());
         assertEquals("BUSINESS_QUERY_SCHEDULED_MENU", response.getResponseType());
         assertEquals("2026-05-22", capturedDate.get());
+        assertEquals(List.of("LUNCH", "DINNER"), capturedMealTypes.get());
         assertEquals(List.of(), response.getMissingSlots());
         assertTrue(response.getAssistantMessage().contains("番茄炒蛋"));
+        assertEquals("排期菜品数", response.getFacts().get(0).getLabel());
+        assertEquals("SCHEDULED_DISH_LIST", response.getFacts().get(0).getSourceType());
+    }
+
+    @Test
+    void shouldNotRepeatAnUnchangedScheduledMenuPlanDuringCorrection() {
+        InMemoryMealPlanChatSessionStore store = store();
+        StubExtractor extractor = new StubExtractor(
+            result(ChatIntent.BUSINESS_QUERY, slots(null, null, "2026-07-13", null), List.of()),
+            result(ChatIntent.BUSINESS_QUERY, slots(null, null, "2026-07-13", null), List.of())
+        );
+        AtomicInteger calls = new AtomicInteger();
+        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+            @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
+            @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
+            @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
+            @Override public Map<String, Object> orderDetail(Long orderId, String orderCode, Long customerId) { return Map.of(); }
+            @Override public Map<String, Object> listVerifications(Long customerId, Long orderId, String mealType, int limit) { return Map.of(); }
+            @Override public Map<String, Object> listRefunds(Long customerId, Long orderId, int limit) { return Map.of(); }
+            @Override public Map<String, Object> listMealPlans(Long customerId, String recordDate, String mealType) { return Map.of(); }
+            @Override public Map<String, Object> explainRule(String topic) { return Map.of(); }
+            @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
+            @Override public Map<String, Object> listScheduledDishes(String recordDate, List<String> mealTypes) {
+                calls.incrementAndGet();
+                return Map.of("recordDate", recordDate, "total", 1, "groups", List.of(
+                    Map.of("mealTypeCode", "LUNCH", "mealTypeName", "午餐", "total", 1,
+                        "items", List.of(Map.of("dishName", "番茄炒蛋", "dishTypeCode", "MAIN"))),
+                    Map.of("mealTypeCode", "DINNER", "mealTypeName", "晚餐", "total", 0, "items", List.of())));
+            }
+        };
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store, extractor, request -> new DiagnosisResponse(),
+            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+
+        AgentChatResponse first = service.chat(request("session-menu-correction", "今天菜单"));
+        AgentChatResponse correction = service.chat(request("session-menu-correction", "怎么全是米饭"));
+
+        assertEquals(ChatStatus.ANSWERED, first.getStatus());
+        assertEquals(1, calls.get());
+        assertEquals(ChatStatus.NEED_MORE_INFO, correction.getStatus());
+        assertEquals("BUSINESS_QUERY_CORRECTION_CLARIFICATION", correction.getResponseType());
+        assertTrue(correction.getAssistantMessage().contains("相同的日期和餐次口径"));
+    }
+
+    @Test
+    void shouldReplanLegacySingleMenuContextWhenUserReportsRiceOnlyResult() {
+        InMemoryMealPlanChatSessionStore store = store();
+        StubExtractor extractor = new StubExtractor(
+            result(ChatIntent.SCHEDULED_MENU_QUERY, slots(null, null, "2026-07-13", null), List.of()),
+            result(ChatIntent.BUSINESS_QUERY, slots(null, null, "2026-07-13", null), List.of())
+        );
+        AtomicInteger calls = new AtomicInteger();
+        BusinessQueryDataClient client = scheduledMenuClient(calls);
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store, extractor, request -> new DiagnosisResponse(),
+            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+
+        service.chat(request("session-menu-replan", "今天菜单"));
+        AgentChatResponse correction = service.chat(request("session-menu-replan", "菜单查得不对，怎么全是米饭"));
+
+        assertEquals(2, calls.get());
+        assertEquals(ChatStatus.ANSWERED, correction.getStatus());
+        assertTrue(correction.getAssistantMessage().contains("已重新规划查询口径"));
+    }
+
+    /** 构造返回午餐、晚餐分组的公共菜单客户端，避免测试依赖主系统网络服务。 */
+    private BusinessQueryDataClient scheduledMenuClient(AtomicInteger calls) {
+        return new BusinessQueryDataClient() {
+            @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
+            @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
+            @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
+            @Override public Map<String, Object> orderDetail(Long orderId, String orderCode, Long customerId) { return Map.of(); }
+            @Override public Map<String, Object> listVerifications(Long customerId, Long orderId, String mealType, int limit) { return Map.of(); }
+            @Override public Map<String, Object> listRefunds(Long customerId, Long orderId, int limit) { return Map.of(); }
+            @Override public Map<String, Object> listMealPlans(Long customerId, String recordDate, String mealType) { return Map.of(); }
+            @Override public Map<String, Object> explainRule(String topic) { return Map.of(); }
+            @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
+            @Override public Map<String, Object> listScheduledDishes(String recordDate, List<String> mealTypes) {
+                calls.incrementAndGet();
+                return Map.of("recordDate", recordDate, "total", 1, "groups", List.of(
+                    Map.of("mealTypeCode", "LUNCH", "mealTypeName", "午餐", "total", 1,
+                        "items", List.of(Map.of("dishName", "番茄炒蛋", "dishTypeCode", "MAIN"))),
+                    Map.of("mealTypeCode", "DINNER", "mealTypeName", "晚餐", "total", 0, "items", List.of())));
+            }
+        };
     }
 
     @Test
@@ -709,6 +804,96 @@ class MealPlanChatServiceImplTest {
     }
 
     @Test
+    void shouldPreserveLlmClarificationInsteadOfGenericBusinessFallback() {
+        InMemoryMealPlanChatSessionStore store = store();
+        StubExtractor extractor = new StubExtractor(result(ChatIntent.BUSINESS_QUERY,
+            slots(null, null, "2026-07-13", null), List.of()));
+        BusinessQuestionAnalysis analysis = allergyAnalysis(MealScope.ALL_AVAILABLE);
+        analysis.setRequiresClarification(true);
+        analysis.setClarificationQuestion("请确认你要查看全天排餐，还是指定某个餐次。");
+        BusinessQuestionAnalyzer analyzer = (question, context) -> analysis;
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store, extractor, request -> new DiagnosisResponse(),
+            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), null, new AgentQueryPlanValidator(),
+            new BusinessAnswerValidator(), analyzer, new BusinessQueryPlanningService());
+
+        AgentChatResponse response = service.chat(request("session-1", "今天排餐的客户 对哪些菜过敏"));
+
+        assertEquals(ChatStatus.NEED_MORE_INFO, response.getStatus());
+        assertEquals("请确认你要查看全天排餐，还是指定某个餐次。", response.getAssistantMessage());
+    }
+
+    @Test
+    void shouldExecuteAllMealPlanRangeChosenByLlmSemanticAnalysis() {
+        InMemoryMealPlanChatSessionStore store = store();
+        StubExtractor extractor = new StubExtractor(result(ChatIntent.BUSINESS_QUERY,
+            slots(null, null, "2026-07-13", null), List.of()));
+        BusinessQuestionAnalyzer analyzer = (question, context) -> allergyAnalysis(MealScope.ALL_AVAILABLE);
+        AtomicReference<String> capturedMealType = new AtomicReference<>("NOT_CALLED");
+        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+            @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
+            @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
+            @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
+            @Override public Map<String, Object> orderDetail(Long orderId, String orderCode, Long customerId) { return Map.of(); }
+            @Override public Map<String, Object> listVerifications(Long customerId, Long orderId, String mealType, int limit) { return Map.of(); }
+            @Override public Map<String, Object> listRefunds(Long customerId, Long orderId, int limit) { return Map.of(); }
+            @Override public Map<String, Object> listMealPlans(Long customerId, String recordDate, String mealType) {
+                capturedMealType.set(mealType);
+                return Map.of("total", 1, "page", 1, "size", 50, "truncated", false, "items", List.of(
+                    Map.of("customerMealPlanId", 10L, "customerCode", "B3303", "recordDate", recordDate,
+                        "mealTypeCode", "LUNCH", "dishes", List.of(Map.of("dishName", "香菇滑鸡",
+                            "replaceReason", "ALLERGY", "allergyFiltered", true, "allergyReasons", List.of("鸡肉"))))));
+            }
+            @Override public Map<String, Object> explainRule(String topic) { return Map.of(); }
+            @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
+        };
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store, extractor, request -> new DiagnosisResponse(),
+            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client, new AgentQueryPlanValidator(),
+            new BusinessAnswerValidator(), analyzer, new BusinessQueryPlanningService());
+
+        AgentChatResponse response = service.chat(request("session-1", "今天排餐的客户 对哪些菜过敏"));
+
+        assertEquals(ChatStatus.ANSWERED, response.getStatus());
+        assertEquals("BUSINESS_QUERY_MEAL_PLAN_ALLERGY", response.getResponseType());
+        assertNull(capturedMealType.get());
+        assertTrue(response.getAssistantMessage().contains("B3303"));
+        assertTrue(response.getAssistantMessage().contains("香菇滑鸡"));
+    }
+
+    @Test
+    void shouldExecuteCustomerMealPlanDiagnosisChosenByLlmSemanticAnalysis() {
+        InMemoryMealPlanChatSessionStore store = store();
+        StubExtractor extractor = new StubExtractor(result(ChatIntent.BUSINESS_QUERY,
+            slots(null, "B3303", "2026-07-13", "LUNCH"), List.of()));
+        BusinessQuestionAnalysis analysis = new BusinessQuestionAnalysis();
+        analysis.setSource("LLM"); analysis.setConfidence(0.96D);
+        analysis.setQueryTarget(BusinessQueryTarget.MEAL_PLAN_DIAGNOSIS);
+        analysis.setDomains(List.of(AgentQueryDomain.MEAL_PLAN));
+        analysis.getEntities().setCustomerCode("B3303");
+        analysis.getFilters().setRecordDate("2026-07-13"); analysis.getFilters().setMealType("LUNCH");
+        BusinessQuestionAnalyzer analyzer = (question, context) -> analysis;
+        AtomicReference<DiagnosisRequest> captured = new AtomicReference<>();
+        MealPlanDiagnosisService diagnosisService = request -> {
+            captured.set(request);
+            DiagnosisResponse result = new DiagnosisResponse();
+            result.setSummary("客户订单未覆盖目标日期");
+            result.setReasons(List.of(new DiagnosisReasonDto()));
+            return result;
+        };
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store, extractor, diagnosisService,
+            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), null, new AgentQueryPlanValidator(),
+            new BusinessAnswerValidator(), analyzer, new BusinessQueryPlanningService());
+
+        AgentChatResponse response = service.chat(request("session-1", "B3303 今天午餐为什么没排上"));
+
+        assertEquals(ChatStatus.ANSWERED, response.getStatus());
+        assertEquals("MEAL_PLAN_DIAGNOSIS", response.getResponseType());
+        assertEquals("B3303", captured.get().getCustomerCode());
+        assertEquals("2026-07-13", captured.get().getRecordDate());
+        assertEquals("LUNCH", captured.get().getMealType());
+        assertNotNull(response.getDiagnosisResult());
+    }
+
+    @Test
     void shouldReturnControlledPartialResponseForInvalidQueryPlanBeforeCallingBusinessClient() {
         InMemoryMealPlanChatSessionStore store = store();
         StubExtractor extractor = new StubExtractor(result(ChatIntent.CUSTOMER_ORDER_QUERY,
@@ -864,6 +1049,20 @@ class MealPlanChatServiceImplTest {
         slots.setRecordDate(recordDate);
         slots.setMealType(mealType);
         return slots;
+    }
+
+    private BusinessQuestionAnalysis allergyAnalysis(MealScope mealScope) {
+        BusinessQuestionAnalysis analysis = new BusinessQuestionAnalysis();
+        analysis.setSource("LLM"); analysis.setConfidence(0.95D);
+        analysis.setQueryTarget(BusinessQueryTarget.MEAL_PLAN_ALLERGY_ANALYSIS);
+        analysis.setMealScope(mealScope);
+        analysis.setDomains(List.of(AgentQueryDomain.MEAL_PLAN, AgentQueryDomain.CUSTOMER, AgentQueryDomain.DISH));
+        analysis.getFilters().setRecordDate("2026-07-13");
+        analysis.setSubjects(List.of("MEAL_PLAN", "CUSTOMER", "DISH"));
+        analysis.setRelations(List.of("MEAL_PLAN_CUSTOMER", "MEAL_PLAN_DISH"));
+        analysis.setRequestedFacts(List.of("CUSTOMER_CODE", "DISH_NAME", "ALLERGY_FILTERED", "ALLERGY_REASONS"));
+        analysis.setOperation("FILTER_AND_GROUP"); analysis.setGroupBy(List.of("CUSTOMER_CODE"));
+        return analysis;
     }
 
     private static class StubExtractor implements MealPlanChatExtractor {

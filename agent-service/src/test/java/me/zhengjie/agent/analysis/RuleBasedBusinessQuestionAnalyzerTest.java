@@ -4,6 +4,11 @@ import me.zhengjie.agent.analysis.domain.BusinessQuestionAnalysis;
 import me.zhengjie.agent.query.domain.AgentQueryDomain;
 import me.zhengjie.agent.query.domain.AgentQueryDimension;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
+import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
+import me.zhengjie.agent.analysis.domain.BusinessQueryTarget;
+import me.zhengjie.agent.analysis.domain.BusinessInteractionMode;
+import me.zhengjie.agent.analysis.domain.MealScope;
+import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -58,4 +63,28 @@ class RuleBasedBusinessQuestionAnalyzerTest {
         assertTrue(result.isRequiresClarification());
         assertEquals("dimensions", result.getAmbiguities().get(0).getField());
     }
+
+    @Test
+    void shouldUseAllAvailableScopeForPublicMenuWithoutMealType() {
+        DiagnosisSlots slots = new DiagnosisSlots(); slots.setRecordDate("2026-07-13");
+
+        BusinessQuestionAnalysis result = analyzer.analyze("今天的菜单是什么", slots);
+
+        assertEquals(BusinessQueryTarget.SCHEDULED_MENU, result.getQueryTarget());
+        assertEquals(MealScope.ALL_AVAILABLE, result.getMealScope());
+        assertEquals(AgentQueryDomain.DISH, result.getDomains().get(0));
+    }
+
+    @Test
+    void shouldRecognizeRiceOnlyComplaintAsMenuCorrection() {
+        DiagnosisSlots slots = new DiagnosisSlots(); slots.setRecordDate("2026-07-13");
+        LastBusinessQueryContext previous = new LastBusinessQueryContext(); previous.setQueryTarget(BusinessQueryTarget.SCHEDULED_MENU);
+
+        BusinessQuestionAnalysis result = analyzer.analyze("怎么全是米饭", slots, previous);
+
+        assertEquals(BusinessInteractionMode.CORRECTION, result.getInteractionMode());
+        assertTrue(result.getCorrection().isRequiresReplan());
+        assertEquals(List.of("ONLY_RICE_RETURNED"), result.getCorrection().getObservations());
+    }
+
 }

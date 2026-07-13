@@ -1464,7 +1464,6 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
         // 6. 组装结果 - 按 (餐次, 套餐) 分组
         List<DailyCustomerStats.MealPackageGroup> groups = new ArrayList<>();
-        int totalCount = 0;
 
         List<String> sortedKeys = groupCustomerIds.keySet().stream()
                 .sorted((a, b) -> {
@@ -1483,8 +1482,6 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
             Set<Long> customerIdSet = groupCustomerIds.get(key);
             int count = customerIdSet != null ? customerIdSet.size() : 0;
-            totalCount += count;
-
             DailyCustomerStats.MealPackageGroup group = new DailyCustomerStats.MealPackageGroup();
             group.setMealType(mealType);
             group.setMealPackage(mealPackage);
@@ -1527,7 +1524,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             sourceGroups.add(sg);
         }
 
-        stats.setTotalCustomerCount(totalCount);
+        // 总数按客户去重，不能把同一客户的不同餐次或套餐分组合计，避免跨组重复计数。
+        stats.setTotalCustomerCount(customerIds.size());
         stats.setGroups(groups);
         stats.setSourceGroups(sourceGroups);
         return stats;

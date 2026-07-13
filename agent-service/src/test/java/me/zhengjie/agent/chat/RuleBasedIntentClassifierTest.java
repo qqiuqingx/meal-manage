@@ -13,12 +13,13 @@ class RuleBasedIntentClassifierTest {
     private final RuleBasedIntentClassifier classifier = new RuleBasedIntentClassifier();
 
     @Test
-    void shouldClassifyExplicitCustomerQueriesWithHighConfidence() {
+    void shouldKeepExplicitCustomerQueriesAsLowConfidenceBusinessCandidates() {
         IntentClassificationRequest request = request("B2201 核销了多少餐", ChatIntent.CUSTOMER_VERIFICATION_QUERY);
         IntentClassificationResult result = classifier.classify(request);
 
         assertEquals(ChatIntent.CUSTOMER_VERIFICATION_QUERY, result.getIntent());
-        assertTrue(result.getConfidence() >= 0.8);
+        assertTrue(result.getConfidence() <= 0.65);
+        assertTrue(result.isFallbackSuggested());
     }
 
     @Test

@@ -200,6 +200,39 @@ public class DiagnosisTraceCollector {
     }
 
     /**
+     * 判断本轮是否存在关键工具失败；关键基础数据缺失时即使模型给出结论也不能直接展示。
+     *
+     * @return 关键工具是否调用失败
+     */
+    public boolean hasCriticalToolFailure() {
+        DiagnosisTraceState state = holder.get();
+        return state != null && state.criticalToolFailed;
+    }
+
+    /**
+     * 判断模型是否尝试超过工具预算；该状态仅在最终结果也不可用时触发整体兜底。
+     *
+     * @return 是否发生工具预算超限
+     */
+    public boolean isBudgetExceeded() {
+        DiagnosisTraceState state = holder.get();
+        return state != null && state.budgetExceeded;
+    }
+
+    /**
+     * 判断指定工具是否在当前诊断中成功返回，缓存命中也视为具备有效工具证据。
+     *
+     * @param toolName 规则声明的登记工具名
+     * @return 是否存在成功调用或成功缓存命中
+     */
+    public boolean hasSuccessfulToolCall(String toolName) {
+        DiagnosisTraceState state = holder.get();
+        if (state == null || toolName == null) return false;
+        return state.events.stream().anyMatch(event -> toolName.equals(event.getToolName()) && event.isSuccess()
+            && ("TOOL_CALL".equals(event.getEventType()) || "TOOL_CACHE_HIT".equals(event.getEventType())));
+    }
+
+    /**
      * 返回 trace 收集过程中产生的 fallback 原因。
      *
      * @return fallback 原因

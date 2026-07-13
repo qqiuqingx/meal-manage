@@ -1,10 +1,14 @@
 package me.zhengjie.agent.query;
 
 import me.zhengjie.agent.analysis.domain.BusinessQuestionAnalysis;
+import me.zhengjie.agent.query.domain.AgentEntityReference;
 import me.zhengjie.agent.query.domain.AgentMetricCatalog;
 import me.zhengjie.agent.query.domain.AgentQueryDomain;
+import me.zhengjie.agent.query.domain.AgentQueryFilters;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
 import me.zhengjie.agent.query.domain.AgentQueryAction;
+import me.zhengjie.agent.analysis.domain.BusinessQueryTarget;
+import me.zhengjie.agent.analysis.domain.MealScope;
 
 import java.util.List;
 
@@ -27,6 +31,8 @@ public class BusinessQueryPlanningService {
         plan.setAnalysisConfidence(analysis.getConfidence());
         AgentQueryDomain domain = analysis.getDomains().get(0);
         plan.setDomain(domain);
+        if (analysis.getQueryTarget() == BusinessQueryTarget.MEAL_PLAN_ALLERGY_ANALYSIS) return mealPlanAllergyPlan(plan, analysis);
+        if (analysis.getQueryTarget() == BusinessQueryTarget.SCHEDULED_MENU) return scheduledMenuPlan(plan, analysis);
         if (domain == AgentQueryDomain.OPERATION_STATISTICS || domain == AgentQueryDomain.NATURAL_LANGUAGE_REPORT) return aggregationPlan(plan, analysis);
         if (domain == AgentQueryDomain.CUSTOMER) {
             boolean hasCustomer = analysis.getEntities() != null && (analysis.getEntities().getCustomerId() != null
@@ -46,6 +52,46 @@ public class BusinessQueryPlanningService {
         if (domain == AgentQueryDomain.REFUND) return singleToolPlan(plan, AgentQueryAction.LIST, "listRefunds");
         // 当前分析协议没有套餐 ID、菜品 ID 列表或规则主题，不能伪造可执行计划。
         return null;
+    }
+
+    /** 将跨客户排餐过敏语义编译为唯一的范围排餐基础查询，调用图不来自模型。 */
+    private AgentQueryPlan mealPlanAllergyPlan(AgentQueryPlan plan, BusinessQuestionAnalysis analysis) {
+        plan.setVersion(AgentQueryPlan.SCHEMA_VERSION_V3);
+        plan.setDomain(AgentQueryDomain.MEAL_PLAN);
+        plan.setAction(AgentQueryAction.LIST);
+        AgentQueryFilters modelFilters = analysis.getFilters();
+        AgentQueryFilters executableFilters = new AgentQueryFilters();
+        if (modelFilters != null) {
+            executableFilters.setRecordDate(modelFilters.getRecordDate());
+            executableFilters.setMealType(modelFilters.getMealType());
+        }
+        plan.setEntities(new AgentEntityReference());
+        plan.setFilters(executableFilters);
+        MealScope scope = analysis.getMealScope();
+        if (scope == null && plan.getFilters().getMealType() != null) {
+            try { scope = MealScope.valueOf(plan.getFilters().getMealType().trim().toUpperCase()); }
+            catch (IllegalArgumentException ignored) { return null; }
+        }
+        if (scope == null) return null;
+        plan.setMealScope(scope);
+        if (scope == MealScope.ALL_AVAILABLE) plan.getFilters().setMealType(null);
+        else plan.getFilters().setMealType(scope.name());
+        plan.setSubjects(analysis.getSubjects()); plan.setRelations(analysis.getRelations());
+        plan.setRequestedFacts(analysis.getRequestedFacts()); plan.setOperation(analysis.getOperation()); plan.setGroupBy(analysis.getGroupBy());
+        plan.setLimit(50); plan.getFilters().setPage(1); plan.getFilters().setSize(50);
+        plan.setToolNames(List.of("listMealPlans"));
+        return plan;
+    }
+
+    /** 将公共菜单目标映射为唯一登记工具，并将餐次范围写入 QueryPlan 供纠错指纹和执行器共同使用。 */
+    private AgentQueryPlan scheduledMenuPlan(AgentQueryPlan plan, BusinessQuestionAnalysis analysis) {
+        if (plan.getDomain() != AgentQueryDomain.DISH) return null;
+        MealScope scope = analysis.getMealScope() == null ? MealScope.ALL_AVAILABLE : analysis.getMealScope();
+        if (scope == MealScope.BREAKFAST) return null;
+        plan.setMealScope(scope);
+        if (scope == MealScope.ALL_AVAILABLE) plan.getFilters().setMealType(null);
+        else plan.getFilters().setMealType(scope.name());
+        return singleToolPlan(plan, AgentQueryAction.LIST, "listScheduledDishes");
     }
 
     /** 组装版本化聚合计划，指标和工具均由服务端目录决定。 */

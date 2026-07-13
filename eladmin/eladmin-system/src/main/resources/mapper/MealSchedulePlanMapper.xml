@@ -31,6 +31,7 @@
         <result column="enabled" property="enabled"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
+        <result column="meal_time" property="scheduleMealTime"/>
     </resultMap>
 
     <select id="findBySchedule" resultMap="DishScheduleResultMap">
@@ -53,6 +54,32 @@
           and msp.day_of_week = #{dayOfWeek}
           and msp.meal_time = #{mealTime}
         order by d.sort asc, d.id asc
+    </select>
+
+    <select id="findByScheduleMealTimes" resultMap="DishScheduleResultMap">
+        select d.id,
+               d.name,
+               d.cooking_method,
+               d.ingredients,
+               d.image_url,
+               msp.dish_category as dish_type,
+               d.meal_packages,
+               d.sort,
+               d.enabled,
+               d.create_time,
+               d.update_time,
+               msp.meal_time as meal_time
+        from meal_schedule_plan msp
+        join dish d on d.id = msp.dish_id
+        where msp.enabled = 1
+          and d.enabled = 1
+          and msp.week_num = #{weekNum}
+          and msp.day_of_week = #{dayOfWeek}
+          and msp.meal_time in
+          <foreach collection="mealTimes" item="mealTime" open="(" separator="," close=")">
+              #{mealTime}
+          </foreach>
+        order by field(msp.meal_time, 'LUNCH', 'DINNER') asc, d.sort asc, d.id asc
     </select>
 
     <select id="findByWeek" resultMap="BaseResultMap">

@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 @Component
 public class RuleBasedIntentClassifier implements ChatIntentClassifier {
 
-    private static final Pattern PRONOUN_OR_CONTEXT = Pattern.compile("他|她|这个客户|那午餐|那晚餐|这个订单|为什么|原因|解释|换成|改成");
+    private static final Pattern PRONOUN_OR_CONTEXT = Pattern.compile("他|她|这个客户|那午餐|那晚餐|这个订单|为什么|原因|解释|换成|改成|不对|不应该|查错|怎么全是|明显");
     private static final Pattern RESET = Pattern.compile("清空|重新开始");
     private static final Pattern RETRY = Pattern.compile("重新排查|重新诊断|再查一次");
     private static final Pattern OUT_OF_SCOPE = Pattern.compile("修改|改一下|下单|申请退款|执行退款|退款一下|修改地址|订单金额|退款金额|优惠金额|已收金额|单价|多少钱|价格");
@@ -33,26 +33,11 @@ public class RuleBasedIntentClassifier implements ChatIntentClassifier {
 
         ChatIntent candidate = parseCandidate(request == null ? null : request.getRuleIntentCandidate());
         if (candidate == null) return result(null, 0.0, "规则无法确定意图");
-        boolean explicitCustomer = text.matches(".*(?i)[A-Z]\\d{3,}.*") || text.matches(".*客户(?:ID|id|Id)\\s*\\d+.*");
-        if (PRONOUN_OR_CONTEXT.matcher(text).find() && !(explicitCustomer && isCustomerQuery(candidate))) {
+        if (PRONOUN_OR_CONTEXT.matcher(text).find()) {
             return result(candidate, 0.45, "消息依赖上下文或存在局部追问表达");
         }
-        return result(candidate, 0.95, "命中高确定性规则");
-    }
-
-    private boolean isCustomerQuery(ChatIntent intent) {
-        return intent == ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY
-            || intent == ChatIntent.CUSTOMER_VERIFICATION_QUERY
-            || intent == ChatIntent.CUSTOMER_ORDER_QUERY
-            || intent == ChatIntent.CUSTOMER_REFUND_QUERY
-            || intent == ChatIntent.CUSTOMER_PACKAGE_QUERY
-            || intent == ChatIntent.MEAL_PLAN_QUERY
-            || intent == ChatIntent.DISH_INGREDIENT_QUERY
-            || intent == ChatIntent.MEAL_PLAN_UNVERIFIED_QUERY
-            || intent == ChatIntent.MEAL_BALANCE_NO_PLAN_QUERY
-            || intent == ChatIntent.MEAL_BALANCE_CHANGE_QUERY
-            || intent == ChatIntent.BUSINESS_RULE_QUERY
-            || intent == ChatIntent.OPERATION_STATISTICS_QUERY;
+        // 宽泛业务名词只是候选领域，必须继续由受控语义分析确定业务目标和上下文指代。
+        return result(candidate, 0.65, "规则仅提供业务候选，等待语义分析确认");
     }
 
     private ChatIntent parseCandidate(String candidate) {

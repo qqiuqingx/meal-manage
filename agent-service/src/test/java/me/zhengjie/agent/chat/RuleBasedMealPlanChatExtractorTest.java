@@ -189,7 +189,7 @@ class RuleBasedMealPlanChatExtractorTest {
     void shouldExtractCustomerCodeTomorrowAndLunch() {
         ChatExtractionResult result = extractor.extract("看下 C10001 明天午餐为什么没排出来", new DiagnosisSlots());
 
-        assertEquals(ChatIntent.DIAGNOSE, result.getIntent());
+        assertEquals(ChatIntent.BUSINESS_QUERY, result.getIntent());
         assertEquals("C10001", result.getSlots().getCustomerCode());
         assertEquals("2026-05-23", result.getSlots().getRecordDate());
         assertEquals("LUNCH", result.getSlots().getMealType());
@@ -209,7 +209,7 @@ class RuleBasedMealPlanChatExtractorTest {
 
         ChatExtractionResult result = extractor.extract("换成后天晚餐", existing);
 
-        assertEquals(ChatIntent.DIAGNOSE, result.getIntent());
+        assertEquals(ChatIntent.BUSINESS_QUERY, result.getIntent());
         assertEquals("C10001", result.getSlots().getCustomerCode());
         assertEquals("2026-05-24", result.getSlots().getRecordDate());
         assertEquals("DINNER", result.getSlots().getMealType());
@@ -311,7 +311,7 @@ class RuleBasedMealPlanChatExtractorTest {
     void shouldDetectAmbiguousCustomerAndRequireConfirmation() {
         ChatExtractionResult result = extractor.extract("客户 123 今天午餐", new DiagnosisSlots());
 
-        assertEquals(ChatIntent.DIAGNOSE, result.getIntent());
+        assertEquals(ChatIntent.BUSINESS_QUERY, result.getIntent());
         assertEquals("123", result.getSlots().getCustomerCode());
         assertEquals("LOW", result.getSlots().getCustomerConfidence());
         assertEquals(List.of(MissingSlot.CUSTOMER), result.getAmbiguousSlots());

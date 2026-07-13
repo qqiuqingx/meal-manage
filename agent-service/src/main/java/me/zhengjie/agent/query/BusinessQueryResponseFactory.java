@@ -108,6 +108,8 @@ public class BusinessQueryResponseFactory {
             addLegacyVerificationFacts(facts, result);
         } else if (!responseType.startsWith("BUSINESS_QUERY")) {
             return facts;
+        } else if ("BUSINESS_QUERY_MEAL_PLAN_ALLERGY".equals(responseType)) {
+            addMealPlanAllergyFacts(facts, result);
         } else if ("BUSINESS_QUERY_CUSTOMER_CANDIDATES".equals(responseType) && result.containsKey("total")) {
             facts.add(new AgentQueryFact("F1", "候选客户数", result.get("total"), "个", "CUSTOMER_CANDIDATE_LIST", null));
         } else if ("BUSINESS_QUERY_DISH_CANDIDATES".equals(responseType) && result.containsKey("totalCandidateCount")) {
@@ -132,7 +134,9 @@ public class BusinessQueryResponseFactory {
                 String.valueOf(result.getOrDefault("metricDefinitionId", "AGENT_OPERATION_STATISTICS")),
                 result.get("recordDate") == null ? null : String.valueOf(result.get("recordDate"))));
         } else if (result.containsKey("total")) {
-            facts.add(new AgentQueryFact("F1", totalFactLabel(responseType), result.get("total"), totalFactUnit(responseType), totalFactSourceType(responseType), null));
+            String label = totalFactLabel(responseType);
+            if (label == null) return facts;
+            facts.add(new AgentQueryFact("F1", label, result.get("total"), totalFactUnit(responseType), totalFactSourceType(responseType), null));
             if (("BUSINESS_QUERY_ORDER".equals(responseType) || "BUSINESS_QUERY_VERIFICATION".equals(responseType) || "BUSINESS_QUERY_REFUND".equals(responseType)) && result.get("items") instanceof List) {
                 facts.add(new AgentQueryFact("F2", "当前展示记录数", ((List<?>) result.get("items")).size(), "笔", totalFactSourceType(responseType), null));
             }
@@ -140,6 +144,34 @@ public class BusinessQueryResponseFactory {
             facts.add(new AgentQueryFact("F1", "规则版本", result.get("version"), null, "BUSINESS_RULE", String.valueOf(result.get("ruleId"))));
         }
         return facts;
+    }
+
+    /** 为每条实际过敏过滤菜品建立客户编号绑定证据，客户主动排除菜品不会成为事实。 */
+    @SuppressWarnings("unchecked")
+    private void addMealPlanAllergyFacts(List<AgentQueryFact> facts, Map<String, Object> result) {
+        Object itemValue = result.get("items");
+        if (!(itemValue instanceof List)) return;
+        for (Object planValue : (List<?>) itemValue) {
+            if (!(planValue instanceof Map)) continue;
+            Map<String, Object> plan = (Map<String, Object>) planValue;
+            String customerCode = plan.get("customerCode") == null ? null : String.valueOf(plan.get("customerCode"));
+            String recordDate = plan.get("recordDate") == null ? null : String.valueOf(plan.get("recordDate"));
+            String mealType = plan.get("mealTypeCode") == null ? null : String.valueOf(plan.get("mealTypeCode"));
+            String sourceRecordId = plan.get("customerMealPlanId") == null ? null : String.valueOf(plan.get("customerMealPlanId"));
+            Object dishesValue = plan.get("dishes");
+            if (!(dishesValue instanceof List)) continue;
+            for (Object dishValue : (List<?>) dishesValue) {
+                if (!(dishValue instanceof Map)) continue;
+                Map<String, Object> dish = (Map<String, Object>) dishValue;
+                if (!Boolean.TRUE.equals(dish.get("allergyFiltered")) || !"ALLERGY".equals(dish.get("replaceReason"))) continue;
+                AgentQueryFact fact = new AgentQueryFact("F" + (facts.size() + 1), "因过敏过滤菜品", dish.get("dishName"), null,
+                    "MEAL_PLAN_DISH_ITEM", sourceRecordId);
+                fact.setCustomerCode(customerCode); fact.setRecordDate(recordDate); fact.setMealType(mealType); fact.setSourceRecordId(sourceRecordId);
+                facts.add(fact);
+            }
+        }
+        if (result.get("scannedCount") != null) facts.add(new AgentQueryFact("F" + (facts.size() + 1), "已扫描排餐记录数",
+            result.get("scannedCount"), "条", "MEAL_PLAN_LIST", null));
     }
 
     private String operationFactLabel(String responseType) {
@@ -240,18 +272,28 @@ public class BusinessQueryResponseFactory {
     }
 
     private String totalFactLabel(String responseType) {
+        if ("BUSINESS_QUERY_ORDER".equals(responseType)) return "订单数量";
         if ("BUSINESS_QUERY_VERIFICATION".equals(responseType)) return "核销记录数";
         if ("BUSINESS_QUERY_REFUND".equals(responseType)) return "退餐记录数";
         if ("BUSINESS_QUERY_MEAL_PLAN".equals(responseType)) return "排餐记录数";
-        return "订单数量";
+        if ("BUSINESS_QUERY_SCHEDULED_MENU".equals(responseType)) return "排期菜品数";
+        if ("BUSINESS_QUERY_DISH".equals(responseType)) return "菜品数量";
+        return null;
     }
 
-    private String totalFactUnit(String responseType) { return "笔"; }
+    private String totalFactUnit(String responseType) {
+        if ("BUSINESS_QUERY_SCHEDULED_MENU".equals(responseType) || "BUSINESS_QUERY_DISH".equals(responseType)) return "道";
+        if ("BUSINESS_QUERY_VERIFICATION".equals(responseType) || "BUSINESS_QUERY_REFUND".equals(responseType)
+            || "BUSINESS_QUERY_MEAL_PLAN".equals(responseType)) return "条";
+        return "笔";
+    }
 
     private String totalFactSourceType(String responseType) {
         if ("BUSINESS_QUERY_VERIFICATION".equals(responseType)) return "VERIFICATION_LIST";
         if ("BUSINESS_QUERY_REFUND".equals(responseType)) return "REFUND_LIST";
         if ("BUSINESS_QUERY_MEAL_PLAN".equals(responseType)) return "MEAL_PLAN_LIST";
+        if ("BUSINESS_QUERY_SCHEDULED_MENU".equals(responseType)) return "SCHEDULED_DISH_LIST";
+        if ("BUSINESS_QUERY_DISH".equals(responseType)) return "DISH_LIST";
         return "ORDER_LIST";
     }
 }

@@ -60,8 +60,11 @@ public class DiagnosisPromptBuilder {
             请明确输出 confidence 和 nextActions。
             reasons 至少包含 1 条；每条 reason 必须包含 code、title、level、description、suggestion、evidence。
             每条 reason 至少包含 %s 条 evidence。
-            evidence 必须带 ruleIds=%s、fieldReference=%s 的可追溯线索。
+            每条 reason.ruleIds 必须是 JSON 字符串数组，并包含当前 reason 引用的规则 ruleId；是否强制要求：%s。
+            fieldReference 不是输出字段，不得输出；字段可追溯性通过 evidence.label 实现，是否强制要求：%s。
             evidence 必须是对象数组，每个对象包含 label 和 value。
+            evidence.label 必须逐字使用当前 reason 引用规则的 evidenceFields，禁止翻译、改写或新增标签。
+            一旦已有工具证据足以确认至少一个登记原因，应立即停止调用工具并输出结论，禁止为了穷举所有可能原因而调用全部工具。
             actionDrafts 由系统模板生成，模型不得声明已执行任何草稿动作。
 
             用户问题：
@@ -122,6 +125,7 @@ public class DiagnosisPromptBuilder {
             如果业务上下文证据不足，请返回需要人工核对，不允许猜测。
             reasons 至少包含 1 条；每条 reason 必须包含 code、title、level、description、suggestion、evidence。
             evidence 必须是对象数组，每个对象包含 label 和 value。
+            evidence.label 必须逐字使用当前 reason 引用规则的 evidenceFields，禁止翻译、改写或新增标签。
 
             用户问题：
             客户ID：%s

@@ -43,7 +43,7 @@ public final class AgentBusinessToolRegistry {
         register(result, "listRefunds", AgentQueryDomain.REFUND, AgentQueryAction.LIST, "customerOrder:list+mealPlan:list", 50, "customerId|orderId|limit", "AgentRefundLogDto[]");
         register(result, "packageDetail", AgentQueryDomain.PACKAGE, AgentQueryAction.DETAIL, "package:list", 5, "parentPackageId", "AgentPackageSpecDto");
         register(result, "listDishes", AgentQueryDomain.DISH, AgentQueryAction.LIST, "dish:list", 20, "dishIds<=20", "AgentDishSummaryDto[]");
-        register(result, "listScheduledDishes", AgentQueryDomain.DISH, AgentQueryAction.LIST, "mealPlan:list+dish:list", 20, "recordDate|mealType", "AgentDishSummaryDto[]");
+        register(result, "listScheduledDishes", AgentQueryDomain.DISH, AgentQueryAction.LIST, "mealPlan:list+dish:list", 20, "recordDate|mealTypes(LUNCH,DINNER)", "AgentScheduledMenuResponseDto");
         register(result, "previewDishCandidates", AgentQueryDomain.DISH, AgentQueryAction.LIST, "customerProfile:list+customerOrder:list+package:list+dish:list", 20, "customerId|recordDate|mealType", "AgentDishCandidatePreviewDto");
         register(result, "explainRule", AgentQueryDomain.BUSINESS_RULE, AgentQueryAction.EXPLAIN, "agentDiagnosis:list", 1, "topic", "AgentBusinessRuleDto");
         register(result, "getDailyCustomerWorkload", AgentQueryDomain.OPERATION_STATISTICS, AgentQueryAction.SUMMARY, "mealPlan:list", 100, "recordDate|mealType", "AgentDailyCustomerStatsDto");

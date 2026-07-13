@@ -43,4 +43,13 @@ class BusinessAnswerValidatorTest {
         assertFalse(validator.isSafe("查询到 3 条核销记录 [F1]", facts));
         assertFalse(validator.isSafe("当前可用 2 个候选菜", List.of()));
     }
+
+    @Test
+    void shouldRejectRawPhoneAndCustomerMealPlanEvidenceWithoutCustomerCode() {
+        AgentQueryFact missingCode = new AgentQueryFact("F1", "因过敏过滤菜品", "香菇滑鸡", null, "MEAL_PLAN_DISH_ITEM", "89231");
+        assertFalse(validator.isSafe("B3303：香菇滑鸡。[F1]", List.of(missingCode)));
+
+        AgentQueryFact phone = new AgentQueryFact("F1", "联系方式", "13812345678", null, "CUSTOMER_OVERVIEW", "1");
+        assertFalse(validator.isSafe("联系方式：[F1]", List.of(phone)));
+    }
 }

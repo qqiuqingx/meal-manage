@@ -14,6 +14,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HybridMealPlanChatExtractorTest {
@@ -23,19 +24,19 @@ class HybridMealPlanChatExtractorTest {
     );
 
     @Test
-    void shouldReturnExplicitCustomerQueryFromRulesWithoutLlm() {
+    void shouldSendExplicitCustomerBusinessCandidateToSemanticAnalysis() {
         HybridMealPlanChatExtractor extractor = extractor("hybrid", null);
 
         ChatExtractionResult result = extractor.extract("B2201 核销了多少餐", new DiagnosisSlots());
 
         assertEquals(ChatIntent.BUSINESS_QUERY, result.getIntent());
         assertEquals(ChatIntent.CUSTOMER_VERIFICATION_QUERY.name(), result.getRuleIntent());
-        assertEquals("RULE", result.getIntentSource());
+        assertEquals("SEMANTIC", result.getIntentSource());
         assertFalse(result.isLlmTriggered());
     }
 
     @Test
-    void shouldUseHighConfidenceLlmResultForContextDependentQuestion() {
+    void shouldSendContextDependentBusinessQuestionDirectlyToSemanticAnalysis() {
         LlmIntentClassifier llm = new StubLlmClassifier(
             new IntentClassificationResult(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY, 0.93, "指代最近客户", false)
         );
@@ -47,12 +48,25 @@ class HybridMealPlanChatExtractorTest {
 
         assertEquals(ChatIntent.BUSINESS_QUERY, result.getIntent());
         assertEquals(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY.name(), result.getRuleIntent());
-        assertEquals("LLM", result.getIntentSource());
-        assertTrue(result.isLlmTriggered());
+        assertEquals("SEMANTIC", result.getIntentSource());
+        assertFalse(result.isLlmTriggered());
     }
 
     @Test
-    void shouldFallbackToRuleWhenLlmResultIsLowConfidence() {
+    void shouldSendCustomerDiagnosisQuestionThroughBusinessSemanticAnalysis() {
+        HybridMealPlanChatExtractor extractor = extractor("hybrid", null);
+
+        ChatExtractionResult result = extractor.extract("B3303 今天午餐为什么没排上", new DiagnosisSlots());
+
+        assertEquals(ChatIntent.BUSINESS_QUERY, result.getIntent());
+        assertEquals(ChatIntent.BUSINESS_QUERY.name(), result.getRuleIntent());
+        assertEquals("B3303", result.getSlots().getCustomerCode());
+        assertEquals("LUNCH", result.getSlots().getMealType());
+        assertEquals("SEMANTIC", result.getIntentSource());
+    }
+
+    @Test
+    void shouldNotCallTopLevelIntentLlmForBusinessSemanticCandidate() {
         LlmIntentClassifier llm = new StubLlmClassifier(
             new IntentClassificationResult(ChatIntent.DIAGNOSE, 0.4, "不确定", true)
         );
@@ -64,8 +78,34 @@ class HybridMealPlanChatExtractorTest {
 
         assertEquals(ChatIntent.BUSINESS_QUERY, result.getIntent());
         assertEquals(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY.name(), result.getRuleIntent());
-        assertEquals("HYBRID", result.getIntentSource());
-        assertTrue(result.isLlmTriggered());
+        assertEquals("SEMANTIC", result.getIntentSource());
+        assertFalse(result.isLlmTriggered());
+    }
+
+    @Test
+    void shouldRouteUnscopedBusinessQuestionDirectlyToSemanticAnalysis() {
+        LlmIntentClassifier llm = new StubLlmClassifier(
+            new IntentClassificationResult(ChatIntent.DIAGNOSE, 0.4, "无法可靠分类", true)
+        );
+        HybridMealPlanChatExtractor extractor = extractor("hybrid", llm);
+
+        ChatExtractionResult result = extractor.extract("今天排餐的客户 对哪些菜过敏", new DiagnosisSlots());
+
+        assertEquals(ChatIntent.BUSINESS_QUERY, result.getIntent());
+        assertEquals(ChatIntent.BUSINESS_QUERY.name(), result.getRuleIntent());
+        assertNull(result.getSlots().getCustomerName());
+        assertEquals("2026-05-22", result.getSlots().getRecordDate());
+        assertEquals("SEMANTIC", result.getIntentSource());
+        assertFalse(result.isLlmTriggered());
+    }
+
+    @Test
+    void shouldKeepExplicitShortCustomerNameWithoutCapturingQuestionText() {
+        ChatExtractionResult explicit = slots.extract("客户 张三 还剩多少餐", new DiagnosisSlots());
+        ChatExtractionResult question = slots.extract("排餐的客户 对哪些菜过敏", new DiagnosisSlots());
+
+        assertEquals("张三", explicit.getSlots().getCustomerName());
+        assertNull(question.getSlots().getCustomerName());
     }
 
     @SuppressWarnings("unchecked")

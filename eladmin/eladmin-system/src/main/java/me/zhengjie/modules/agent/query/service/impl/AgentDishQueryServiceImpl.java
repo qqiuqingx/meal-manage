@@ -6,6 +6,8 @@ import me.zhengjie.modules.agent.query.domain.dto.AgentDishCandidateItemDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentDishCandidatePreviewDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentListResultDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerOverviewDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentScheduledMenuGroupDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentScheduledMenuResponseDto;
 import me.zhengjie.modules.agent.query.service.AgentDishQueryService;
 import me.zhengjie.modules.agent.query.service.AgentCustomerQueryService;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
@@ -61,16 +63,46 @@ public class AgentDishQueryServiceImpl implements AgentDishQueryService {
 
     /** {@inheritDoc} */
     @Override
-    public AgentListResultDto<AgentDishSummaryDto> listScheduled(String recordDate, String mealType) {
+    public AgentScheduledMenuResponseDto listScheduled(String recordDate, List<String> mealTypes) {
         LocalDate date = LocalDate.parse(recordDate);
-        List<Dish> scheduled = mergeCandidates(date, mealType);
+        List<String> safeMealTypes = normalizeScheduledMealTypes(mealTypes);
+        List<Dish> scheduled = mealSchedulePlanMapper.findByScheduleMealTimes(ScheduleKeyUtil.calcWeek(date),
+            ScheduleKeyUtil.calcDay(date), safeMealTypes);
+        if (scheduled == null) scheduled = Collections.emptyList();
         List<Integer> ids = scheduled.stream().map(Dish::getId).filter(java.util.Objects::nonNull).collect(Collectors.toList());
         Map<Integer, List<DishIngredientRelation>> relations = ids.isEmpty() ? Collections.emptyMap()
             : dishIngredientMapper.findRelationsByDishIds(ids).stream().collect(Collectors.groupingBy(DishIngredientRelation::getDishId));
-        AgentListResultDto<AgentDishSummaryDto> result = new AgentListResultDto<>();
-        result.setTotal(scheduled.size()); result.setTruncated(scheduled.size() > MAX_DISHES);
-        result.setItems(scheduled.stream().limit(MAX_DISHES).map(dish -> toSummary(dish, relations.getOrDefault(dish.getId(), Collections.emptyList()))).collect(Collectors.toList()));
+        AgentScheduledMenuResponseDto result = new AgentScheduledMenuResponseDto();
+        result.setRecordDate(recordDate); result.setTotal(scheduled.size()); result.setTruncated(scheduled.size() > MAX_DISHES);
+        int[] remaining = {MAX_DISHES};
+        for (String mealType : safeMealTypes) {
+            List<Dish> groupDishes = scheduled.stream().filter(dish -> mealType.equals(dish.getScheduleMealTime())).collect(Collectors.toList());
+            AgentScheduledMenuGroupDto group = new AgentScheduledMenuGroupDto();
+            group.setMealTypeCode(mealType); group.setMealTypeName(mealTypeName(mealType)); group.setTotal(groupDishes.size());
+            group.setItems(groupDishes.stream().limit(remaining[0]).map(dish -> toSummary(dish,
+                relations.getOrDefault(dish.getId(), Collections.emptyList()))).collect(Collectors.toList()));
+            remaining[0] -= group.getItems().size();
+            result.getGroups().add(group);
+        }
         return result;
+    }
+
+    /** 将公共菜单餐次收敛为午餐、晚餐白名单和固定排序，拒绝空集合及未登记餐次。 */
+    private List<String> normalizeScheduledMealTypes(List<String> mealTypes) {
+        if (mealTypes == null || mealTypes.isEmpty()) throw new IllegalArgumentException("公共菜单餐次不能为空");
+        List<String> result = new ArrayList<>();
+        for (String mealType : List.of("LUNCH", "DINNER")) {
+            if (mealTypes.contains(mealType)) result.add(mealType);
+        }
+        if (result.size() != mealTypes.stream().filter(java.util.Objects::nonNull).distinct().count() || result.isEmpty()) {
+            throw new IllegalArgumentException("公共菜单仅支持午餐和晚餐");
+        }
+        return result;
+    }
+
+    /** 返回公共菜单餐次的固定中文名称。 */
+    private String mealTypeName(String mealType) {
+        return "LUNCH".equals(mealType) ? "午餐" : "DINNER".equals(mealType) ? "晚餐" : mealType;
     }
 
     /** {@inheritDoc} */

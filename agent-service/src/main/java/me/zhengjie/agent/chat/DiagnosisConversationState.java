@@ -1,6 +1,7 @@
 package me.zhengjie.agent.chat;
 
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
+import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +26,7 @@ public class DiagnosisConversationState {
     private DiagnosisResponse lastDiagnosisResult;
     private List<DiagnosisConversationTurn> recentTurns = new ArrayList<>();
     private List<DiagnosisResponse> recentDiagnosisResults = new ArrayList<>();
+    private LastBusinessQueryContext lastBusinessQueryContext;
 
     /**
      * 创建默认会话状态，新会话默认进入槽位收集阶段。
@@ -83,6 +85,7 @@ public class DiagnosisConversationState {
         this.lastDiagnosisResult = null;
         this.recentTurns = new ArrayList<>();
         this.recentDiagnosisResults = new ArrayList<>();
+        this.lastBusinessQueryContext = null;
     }
 
     public String getStage() {
@@ -115,5 +118,13 @@ public class DiagnosisConversationState {
 
     public void setRecentDiagnosisResults(List<DiagnosisResponse> recentDiagnosisResults) {
         this.recentDiagnosisResults = recentDiagnosisResults;
+    }
+
+    /** 返回可供下一轮重新规划使用的脱敏业务查询摘要。 */
+    public LastBusinessQueryContext getLastBusinessQueryContext() { return lastBusinessQueryContext; }
+
+    /** 保存最近一次受控业务查询摘要，不保存工具原始响应。 */
+    public void setLastBusinessQueryContext(LastBusinessQueryContext lastBusinessQueryContext) {
+        this.lastBusinessQueryContext = lastBusinessQueryContext;
     }
 }

@@ -7,6 +7,8 @@ import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanManualReplaceMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
+import me.zhengjie.modules.agent.security.AgentCustomerDataScopeContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,6 +28,7 @@ class AgentMealPlanQueryServiceImplTest {
     @Mock private MealPlanCustomerItemMapper mealPlanCustomerItemMapper;
     @Mock private MealPlanManualReplaceMapper mealPlanManualReplaceMapper;
     @Mock private CustomerMealScheduleAdditionMapper customerMealScheduleAdditionMapper;
+    @Mock private CustomerProfileMapper customerProfileMapper;
     @InjectMocks private AgentMealPlanQueryServiceImpl service;
 
     @Test
@@ -38,5 +41,15 @@ class AgentMealPlanQueryServiceImplTest {
 
         verify(mealPlanCustomerMapper).selectById(8001L);
         verifyNoInteractions(mealPlanMapper, mealPlanCustomerItemMapper, mealPlanManualReplaceMapper, customerMealScheduleAdditionMapper);
+    }
+
+    @Test
+    void shouldRejectRangeQueryWhenCustomerDataScopeIsUnbound() {
+        AgentCustomerDataScopeContext.clear();
+        AgentMealPlanQueryRequest request = new AgentMealPlanQueryRequest();
+        request.setRecordDate("2026-07-13"); request.setMealType("LUNCH"); request.setPage(1); request.setSize(50);
+
+        assertEquals(0, service.query(request).getTotal());
+        verifyNoInteractions(mealPlanMapper, mealPlanCustomerMapper, mealPlanCustomerItemMapper, customerMealScheduleAdditionMapper);
     }
 }

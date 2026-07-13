@@ -3,6 +3,7 @@ package me.zhengjie.modules.agent.query.service;
 import me.zhengjie.modules.agent.query.domain.dto.AgentDishSummaryDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentDishCandidatePreviewDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentListResultDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentScheduledMenuResponseDto;
 
 import java.util.List;
 
@@ -17,13 +18,13 @@ public interface AgentDishQueryService {
     AgentListResultDto<AgentDishSummaryDto> listByIds(List<Integer> dishIds);
 
     /**
-     * 查询指定日期、餐次的公共排期菜单，不关联任何客户、订单或配送信息。
+     * 查询指定日期和受控餐次集合的公共排期菜单，不关联任何客户、订单或配送信息。
      *
      * @param recordDate 日期（yyyy-MM-dd）
-     * @param mealType 餐次代码，可为空
-     * @return 去重且限量的菜品摘要
+     * @param mealTypes 餐次代码集合，仅允许 LUNCH、DINNER
+     * @return 按餐次分组且限量的菜品摘要
      */
-    AgentListResultDto<AgentDishSummaryDto> listScheduled(String recordDate, String mealType);
+    AgentScheduledMenuResponseDto listScheduled(String recordDate, List<String> mealTypes);
 
     /**
      * 预览指定客户在某日餐次的排期候选菜及过滤状态，不写入排餐记录。

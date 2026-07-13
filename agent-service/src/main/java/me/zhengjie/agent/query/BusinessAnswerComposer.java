@@ -90,6 +90,17 @@ public class BusinessAnswerComposer {
     /** 构造公共排期菜单话术，结果不含任何客户或订单信息。 */
     @SuppressWarnings("unchecked")
     public String scheduledMenu(Map<String, Object> result) {
+        if (result != null && result.get("groups") instanceof List) {
+            List<Map<String, Object>> groups = (List<Map<String, Object>>) result.get("groups");
+            String text = groups.stream().map(group -> {
+                List<Map<String, Object>> items = group.get("items") instanceof List ? (List<Map<String, Object>>) group.get("items") : List.of();
+                String names = items.stream().map(item -> String.valueOf(item.getOrDefault("dishName", "")))
+                    .filter(this::notBlank).limit(10).collect(java.util.stream.Collectors.joining("、"));
+                String mealType = String.valueOf(group.getOrDefault("mealTypeName", group.getOrDefault("mealTypeCode", "菜单")));
+                return names.isEmpty() ? mealType + "暂无已配置菜品" : mealType + "：" + names;
+            }).collect(java.util.stream.Collectors.joining("；"));
+            return text.isEmpty() ? "指定日期暂无已配置的公共排期菜单。" : "指定日期公共排期菜单（按餐次）：" + text + "。";
+        }
         List<Map<String, Object>> items = result != null && result.get("items") instanceof List ? (List<Map<String, Object>>) result.get("items") : List.of();
         if (items.isEmpty()) return "指定日期暂无已配置的公共排期菜单。";
         String names = items.stream().map(item -> String.valueOf(item.getOrDefault("dishName", ""))).filter(this::notBlank).limit(10).collect(java.util.stream.Collectors.joining("、"));
@@ -117,6 +128,26 @@ public class BusinessAnswerComposer {
         return String.format("%s %s 已生成排餐，状态：%s；菜品：%s。", plan.getOrDefault("recordDate", ""),
             mealTypeText(String.valueOf(plan.get("mealTypeCode"))), plan.getOrDefault("generationStatus", "-"),
             dishNames.isEmpty() ? "暂无菜品明细" : dishNames);
+    }
+
+    /** 根据已过滤的排餐过敏事实生成确定性回答，不把客户主动排除菜品表述为过敏。 */
+    @SuppressWarnings("unchecked")
+    public String mealPlanAllergy(Map<String, Object> result) {
+        List<Map<String, Object>> items = result != null && result.get("items") instanceof List ? (List<Map<String, Object>>) result.get("items") : List.of();
+        if (items.isEmpty()) return "指定日期和餐次的已查询排餐中，没有发现实际命中过敏过滤的菜品。";
+        String details = items.stream().map(item -> {
+            String customerCode = String.valueOf(item.getOrDefault("customerCode", ""));
+            List<Map<String, Object>> dishes = item.get("dishes") instanceof List ? (List<Map<String, Object>>) item.get("dishes") : List.of();
+            String dishesText = dishes.stream().map(dish -> {
+                String name = String.valueOf(dish.getOrDefault("dishName", "未命名菜品"));
+                Object reasons = dish.get("allergyReasons");
+                String tags = reasons instanceof List ? ((List<?>) reasons).stream().map(String::valueOf).collect(java.util.stream.Collectors.joining("、")) : "";
+                return tags.isEmpty() ? name : name + "（过敏标签：" + tags + "）";
+            }).collect(java.util.stream.Collectors.joining("、"));
+            return customerCode + "：" + dishesText;
+        }).collect(java.util.stream.Collectors.joining("；"));
+        long scanned = result.get("scannedCount") instanceof Number ? ((Number) result.get("scannedCount")).longValue() : 0L;
+        return "指定日期和餐次的排餐中，以下客户存在实际过敏过滤：" + details + "。本次扫描 " + scanned + " 条排餐记录。";
     }
 
     /** 构造已排未核销的记录数量话术。 */

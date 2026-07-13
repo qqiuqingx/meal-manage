@@ -13,6 +13,7 @@ import me.zhengjie.agent.query.client.dto.PackageSpecResponse;
 import me.zhengjie.agent.query.client.dto.BusinessRuleResponse;
 import me.zhengjie.agent.query.client.dto.DishListResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -28,6 +29,9 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.Iterator;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * 主系统通用只读查询 HTTP 客户端；请求仅使用固定路径与强类型字段名。
@@ -37,6 +41,7 @@ public class HttpBusinessQueryDataClient implements BusinessQueryDataClient {
 
     private static final String REQUEST_ID_KEY = "requestId";
     private static final ObjectMapper ERROR_MAPPER = new ObjectMapper();
+    private static final Pattern MAINLAND_PHONE = Pattern.compile("(?<!\\d)1[3-9]\\d{9}(?!\\d)");
     private final RestClient restClient;
     private final String internalToken;
 
@@ -183,6 +188,15 @@ public class HttpBusinessQueryDataClient implements BusinessQueryDataClient {
 
     /** {@inheritDoc} */
     @Override
+    public MealPlanListResponse listMealPlansRangeTyped(Long customerId, String recordDate, String mealType, int page, int size) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customerId", customerId); body.put("recordDate", recordDate); body.put("mealType", mealType);
+        body.put("page", page); body.put("size", size);
+        return post("/api/internal/agent/query/meal-plans/list", body, MealPlanListResponse.class);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public Map<String, Object> packageDetail(Long parentPackageId) {
         return packageDetailTyped(parentPackageId).toPresentationMap();
     }
@@ -222,6 +236,14 @@ public class HttpBusinessQueryDataClient implements BusinessQueryDataClient {
     public Map<String, Object> listScheduledDishes(String recordDate, String mealType) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("recordDate", recordDate); body.put("mealType", mealType);
+        return post("/api/internal/agent/query/dishes/scheduled", body, Map.class);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public Map<String, Object> listScheduledDishes(String recordDate, List<String> mealTypes) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("recordDate", recordDate); body.put("mealTypes", mealTypes);
         return post("/api/internal/agent/query/dishes/scheduled", body, Map.class);
     }
 
@@ -275,14 +297,50 @@ public class HttpBusinessQueryDataClient implements BusinessQueryDataClient {
         String sessionId = AgentAccessContextHolder.sessionId();
         if (context == null || sessionId == null) throw new IllegalStateException("Missing signed Agent access context");
         try {
-            return restClient.post().uri(path).contentType(MediaType.APPLICATION_JSON)
+            T response = restClient.post().uri(path).contentType(MediaType.APPLICATION_JSON)
                 .header("X-Agent-Internal-Token", internalToken).header("X-Request-Id", requestId()).header("X-Agent-Session-Id", sessionId)
                 .header("X-Agent-Access-Context", context).body(body).retrieve().body(responseType);
+            assertNoSensitiveResponseData(response);
+            return response;
         } catch (RestClientResponseException exception) {
             throw new BusinessQueryClientException(resolveFailureCode(exception));
         } catch (ResourceAccessException exception) {
             throw new BusinessQueryClientException(isTimeout(exception) ? "TOOL_TIMEOUT" : "TOOL_UNAVAILABLE");
         }
+    }
+
+    /**
+     * 在结果进入 Agent DTO 前拒绝原始手机号字段和 11 位大陆手机号，避免主系统回归时泄露到模型、日志或前端。
+     * 已脱敏字段仅允许以 maskedPhone 或 maskedContactPhone 命名出现。
+     *
+     * @param response 主系统已反序列化的受控响应
+     */
+    private void assertNoSensitiveResponseData(Object response) {
+        if (response == null || response instanceof String) {
+            if (response instanceof String && MAINLAND_PHONE.matcher((String) response).find()) throw new BusinessQueryClientException("SENSITIVE_DATA_REJECTED");
+            return;
+        }
+        if (containsSensitiveData(ERROR_MAPPER.valueToTree(response), null)) throw new BusinessQueryClientException("SENSITIVE_DATA_REJECTED");
+    }
+
+    /** 递归检查结构化响应，禁止仅靠 DTO 字段遗漏来隐式保护敏感数据。 */
+    private boolean containsSensitiveData(JsonNode node, String fieldName) {
+        if (node == null || node.isNull()) return false;
+        if (node.isTextual()) return MAINLAND_PHONE.matcher(node.asText()).find();
+        if (node.isArray()) {
+            for (JsonNode item : node) if (containsSensitiveData(item, fieldName)) return true;
+            return false;
+        }
+        if (!node.isObject()) return false;
+        Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> field = fields.next();
+            String normalized = field.getKey().toLowerCase(Locale.ROOT);
+            if (("phone".equals(normalized) || "mobile".equals(normalized) || "contactphone".equals(normalized))
+                && !normalized.startsWith("masked")) return true;
+            if (containsSensitiveData(field.getValue(), field.getKey())) return true;
+        }
+        return false;
     }
 
     /** 仅根据异常类型判断是否为网络超时，不保留底层连接或地址信息。 */

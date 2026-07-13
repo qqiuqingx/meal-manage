@@ -7,7 +7,7 @@
   triggerConditions:
     - 客户ID或客户编号查询不到客户档案
   requiredTools:
-    - getCustomerExcludeDates
+    - getCustomerProfile
   requiredData:
     - customerId
     - customerCode

@@ -21,4 +21,13 @@ public class AgentListResultDto<T> {
 
     /** 是否因结果上限而截断。 */
     private boolean truncated;
+
+    /** 当前页码，范围查询从 1 开始。 */
+    private int page = 1;
+
+    /** 当前页实际请求的条数上限。 */
+    private int size;
+
+    /** 主系统生成本次受控结果的时间。 */
+    private String queriedAt;
 }

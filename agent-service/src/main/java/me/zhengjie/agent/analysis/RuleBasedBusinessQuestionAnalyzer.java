@@ -8,6 +8,12 @@ import me.zhengjie.agent.query.domain.AgentQueryDimension;
 import me.zhengjie.agent.query.domain.AgentQueryDomain;
 import me.zhengjie.agent.query.domain.AgentQueryFilters;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
+import me.zhengjie.agent.analysis.domain.BusinessInteractionMode;
+import me.zhengjie.agent.analysis.domain.BusinessQueryTarget;
+import me.zhengjie.agent.analysis.domain.MealScope;
+import me.zhengjie.agent.analysis.domain.CorrectionReason;
+import me.zhengjie.agent.query.domain.BusinessCorrection;
+import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -19,11 +25,20 @@ import java.util.List;
 public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
     @Override
     public BusinessQuestionAnalysis analyze(String question, DiagnosisSlots context) {
+        return analyze(question, context, null);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public BusinessQuestionAnalysis analyze(String question, DiagnosisSlots context,
+                                            LastBusinessQueryContext lastBusinessQueryContext) {
         String text = question == null ? "" : question.trim();
         BusinessQuestionAnalysis analysis = new BusinessQuestionAnalysis();
         analysis.setEntities(copyEntities(context));
         analysis.setFilters(copyFilters(context));
         analysis.setSource("RULE");
+        if (isContextCorrection(text, lastBusinessQueryContext)) return correctionMenu(analysis, text, lastBusinessQueryContext);
+        if (isScheduledMenuQuestion(text, context)) return scheduledMenu(analysis, text);
         List<AgentQueryMetric> dailyReportMetrics = dailyReportMetrics(text);
         if (dailyReportMetrics.size() > 1) {
             operation(analysis, dailyReportMetrics, text);
@@ -62,6 +77,55 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
             analysis.setClarificationQuestion("请说明想查询客户、订单、排餐、核销、退餐或运营统计中的哪类数据。");
         }
         return analysis;
+    }
+
+    /** 构造公共菜单的高精度离线回退，未指定餐次时固定为全部可用餐次。 */
+    private BusinessQuestionAnalysis scheduledMenu(BusinessQuestionAnalysis analysis, String text) {
+        analysis.setDomains(List.of(AgentQueryDomain.DISH));
+        analysis.setQueryTarget(BusinessQueryTarget.SCHEDULED_MENU);
+        MealScope scope = mealScope(text, analysis.getFilters().getMealType());
+        analysis.setMealScope(scope);
+        if (scope == MealScope.LUNCH || scope == MealScope.DINNER) analysis.getFilters().setMealType(scope.name());
+        else analysis.getFilters().setMealType(null);
+        analysis.setConfidence(0.82D);
+        return analysis;
+    }
+
+    /** 构造上一轮公共菜单结果的受控纠错语义，未能重新规划时由服务层追问。 */
+    private BusinessQuestionAnalysis correctionMenu(BusinessQuestionAnalysis analysis, String text,
+                                                    LastBusinessQueryContext lastBusinessQueryContext) {
+        scheduledMenu(analysis, text);
+        analysis.setInteractionMode(BusinessInteractionMode.CORRECTION);
+        analysis.setReferenceTurn("PREVIOUS_BUSINESS_QUERY");
+        BusinessCorrection correction = new BusinessCorrection();
+        correction.setRequiresReplan(true);
+        if (contains(text, "米饭", "主食")) {
+            correction.setReason(CorrectionReason.PREVIOUS_RESULT_IMPLAUSIBLE);
+            correction.setObservations(List.of("ONLY_RICE_RETURNED"));
+        } else {
+            correction.setReason(CorrectionReason.UNKNOWN);
+        }
+        analysis.setCorrection(correction);
+        analysis.setConfidence(0.84D);
+        return analysis;
+    }
+
+    private boolean isScheduledMenuQuestion(String text, DiagnosisSlots context) {
+        return contains(text, "菜单") && (context == null || context.getCustomerId() == null)
+            && !text.matches(".*(?i)\\b[A-Z]\\d{3,}\\b.*") && !contains(text, "客户", "候选菜", "哪些菜能吃");
+    }
+
+    private boolean isContextCorrection(String text, LastBusinessQueryContext lastBusinessQueryContext) {
+        if (lastBusinessQueryContext == null || lastBusinessQueryContext.getQueryTarget() != BusinessQueryTarget.SCHEDULED_MENU) return false;
+        return contains(text, "不对", "不应该", "查错", "怎么全是", "明显", "不太对", "全是米饭", "主食列表");
+    }
+
+    private MealScope mealScope(String text, String inheritedMealType) {
+        if (contains(text, "午餐")) return MealScope.LUNCH;
+        if (contains(text, "晚餐")) return MealScope.DINNER;
+        if ("LUNCH".equals(inheritedMealType)) return MealScope.LUNCH;
+        if ("DINNER".equals(inheritedMealType)) return MealScope.DINNER;
+        return MealScope.ALL_AVAILABLE;
     }
 
     private void operation(BusinessQuestionAnalysis analysis, AgentQueryMetric metric, String text) {

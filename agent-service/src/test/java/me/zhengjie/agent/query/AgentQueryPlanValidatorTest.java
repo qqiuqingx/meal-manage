@@ -8,6 +8,7 @@ import me.zhengjie.agent.query.domain.AgentQueryFilters;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
 import me.zhengjie.agent.query.domain.AgentQueryDimension;
+import me.zhengjie.agent.analysis.domain.MealScope;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -110,6 +111,35 @@ class AgentQueryPlanValidatorTest {
 
         assertFalse(result.isValid());
         assertTrue(result.errors().stream().anyMatch(error -> "CANDIDATE_DISH_MEAL_TYPE_INVALID".equals(error.code())));
+    }
+
+    @Test
+    void shouldRejectBreakfastForScheduledMenu() {
+        AgentQueryPlan plan = new AgentQueryPlan();
+        plan.setDomain(AgentQueryDomain.DISH); plan.setAction(AgentQueryAction.LIST);
+        AgentQueryFilters filters = new AgentQueryFilters(); filters.setRecordDate("2026-07-11"); filters.setMealType("BREAKFAST"); plan.setFilters(filters);
+        plan.setToolNames(List.of("listScheduledDishes"));
+
+        AgentQueryPlanValidationResult result = validator.validate(plan);
+
+        assertFalse(result.isValid());
+        assertTrue(result.errors().stream().anyMatch(error -> "SCHEDULED_MENU_MEAL_TYPE_INVALID".equals(error.code())));
+    }
+
+    @Test
+    void shouldAcceptAllMealScopeForBoundedV3MealPlanAnalysis() {
+        AgentQueryPlan plan = new AgentQueryPlan();
+        plan.setVersion(AgentQueryPlan.SCHEMA_VERSION_V3);
+        plan.setDomain(AgentQueryDomain.MEAL_PLAN); plan.setAction(AgentQueryAction.LIST);
+        AgentQueryFilters filters = new AgentQueryFilters(); filters.setRecordDate("2026-07-13"); filters.setPage(1); filters.setSize(50); plan.setFilters(filters);
+        plan.setMealScope(MealScope.ALL_AVAILABLE);
+        plan.setSubjects(List.of("MEAL_PLAN", "CUSTOMER", "DISH"));
+        plan.setRelations(List.of("MEAL_PLAN_CUSTOMER", "MEAL_PLAN_DISH"));
+        plan.setRequestedFacts(List.of("CUSTOMER_CODE", "DISH_NAME", "ALLERGY_FILTERED", "ALLERGY_REASONS"));
+        plan.setOperation("FILTER_AND_GROUP"); plan.setGroupBy(List.of("CUSTOMER_CODE"));
+        plan.setToolNames(List.of("listMealPlans"));
+
+        assertTrue(validator.validate(plan).isValid());
     }
 
     /** 运营统计只能使用 2.0 协议中登记的指标、维度和工具。 */

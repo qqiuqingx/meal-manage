@@ -20,11 +20,13 @@ import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.ToolCallAdvisor;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Spring AI 实现的诊断客户端。
@@ -52,6 +54,7 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
     private final DiagnosisSuggestionTemplateService suggestionTemplateService;
     private final AgentToolRegistry agentToolRegistry;
     private final DiagnosisToolCallLoggingAdvisor toolCallLoggingAdvisor;
+    private final BeanOutputConverter<DiagnosisResponse> outputConverter;
     private final boolean toolModeEnabled;
     private final String modelName;
 
@@ -88,6 +91,7 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
         this.toolCallLoggingAdvisor = toolCallLoggingAdvisor;
         this.modelName = modelName;
         this.toolModeEnabled = toolModeEnabled;
+        this.outputConverter = new BeanOutputConverter<>(DiagnosisResponse.class, objectMapper);
     }
 
     /**
@@ -106,6 +110,11 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
             String prompt = toolModeEnabled
                 ? promptBuilder.buildToolPrompt(context, ruleRegistry)
                 : promptBuilder.buildLegacyPrompt(context, ruleRegistry);
+            prompt = prompt + "\n最终只返回一个 JSON 对象，不要输出 Markdown 或解释文字。输出必须符合以下由 Spring AI 根据 DiagnosisResponse 生成的 Schema：\n"
+                + outputConverter.getFormat()
+                + "\n执行顺序强制要求：先完成上文列出的关键工具查询，再生成最终 JSON。"
+                + "customerId 为 null 只表示请求尚未解析出内部ID；只要 customerCode 有值，就不得据此判断客户不存在。"
+                + "CUSTOMER_NOT_FOUND 只能在客户档案工具已成功调用且明确返回空结果后使用。";
             MDC.put(STAGE_KEY, "PROMPT_READY");
             log.info("诊断阶段 stage=提示词已构建 requestId={} customerId={} recordDate={} mealType={} toolModeEnabled={} promptChars={} ruleCount={}",
                 MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType(),
@@ -128,6 +137,9 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
             ChatClientResponse rawClientResponse = callResponseSpec.chatClientResponse();
             ChatResponse rawChatResponse = rawClientResponse == null ? null : rawClientResponse.chatResponse();
             DiagnosisResponse response = responseParser.parse(extractContent(rawChatResponse));
+            if (toolModeEnabled && !hasRequiredToolEvidence(response, ruleRegistry)) {
+                response = null;
+            }
             if (phase2Enabled && suggestionTemplateEnabled) {
                 response = suggestionTemplateService.applyTemplates(response);
             }
@@ -139,7 +151,9 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
                 rawChatResponse == null ? null : rawChatResponse.getResults(),
                 rawChatResponse == null ? null : rawChatResponse.getMetadata(),
                 serializeDiagnosisResponse(response));
-            if (traceCollector.shouldFallback()) {
+            DiagnosisResponse validated = resultValidator.validateOrFallback(response, context, ruleRegistry);
+            if (traceCollector.hasCriticalToolFailure()
+                || traceCollector.isBudgetExceeded() && validated.isFallback()) {
                 DiagnosisResponse fallback = resultValidator.validateOrFallback(null, context, ruleRegistry);
                 attachTrace(fallback);
                 fallback.setFallbackReason(traceCollector.fallbackReason());
@@ -148,7 +162,6 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
                 MDC.put(STAGE_KEY, "MODEL_FALLBACK");
                 return fallback;
             }
-            DiagnosisResponse validated = resultValidator.validateOrFallback(response, context, ruleRegistry);
             attachTrace(validated);
             if (!validated.isFallback()) {
                 validated.setModelName("spring-ai-chat-client");
@@ -216,6 +229,37 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
             return results.get(0).getOutput().getText();
         }
         return result.getOutput().getText();
+    }
+
+    /**
+     * 校验模型引用规则的必需工具均已成功调用，防止仅依据请求中的空槽位直接下业务结论。
+     *
+     * @param response 模型解析后的诊断结果
+     * @param ruleRegistry 当前版本的诊断规则
+     * @return 所有返回原因均具备规则要求的成功工具证据时返回 true
+     */
+    private boolean hasRequiredToolEvidence(DiagnosisResponse response, RuleRegistry ruleRegistry) {
+        if (response == null || response.getReasons() == null || ruleRegistry == null || ruleRegistry.getRules() == null) {
+            return response != null;
+        }
+        for (me.zhengjie.agent.domain.dto.DiagnosisReasonDto reason : response.getReasons()) {
+            if (reason == null) continue;
+            List<me.zhengjie.agent.rule.DiagnosisRule> referencedRules = ruleRegistry.getRules().stream()
+                .filter(Objects::nonNull)
+                .filter(rule -> Objects.equals(rule.getReasonCode(), reason.getCode())
+                    || reason.getRuleIds() != null && reason.getRuleIds().contains(rule.getRuleId()))
+                .toList();
+            for (me.zhengjie.agent.rule.DiagnosisRule rule : referencedRules) {
+                for (String toolName : rule.getRequiredTools()) {
+                    if (!traceCollector.hasSuccessfulToolCall(toolName)) {
+                        log.warn("诊断阶段 stage=规则工具证据缺失 reasonCode={} ruleId={} requiredTool={}",
+                            reason.getCode(), rule.getRuleId(), toolName);
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     private void putDiagnosisMdc(DiagnosisContextDto context, String stage) {

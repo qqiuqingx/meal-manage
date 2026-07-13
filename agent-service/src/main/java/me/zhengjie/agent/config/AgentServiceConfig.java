@@ -11,6 +11,7 @@ import me.zhengjie.agent.query.BusinessQueryPlanningService;
 import me.zhengjie.agent.validator.DiagnosisResultValidator;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -37,7 +38,7 @@ public class AgentServiceConfig {
     }
 
     /**
-     * 业务问题分析以规则为主；仅在模型客户端已配置时启用低置信度问题的受控 JSON 补充分析。
+     * 业务语义默认交给模型输出受控 JSON；模型未配置、关闭、低置信度或结果不安全时回退规则。
      *
      * @param builderProvider 可选的 Spring AI 客户端构造器
      * @param objectMapper 统一 JSON 枚举反序列化器
@@ -45,11 +46,13 @@ public class AgentServiceConfig {
      */
     @Bean
     public BusinessQuestionAnalyzer businessQuestionAnalyzer(ObjectProvider<ChatClient.Builder> builderProvider,
-                                                             ObjectMapper objectMapper) {
+                                                             ObjectMapper objectMapper,
+                                                             @Value("${agent.chat.semantic-analysis.enabled:true}") boolean semanticAnalysisEnabled,
+                                                             @Value("${agent.chat.semantic-analysis.confidence-threshold:0.80}") double confidenceThreshold) {
         RuleBasedBusinessQuestionAnalyzer ruleAnalyzer = new RuleBasedBusinessQuestionAnalyzer();
         ChatClient.Builder builder = builderProvider.getIfAvailable();
-        return builder == null ? ruleAnalyzer : new HybridBusinessQuestionAnalyzer(ruleAnalyzer,
-            new LlmBusinessQuestionAnalyzer(builder, objectMapper));
+        return !semanticAnalysisEnabled || builder == null ? ruleAnalyzer : new HybridBusinessQuestionAnalyzer(ruleAnalyzer,
+            new LlmBusinessQuestionAnalyzer(builder, objectMapper), confidenceThreshold);
     }
 
     /** 创建从受控问题分析生成 QueryPlan 2.0 的规划器。 */

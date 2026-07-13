@@ -78,6 +78,10 @@ public class Dish implements Serializable {
     @TableField(exist = false)
     private java.util.Set<String> mealTimeInfo;
 
+    @ApiModelProperty(value = "排期查询命中的餐次（内部查询分组用，非数据库字段）")
+    @TableField(exist = false)
+    private String scheduleMealTime;
+
     @ApiModelProperty(value = "排期：格式如1-1表示第1周周一")
     @TableField(value = "schedule", typeHandler = JacksonTypeHandler.class)
     private List<String> schedule;

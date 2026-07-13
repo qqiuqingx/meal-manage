@@ -101,6 +101,20 @@ public interface BusinessQueryDataClient {
         return MealPlanListResponse.fromLegacyMap(listMealPlans(customerId, recordDate, mealType, customerMealPlanId));
     }
 
+    /**
+     * 按单日、餐次和受控分页查询客户排餐范围；customerId 为 null 时由主系统 SQL 数据范围限制结果。
+     *
+     * @param customerId 单客户约束；范围查询传 null
+     * @param recordDate 必填单日日期
+     * @param mealType 单一餐次；为空时查询该日全部排餐餐次
+     * @param page 页码，从 1 开始
+     * @param size 每页条数，最大 50
+     * @return 仅包含脱敏字段、客户编号与排餐过滤事实的结果
+     */
+    default MealPlanListResponse listMealPlansRangeTyped(Long customerId, String recordDate, String mealType, int page, int size) {
+        return listMealPlansTyped(customerId, recordDate, mealType, null);
+    }
+
     /** 按主套餐稳定 ID 查询父子套餐和餐品规格。 */
     default Map<String, Object> packageDetail(Long parentPackageId) {
         throw new UnsupportedOperationException("package detail client is not configured");
@@ -124,6 +138,18 @@ public interface BusinessQueryDataClient {
     /** 查询指定日期餐次的公共排期菜单，不返回客户相关数据。 */
     default Map<String, Object> listScheduledDishes(String recordDate, String mealType) {
         throw new UnsupportedOperationException("scheduled menu client is not configured");
+    }
+
+    /**
+     * 查询指定日期、受控餐次集合的公共排期菜单；默认实现保留旧客户端的单餐次兼容能力。
+     *
+     * @param recordDate 查询日期
+     * @param mealTypes 服务端白名单生成的餐次集合
+     * @return 按餐次分组的菜单结果
+     */
+    default Map<String, Object> listScheduledDishes(String recordDate, List<String> mealTypes) {
+        if (mealTypes != null && mealTypes.size() == 1) return listScheduledDishes(recordDate, mealTypes.get(0));
+        return listScheduledDishes(recordDate, (String) null);
     }
 
     /** 预览客户指定日期餐次的排期候选菜和过滤摘要。 */

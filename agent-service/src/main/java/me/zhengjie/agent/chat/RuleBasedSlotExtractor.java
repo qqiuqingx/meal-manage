@@ -35,7 +35,8 @@ public class RuleBasedSlotExtractor {
     private static final Pattern CUSTOMER_CODE_PATTERN = Pattern.compile("(?i)\\b[A-Z]\\d{3,}\\b");
     private static final Pattern CUSTOMER_ID_PATTERN = Pattern.compile("(?:客户ID|客户id|客户Id)\\s*(\\d{1,})");
     private static final Pattern CUSTOMER_CODE_WITH_LABEL_PATTERN = Pattern.compile("(?i)(?:客户编号|编号)\\s*([A-Z]\\d{3,})");
-    private static final Pattern CUSTOMER_NAME_WITH_LABEL_PATTERN = Pattern.compile("(?:客户姓名|姓名|客户)\\s*([\\u4e00-\\u9fa5]{2,8})");
+    private static final Pattern CUSTOMER_NAME_WITH_LABEL_PATTERN = Pattern.compile("(?:客户姓名|姓名)\\s*[:：]?\\s*([\\u4e00-\\u9fa5]{2,8})");
+    private static final Pattern CUSTOMER_NAME_SHORT_PATTERN = Pattern.compile("客户\\s+([\\u4e00-\\u9fa5]{2,4})(?=\\s|$)");
     private static final Pattern AMBIGUOUS_CUSTOMER_PATTERN = Pattern.compile("(?i)(?:客户|编号)\\s*(\\d{3,})");
     private static final Pattern ORDER_CODE_PATTERN = Pattern.compile("(?i)\\bO\\d{5,}\\b");
     private static final Pattern ORDER_ID_PATTERN = Pattern.compile("(?:订单ID|订单id|订单Id)\\s*(\\d+)");
@@ -143,7 +144,8 @@ public class RuleBasedSlotExtractor {
 
         // 优先级：客户信息查询 > 诊断；缺槽按最终意图计算。
         ChatIntent insightIntent = detectCustomerInsightIntent(text);
-        ChatIntent intent = insightIntent == null ? ChatIntent.DIAGNOSE : insightIntent;
+        // 普通自然语言统一进入受控业务语义分析；单客户诊断只能由模型高置信度显式选择。
+        ChatIntent intent = insightIntent == null ? ChatIntent.BUSINESS_QUERY : insightIntent;
         result.setIntent(intent);
         result.setMissingSlots(missingSlots(merged, intent));
         return result;
@@ -253,8 +255,10 @@ public class RuleBasedSlotExtractor {
             return;
         }
         Matcher nameMatcher = CUSTOMER_NAME_WITH_LABEL_PATTERN.matcher(text);
-        if (nameMatcher.find()) {
-            String customerName = nameMatcher.group(1);
+        Matcher shortNameMatcher = CUSTOMER_NAME_SHORT_PATTERN.matcher(text);
+        String customerName = nameMatcher.find() ? nameMatcher.group(1)
+            : shortNameMatcher.find() ? shortNameMatcher.group(1) : null;
+        if (customerName != null) {
             slots.setCustomerName(customerName);
             slots.setCustomerId(null);
             slots.setCustomerCode(null);

@@ -65,4 +65,33 @@ class BusinessQueryResponseFactoryTest {
         assertTrue(response.getAssistantMessage().contains("F1"));
         assertTrue(response.getAssistantMessage().contains("F2"));
     }
+
+    @Test
+    void shouldLabelScheduledMenuTotalAsScheduledDishes() {
+        DiagnosisSlots slots = new DiagnosisSlots(); slots.setRecordDate("2026-07-12");
+        var response = factory.create("session-1", slots, Map.of(), "DIAGNOSED", "BUSINESS_QUERY_SCHEDULED_MENU",
+            Map.of("recordDate", "2026-07-12", "total", 3, "groups", List.of(
+                Map.of("mealTypeCode", "LUNCH", "mealTypeName", "午餐", "total", 2, "items", List.of()),
+                Map.of("mealTypeCode", "DINNER", "mealTypeName", "晚餐", "total", 1, "items", List.of()))),
+            "指定日期公共排期菜单（按餐次）：午餐暂无已配置菜品；晚餐暂无已配置菜品。", List.of());
+
+        assertEquals(1, response.getFacts().size());
+        assertEquals("排期菜品数", response.getFacts().get(0).getLabel());
+        assertEquals("道", response.getFacts().get(0).getUnit());
+        assertEquals("SCHEDULED_DISH_LIST", response.getFacts().get(0).getSourceType());
+    }
+
+    @Test
+    void shouldBuildCustomerCodeBoundFactsForActualMealPlanAllergyFiltering() {
+        DiagnosisSlots slots = new DiagnosisSlots(); slots.setRecordDate("2026-07-13"); slots.setMealType("LUNCH");
+        var response = factory.create("session-1", slots, Map.of(), "DIAGNOSED", "BUSINESS_QUERY_MEAL_PLAN_ALLERGY",
+            Map.of("scannedCount", 1, "items", List.of(Map.of("customerCode", "B3303", "customerMealPlanId", 89231L,
+                "recordDate", "2026-07-13", "mealTypeCode", "LUNCH", "dishes", List.of(Map.of("dishName", "香菇滑鸡",
+                    "allergyFiltered", true, "replaceReason", "ALLERGY", "allergyReasons", List.of("鸡肉"))))), "truncated", false),
+            "指定日期和餐次的排餐中，以下客户存在实际过敏过滤：B3303：香菇滑鸡（过敏标签：鸡肉）。本次扫描 1 条排餐记录。", List.of());
+
+        assertEquals("B3303", response.getFacts().get(0).getCustomerCode());
+        assertEquals("89231", response.getFacts().get(0).getSourceRecordId());
+        assertTrue(response.getAssistantMessage().contains("F1"));
+    }
 }

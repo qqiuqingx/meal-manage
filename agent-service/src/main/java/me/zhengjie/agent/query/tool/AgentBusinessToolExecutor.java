@@ -111,13 +111,18 @@ public class AgentBusinessToolExecutor {
         if ("customerOverview".equals(toolName)) return client.customerOverviewTyped(entities.getCustomerId(), entities.getCustomerCode()).toPresentationMap();
         if ("listOrders".equals(toolName)) return client.listOrdersTyped(entities.getCustomerId(), orderStatus(filters), page(filters), size(filters)).toPresentationMap();
         if ("orderDetail".equals(toolName)) return client.orderDetailTyped(entities.getOrderId(), entities.getOrderCode(), entities.getCustomerId()).toPresentationMap();
-        if ("listMealPlans".equals(toolName)) return client.listMealPlansTyped(entities.getCustomerId(), filters.getRecordDate(), filters.getMealType(), entities.getMealPlanRecordId()).toPresentationMap();
+        if ("listMealPlans".equals(toolName)) {
+            if (AgentQueryPlan.SCHEMA_VERSION_V3.equals(plan.getVersion())) {
+                return client.listMealPlansRangeTyped(entities.getCustomerId(), filters.getRecordDate(), filters.getMealType(), page(filters), size(filters)).toPresentationMap();
+            }
+            return client.listMealPlansTyped(entities.getCustomerId(), filters.getRecordDate(), filters.getMealType(), entities.getMealPlanRecordId()).toPresentationMap();
+        }
         if ("listVerifications".equals(toolName)) return client.listVerificationsTyped(entities.getCustomerId(), entities.getOrderId(), filters.getMealType(), recentLimit(filters), filters.getStartDate(), filters.getEndDate()).toPresentationMap();
         if ("listRefunds".equals(toolName)) return client.listRefundsTyped(entities.getCustomerId(), entities.getOrderId(), recentLimit(filters), filters.getStartDate(), filters.getEndDate()).toPresentationMap();
         if ("packageDetail".equals(toolName)) return client.packageDetailTyped(entities.getPackageId()).toPresentationMap();
         if ("explainRule".equals(toolName)) return client.explainRuleTyped(ruleTopic).toPresentationMap();
         if ("listDishes".equals(toolName)) return client.listDishesTyped(dishIds == null ? List.of() : dishIds.stream().distinct().limit(20).toList()).toPresentationMap();
-        if ("listScheduledDishes".equals(toolName)) return client.listScheduledDishes(filters.getRecordDate(), filters.getMealType());
+        if ("listScheduledDishes".equals(toolName)) return client.listScheduledDishes(filters.getRecordDate(), scheduledMenuMealTypes(plan));
         if ("previewDishCandidates".equals(toolName)) return client.previewDishCandidates(entities.getCustomerId(), filters.getRecordDate(), filters.getMealType()).toPresentationMap();
         if ("getDailyCustomerWorkload".equals(toolName) || "getMealPlanFailureSummary".equals(toolName)) {
             List<String> dimensions = plan.getDimensions() == null ? List.of() : plan.getDimensions().stream().map(Enum::name).collect(java.util.stream.Collectors.toList());
@@ -135,6 +140,16 @@ public class AgentBusinessToolExecutor {
     private Integer orderStatus(AgentQueryFilters filters) {
         try { return filters.getOrderStatus() == null ? null : Integer.valueOf(filters.getOrderStatus()); }
         catch (NumberFormatException ignored) { return null; }
+    }
+
+    /** 公共菜单未指定餐次时固定查询午餐和晚餐，禁止将空餐次传入单餐次 SQL。 */
+    private List<String> scheduledMenuMealTypes(AgentQueryPlan plan) {
+        if (plan != null && plan.getMealScope() == me.zhengjie.agent.analysis.domain.MealScope.LUNCH) return List.of("LUNCH");
+        if (plan != null && plan.getMealScope() == me.zhengjie.agent.analysis.domain.MealScope.DINNER) return List.of("DINNER");
+        AgentQueryFilters filters = plan == null ? null : plan.getFilters();
+        if (filters != null && "LUNCH".equals(filters.getMealType())) return List.of("LUNCH");
+        if (filters != null && "DINNER".equals(filters.getMealType())) return List.of("DINNER");
+        return List.of("LUNCH", "DINNER");
     }
     private String cacheKey(AgentQueryPlan plan, String toolName, String ruleTopic, List<Integer> dishIds) {
         return toolName + "|" + plan.getEntities().getCustomerId() + "|" + plan.getEntities().getCustomerCode() + "|"

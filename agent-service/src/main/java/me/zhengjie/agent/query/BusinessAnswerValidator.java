@@ -18,6 +18,7 @@ public class BusinessAnswerValidator {
     private static final List<String> FORBIDDEN_TERMS = List.of("订单金额", "单价", "退款金额", "优惠金额", "已收金额", "餐费余额", "￥", "¥", "已修改", "已新增", "已删除", "已重排");
     private static final Pattern FACT_REFERENCE = Pattern.compile("\\[F(\\d+)]");
     private static final Pattern QUANTIFIED_NUMBER = Pattern.compile("(?<![\\d-])(\\d+)(?=\\s*(?:笔|餐|条|个))");
+    private static final Pattern MAINLAND_PHONE = Pattern.compile("(?<!\\d)1[3-9]\\d{9}(?!\\d)");
 
     /**
      * 判断回答和事实是否可安全展示。
@@ -33,9 +34,12 @@ public class BusinessAnswerValidator {
         for (AgentQueryFact fact : facts) {
             if (fact == null || containsForbidden(String.valueOf(fact.getLabel())) || containsForbidden(String.valueOf(fact.getValue()))
                 || fact.getFactId() == null || !fact.getFactId().matches("F[1-9]\\d*")) return false;
+            if (containsSensitivePhone(String.valueOf(fact.getValue())) || containsSensitivePhone(fact.getCustomerCode())
+                || containsSensitivePhone(fact.getSourceId()) || containsSensitivePhone(fact.getSourceRecordId())) return false;
+            if ("MEAL_PLAN_DISH_ITEM".equals(fact.getSourceType()) && (fact.getCustomerCode() == null || fact.getCustomerCode().trim().isEmpty())) return false;
             factIds.add(fact.getFactId());
         }
-        return !containsUnknownFactReference(message, factIds) && !containsUnfoundedQuantifiedNumber(message, facts);
+        return !containsSensitivePhone(message) && !containsUnknownFactReference(message, factIds) && !containsUnfoundedQuantifiedNumber(message, facts);
     }
 
     /**
@@ -50,6 +54,8 @@ public class BusinessAnswerValidator {
         }
         return false;
     }
+    /** 原始大陆手机号不得进入回答或事实；已脱敏号码不匹配该规则。 */
+    private boolean containsSensitivePhone(String value) { return value != null && MAINLAND_PHONE.matcher(value).find(); }
     /** 校验回答中出现的事实引用均由本轮结构化事实提供，防止模型伪造引用。 */
     private boolean containsUnknownFactReference(String message, Set<String> factIds) {
         Matcher matcher = FACT_REFERENCE.matcher(message);

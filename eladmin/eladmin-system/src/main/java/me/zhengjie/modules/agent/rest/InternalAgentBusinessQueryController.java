@@ -22,6 +22,8 @@ import me.zhengjie.modules.agent.query.domain.dto.AgentDishListRequest;
 import me.zhengjie.modules.agent.query.domain.dto.AgentDishCandidateRequest;
 import me.zhengjie.modules.agent.query.domain.dto.AgentDishCandidatePreviewDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentDishSummaryDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentScheduledMenuQueryRequest;
+import me.zhengjie.modules.agent.query.domain.dto.AgentScheduledMenuResponseDto;
 import me.zhengjie.modules.agent.query.service.AgentCustomerQueryService;
 import me.zhengjie.modules.agent.query.service.AgentOrderQueryService;
 import me.zhengjie.modules.agent.query.service.AgentHistoryQueryService;
@@ -149,7 +151,7 @@ public class InternalAgentBusinessQueryController {
         return ResponseEntity.ok(historyQueryService.listRefunds(request));
     }
 
-    /** 查询客户指定日期和餐次的排餐及菜品明细。 */
+    /** 查询客户或跨客户单日范围的排餐及菜品明细；范围查询可省略餐次以覆盖全天。 */
     @AnonymousPostMapping("/meal-plans/list")
     public ResponseEntity<AgentListResultDto<AgentMealPlanSummaryDto>> listMealPlans(
             @RequestHeader(value = "X-Request-Id") String requestId,
@@ -185,16 +187,16 @@ public class InternalAgentBusinessQueryController {
         return ResponseEntity.ok(dishQueryService.listByIds(request.getDishIds()));
     }
 
-    /** 查询指定日期、餐次的公共排期菜单，不返回客户、订单或地址信息。 */
+    /** 查询指定日期、受控餐次集合的公共排期菜单，不返回客户、订单或地址信息。 */
     @AnonymousPostMapping("/dishes/scheduled")
-    public ResponseEntity<AgentListResultDto<AgentDishSummaryDto>> listScheduledDishes(
+    public ResponseEntity<AgentScheduledMenuResponseDto> listScheduledDishes(
             @RequestHeader(value = "X-Request-Id") String requestId,
             @RequestHeader(value = "X-Agent-Session-Id") String sessionId,
             @RequestHeader(value = INTERNAL_TOKEN_HEADER) String agentToken,
             @RequestHeader(value = ACCESS_CONTEXT_HEADER) String accessToken,
-            @Validated @RequestBody AgentMealPlanQueryRequest request) {
+            @Validated @RequestBody AgentScheduledMenuQueryRequest request) {
         requirePermission(agentToken, accessToken, sessionId, requestId, "mealPlan:list", "dish:list");
-        return ResponseEntity.ok(dishQueryService.listScheduled(request.getRecordDate(), request.getMealType()));
+        return ResponseEntity.ok(dishQueryService.listScheduled(request.getRecordDate(), request.getMealTypes()));
     }
 
     /** 预览客户指定日期餐次的排期候选菜及套餐、过敏和忌口过滤摘要。 */

@@ -39,3 +39,12 @@ agent:
     max-diagnosis-history: ${AGENT_CHAT_MAX_DIAGNOSIS_HISTORY:3}
     intent-classifier:
       mode: ${AGENT_CHAT_INTENT_CLASSIFIER_MODE:hybrid}
+    semantic-analysis:
+      enabled: ${AGENT_CHAT_SEMANTIC_ANALYSIS_ENABLED:true}
+      confidence-threshold: ${AGENT_CHAT_SEMANTIC_CONFIDENCE_THRESHOLD:0.80}
+      business-keyword-fast-path-enabled: ${AGENT_CHAT_BUSINESS_KEYWORD_FAST_PATH_ENABLED:false}
+      correction-replan-enabled: ${AGENT_CHAT_CORRECTION_REPLAN_ENABLED:true}
+      unchanged-plan-on-correction: ${AGENT_CHAT_UNCHANGED_PLAN_ON_CORRECTION:CLARIFY}
+    scheduled-menu:
+      default-meal-scopes: ${AGENT_CHAT_SCHEDULED_MENU_DEFAULT_MEAL_SCOPES:LUNCH,DINNER}
+      include-global-rice-candidates: ${AGENT_CHAT_SCHEDULED_MENU_INCLUDE_GLOBAL_RICE_CANDIDATES:false}

@@ -37,6 +37,10 @@ public class AgentQueryPlanValidator {
     private static final int MAX_NAME_LENGTH = 50;
     private static final Set<String> DETAIL_LEVELS = Set.of("SUMMARY", "DETAIL");
     private static final Set<String> MEAL_TYPES = Set.of("BREAKFAST", "LUNCH", "DINNER");
+    private static final Set<String> V3_SUBJECTS = Set.of("MEAL_PLAN", "CUSTOMER", "DISH");
+    private static final Set<String> V3_RELATIONS = Set.of("MEAL_PLAN_CUSTOMER", "MEAL_PLAN_DISH");
+    private static final Set<String> V3_FACTS = Set.of("CUSTOMER_CODE", "DISH_NAME", "ALLERGY_FILTERED", "ALLERGY_REASONS");
+    private static final Set<String> V3_GROUP_BY = Set.of("CUSTOMER_CODE");
     private static final Set<AgentQueryDimension> EXECUTABLE_OPERATION_DIMENSIONS = EnumSet.of(
         AgentQueryDimension.MEAL_TYPE, AgentQueryDimension.PACKAGE, AgentQueryDimension.CUSTOMER_SOURCE);
     private static final Map<AgentQueryDomain, Set<AgentQueryAction>> ALLOWED_ACTIONS = allowedActions();
@@ -55,8 +59,9 @@ public class AgentQueryPlanValidator {
             return new AgentQueryPlanValidationResult(errors, missingFields);
         }
         if (!AgentQueryPlan.SCHEMA_VERSION.equals(plan.getVersion())
-            && !AgentQueryPlan.SCHEMA_VERSION_V2.equals(plan.getVersion())) {
-            errors.add(error("version", "VERSION_UNSUPPORTED", "仅支持 QueryPlan 版本 1.0 或 2.0"));
+            && !AgentQueryPlan.SCHEMA_VERSION_V2.equals(plan.getVersion())
+            && !AgentQueryPlan.SCHEMA_VERSION_V3.equals(plan.getVersion())) {
+            errors.add(error("version", "VERSION_UNSUPPORTED", "仅支持 QueryPlan 版本 1.0、2.0 或 3.0"));
         }
         if (plan.getDomain() == null) errors.add(error("domain", "DOMAIN_REQUIRED", "必须指定查询领域"));
         if (plan.getAction() == null) errors.add(error("action", "ACTION_REQUIRED", "必须指定查询动作"));
@@ -70,11 +75,40 @@ public class AgentQueryPlanValidator {
         validateToolBudget(plan, errors);
         validateMetrics(plan, errors);
         validateAggregation(plan, errors);
+        validateV3(plan, errors);
         if (!DETAIL_LEVELS.contains(normalize(plan.getDetailLevel()))) {
             errors.add(error("detailLevel", "DETAIL_LEVEL_INVALID", "明细级别仅支持 SUMMARY 或 DETAIL"));
         }
         validateRequiredConditions(plan, errors, missingFields);
         return new AgentQueryPlanValidationResult(errors, missingFields);
+    }
+
+    /** 校验 V3 语义对象、关系、事实和分组只能来自登记白名单。 */
+    private void validateV3(AgentQueryPlan plan, List<AgentQueryPlanValidationError> errors) {
+        if (!AgentQueryPlan.SCHEMA_VERSION_V3.equals(plan.getVersion())) return;
+        if (plan.getDomain() != AgentQueryDomain.MEAL_PLAN || plan.getAction() != AgentQueryAction.LIST
+            || plan.getToolNames() == null || !plan.getToolNames().equals(List.of("listMealPlans"))) {
+            errors.add(error("plan", "V3_GRAPH_NOT_ALLOWED", "V3 排餐分析只能使用登记的范围排餐查询图"));
+        }
+        if (!V3_SUBJECTS.equals(toSet(plan.getSubjects())) || !V3_RELATIONS.equals(toSet(plan.getRelations()))
+            || !V3_FACTS.equals(toSet(plan.getRequestedFacts())) || !"FILTER_AND_GROUP".equals(plan.getOperation())
+            || !V3_GROUP_BY.equals(toSet(plan.getGroupBy()))) {
+            errors.add(error("plan", "V3_SEMANTIC_NOT_ALLOWED", "V3 语义包含未登记对象、关系、事实或操作"));
+        }
+        AgentQueryFilters filters = plan.getFilters();
+        boolean allMeals = plan.getMealScope() == me.zhengjie.agent.analysis.domain.MealScope.ALL_AVAILABLE;
+        boolean singleMeal = plan.getMealScope() != null && plan.getMealScope() != me.zhengjie.agent.analysis.domain.MealScope.ALL_AVAILABLE
+            && filters != null && plan.getMealScope().name().equals(normalize(filters.getMealType()));
+        if (filters == null || !notBlank(filters.getRecordDate()) || allMeals && notBlank(filters.getMealType()) || !allMeals && !singleMeal) {
+            errors.add(error("filters", "V3_SCOPE_REQUIRED", "V3 排餐分析必须指定单日日期，并使用单一餐次或全部餐次范围"));
+        }
+        if (filters != null && (filters.getPage() == null || filters.getSize() == null || filters.getSize() > MAX_PAGE_SIZE)) {
+            errors.add(error("filters", "V3_PAGE_REQUIRED", "V3 排餐分析必须使用受控分页"));
+        }
+    }
+
+    private Set<String> toSet(List<String> values) {
+        return values == null ? Set.of() : Set.copyOf(values);
     }
 
     /** 校验指标、维度和口径版本，保证统计只能使用登记能力。 */
@@ -168,7 +202,7 @@ public class AgentQueryPlanValidator {
         }
         if (plan.getDomain() == AgentQueryDomain.ORDER && plan.getAction() == AgentQueryAction.DETAIL && !order) missing(missingFields, "order");
         if (plan.getDomain() == AgentQueryDomain.ORDER && plan.getAction() != AgentQueryAction.DETAIL && !customer && !order) missing(missingFields, "customerOrOrder");
-        if (plan.getDomain() == AgentQueryDomain.MEAL_PLAN && !mealPlan && !customer) missing(missingFields, "customer");
+        if (plan.getDomain() == AgentQueryDomain.MEAL_PLAN && !AgentQueryPlan.SCHEMA_VERSION_V3.equals(plan.getVersion()) && !mealPlan && !customer) missing(missingFields, "customer");
         if (plan.getDomain() == AgentQueryDomain.MEAL_PLAN && !mealPlan && !recordDate) missing(missingFields, "recordDate");
         if ((plan.getDomain() == AgentQueryDomain.VERIFICATION || plan.getDomain() == AgentQueryDomain.REFUND) && !customer && !order) missing(missingFields, "customerOrOrder");
         if (plan.getDomain() == AgentQueryDomain.PACKAGE && plan.getAction() == AgentQueryAction.DETAIL && !packageRef) missing(missingFields, "package");
@@ -223,10 +257,14 @@ public class AgentQueryPlanValidator {
 
     /** 校验候选菜预览等工具的额外输入边界，避免把通用槽位传入不支持的内部接口。 */
     private void validateToolSpecificConstraints(AgentQueryPlan plan, List<AgentQueryPlanValidationError> errors) {
-        if (plan.getToolNames() == null || !plan.getToolNames().contains("previewDishCandidates") || plan.getFilters() == null) return;
+        if (plan.getToolNames() == null || plan.getFilters() == null) return;
         String mealType = normalize(plan.getFilters().getMealType());
-        if (!"LUNCH".equals(mealType) && !"DINNER".equals(mealType)) {
+        if (plan.getToolNames().contains("previewDishCandidates") && !"LUNCH".equals(mealType) && !"DINNER".equals(mealType)) {
             errors.add(error("filters.mealType", "CANDIDATE_DISH_MEAL_TYPE_INVALID", "候选菜预览仅支持午餐或晚餐"));
+        }
+        if (plan.getToolNames().contains("listScheduledDishes") && !mealType.isEmpty()
+            && !"LUNCH".equals(mealType) && !"DINNER".equals(mealType)) {
+            errors.add(error("filters.mealType", "SCHEDULED_MENU_MEAL_TYPE_INVALID", "公共排期菜单仅支持午餐或晚餐"));
         }
     }
 

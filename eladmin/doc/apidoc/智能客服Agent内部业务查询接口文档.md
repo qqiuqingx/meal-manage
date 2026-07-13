@@ -73,7 +73,11 @@
 
 `POST /api/internal/agent/query/meal-plans/list`
 
-权限：`agentDiagnosis:list` + `mealPlan:list`。必须提供 `customerId + recordDate`（餐次可选），或 `customerId + startDate + endDate`（最多 31 天，餐次可选），或受控的 `customerMealPlanId`；带客户 ID 查询记录 ID 时会校验归属关系。响应按“排餐主单 → 客户排餐记录 → 菜品明细”返回，包含使用订单/父子套餐 ID、生成时间、脱敏配送地址、人工新增命中标记、手工换菜数量和失败原因摘要；菜品明细最多 30 条并通过 `dishesTruncated` 表示截断。当前表结构没有可审计的人工删除原因，因此不会将软删除记录推断为人工删除。
+权限：`agentDiagnosis:list` + `mealPlan:list`。支持 `customerId + recordDate`、`customerId + startDate + endDate`（最多 31 天）或受控的 `customerMealPlanId`。跨客户范围查询使用 `recordDate + page + size`，`mealType` 可选：传入时仅允许 `BREAKFAST`、`LUNCH`、`DINNER` 并只查该餐次，省略时查询当天全部排餐餐次。范围查询只支持单日，`size` 最大 50，并在 SQL 条件中应用当前客服的数据范围。未绑定数据范围直接拒绝，不会按全量数据执行。
+
+响应按“排餐主单 → 客户排餐记录 → 菜品明细”返回，包含 `customerCode`、使用订单/父子套餐 ID、生成时间、脱敏配送地址、人工新增命中标记、手工换菜数量和失败原因摘要；包含 `total`、`page`、`size`、`truncated` 和 `queriedAt`。菜品明细最多 30 条并通过 `dishesTruncated` 表示截断，且返回 `allergyFiltered`、`allergyReasons`、`replaceReason`、`originalDishId` 和 `originalDishName`。
+
+只有 `allergyFiltered=true` 且 `replaceReason=ALLERGY` 才能解释为本次排餐实际命中过敏过滤；客户主动排除菜品、订单换菜和缺菜回退不得表述为客户过敏。当前表结构没有可审计的人工删除原因，因此不会将软删除记录推断为人工删除。
 
 ### 3.7 套餐规格
 
@@ -100,6 +104,27 @@
 `POST /api/internal/agent/query/dishes/candidates`
 
 权限：`agentDiagnosis:list` + `customerProfile:list` + `customerOrder:list` + `package:list` + `dish:list`。请求必须提供客户 ID、单日日期和午餐或晚餐。服务读取当日排期菜、固定米饭、客户当前进行中订单关联的父套餐、客户排除菜和三级过敏标签，最多返回 20 条候选菜，并标注 `PACKAGE_NOT_MATCHED`、`CUSTOMER_EXCLUDED_DISH`、`ALLERGY:<标签>` 等过滤摘要。该结果仅表示只读候选预览，不创建排餐记录，也不表示该餐次已生成或可直接配送。
+
+### 3.11 公共排期菜单
+
+`POST /api/internal/agent/query/dishes/scheduled`
+
+权限：`agentDiagnosis:list` + `mealPlan:list` + `dish:list`。该接口只查询公共排期，不关联客户、订单、配送地址或客户实际排餐。
+
+请求体：
+
+```json
+{
+  "recordDate": "2026-07-13",
+  "mealTypes": ["LUNCH", "DINNER"]
+}
+```
+
+- `recordDate` 必填，格式为 `yyyy-MM-dd`；服务按 `ScheduleKeyUtil` 映射到排期周次和星期。
+- `mealTypes` 必填，仅允许受控值 `LUNCH`、`DINNER`；未指定餐次的产品默认值由 Agent 固定为两者，禁止向单餐次 SQL 传入空餐次。
+- 数据仅来自启用的 `meal_schedule_plan JOIN dish`；不会追加 `dish` 主档中的全局 `RICE_TYPE` 米饭候选。
+- 响应为 `{recordDate, groups, total, truncated}`。`groups` 按午餐、晚餐稳定排序，每组包含 `mealTypeCode`、`mealTypeName`、`total` 和限量 `items`；无排期时仍返回对应的空分组。
+- `total` 的事实含义为排期菜品数，单位为“道”，来源类型为 `SCHEDULED_DISH_LIST`，不得解释为订单数量。
 
 ## 4. 会话历史卡片恢复
 

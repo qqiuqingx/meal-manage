@@ -2,6 +2,7 @@ package me.zhengjie.agent.query.domain;
 
 import java.util.ArrayList;
 import java.util.List;
+import me.zhengjie.agent.analysis.domain.MealScope;
 
 /**
  * 模型生成、服务端校验并执行的受控只读查询计划。
@@ -10,6 +11,7 @@ public class AgentQueryPlan {
 
     public static final String SCHEMA_VERSION = "1.0";
     public static final String SCHEMA_VERSION_V2 = "2.0";
+    public static final String SCHEMA_VERSION_V3 = "3.0";
 
     private String version = SCHEMA_VERSION;
     private AgentQueryDomain domain;
@@ -25,7 +27,18 @@ public class AgentQueryPlan {
     private String analysisSource;
     private Double analysisConfidence;
     private String detailLevel = "SUMMARY";
+    private MealScope mealScope;
     private List<String> toolNames = new ArrayList<>();
+    /** V3 受控业务对象，仅允许服务端定义的语义枚举。 */
+    private List<String> subjects = new ArrayList<>();
+    /** V3 受控对象关系，不能表示 SQL Join 或工具名称。 */
+    private List<String> relations = new ArrayList<>();
+    /** V3 请求事实白名单。 */
+    private List<String> requestedFacts = new ArrayList<>();
+    /** V3 服务端可编译的聚合操作。 */
+    private String operation;
+    /** V3 服务端可编译的分组维度。 */
+    private List<String> groupBy = new ArrayList<>();
 
     public String getVersion() { return version; }
     public void setVersion(String version) { this.version = version; }
@@ -55,6 +68,18 @@ public class AgentQueryPlan {
     public void setAnalysisConfidence(Double analysisConfidence) { this.analysisConfidence = analysisConfidence; }
     public String getDetailLevel() { return detailLevel; }
     public void setDetailLevel(String detailLevel) { this.detailLevel = detailLevel; }
+    public MealScope getMealScope() { return mealScope; }
+    public void setMealScope(MealScope mealScope) { this.mealScope = mealScope; }
     public List<String> getToolNames() { return toolNames; }
     public void setToolNames(List<String> toolNames) { this.toolNames = toolNames; }
+    public List<String> getSubjects() { return subjects; }
+    public void setSubjects(List<String> subjects) { this.subjects = subjects; }
+    public List<String> getRelations() { return relations; }
+    public void setRelations(List<String> relations) { this.relations = relations; }
+    public List<String> getRequestedFacts() { return requestedFacts; }
+    public void setRequestedFacts(List<String> requestedFacts) { this.requestedFacts = requestedFacts; }
+    public String getOperation() { return operation; }
+    public void setOperation(String operation) { this.operation = operation; }
+    public List<String> getGroupBy() { return groupBy; }
+    public void setGroupBy(List<String> groupBy) { this.groupBy = groupBy; }
 }

@@ -57,6 +57,15 @@ public class HybridMealPlanChatExtractor implements MealPlanChatExtractor {
                                         DiagnosisSlots existingSlots,
                                         DiagnosisConversationState conversationState) {
         ChatExtractionResult slots = slotExtractor.extract(message, existingSlots);
+        if (isContextCorrection(message, conversationState)) {
+            slots.setIntent(ChatIntent.BUSINESS_QUERY);
+            slots.setRuleIntent("CONTEXT_CORRECTION");
+            slots.setIntentConfidence(0.0D);
+            slots.setIntentReason("检测到上一轮业务查询结果纠错信号");
+            slots.setIntentSource("HYBRID");
+            slots.setLlmTriggered(true);
+            return slots;
+        }
         IntentClassificationRequest request = new IntentClassificationRequest();
         request.setUserMessage(message);
         request.setExistingSlots(existingSlots);
@@ -73,7 +82,10 @@ public class HybridMealPlanChatExtractor implements MealPlanChatExtractor {
         IntentClassificationResult selected = rule;
         String source = "RULE";
         boolean llmTriggered = false;
-        if (shouldUseLlm(rule)) {
+        if (isBusinessSemanticCandidate(rule)) {
+            // 普通业务问题直接进入 BusinessQuestionAnalyzer，避免重复意图模型成为前置失败点。
+            source = "SEMANTIC";
+        } else if (shouldUseLlm(rule)) {
             llmTriggered = true;
             LlmIntentClassifier classifier = llmClassifier.getIfAvailable();
             if (classifier != null) {
@@ -89,7 +101,7 @@ public class HybridMealPlanChatExtractor implements MealPlanChatExtractor {
         }
         if (selected != null && selected.getIntent() != null) {
             ChatIntent selectedIntent = selected.getIntent();
-            if (isLegacyBusinessIntent(selectedIntent)) {
+            if (selectedIntent == ChatIntent.DIAGNOSE || isLegacyBusinessIntent(selectedIntent)) {
                 // 旧意图只作为兼容路由线索，对外统一进入业务查询顶层入口。
                 slots.setRuleIntent(selectedIntent.name());
                 slots.setIntent(ChatIntent.BUSINESS_QUERY);
@@ -104,6 +116,11 @@ public class HybridMealPlanChatExtractor implements MealPlanChatExtractor {
         return slots;
     }
 
+    /** 判断规则结果是否只是业务语义候选；该类问题应由统一业务分析器理解完整语义。 */
+    private boolean isBusinessSemanticCandidate(IntentClassificationResult rule) {
+        return rule != null && (rule.getIntent() == ChatIntent.BUSINESS_QUERY || isLegacyBusinessIntent(rule.getIntent()));
+    }
+
     private boolean shouldUseLlm(IntentClassificationResult rule) {
         if ("rule_only".equals(mode)) return false;
         if ("llm_only".equals(mode)) return true;
@@ -112,6 +129,13 @@ public class HybridMealPlanChatExtractor implements MealPlanChatExtractor {
 
     private boolean usable(IntentClassificationResult result) {
         return result != null && result.getIntent() != null && result.getConfidence() >= 0.8;
+    }
+
+    /** 仅以粗粒度否定信号触发语义分析，不在规则层决定纠错对象。 */
+    private boolean isContextCorrection(String message, DiagnosisConversationState state) {
+        if (state == null || state.getLastBusinessQueryContext() == null || message == null) return false;
+        String text = message.trim();
+        return text.matches(".*(不对|不应该|查错|怎么全是|明显|全是米饭|主食列表).*" );
     }
 
     /** 判断旧版细粒度意图是否应归入顶层只读业务查询入口。 */
