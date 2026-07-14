@@ -2,6 +2,8 @@
 
 基于 ELADMIN 二次开发的前后端分离后台系统，当前业务重心是客户建档、套餐签约、订单餐数、智能排餐、生产单、配送核销、退餐和销售统计。技术底座为 Spring Boot 2.7.18 + MyBatis-Plus + Spring Security + JWT + Redis + Vue 2.7 + Element UI。
 
+> **Agent 功能说明：** 最新的 Agent 相关功能在 [`agent-dev` 分支](../../tree/agent-dev) 开发和维护，请前往该分支查看。
+
 > 原 ELADMIN 通用后台能力仍保留，包括用户、角色、菜单、部门、字典、日志、SQL 监控、定时任务、代码生成、文件存储等。
 
 ## 系统定位
