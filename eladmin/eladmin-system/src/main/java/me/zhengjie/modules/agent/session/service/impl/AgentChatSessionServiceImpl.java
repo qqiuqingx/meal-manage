@@ -171,6 +171,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         downstreamRequest.setContextSlots(toPersistedSlots(session));
         downstreamRequest.setPendingBusinessQueryContext(parseMap(session.getPendingBusinessQueryJson()));
         downstreamRequest.setLastBusinessQueryContext(parseMap(session.getLastBusinessQueryContextJson()));
+        downstreamRequest.setActiveTaskStack(parseMap(session.getActiveTaskStackJson()));
         String accessContext = accessContextService.issue(session.getSessionId(), resolvedRequestId);
         long queryStart = System.currentTimeMillis();
         AgentChatResponse response = diagnosisFacadeService.chatMealPlan(downstreamRequest, resolvedRequestId, accessContext);
@@ -261,6 +262,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         dto.setUpdateTime(session.getUpdateTime());
         dto.setPendingBusinessQueryContext(parseMap(session.getPendingBusinessQueryJson()));
         dto.setLastBusinessQueryContext(parseMap(session.getLastBusinessQueryContextJson()));
+        dto.setActiveTaskStack(parseMap(session.getActiveTaskStackJson()));
         List<AgentChatMessageDto> messageDtos = messages.stream().map(this::toMessageDto).collect(Collectors.toList());
         dto.setMessages(messageDtos);
         for (int i = messageDtos.size() - 1; i >= 0; i--) {
@@ -480,6 +482,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         }
         session.setPendingBusinessQueryJson(toJson(response.getPendingBusinessQueryContext()));
         session.setLastBusinessQueryContextJson(toJson(response.getLastBusinessQueryContext()));
+        session.setActiveTaskStackJson(toJson(response.getActiveTaskStack()));
         if (slots != null) {
             boolean customerFocusChanged = customerFocusChanged(session, slots);
             session.setCustomerId(slots.getCustomerId());
@@ -638,6 +641,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         snapshot.put("queryPlan", response.getQueryPlan());
         snapshot.put("pendingBusinessQueryContext", response.getPendingBusinessQueryContext());
         snapshot.put("lastBusinessQueryContext", response.getLastBusinessQueryContext());
+        snapshot.put("activeTaskStack", response.getActiveTaskStack());
         snapshot.put("semanticTraceSummary", response.getSemanticTraceSummary());
         return snapshot;
     }
@@ -665,6 +669,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
             ? (Map<String, Object>) snapshot.get("pendingBusinessQueryContext") : null);
         response.setLastBusinessQueryContext(snapshot.get("lastBusinessQueryContext") instanceof Map
             ? (Map<String, Object>) snapshot.get("lastBusinessQueryContext") : null);
+        response.setActiveTaskStack(snapshot.get("activeTaskStack") instanceof Map
+            ? (Map<String, Object>) snapshot.get("activeTaskStack") : null);
         response.setSemanticTraceSummary(snapshot.get("semanticTraceSummary") instanceof Map
             ? (Map<String, Object>) snapshot.get("semanticTraceSummary") : null);
     }
@@ -743,6 +749,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         session.setMealType(null);
         session.setPendingBusinessQueryJson(null);
         session.setLastBusinessQueryContextJson(null);
+        session.setActiveTaskStackJson(null);
     }
 
     private String limitTitle(String value) {

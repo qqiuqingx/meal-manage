@@ -130,6 +130,7 @@ public class AgentBusinessToolExecutor {
         }
         if ("getCustomerProfileCount".equals(toolName)) return client.customerProfileCount();
         if ("getActiveCustomerSummary".equals(toolName)) return client.activeCustomerSummary();
+        if ("listActiveCustomerMealBalances".equals(toolName)) return client.activeCustomerBalances(page(filters), size(filters)).toPresentationMap();
         if ("getExpiringOrderSummary".equals(toolName)) return client.expiringOrderSummary(filters.getStartDate(), filters.getEndDate());
         throw new IllegalArgumentException("unsupported tool");
     }

@@ -70,6 +70,11 @@ public final class AgentMetricCatalog {
             AgentDefaultTemporalPolicy.NONE, false, "客户", "total",
             List.of("还有餐数的客户", "活跃客户"), "getActiveCustomerSummary", "BUSINESS_QUERY_OPERATION_ACTIVE",
             new AgentQueryDimension[0]);
+        register(result, AgentQueryMetric.ACTIVE_CUSTOMER_MEAL_BALANCE_DETAIL, "活跃客户餐数余额明细",
+            "对已登记且授权的活跃客户集合，按客户返回早餐和午晚餐剩余餐数，不返回金额或联系方式", AgentQueryDomain.OPERATION_STATISTICS,
+            AgentDefaultTemporalPolicy.NONE, false, "客户", "items",
+            List.of(), "listActiveCustomerMealBalances", "BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES",
+            AgentQueryDimension.CUSTOMER);
         register(result, AgentQueryMetric.ACTIVE_ORDER_COUNT, "进行中订单数", "状态为进行中且未删除的订单数",
             AgentQueryDomain.OPERATION_STATISTICS, AgentDefaultTemporalPolicy.NONE, false, "订单", "total",
             List.of("进行中订单"), "getActiveCustomerSummary", "BUSINESS_QUERY_OPERATION_ACTIVE_ORDER",

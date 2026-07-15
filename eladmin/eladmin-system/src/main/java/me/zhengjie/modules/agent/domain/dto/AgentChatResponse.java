@@ -62,6 +62,7 @@ public class AgentChatResponse {
     private Map<String, Object> pendingBusinessQueryContext;
     /** Agent 返回的最近业务查询脱敏摘要。 */
     private Map<String, Object> lastBusinessQueryContext;
+    private Map<String, Object> activeTaskStack;
     /** 不含问题原文、Prompt 和业务结果的语义追踪摘要。 */
     private Map<String, Object> semanticTraceSummary;
 
@@ -173,6 +174,8 @@ public class AgentChatResponse {
     public void setPendingBusinessQueryContext(Map<String, Object> pendingBusinessQueryContext) { this.pendingBusinessQueryContext = pendingBusinessQueryContext; }
     public Map<String, Object> getLastBusinessQueryContext() { return lastBusinessQueryContext; }
     public void setLastBusinessQueryContext(Map<String, Object> lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
+    public Map<String, Object> getActiveTaskStack() { return activeTaskStack; }
+    public void setActiveTaskStack(Map<String, Object> activeTaskStack) { this.activeTaskStack = activeTaskStack; }
     public Map<String, Object> getSemanticTraceSummary() { return semanticTraceSummary; }
     public void setSemanticTraceSummary(Map<String, Object> semanticTraceSummary) { this.semanticTraceSummary = semanticTraceSummary; }
 }

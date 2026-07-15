@@ -4,6 +4,8 @@ import me.zhengjie.modules.agent.query.domain.dto.AgentDailyCustomerStatsDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentOperationCountDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentOperationDailyRequest;
 import me.zhengjie.modules.agent.query.domain.dto.AgentOperationOrderRequest;
+import me.zhengjie.modules.agent.query.domain.dto.AgentActiveCustomerBalanceRequest;
+import me.zhengjie.modules.agent.query.domain.dto.AgentActiveCustomerBalanceResponse;
 
 /** 主系统运营指标的只读聚合服务，页面和 Agent 应共用该口径。 */
 public interface AgentOperationQueryService {
@@ -11,6 +13,8 @@ public interface AgentOperationQueryService {
     AgentDailyCustomerStatsDto dailyCustomers(AgentOperationDailyRequest request);
     /** 查询存在进行中且仍有餐数余额的客户去重数。 */
     AgentOperationCountDto activeCustomers();
+    /** 查询当前授权范围内活跃客户的脱敏餐数余额明细。 */
+    AgentActiveCustomerBalanceResponse activeCustomerBalances(AgentActiveCustomerBalanceRequest request);
     /** 查询当前授权数据范围内已录入的客户档案总数。 */
     AgentOperationCountDto customerProfileCount();
     /** 查询日期范围内到期的进行中订单数。 */

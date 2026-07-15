@@ -1,0 +1,16 @@
+catalogVersion: "1.0"
+capabilities:
+  - capabilityId: CUSTOMER_MEAL_BALANCE_BREAKDOWN_V1
+    displayName: 客户集合餐数余额明细
+    frame:
+      goal: QUERY
+      targetEntity: CUSTOMER
+      allowedScopeKinds: [ENTITY_SET]
+      requiredMeasures: [MEAL_BALANCE]
+      allowedDimensions: [CUSTOMER]
+      allowedOperations: [PROJECT, GROUP]
+      allowedOutputShapes: [DETAIL_LIST]
+    allowedSetDefinitions: [AGENT_ACTIVE_CUSTOMER_V1]
+    requiredPermissions: [customerOrder:list]
+    plannerProfile: ACTIVE_CUSTOMER_BALANCE_DETAIL_V1
+    riskLevel: INTERNAL_SENSITIVE_LIST

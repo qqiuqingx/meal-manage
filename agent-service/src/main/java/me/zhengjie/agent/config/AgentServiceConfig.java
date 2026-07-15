@@ -12,6 +12,11 @@ import me.zhengjie.agent.analysis.ShadowBusinessQuestionAnalyzer;
 import me.zhengjie.agent.prompt.DiagnosisPromptBuilder;
 import me.zhengjie.agent.prompt.DiagnosisPromptPolicyLoader;
 import me.zhengjie.agent.query.BusinessQueryPlanningService;
+import me.zhengjie.agent.query.MultiIntentPlanningService;
+import me.zhengjie.agent.analysis.ConversationUnderstandingValidator;
+import me.zhengjie.agent.analysis.IntentConfidencePolicy;
+import me.zhengjie.agent.analysis.ConversationUnderstandingService;
+import me.zhengjie.agent.analysis.LlmConversationUnderstandingService;
 import me.zhengjie.agent.validator.DiagnosisResultValidator;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.ObjectProvider;
@@ -87,5 +92,27 @@ public class AgentServiceConfig {
     @Bean
     public BusinessQueryPlanningService businessQueryPlanningService() {
         return new BusinessQueryPlanningService();
+    }
+
+    /** 创建多语义帧的固定计划编译器。 */
+    @Bean
+    public MultiIntentPlanningService multiIntentPlanningService() { return new MultiIntentPlanningService(); }
+
+    /** 创建会话理解协议校验器，非法帧不能进入查询编排。 */
+    @Bean
+    public ConversationUnderstandingValidator conversationUnderstandingValidator() { return new ConversationUnderstandingValidator(); }
+
+    /** 创建校准后的置信度决策策略，模型自报分数不直接控制执行。 */
+    @Bean
+    public IntentConfidencePolicy intentConfidencePolicy() { return new IntentConfidencePolicy(); }
+
+    /** 在可用模型客户端存在时创建受控多帧理解服务。 */
+    @Bean
+    public ConversationUnderstandingService conversationUnderstandingService(ObjectProvider<ChatClient.Builder> builderProvider,
+                                                                             ObjectMapper objectMapper,
+                                                                             ConversationUnderstandingValidator validator) {
+        ChatClient.Builder builder = builderProvider.getIfAvailable();
+        return builder == null ? (message, slots, handles) -> { me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult result = new me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult(); result.setRequiresClarification(true); result.setClarificationCode("MODEL_UNAVAILABLE"); return result; }
+            : new LlmConversationUnderstandingService(builder, objectMapper, validator);
     }
 }

@@ -12,6 +12,7 @@ import me.zhengjie.agent.query.domain.AgentQueryPlan;
 import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
 import me.zhengjie.agent.query.domain.PendingBusinessQueryContext;
 import me.zhengjie.agent.query.domain.SemanticTraceSummary;
+import me.zhengjie.agent.query.domain.ConversationTaskStack;
 
 /**
  * 智能排查聊天响应。
@@ -41,6 +42,7 @@ public class AgentChatResponse {
     private PendingBusinessQueryContext pendingBusinessQueryContext;
     private LastBusinessQueryContext lastBusinessQueryContext;
     private SemanticTraceSummary semanticTraceSummary;
+    private ConversationTaskStack activeTaskStack;
 
     public String getResponseType() {
         return responseType;
@@ -75,6 +77,8 @@ public class AgentChatResponse {
     public void setLastBusinessQueryContext(LastBusinessQueryContext lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
     public SemanticTraceSummary getSemanticTraceSummary() { return semanticTraceSummary; }
     public void setSemanticTraceSummary(SemanticTraceSummary semanticTraceSummary) { this.semanticTraceSummary = semanticTraceSummary; }
+    public ConversationTaskStack getActiveTaskStack() { return activeTaskStack; }
+    public void setActiveTaskStack(ConversationTaskStack activeTaskStack) { this.activeTaskStack = activeTaskStack; }
 
     public String getRequestId() {
         return requestId;

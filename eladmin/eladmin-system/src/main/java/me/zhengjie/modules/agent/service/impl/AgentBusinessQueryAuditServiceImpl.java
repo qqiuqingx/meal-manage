@@ -60,6 +60,11 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
         audit.setClarificationRequired("NEED_MORE_INFO".equals(response.getStatus()));
         audit.setMetricCodes(JSON.toJSONString(list(plan.get("metrics")))); audit.setDimensionCodes(JSON.toJSONString(list(plan.get("dimensions"))));
         audit.setUnsupportedReason(unsupportedReason(response)); audit.setAnswerValidationResult(answerValidationResult(response));
+        audit.setUnderstandingSchemaVersion("1.0"); audit.setInteractionMode(string(semanticTrace.get("interactionMode")));
+        audit.setSemanticFrameCount(response.getActiveTaskStack() == null ? 0 : 1);
+        audit.setReferenceResolution(string(semanticTrace.get("referenceResolution")));
+        audit.setConfidenceBucket(string(semanticTrace.get("confidenceBucket")));
+        audit.setClarificationCode("NEED_MORE_INFO".equals(response.getStatus()) ? response.getResponseType() : null);
         audit.setCostMs(Math.max(0, costMs)); audit.setCreateTime(new Timestamp(System.currentTimeMillis()));
         auditMapper.insert(audit);
     }

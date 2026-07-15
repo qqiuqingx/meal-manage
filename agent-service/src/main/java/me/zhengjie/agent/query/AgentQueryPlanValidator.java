@@ -42,7 +42,7 @@ public class AgentQueryPlanValidator {
     private static final Set<String> V3_FACTS = Set.of("CUSTOMER_CODE", "DISH_NAME", "ALLERGY_FILTERED", "ALLERGY_REASONS");
     private static final Set<String> V3_GROUP_BY = Set.of("CUSTOMER_CODE");
     private static final Set<AgentQueryDimension> EXECUTABLE_OPERATION_DIMENSIONS = EnumSet.of(
-        AgentQueryDimension.MEAL_TYPE, AgentQueryDimension.PACKAGE, AgentQueryDimension.CUSTOMER_SOURCE);
+        AgentQueryDimension.MEAL_TYPE, AgentQueryDimension.PACKAGE, AgentQueryDimension.CUSTOMER_SOURCE, AgentQueryDimension.CUSTOMER);
     private static final Map<AgentQueryDomain, Set<AgentQueryAction>> ALLOWED_ACTIONS = allowedActions();
 
     /**

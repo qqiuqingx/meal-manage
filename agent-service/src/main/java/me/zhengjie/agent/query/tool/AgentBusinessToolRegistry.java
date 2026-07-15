@@ -49,6 +49,7 @@ public final class AgentBusinessToolRegistry {
         register(result, "getDailyCustomerWorkload", AgentQueryDomain.OPERATION_STATISTICS, AgentQueryAction.SUMMARY, "mealPlan:list", 100, "recordDate|mealType", "AgentDailyCustomerStatsDto");
         register(result, "getCustomerProfileCount", AgentQueryDomain.OPERATION_STATISTICS, AgentQueryAction.SUMMARY, "customerProfile:list", 1, "none", "AgentOperationCountDto");
         register(result, "getActiveCustomerSummary", AgentQueryDomain.OPERATION_STATISTICS, AgentQueryAction.SUMMARY, "customerOrder:list", 1, "dateRange", "AgentOperationCountDto");
+        register(result, "listActiveCustomerMealBalances", AgentQueryDomain.OPERATION_STATISTICS, AgentQueryAction.BREAKDOWN, "customerOrder:list", 50, "activeCustomerSet|page|size", "ActiveCustomerBalanceResponse");
         register(result, "getExpiringOrderSummary", AgentQueryDomain.OPERATION_STATISTICS, AgentQueryAction.SUMMARY, "customerOrder:list", 1, "startDate|endDate", "AgentOperationCountDto");
         register(result, "getMealPlanFailureSummary", AgentQueryDomain.OPERATION_STATISTICS, AgentQueryAction.SUMMARY, "mealPlan:list", 1, "recordDate|mealType", "AgentDailyCustomerStatsDto");
         return Map.copyOf(result);

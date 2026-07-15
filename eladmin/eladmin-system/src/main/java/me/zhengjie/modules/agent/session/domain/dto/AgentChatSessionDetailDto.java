@@ -73,6 +73,7 @@ public class AgentChatSessionDetailDto {
     private Map<String, Object> pendingBusinessQueryContext;
     /** 最近一次业务查询的脱敏上下文。 */
     private Map<String, Object> lastBusinessQueryContext;
+    private Map<String, Object> activeTaskStack;
 
     public String getSessionId() {
         return sessionId;
@@ -254,4 +255,6 @@ public class AgentChatSessionDetailDto {
     public void setPendingBusinessQueryContext(Map<String, Object> pendingBusinessQueryContext) { this.pendingBusinessQueryContext = pendingBusinessQueryContext; }
     public Map<String, Object> getLastBusinessQueryContext() { return lastBusinessQueryContext; }
     public void setLastBusinessQueryContext(Map<String, Object> lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
+    public Map<String, Object> getActiveTaskStack() { return activeTaskStack; }
+    public void setActiveTaskStack(Map<String, Object> activeTaskStack) { this.activeTaskStack = activeTaskStack; }
 }

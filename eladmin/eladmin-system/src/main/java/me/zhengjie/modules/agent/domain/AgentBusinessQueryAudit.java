@@ -41,5 +41,12 @@ public class AgentBusinessQueryAudit {
     /** 未支持问题的稳定拒绝原因。 */ private String unsupportedReason;
     /** 回答安全校验结果，VALID/PARTIAL/REJECTED。 */ private String answerValidationResult;
     /** 处理耗时毫秒。 */ private Long costMs;
+    /** 会话理解协议版本。 */ private String understandingSchemaVersion;
+    /** 本轮交互模式。 */ private String interactionMode;
+    /** 语义帧数量。 */ private Integer semanticFrameCount;
+    /** 命中的能力目录标识。 */ private String capabilityIds;
+    /** 上下文引用解析状态。 */ private String referenceResolution;
+    /** 校准后置信度分桶。 */ private String confidenceBucket;
+    /** 澄清稳定码。 */ private String clarificationCode;
     /** 创建时间。 */ private Timestamp createTime;
 }

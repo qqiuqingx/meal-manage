@@ -13,6 +13,7 @@ import me.zhengjie.agent.query.client.dto.CustomerCandidateListResponse;
 import me.zhengjie.agent.query.client.dto.PackageSpecResponse;
 import me.zhengjie.agent.query.client.dto.BusinessRuleResponse;
 import me.zhengjie.agent.query.client.dto.DishListResponse;
+import me.zhengjie.agent.query.client.dto.ActiveCustomerBalanceResponse;
 
 /**
  * 调用主系统受控业务查询接口的客户端；不支持自由 SQL 或任意 URL。
@@ -170,6 +171,11 @@ public interface BusinessQueryDataClient {
     /** 查询活跃客户去重数。 */
     default Map<String, Object> activeCustomerSummary() {
         throw new UnsupportedOperationException("active customer summary client is not configured");
+    }
+
+    /** 查询活跃客户集合的脱敏餐数余额明细，服务端固定限制为 50 条。 */
+    default ActiveCustomerBalanceResponse activeCustomerBalances(int page, int size) {
+        throw new UnsupportedOperationException("active customer balance client is not configured");
     }
 
     /** 查询当前授权范围内的客户档案总数。 */

@@ -6,5 +6,6 @@ public enum BusinessInteractionMode {
     FOLLOW_UP,
     REFINE,
     CORRECTION,
-    RETRY
+    RETRY,
+    RESET
 }

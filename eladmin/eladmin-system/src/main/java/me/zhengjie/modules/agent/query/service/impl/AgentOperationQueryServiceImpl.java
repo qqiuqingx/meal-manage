@@ -6,6 +6,9 @@ import me.zhengjie.modules.agent.query.domain.dto.AgentDailyCustomerStatsDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentOperationCountDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentOperationDailyRequest;
 import me.zhengjie.modules.agent.query.domain.dto.AgentOperationOrderRequest;
+import me.zhengjie.modules.agent.query.domain.dto.AgentActiveCustomerBalanceItem;
+import me.zhengjie.modules.agent.query.domain.dto.AgentActiveCustomerBalanceRequest;
+import me.zhengjie.modules.agent.query.domain.dto.AgentActiveCustomerBalanceResponse;
 import me.zhengjie.modules.agent.query.service.AgentOperationQueryService;
 import me.zhengjie.modules.agent.security.AgentCustomerDataScopeContext;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
@@ -157,6 +160,55 @@ public class AgentOperationQueryServiceImpl implements AgentOperationQueryServic
             if (balance.getRemainingBreakfast() > 0 || balance.getRemainingLunchDinner() > 0) customers.add(order.getCustomerId());
         }
         return count("ACTIVE_CUSTOMER_COUNT", "AGENT_ACTIVE_CUSTOMER_V1", customers.size());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public AgentActiveCustomerBalanceResponse activeCustomerBalances(AgentActiveCustomerBalanceRequest request) {
+        int page = request == null || request.getPage() == null ? 1 : Math.max(request.getPage(), 1);
+        int size = request == null || request.getSize() == null ? 50 : request.getSize();
+        if (size < 1 || size > 50) throw new IllegalArgumentException("每页活跃客户余额明细必须在 1 至 50 条之间");
+        Set<Long> scopedCustomerIds = AgentCustomerDataScopeContext.customerIds();
+        List<CustomerOrder> orders = scopedCustomerIds != null && scopedCustomerIds.isEmpty() ? List.of()
+            : customerOrderMapper.selectList(new LambdaQueryWrapper<CustomerOrder>().eq(CustomerOrder::getStatus, 1)
+                .in(scopedCustomerIds != null, CustomerOrder::getCustomerId, scopedCustomerIds));
+        Map<Long, int[]> verifiedByOrder = verifiedByOrder(orders);
+        Map<Long, int[]> balances = new HashMap<>();
+        for (CustomerOrder order : orders) {
+            if (order == null || order.getId() == null || order.getCustomerId() == null) continue;
+            int[] verified = verifiedByOrder.getOrDefault(order.getId(), new int[3]);
+            OrderMealBalanceDto balance = OrderMealBalanceCalculator.calculate(order, verified[0], verified[1], verified[2]);
+            if (balance.getRemainingBreakfast() <= 0 && balance.getRemainingLunchDinner() <= 0) continue;
+            int[] customerBalance = balances.computeIfAbsent(order.getCustomerId(), ignored -> new int[2]);
+            customerBalance[0] += Math.max(balance.getRemainingBreakfast(), 0);
+            customerBalance[1] += Math.max(balance.getRemainingLunchDinner(), 0);
+        }
+        List<CustomerProfile> profiles = balances.isEmpty() ? List.of() : customerProfileMapper.selectList(new LambdaQueryWrapper<CustomerProfile>()
+            .in(CustomerProfile::getId, balances.keySet()).orderByAsc(CustomerProfile::getCustomerCode));
+        AgentActiveCustomerBalanceResponse response = new AgentActiveCustomerBalanceResponse();
+        response.setTotal(balances.size()); response.setPage(page); response.setSize(size);
+        int from = Math.min((page - 1) * size, profiles.size());
+        int to = Math.min(from + size, profiles.size());
+        for (CustomerProfile profile : profiles.subList(from, to)) {
+            int[] balance = balances.get(profile.getId());
+            if (balance == null) continue;
+            AgentActiveCustomerBalanceItem item = new AgentActiveCustomerBalanceItem();
+            item.setCustomerId(profile.getId()); item.setCustomerCode(profile.getCustomerCode());
+            item.setCustomerNameMasked(maskName(profile.getCustomerName()));
+            item.setRemainingBreakfast(Math.max(balance[0], 0)); item.setRemainingLunchDinner(Math.max(balance[1], 0));
+            item.setRemainingTotal(item.getRemainingBreakfast() + item.getRemainingLunchDinner());
+            response.getItems().add(item);
+        }
+        response.setTruncated(to < profiles.size());
+        response.setQueriedAt(java.time.ZonedDateTime.now(ZoneId.of("Asia/Shanghai")).toOffsetDateTime().toString());
+        return response;
+    }
+
+    /** 对客户姓名做最小必要脱敏，避免把完整个人信息传入 Agent。 */
+    private String maskName(String name) {
+        if (name == null || name.trim().isEmpty()) return "***";
+        String value = name.trim();
+        return value.length() == 1 ? value + "*" : value.substring(0, 1) + "*";
     }
 
     /** {@inheritDoc} */

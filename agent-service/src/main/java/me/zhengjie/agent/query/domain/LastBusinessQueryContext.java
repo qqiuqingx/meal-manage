@@ -6,6 +6,9 @@ import me.zhengjie.agent.analysis.domain.MealScope;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
+import me.zhengjie.agent.analysis.domain.ConversationContextHandle;
 
 /** 可持久化的上一轮业务查询脱敏摘要，仅供纠错重新规划使用。 */
 public class LastBusinessQueryContext {
@@ -21,6 +24,7 @@ public class LastBusinessQueryContext {
     private Map<String, Object> resultShape = new LinkedHashMap<>();
     private String assistantSummary;
     private OffsetDateTime queriedAt;
+    private List<ConversationContextHandle> contextHandles = new ArrayList<>();
 
     public String getResponseType() { return responseType; }
     public void setResponseType(String responseType) { this.responseType = responseType; }
@@ -46,4 +50,6 @@ public class LastBusinessQueryContext {
     public void setAssistantSummary(String assistantSummary) { this.assistantSummary = assistantSummary; }
     public OffsetDateTime getQueriedAt() { return queriedAt; }
     public void setQueriedAt(OffsetDateTime queriedAt) { this.queriedAt = queriedAt; }
+    public List<ConversationContextHandle> getContextHandles() { return contextHandles; }
+    public void setContextHandles(List<ConversationContextHandle> contextHandles) { this.contextHandles = contextHandles == null ? new ArrayList<>() : contextHandles; }
 }

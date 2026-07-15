@@ -5,6 +5,7 @@ import me.zhengjie.agent.analysis.BusinessQuestionAnalyzer;
 import me.zhengjie.agent.analysis.LegacyBusinessQuestionAnalysisFactory;
 import me.zhengjie.agent.analysis.RuleBasedBusinessQuestionAnalyzer;
 import me.zhengjie.agent.analysis.BusinessTemporalResolver;
+import me.zhengjie.agent.analysis.ContextReferenceResolver;
 import me.zhengjie.agent.config.BusinessTimeProperties;
 import me.zhengjie.agent.analysis.domain.BusinessQuestionAnalysis;
 import me.zhengjie.agent.query.client.BusinessQueryDataClient;
@@ -17,12 +18,19 @@ import me.zhengjie.agent.query.BusinessResultValidator;
 import me.zhengjie.agent.query.BusinessAnswerComposer;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
 import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
+import me.zhengjie.agent.analysis.domain.ConversationContextHandle;
+import me.zhengjie.agent.analysis.domain.ContextHandleKind;
+import me.zhengjie.agent.analysis.domain.SemanticEntityType;
+import me.zhengjie.agent.analysis.domain.SemanticOperation;
 import me.zhengjie.agent.query.domain.PendingBusinessQueryContext;
 import me.zhengjie.agent.query.domain.SemanticTraceSummary;
 import me.zhengjie.agent.query.domain.AgentMetricCatalog;
 import me.zhengjie.agent.query.domain.AgentMetricDefinition;
 import me.zhengjie.agent.query.domain.AgentQueryFilters;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
+import me.zhengjie.agent.query.domain.AgentQueryDomain;
+import me.zhengjie.agent.query.domain.AgentQueryAction;
+import me.zhengjie.agent.query.domain.AgentQueryDimension;
 import me.zhengjie.agent.analysis.domain.BusinessInteractionMode;
 import me.zhengjie.agent.analysis.domain.BusinessQueryTarget;
 import me.zhengjie.agent.analysis.domain.MealScope;
@@ -749,6 +757,8 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
             analysis = resolveTemporalAnalysis(analysis, session, false);
         }
         if (analysis == null) return null;
+        AgentChatResponse contextFollowUp = handleActiveCustomerBalanceFollowUp(session, analysis, orchestrator);
+        if (contextFollowUp != null) return contextFollowUp;
         if (analysis.isRequiresClarification()) {
             // 未识别出任何领域时保留既有细粒度意图兼容入口；已识别领域的歧义统一由语义层追问。
             if (analysis.getDomains() == null || analysis.getDomains().isEmpty()) return null;
@@ -811,6 +821,50 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         applyResultValidation(response, queryPlan, result);
         captureLastBusinessQueryContext(session, response);
         session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
+        return response;
+    }
+
+    /**
+     * 将已识别的餐数余额语义与服务端登记的客户集合句柄组合为固定明细计划。
+     * 该方法只检查结构化语义和句柄类型，绝不按代词或量词文本直接选择集合或工具。
+     */
+    private AgentChatResponse handleActiveCustomerBalanceFollowUp(MealPlanChatSession session,
+                                                                   BusinessQuestionAnalysis analysis,
+                                                                   BusinessQueryOrchestrator orchestrator) {
+        if (analysis == null || analysis.getMetrics() == null || !analysis.getMetrics().contains(AgentQueryMetric.MEAL_BALANCE)
+            || analysis.getEntities() == null || analysis.getEntities().getCustomerId() != null || isNotBlank(analysis.getEntities().getCustomerCode())) return null;
+        LastBusinessQueryContext context = session.getConversationState().getLastBusinessQueryContext();
+        me.zhengjie.agent.analysis.domain.SemanticRequestFrame frame = new me.zhengjie.agent.analysis.domain.SemanticRequestFrame();
+        me.zhengjie.agent.analysis.domain.SemanticScope scope = new me.zhengjie.agent.analysis.domain.SemanticScope();
+        scope.setType(me.zhengjie.agent.analysis.domain.SemanticScope.Type.CONTEXT_REFERENCE);
+        scope.setRequiredKind(ContextHandleKind.ENTITY_SET); scope.setRequiredEntityType(SemanticEntityType.CUSTOMER);
+        frame.setScope(scope);
+        ContextReferenceResolver.Resolution resolution = new ContextReferenceResolver().resolve(frame,
+            context == null ? List.of() : context.getContextHandles(), OffsetDateTime.now(ZoneOffset.ofHours(8)));
+        if (resolution.status() == ContextReferenceResolver.Status.MISSING) {
+            return response(session, ChatStatus.NEED_MORE_INFO, "你指的是哪些客户？请先查询一个客户集合，或提供客户编号。", null,
+                List.of(), List.of("现在活跃客户有多少", "B3303 还剩多少餐"), "CONTEXT_REFERENCE_MISSING");
+        }
+        if (resolution.status() == ContextReferenceResolver.Status.AMBIGUOUS) {
+            return response(session, ChatStatus.NEED_MORE_INFO, "当前存在多个可引用的客户集合，请说明要查看哪一批客户。", null,
+                List.of(), List.of(), "CONTEXT_REFERENCE_AMBIGUOUS");
+        }
+        if (resolution.status() != ContextReferenceResolver.Status.RESOLVED || !"AGENT_ACTIVE_CUSTOMER_V1".equals(resolution.handle().getDefinitionId())) return null;
+        if (businessQueryDataClient == null) return response(session, ChatStatus.ERROR, "客户余额明细查询服务暂不可用，请稍后重试。", null,
+            List.of(), List.of(), "CAPABILITY_NOT_AVAILABLE");
+        AgentQueryPlan plan = new AgentQueryPlan();
+        plan.setVersion(AgentQueryPlan.SCHEMA_VERSION_V2); plan.setDomain(AgentQueryDomain.OPERATION_STATISTICS);
+        plan.setAction(AgentQueryAction.BREAKDOWN); plan.setMetrics(List.of(AgentQueryMetric.ACTIVE_CUSTOMER_MEAL_BALANCE_DETAIL));
+        plan.setDimensions(List.of(AgentQueryDimension.CUSTOMER)); plan.setLimit(50); plan.getFilters().setPage(1); plan.getFilters().setSize(50);
+        plan.setToolNames(List.of("listActiveCustomerMealBalances")); plan.setMetricVersion(AgentMetricCatalog.VERSION); plan.setTimezone("Asia/Shanghai"); plan.setAnalysisSource(analysis.getSource()); plan.setAnalysisConfidence(analysis.getConfidence());
+        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, plan, "listActiveCustomerMealBalances", null, List.of());
+        Map<String, Object> result = execution.result();
+        int shown = result.get("items") instanceof List ? ((List<?>) result.get("items")).size() : 0;
+        Object total = result.getOrDefault("total", 0);
+        String answer = "当前口径活跃客户共 " + total + " 位，已展示 " + shown + " 位的早餐、午晚餐及合计剩余餐数"
+            + (Boolean.TRUE.equals(result.get("truncated")) ? "；结果已截断，请缩小范围后继续查询。" : "。");
+        AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES", result, answer, List.of("活跃客户数", "清空会话"));
+        response.setQueryPlan(plan); applyToolExecution(response, execution); response.setSemanticTraceSummary(semanticTrace(analysis, false));
         return response;
     }
 
@@ -1322,6 +1376,16 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         Map<String, Object> shape = new LinkedHashMap<>();
         Map<String, Object> result = response.getInsightResult();
         if (result != null && result.get("total") instanceof Number) shape.put("total", result.get("total"));
+        if ("BUSINESS_QUERY_OPERATION_ACTIVE".equals(response.getResponseType()) && result != null && result.get("total") instanceof Number) {
+            ConversationContextHandle handle = new ConversationContextHandle();
+            handle.setHandleId("ctx-" + java.util.UUID.randomUUID()); handle.setKind(ContextHandleKind.ENTITY_SET);
+            handle.setEntityType(SemanticEntityType.CUSTOMER); handle.setDefinitionId("AGENT_ACTIVE_CUSTOMER_V1");
+            handle.setCardinality(((Number) result.get("total")).intValue());
+            handle.setSafeDescriptor(Map.of("metric", "ACTIVE_CUSTOMER_COUNT"));
+            handle.setAllowedOperations(List.of(SemanticOperation.COUNT, SemanticOperation.PROJECT, SemanticOperation.GROUP, SemanticOperation.FILTER));
+            handle.setSalience(1D); handle.setCreatedAt(context.getQueriedAt()); handle.setExpiresAt(context.getQueriedAt().plusMinutes(30));
+            context.setContextHandles(List.of(handle));
+        }
         if ("BUSINESS_QUERY_SCHEDULED_MENU".equals(response.getResponseType()) && result != null && result.get("groups") instanceof List) {
             Map<String, Integer> mealTypes = new LinkedHashMap<>();
             Map<String, Integer> dishTypes = new LinkedHashMap<>();
@@ -1541,6 +1605,7 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         response.setResponseType(responseType);
         response.setPendingBusinessQueryContext(session.getConversationState().getPendingBusinessQueryContext());
         response.setLastBusinessQueryContext(session.getConversationState().getLastBusinessQueryContext());
+        response.setActiveTaskStack(session.getConversationState().getTaskStack());
         return response;
     }
 
@@ -1553,6 +1618,7 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         if (request.getLastBusinessQueryContext() != null) {
             session.getConversationState().setLastBusinessQueryContext(request.getLastBusinessQueryContext());
         }
+        if (request.getActiveTaskStack() != null) session.getConversationState().setTaskStack(request.getActiveTaskStack());
     }
 
     /**
@@ -1709,6 +1775,9 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
             trace.setResolvedEndDate(analysis.getFilters().getEndDate());
         }
         trace.setPendingContextReused(pendingReused);
+        trace.setInteractionMode(analysis == null || analysis.getInteractionMode() == null ? null : analysis.getInteractionMode().name());
+        double confidence = analysis == null ? 0D : analysis.getConfidence();
+        trace.setConfidenceBucket(confidence >= .90D ? "HIGH" : confidence >= .80D ? "MEDIUM" : "LOW");
         return trace;
     }
 

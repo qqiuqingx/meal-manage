@@ -6,6 +6,8 @@ import me.zhengjie.modules.agent.query.domain.dto.AgentDailyCustomerStatsDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentOperationCountDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentOperationDailyRequest;
 import me.zhengjie.modules.agent.query.domain.dto.AgentOperationOrderRequest;
+import me.zhengjie.modules.agent.query.domain.dto.AgentActiveCustomerBalanceRequest;
+import me.zhengjie.modules.agent.query.domain.dto.AgentActiveCustomerBalanceResponse;
 import me.zhengjie.modules.agent.query.service.AgentOperationQueryService;
 import me.zhengjie.modules.agent.security.AgentAccessContext;
 import me.zhengjie.modules.agent.security.AgentAccessContextService;
@@ -58,6 +60,16 @@ public class InternalAgentOperationQueryController {
             @RequestHeader(INTERNAL_TOKEN_HEADER) String agentToken, @RequestHeader(ACCESS_CONTEXT_HEADER) String accessToken) {
         require(agentToken, accessToken, sessionId, requestId, "customerOrder:list");
         return ResponseEntity.ok(operationQueryService.activeCustomers());
+    }
+
+    /** 查询活跃客户集合的脱敏餐数余额明细，最多返回 50 位客户。 */
+    @AnonymousPostMapping("/active-customer-balances")
+    public ResponseEntity<AgentActiveCustomerBalanceResponse> activeCustomerBalances(
+            @RequestHeader("X-Request-Id") String requestId, @RequestHeader("X-Agent-Session-Id") String sessionId,
+            @RequestHeader(INTERNAL_TOKEN_HEADER) String agentToken, @RequestHeader(ACCESS_CONTEXT_HEADER) String accessToken,
+            @RequestBody(required = false) AgentActiveCustomerBalanceRequest request) {
+        require(agentToken, accessToken, sessionId, requestId, "customerOrder:list");
+        return ResponseEntity.ok(operationQueryService.activeCustomerBalances(request));
     }
 
     /** 查询当前客服授权数据范围内的客户档案总数。 */

@@ -69,6 +69,9 @@ public class AgentChatSession extends BaseEntity {
     /** 最近一次已执行业务查询的脱敏上下文 JSON。 */
     private String lastBusinessQueryContextJson;
 
+    /** 受控任务栈 JSON，用于跨实例恢复追问和插问状态。 */
+    private String activeTaskStackJson;
+
     /** 最近消息时间。 */
     private Timestamp lastMessageTime;
 

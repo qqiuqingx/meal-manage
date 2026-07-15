@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
 import me.zhengjie.agent.query.domain.PendingBusinessQueryContext;
+import me.zhengjie.agent.query.domain.ConversationTaskStack;
 
 /**
  * 智能排查聊天请求。
@@ -26,6 +27,8 @@ public class AgentChatRequest {
     private PendingBusinessQueryContext pendingBusinessQueryContext;
     /** 主系统持久化的最近已执行查询脱敏摘要。 */
     private LastBusinessQueryContext lastBusinessQueryContext;
+    /** 主系统保存的受控任务栈，前端不得作为可信状态构造。 */
+    private ConversationTaskStack activeTaskStack;
 
     public String getSessionId() {
         return sessionId;
@@ -59,4 +62,6 @@ public class AgentChatRequest {
     public void setPendingBusinessQueryContext(PendingBusinessQueryContext pendingBusinessQueryContext) { this.pendingBusinessQueryContext = pendingBusinessQueryContext; }
     public LastBusinessQueryContext getLastBusinessQueryContext() { return lastBusinessQueryContext; }
     public void setLastBusinessQueryContext(LastBusinessQueryContext lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
+    public ConversationTaskStack getActiveTaskStack() { return activeTaskStack; }
+    public void setActiveTaskStack(ConversationTaskStack activeTaskStack) { this.activeTaskStack = activeTaskStack; }
 }

@@ -53,6 +53,17 @@ agent:
       confidence-threshold: ${AGENT_CHAT_BUSINESS_SEMANTIC_CONFIDENCE_THRESHOLD:0.80}
       pending-context-enabled: ${AGENT_CHAT_PENDING_CONTEXT_ENABLED:true}
       pending-context-ttl-minutes: ${AGENT_CHAT_PENDING_CONTEXT_TTL_MINUTES:30}
+    conversation-understanding:
+      mode: ${AGENT_CHAT_CONVERSATION_UNDERSTANDING_MODE:shadow}
+      schema-version: ${AGENT_CHAT_CONVERSATION_UNDERSTANDING_SCHEMA_VERSION:1.0}
+      multi-frame-enabled: ${AGENT_CHAT_MULTI_FRAME_ENABLED:false}
+      task-stack-enabled: ${AGENT_CHAT_TASK_STACK_ENABLED:true}
+      context-handle-resolution-enabled: ${AGENT_CHAT_CONTEXT_HANDLE_RESOLUTION_ENABLED:true}
+      max-frames-per-turn: ${AGENT_CHAT_MAX_FRAMES_PER_TURN:3}
+      model-timeout-ms: ${AGENT_CHAT_CONVERSATION_MODEL_TIMEOUT_MS:3000}
+    active-customer-balance-detail:
+      enabled: ${AGENT_CHAT_ACTIVE_CUSTOMER_BALANCE_DETAIL_ENABLED:true}
+      max-result-count: ${AGENT_CHAT_ACTIVE_CUSTOMER_BALANCE_DETAIL_MAX_RESULT_COUNT:50}
     scheduled-menu:
       default-meal-scopes: ${AGENT_CHAT_SCHEDULED_MENU_DEFAULT_MEAL_SCOPES:LUNCH,DINNER}
       include-global-rice-candidates: ${AGENT_CHAT_SCHEDULED_MENU_INCLUDE_GLOBAL_RICE_CANDIDATES:false}

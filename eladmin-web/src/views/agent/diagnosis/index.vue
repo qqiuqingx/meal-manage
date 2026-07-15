@@ -238,6 +238,7 @@
                   <business-rule-card v-if="message.responseType === 'BUSINESS_QUERY_RULE'" :result="message.insightResult" />
                   <business-package-card v-if="message.responseType === 'BUSINESS_QUERY_PACKAGE'" :result="message.insightResult" />
                   <business-operation-stats-card v-if="message.responseType && message.responseType.indexOf('BUSINESS_QUERY_OPERATION_') === 0 && message.responseType !== 'BUSINESS_QUERY_OPERATION_CLARIFICATION'" :result="message.insightResult" />
+                  <active-customer-balance-card v-if="message.responseType === 'BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES'" :result="message.insightResult" />
                   <el-alert
                     v-if="message.partial || (message.warnings && message.warnings.length)"
                     :title="queryWarningText(message)"
@@ -516,6 +517,7 @@ import BusinessDishCandidateCard from './components/businessDishCandidateCard'
 import BusinessRuleCard from './components/businessRuleCard'
 import BusinessPackageCard from './components/businessPackageCard'
 import BusinessOperationStatsCard from './components/businessOperationStatsCard'
+import ActiveCustomerBalanceCard from './components/activeCustomerBalanceCard'
 
 const DEFAULT_QUICK_REPLIES = ['B3303 目前什么情况？', 'B3303 有哪些订单？', 'B3303 今天午餐排了吗？', 'B3303 今天午餐哪些菜可以吃？', 'B3303 最近核销记录', '今天待核销客户有多少？', '重新排查']
 
@@ -545,7 +547,8 @@ export default {
     BusinessDishCandidateCard,
     BusinessRuleCard,
     BusinessPackageCard,
-    BusinessOperationStatsCard
+    BusinessOperationStatsCard,
+    ActiveCustomerBalanceCard
   },
   data() {
     return {

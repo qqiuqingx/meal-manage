@@ -12,6 +12,7 @@ import me.zhengjie.agent.query.client.dto.CustomerCandidateListResponse;
 import me.zhengjie.agent.query.client.dto.PackageSpecResponse;
 import me.zhengjie.agent.query.client.dto.BusinessRuleResponse;
 import me.zhengjie.agent.query.client.dto.DishListResponse;
+import me.zhengjie.agent.query.client.dto.ActiveCustomerBalanceResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.MDC;
@@ -273,6 +274,14 @@ public class HttpBusinessQueryDataClient implements BusinessQueryDataClient {
     @Override
     public Map<String, Object> activeCustomerSummary() {
         return post("/api/internal/agent/operations/active-customers", Map.of(), Map.class);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public ActiveCustomerBalanceResponse activeCustomerBalances(int page, int size) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("page", page); body.put("size", size);
+        return post("/api/internal/agent/operations/active-customer-balances", body, ActiveCustomerBalanceResponse.class);
     }
 
     /** {@inheritDoc} */

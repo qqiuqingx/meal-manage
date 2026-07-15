@@ -4,6 +4,7 @@ package me.zhengjie.agent.query.domain;
  * 指标目录允许的聚合维度。枚举值是内部协议，不接受模型传入任意字段名。
  */
 public enum AgentQueryDimension {
+    CUSTOMER,
     RECORD_DATE,
     MEAL_TYPE,
     PACKAGE,

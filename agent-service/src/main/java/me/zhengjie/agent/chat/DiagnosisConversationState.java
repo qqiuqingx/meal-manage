@@ -3,6 +3,7 @@ package me.zhengjie.agent.chat;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
 import me.zhengjie.agent.query.domain.PendingBusinessQueryContext;
+import me.zhengjie.agent.query.domain.ConversationTaskStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +30,7 @@ public class DiagnosisConversationState {
     private List<DiagnosisResponse> recentDiagnosisResults = new ArrayList<>();
     private LastBusinessQueryContext lastBusinessQueryContext;
     private PendingBusinessQueryContext pendingBusinessQueryContext;
+    private ConversationTaskStack taskStack = new ConversationTaskStack();
 
     /**
      * 创建默认会话状态，新会话默认进入槽位收集阶段。
@@ -89,6 +91,7 @@ public class DiagnosisConversationState {
         this.recentDiagnosisResults = new ArrayList<>();
         this.lastBusinessQueryContext = null;
         this.pendingBusinessQueryContext = null;
+        this.taskStack = new ConversationTaskStack();
     }
 
     public String getStage() {
@@ -138,4 +141,8 @@ public class DiagnosisConversationState {
     public void setPendingBusinessQueryContext(PendingBusinessQueryContext pendingBusinessQueryContext) {
         this.pendingBusinessQueryContext = pendingBusinessQueryContext;
     }
+    /** 返回受控会话任务栈，供插问和跨实例恢复使用。 */
+    public ConversationTaskStack getTaskStack() { return taskStack; }
+    /** 设置主系统恢复的任务栈。 */
+    public void setTaskStack(ConversationTaskStack taskStack) { this.taskStack = taskStack == null ? new ConversationTaskStack() : taskStack; }
 }

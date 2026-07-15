@@ -44,7 +44,21 @@
 
 活跃客户接口当前只返回总数，不支持套餐或客户来源分组。
 
-## 5. 即将到期订单数
+## 5. 活跃客户餐数余额明细
+
+`POST /api/internal/agent/operations/active-customer-balances`
+
+所需权限：`agentDiagnosis:list` + `customerOrder:list`。接口仅供已登记的活跃客户集合追问使用，不能按任意客户范围展开。
+
+请求可选分页参数，`page` 从 1 开始，`size` 为 1 至 50，默认 `1/50`：
+
+```json
+{"page":1,"size":50}
+```
+
+响应包含 `total`、`items`、`page`、`size`、`truncated`、`metricDefinitionId`、`queriedAt` 和 `timezone`。每个明细仅包含 `customerCode`、`customerNameMasked`、`remainingBreakfast`、`remainingLunchDinner` 和 `remainingTotal`；不返回手机号、地址、金额或备注。早餐与午晚餐分别按所有进行中订单汇总，午餐和晚餐共享同一个餐数池。
+
+## 6. 即将到期订单数
 
 `POST /api/internal/agent/operations/expiring-orders`
 
