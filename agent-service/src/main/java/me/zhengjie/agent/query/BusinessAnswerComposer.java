@@ -2,6 +2,8 @@ package me.zhengjie.agent.query;
 
 import me.zhengjie.agent.query.domain.AgentQueryFact;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
+import me.zhengjie.agent.query.domain.AgentMetricCatalog;
+import me.zhengjie.agent.query.domain.AgentMetricDefinition;
 
 import java.util.List;
 import java.util.Map;
@@ -181,6 +183,24 @@ public class BusinessAnswerComposer {
     }
 
     /**
+     * 按指标目录生成单指标回答，展示名和结果字段不再由用户原文或中文标签反推。
+     *
+     * @param result 主系统受控聚合结果
+     * @param metric QueryPlan 中唯一的登记指标
+     * @return 带实际业务日期和口径标识的固定回答
+     */
+    public String operationStatistics(Map<String, Object> result, AgentQueryMetric metric) {
+        AgentMetricDefinition definition = AgentMetricCatalog.definition(metric);
+        if (result == null || result.isEmpty() || definition == null) return "运营统计查询未返回可用结果，请稍后重试。";
+        Object value = result.get(definition.getResultFieldKey());
+        if (value == null) return "运营统计结果缺少登记指标字段，已停止展示，请稍后重试。";
+        String date = String.valueOf(result.getOrDefault("recordDate", "当前口径"));
+        String metricDefinition = String.valueOf(result.getOrDefault("metricDefinitionId", definition.getMetricVersion()));
+        return date + definition.getDisplayName() + "为 " + number(value) + " " + definition.getResultUnit()
+            + "。统计口径：" + metricDefinition + "。";
+    }
+
+    /**
      * 组装同源运营指标报表，不计算或修改主系统已返回的任何数值。
      *
      * @param result 主系统每日工作量聚合结果
@@ -205,23 +225,13 @@ public class BusinessAnswerComposer {
     }
     /** 返回登记指标的固定中文名称，禁止使用模型生成字段或标签。 */
     private String metricLabel(AgentQueryMetric metric) {
-        if (metric == AgentQueryMetric.DAILY_SCHEDULED_CUSTOMER_COUNT) return "已排餐客户数";
-        if (metric == AgentQueryMetric.DAILY_VERIFIED_CUSTOMER_COUNT) return "已核销客户数";
-        if (metric == AgentQueryMetric.DAILY_UNVERIFIED_CUSTOMER_COUNT) return "待核销客户数";
-        if (metric == AgentQueryMetric.DAILY_EXPECTED_CUSTOMER_COUNT) return "应服务客户数";
-        if (metric == AgentQueryMetric.DAILY_UNSCHEDULED_CUSTOMER_COUNT) return "待排餐客户数";
-        if (metric == AgentQueryMetric.MEAL_PLAN_FAILURE_COUNT) return "排餐失败数";
-        return metric == null ? "运营指标" : metric.name();
+        AgentMetricDefinition definition = AgentMetricCatalog.definition(metric);
+        return definition == null ? "运营指标" : definition.getDisplayName();
     }
     /** 从主系统受控字段读取指标值，未知指标只能展示为零，不接受自由键名。 */
     private Object metricValue(Map<String, Object> result, AgentQueryMetric metric) {
-        if (metric == AgentQueryMetric.DAILY_SCHEDULED_CUSTOMER_COUNT) return result.get("scheduledCustomerCount");
-        if (metric == AgentQueryMetric.DAILY_VERIFIED_CUSTOMER_COUNT) return result.get("verifiedCustomerCount");
-        if (metric == AgentQueryMetric.DAILY_UNVERIFIED_CUSTOMER_COUNT) return result.get("unverifiedCustomerCount");
-        if (metric == AgentQueryMetric.DAILY_EXPECTED_CUSTOMER_COUNT) return result.get("expectedCustomerCount");
-        if (metric == AgentQueryMetric.DAILY_UNSCHEDULED_CUSTOMER_COUNT) return result.get("unscheduledCustomerCount");
-        if (metric == AgentQueryMetric.MEAL_PLAN_FAILURE_COUNT) return result.get("mealPlanFailureCount");
-        return 0;
+        AgentMetricDefinition definition = AgentMetricCatalog.definition(metric);
+        return definition == null ? null : result.get(definition.getResultFieldKey());
     }
 
     /**

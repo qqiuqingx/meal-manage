@@ -14,7 +14,7 @@ class LlmBusinessQuestionAnalyzerSchemaTest {
 
     @Test
     void shouldAcceptDeclaredBusinessAnalysisSchema() throws Exception {
-        assertTrue(LlmBusinessQuestionAnalyzer.isSafePayload(objectMapper.readTree("{\"questionType\":\"BUSINESS_QUERY\",\"domains\":[\"ORDER\"],\"entities\":{\"customerCode\":\"B3303\"},\"filters\":{\"recordDate\":\"2026-07-13\"},\"metrics\":[],\"dimensions\":[],\"ambiguities\":[],\"confidence\":0.9,\"requiresClarification\":false}")));
+        assertTrue(LlmBusinessQuestionAnalyzer.isSafePayload(objectMapper.readTree("{\"questionType\":\"BUSINESS_QUERY\",\"domains\":[\"OPERATION_STATISTICS\"],\"entities\":{},\"filters\":{},\"metrics\":[\"DAILY_UNSCHEDULED_CUSTOMER_COUNT\"],\"dimensions\":[],\"ambiguities\":[],\"temporal\":{\"expression\":\"CURRENT_DAY\"},\"confidence\":0.96,\"requiresClarification\":false}")));
     }
 
     @Test
@@ -57,6 +57,7 @@ class LlmBusinessQuestionAnalyzerSchemaTest {
         assertTrue(schema.contains("MEAL_PLAN_ALLERGY_ANALYSIS"));
         assertTrue(schema.contains("MEAL_PLAN_DIAGNOSIS"));
         assertTrue(schema.contains("NEW_QUERY"));
+        assertTrue(schema.contains("CURRENT_DAY"));
         assertFalse(schema.contains("\"source\""));
     }
 }

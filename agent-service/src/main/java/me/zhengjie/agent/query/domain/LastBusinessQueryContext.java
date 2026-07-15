@@ -14,6 +14,9 @@ public class LastBusinessQueryContext {
     private String queryPlanFingerprint;
     private String domain;
     private String recordDate;
+    private String startDate;
+    private String endDate;
+    private String metric;
     private MealScope mealScope;
     private Map<String, Object> resultShape = new LinkedHashMap<>();
     private String assistantSummary;
@@ -29,6 +32,12 @@ public class LastBusinessQueryContext {
     public void setDomain(String domain) { this.domain = domain; }
     public String getRecordDate() { return recordDate; }
     public void setRecordDate(String recordDate) { this.recordDate = recordDate; }
+    public String getStartDate() { return startDate; }
+    public void setStartDate(String startDate) { this.startDate = startDate; }
+    public String getEndDate() { return endDate; }
+    public void setEndDate(String endDate) { this.endDate = endDate; }
+    public String getMetric() { return metric; }
+    public void setMetric(String metric) { this.metric = metric; }
     public MealScope getMealScope() { return mealScope; }
     public void setMealScope(MealScope mealScope) { this.mealScope = mealScope; }
     public Map<String, Object> getResultShape() { return resultShape; }

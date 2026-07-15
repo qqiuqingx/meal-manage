@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS `agent_chat_session` (
   `stage` varchar(32) NOT NULL DEFAULT 'COLLECTING_SLOTS' COMMENT '会话阶段',
   `last_request_id` varchar(64) DEFAULT NULL COMMENT '最近一次请求ID',
   `last_summary` varchar(500) DEFAULT NULL COMMENT '最近诊断摘要',
+  `pending_business_query_json` longtext DEFAULT NULL COMMENT '待补充条件的受控业务查询上下文',
+  `last_business_query_context_json` longtext DEFAULT NULL COMMENT '最近一次已执行业务查询的脱敏摘要',
   `last_message_time` datetime DEFAULT NULL COMMENT '最近消息时间',
   `archived` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否归档',
   `version` int NOT NULL DEFAULT 0 COMMENT '乐观锁版本',

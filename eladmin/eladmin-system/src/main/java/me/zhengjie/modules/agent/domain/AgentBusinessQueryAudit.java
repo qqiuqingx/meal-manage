@@ -28,6 +28,13 @@ public class AgentBusinessQueryAudit {
     /** 失败类型，仅存稳定错误码。 */ private String failureType;
     /** 分析来源，RULE/LLM/HYBRID。 */ private String analysisSource;
     /** 模型或规则分析置信度。 */ private Double analysisConfidence;
+    /** 模型降级的稳定原因；正常澄清不填写。 */ private String semanticFallbackReason;
+    /** 受控语义目录版本。 */ private String semanticCatalogVersion;
+    /** 模型输出的相对时间枚举。 */ private String temporalExpression;
+    /** 服务端解析后的单日业务日期。 */ private String resolvedRecordDate;
+    /** 服务端解析后的范围开始日期。 */ private String resolvedStartDate;
+    /** 服务端解析后的范围结束日期。 */ private String resolvedEndDate;
+    /** 是否复用了跨轮 Pending Context。 */ private Boolean pendingContextReused;
     /** 是否向客服发起关键澄清。 */ private Boolean clarificationRequired;
     /** 指标代码 JSON，仅存受控枚举。 */ private String metricCodes;
     /** 维度代码 JSON，仅存受控枚举。 */ private String dimensionCodes;

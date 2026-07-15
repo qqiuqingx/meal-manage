@@ -4,6 +4,7 @@ import me.zhengjie.agent.analysis.domain.BusinessQuestionAnalysis;
 import me.zhengjie.agent.query.domain.AgentEntityReference;
 import me.zhengjie.agent.query.domain.AgentQueryAction;
 import me.zhengjie.agent.query.domain.AgentQueryDomain;
+import me.zhengjie.agent.query.domain.AgentQueryMetric;
 import me.zhengjie.agent.analysis.domain.BusinessQueryTarget;
 import me.zhengjie.agent.analysis.domain.MealScope;
 import org.junit.jupiter.api.Test;
@@ -96,6 +97,21 @@ class BusinessQueryPlanningServiceTest {
         assertNull(plan.getFilters().getRecentLimit());
         assertNull(plan.getEntities().getCustomerName());
         assertEquals(List.of("listMealPlans"), plan.getToolNames());
+    }
+
+    @Test
+    void shouldCompileCustomerProfileCountAndNormalizeUnusedZeroLimits() {
+        BusinessQuestionAnalysis analysis = analysis(AgentQueryDomain.OPERATION_STATISTICS);
+        analysis.setMetrics(List.of(AgentQueryMetric.CUSTOMER_PROFILE_COUNT));
+        analysis.getFilters().setPage(0); analysis.getFilters().setSize(0); analysis.getFilters().setRecentLimit(0);
+
+        var plan = service.plan(analysis);
+
+        assertEquals(AgentQueryAction.SUMMARY, plan.getAction());
+        assertEquals(List.of("getCustomerProfileCount"), plan.getToolNames());
+        assertNull(plan.getFilters().getPage());
+        assertNull(plan.getFilters().getSize());
+        assertNull(plan.getFilters().getRecentLimit());
     }
 
     private BusinessQuestionAnalysis analysis(AgentQueryDomain domain) {

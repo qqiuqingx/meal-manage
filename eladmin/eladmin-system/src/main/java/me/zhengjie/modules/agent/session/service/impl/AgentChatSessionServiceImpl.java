@@ -169,6 +169,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         downstreamRequest.setClientMessageId(clientMessageId);
         downstreamRequest.setMessage(safeRequest.getMessage());
         downstreamRequest.setContextSlots(toPersistedSlots(session));
+        downstreamRequest.setPendingBusinessQueryContext(parseMap(session.getPendingBusinessQueryJson()));
+        downstreamRequest.setLastBusinessQueryContext(parseMap(session.getLastBusinessQueryContextJson()));
         String accessContext = accessContextService.issue(session.getSessionId(), resolvedRequestId);
         long queryStart = System.currentTimeMillis();
         AgentChatResponse response = diagnosisFacadeService.chatMealPlan(downstreamRequest, resolvedRequestId, accessContext);
@@ -257,6 +259,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         dto.setArchived(session.getArchived());
         dto.setCreateTime(session.getCreateTime());
         dto.setUpdateTime(session.getUpdateTime());
+        dto.setPendingBusinessQueryContext(parseMap(session.getPendingBusinessQueryJson()));
+        dto.setLastBusinessQueryContext(parseMap(session.getLastBusinessQueryContextJson()));
         List<AgentChatMessageDto> messageDtos = messages.stream().map(this::toMessageDto).collect(Collectors.toList());
         dto.setMessages(messageDtos);
         for (int i = messageDtos.size() - 1; i >= 0; i--) {
@@ -474,6 +478,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         if ("RESET".equalsIgnoreCase(response.getStatus())) {
             clearBusinessFocus(session);
         }
+        session.setPendingBusinessQueryJson(toJson(response.getPendingBusinessQueryContext()));
+        session.setLastBusinessQueryContextJson(toJson(response.getLastBusinessQueryContext()));
         if (slots != null) {
             boolean customerFocusChanged = customerFocusChanged(session, slots);
             session.setCustomerId(slots.getCustomerId());
@@ -630,6 +636,9 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         snapshot.put("partial", response.isPartial());
         snapshot.put("queriedAt", response.getQueriedAt());
         snapshot.put("queryPlan", response.getQueryPlan());
+        snapshot.put("pendingBusinessQueryContext", response.getPendingBusinessQueryContext());
+        snapshot.put("lastBusinessQueryContext", response.getLastBusinessQueryContext());
+        snapshot.put("semanticTraceSummary", response.getSemanticTraceSummary());
         return snapshot;
     }
 
@@ -652,6 +661,12 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         response.setPartial(Boolean.TRUE.equals(snapshot.get("partial")));
         response.setQueriedAt((String) snapshot.get("queriedAt"));
         response.setQueryPlan(snapshot.get("queryPlan") instanceof Map ? (Map<String, Object>) snapshot.get("queryPlan") : Collections.emptyMap());
+        response.setPendingBusinessQueryContext(snapshot.get("pendingBusinessQueryContext") instanceof Map
+            ? (Map<String, Object>) snapshot.get("pendingBusinessQueryContext") : null);
+        response.setLastBusinessQueryContext(snapshot.get("lastBusinessQueryContext") instanceof Map
+            ? (Map<String, Object>) snapshot.get("lastBusinessQueryContext") : null);
+        response.setSemanticTraceSummary(snapshot.get("semanticTraceSummary") instanceof Map
+            ? (Map<String, Object>) snapshot.get("semanticTraceSummary") : null);
     }
 
     /**
@@ -726,6 +741,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         session.setQueryStartDate(null);
         session.setQueryEndDate(null);
         session.setMealType(null);
+        session.setPendingBusinessQueryJson(null);
+        session.setLastBusinessQueryContextJson(null);
     }
 
     private String limitTitle(String value) {

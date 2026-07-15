@@ -22,10 +22,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.sql.Timestamp;
 import java.util.Collections;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -136,7 +138,7 @@ class AgentChatSessionServiceImplTest {
         assistantMessage.setContent("已完成诊断");
         assistantMessage.setSlotsJson("{\"customerCode\":\"C10001\"}");
         assistantMessage.setDiagnosisResultJson("{\"summary\":\"命中客户排除日期\"}");
-        assistantMessage.setBusinessResultJson("{\"responseType\":\"BUSINESS_QUERY_ORDER\",\"insightResult\":{\"total\":2},\"facts\":[{\"factId\":\"F1\",\"label\":\"订单数量\",\"value\":2,\"unit\":\"笔\"}],\"warnings\":[],\"partial\":false,\"queriedAt\":\"2026-07-11T10:00:00+08:00\",\"queryPlan\":{\"domain\":\"ORDER\",\"action\":\"LIST\"}}");
+        assistantMessage.setBusinessResultJson("{\"responseType\":\"BUSINESS_QUERY_ORDER\",\"insightResult\":{\"total\":2},\"facts\":[{\"factId\":\"F1\",\"label\":\"订单数量\",\"value\":2,\"unit\":\"笔\"}],\"warnings\":[],\"partial\":false,\"queriedAt\":\"2026-07-11T10:00:00+08:00\",\"queryPlan\":{\"domain\":\"ORDER\",\"action\":\"LIST\"},\"pendingBusinessQueryContext\":{\"missingFields\":[\"recordDate\"]},\"lastBusinessQueryContext\":{\"metric\":\"MEAL_BALANCE\"},\"semanticTraceSummary\":{\"semanticSource\":\"PENDING_CONTEXT\",\"pendingContextReused\":true}}");
         assistantMessage.setCreateTime(new Timestamp(System.currentTimeMillis()));
 
         when(messageMapper.selectOne(any())).thenReturn(existingUserMessage, assistantMessage);
@@ -157,6 +159,9 @@ class AgentChatSessionServiceImplTest {
         assertEquals(2, response.getInsightResult().get("total"));
         assertEquals("F1", response.getFacts().get(0).get("factId"));
         assertEquals("ORDER", response.getQueryPlan().get("domain"));
+        assertEquals(Collections.singletonList("recordDate"), response.getPendingBusinessQueryContext().get("missingFields"));
+        assertEquals("MEAL_BALANCE", response.getLastBusinessQueryContext().get("metric"));
+        assertEquals("PENDING_CONTEXT", response.getSemanticTraceSummary().get("semanticSource"));
         verify(diagnosisFacadeService, never()).chatMealPlan(any(AgentChatRequest.class), any());
         verify(messageMapper, never()).insert(any(AgentChatMessage.class));
     }
@@ -288,5 +293,37 @@ class AgentChatSessionServiceImplTest {
         assertEquals(2001L, slots.getOrderId()); assertEquals("O20260001", slots.getOrderCode());
         assertEquals(3001L, slots.getMealPlanRecordId()); assertEquals("2026-07-13", slots.getRecordDate());
         assertEquals("2026-07-01", slots.getStartDate()); assertEquals("2026-07-13", slots.getEndDate()); assertEquals("LUNCH", slots.getMealType());
+    }
+
+    /** Pending/Last Context 必须从数据库下发并用本轮 Agent 响应回写，支持重启和实例切换。 */
+    @Test
+    void shouldRoundTripPersistedSemanticContextsAcrossAgentInstances() {
+        AgentChatSession session = new AgentChatSession();
+        session.setId(1L); session.setSessionId("semantic-session"); session.setOperator("system"); session.setArchived(false);
+        session.setPendingBusinessQueryJson("{\"missingFields\":[\"recordDate\"],\"originalQuestionSummary\":\"待排餐客户数\"}");
+        session.setLastBusinessQueryContextJson("{\"metric\":\"DAILY_SCHEDULED_CUSTOMER_COUNT\",\"recordDate\":\"2026-07-13\"}");
+        when(sessionMapper.selectOne(any())).thenReturn(session);
+        when(messageMapper.selectOne(any())).thenReturn(null);
+        when(messageMapper.insert(any(AgentChatMessage.class))).thenReturn(1);
+        when(sessionMapper.updateById(any(AgentChatSession.class))).thenReturn(1);
+        when(accessContextService.issue(any(), any())).thenReturn("signed-context");
+        AgentChatResponse response = new AgentChatResponse();
+        response.setSessionId("semantic-session"); response.setRequestId("semantic-request"); response.setStatus("ANSWERED");
+        response.setAssistantMessage("已继续查询"); response.setConversationStage("DIAGNOSED"); response.setSlots(new DiagnosisSlots());
+        response.setPendingBusinessQueryContext(null);
+        response.setLastBusinessQueryContext(Map.of("metric", "DAILY_UNSCHEDULED_CUSTOMER_COUNT", "recordDate", "2026-07-14"));
+        when(diagnosisFacadeService.chatMealPlan(any(AgentChatRequest.class), any(), any())).thenReturn(response);
+
+        AgentChatRequest request = new AgentChatRequest(); request.setSessionId("semantic-session"); request.setMessage("今天");
+        service.chat(request, "semantic-request");
+
+        ArgumentCaptor<AgentChatRequest> downstream = ArgumentCaptor.forClass(AgentChatRequest.class);
+        verify(diagnosisFacadeService).chatMealPlan(downstream.capture(), any(), any());
+        assertEquals(Collections.singletonList("recordDate"), downstream.getValue().getPendingBusinessQueryContext().get("missingFields"));
+        assertEquals("DAILY_SCHEDULED_CUSTOMER_COUNT", downstream.getValue().getLastBusinessQueryContext().get("metric"));
+        ArgumentCaptor<AgentChatSession> updated = ArgumentCaptor.forClass(AgentChatSession.class);
+        verify(sessionMapper).updateById(updated.capture());
+        assertNull(updated.getValue().getPendingBusinessQueryJson());
+        assertTrue(updated.getValue().getLastBusinessQueryContextJson().contains("DAILY_UNSCHEDULED_CUSTOMER_COUNT"));
     }
 }

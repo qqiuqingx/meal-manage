@@ -44,6 +44,13 @@ class OperationStatisticsIntentTest {
     }
 
     @Test
+    void shouldRecognizeSystemCustomerTotalQuestion() {
+        ChatExtractionResult result = extractor.extract("现在系统中还有多少客户", null);
+
+        assertEquals(ChatIntent.OPERATION_STATISTICS_QUERY, result.getIntent());
+    }
+
+    @Test
     void shouldResolveClarificationOptionWithExistingDate() {
         DiagnosisSlots context = new DiagnosisSlots();
         context.setRecordDate("2026-07-13");
@@ -52,5 +59,12 @@ class OperationStatisticsIntentTest {
 
         assertEquals(ChatIntent.OPERATION_STATISTICS_QUERY, result.getIntent());
         assertEquals("2026-07-13", result.getSlots().getRecordDate());
+    }
+
+    @Test
+    void shouldRecognizeMealBalanceWithoutPlanAsOperationStatistic() {
+        ChatExtractionResult result = extractor.extract("现在还有多少客户有餐数没有排餐", null);
+
+        assertEquals(ChatIntent.OPERATION_STATISTICS_QUERY, result.getIntent());
     }
 }

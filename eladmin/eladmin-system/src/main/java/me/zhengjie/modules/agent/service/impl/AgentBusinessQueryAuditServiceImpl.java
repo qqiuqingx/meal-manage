@@ -45,12 +45,28 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
         Object tools = plan.get("toolNames"); audit.setToolNames(JSON.toJSONString(tools instanceof List ? tools : Collections.emptyList()));
         audit.setResultCount(resultCount(response.getInsightResult())); audit.setCached(response.isCached()); audit.setPartial(response.isPartial());
         audit.setFailureType(resolveFailureType(response));
-        audit.setAnalysisSource(string(plan.get("analysisSource"))); audit.setAnalysisConfidence(doubleValue(plan.get("analysisConfidence")));
+        Map<String, Object> semanticTrace = response.getSemanticTraceSummary() == null
+            ? Collections.emptyMap() : response.getSemanticTraceSummary();
+        audit.setAnalysisSource(firstNonBlank(string(semanticTrace.get("semanticSource")), string(plan.get("analysisSource"))));
+        audit.setAnalysisConfidence(semanticTrace.get("semanticConfidence") == null
+            ? doubleValue(plan.get("analysisConfidence")) : doubleValue(semanticTrace.get("semanticConfidence")));
+        audit.setSemanticFallbackReason(string(semanticTrace.get("fallbackReason")));
+        audit.setSemanticCatalogVersion(string(semanticTrace.get("semanticCatalogVersion")));
+        audit.setTemporalExpression(string(semanticTrace.get("temporalExpression")));
+        audit.setResolvedRecordDate(string(semanticTrace.get("resolvedRecordDate")));
+        audit.setResolvedStartDate(string(semanticTrace.get("resolvedStartDate")));
+        audit.setResolvedEndDate(string(semanticTrace.get("resolvedEndDate")));
+        audit.setPendingContextReused(Boolean.TRUE.equals(semanticTrace.get("pendingContextReused")));
         audit.setClarificationRequired("NEED_MORE_INFO".equals(response.getStatus()));
         audit.setMetricCodes(JSON.toJSONString(list(plan.get("metrics")))); audit.setDimensionCodes(JSON.toJSONString(list(plan.get("dimensions"))));
         audit.setUnsupportedReason(unsupportedReason(response)); audit.setAnswerValidationResult(answerValidationResult(response));
         audit.setCostMs(Math.max(0, costMs)); audit.setCreateTime(new Timestamp(System.currentTimeMillis()));
         auditMapper.insert(audit);
+    }
+
+    /** 返回首个非空追踪值，兼容升级前仅在 QueryPlan 中记录来源的响应。 */
+    private String firstNonBlank(String first, String second) {
+        return first == null || first.trim().isEmpty() ? second : first;
     }
 
     /**
@@ -85,6 +101,8 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
         long clarificationRequiredCount = audits.stream().filter(item -> Boolean.TRUE.equals(item.getClarificationRequired())).count();
         long answerValidationRejectedCount = audits.stream().filter(item -> "REJECTED".equals(item.getAnswerValidationResult())).count();
         long directAnswerCount = audits.stream().filter(this::isDirectAnswer).count();
+        long semanticFallbackCount = audits.stream().filter(item -> "RULE_FALLBACK".equals(item.getAnalysisSource())).count();
+        long pendingContextReuseCount = audits.stream().filter(item -> Boolean.TRUE.equals(item.getPendingContextReused())).count();
         stats.setQueryCount(queryCount);
         stats.setPartialCount(partialCount);
         stats.setPartialRate(rate(partialCount, queryCount));
@@ -100,6 +118,10 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
         stats.setDirectAnswerCount(directAnswerCount);
         stats.setDirectAnswerRate(rate(directAnswerCount, queryCount));
         stats.setClarificationSuccessRate(clarificationSuccessRate(audits));
+        stats.setSemanticFallbackCount(semanticFallbackCount);
+        stats.setSemanticFallbackRate(rate(semanticFallbackCount, queryCount));
+        stats.setPendingContextReuseCount(pendingContextReuseCount);
+        stats.setPendingContextReuseRate(rate(pendingContextReuseCount, queryCount));
         stats.setAverageCostMs(audits.stream().map(AgentBusinessQueryAudit::getCostMs).filter(Objects::nonNull).mapToLong(Long::longValue).average().orElse(0D));
         stats.setP95CostMs(percentile(audits.stream().map(AgentBusinessQueryAudit::getCostMs).filter(Objects::nonNull).collect(Collectors.toList()), 0.95D));
         stats.setDomainDistribution(distribution(audits.stream().map(AgentBusinessQueryAudit::getQueryDomain).collect(Collectors.toList())));
@@ -107,6 +129,8 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
         stats.setMetricDistribution(metricDistribution(audits));
         stats.setFailureTypeDistribution(distribution(audits.stream().map(AgentBusinessQueryAudit::getFailureType).collect(Collectors.toList())));
         stats.setUnsupportedReasonDistribution(distribution(audits.stream().map(AgentBusinessQueryAudit::getUnsupportedReason).collect(Collectors.toList())));
+        stats.setSemanticSourceDistribution(distribution(audits.stream().map(AgentBusinessQueryAudit::getAnalysisSource).collect(Collectors.toList())));
+        stats.setSemanticFallbackReasonDistribution(distribution(audits.stream().map(AgentBusinessQueryAudit::getSemanticFallbackReason).collect(Collectors.toList())));
         return stats;
     }
 

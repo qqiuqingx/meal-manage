@@ -41,7 +41,47 @@ public class HybridBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer 
     public BusinessQuestionAnalysis analyze(String question, DiagnosisSlots context,
                                             LastBusinessQueryContext lastBusinessQueryContext) {
         BusinessQuestionAnalysis llm = llmAnalyzer == null ? null : llmAnalyzer.analyze(question, context, lastBusinessQueryContext);
-        if (llm != null && llm.getConfidence() >= modelConfidenceThreshold) return llm;
-        return ruleAnalyzer.analyze(question, context, lastBusinessQueryContext);
+        BusinessQuestionAnalysis fallback = ruleAnalyzer.analyze(question, context, lastBusinessQueryContext);
+        if (llm != null && llm.getConfidence() >= modelConfidenceThreshold) {
+            normalizeOptionalLimits(llm);
+            if (shouldUseRuleGuardrail(llm, fallback)) {
+                fallback.setSource("RULE_FALLBACK");
+                fallback.setFallbackReason("MODEL_CONFLICTS_WITH_RULE_GUARDRAIL");
+                return fallback;
+            }
+            alignImplicitDimensions(llm, fallback);
+            return llm;
+        }
+        if (fallback != null) {
+            fallback.setSource("RULE_FALLBACK");
+            String failureReason = llm == null && llmAnalyzer instanceof LlmBusinessQuestionAnalyzer
+                ? ((LlmBusinessQuestionAnalyzer) llmAnalyzer).getLastFailureReason() : null;
+            fallback.setFallbackReason(llm == null
+                ? (failureReason == null ? "MODEL_UNAVAILABLE" : failureReason) : "MODEL_LOW_CONFIDENCE");
+        }
+        return fallback;
+    }
+
+    /** 将模型用 0 表示的未指定分页参数还原为空，负数仍交由 QueryPlan 校验器拒绝。 */
+    private void normalizeOptionalLimits(BusinessQuestionAnalysis analysis) {
+        if (analysis == null || analysis.getFilters() == null) return;
+        if (Integer.valueOf(0).equals(analysis.getFilters().getPage())) analysis.getFilters().setPage(null);
+        if (Integer.valueOf(0).equals(analysis.getFilters().getSize())) analysis.getFilters().setSize(null);
+        if (Integer.valueOf(0).equals(analysis.getFilters().getRecentLimit())) analysis.getFilters().setRecentLimit(null);
+    }
+
+    /** 高精度规则识别出的关键歧义或明确指标优先于冲突的模型猜测。 */
+    private boolean shouldUseRuleGuardrail(BusinessQuestionAnalysis llm, BusinessQuestionAnalysis rule) {
+        if (rule == null) return false;
+        if (rule.isRequiresClarification()) return true;
+        return rule.getConfidence() >= 0.90D && rule.getMetrics() != null && !rule.getMetrics().isEmpty()
+            && !rule.getMetrics().equals(llm.getMetrics());
+    }
+
+    /** 同一高置信指标未出现规则可识别分组时，禁止模型凭空增加套餐或来源维度。 */
+    private void alignImplicitDimensions(BusinessQuestionAnalysis llm, BusinessQuestionAnalysis rule) {
+        if (rule == null || rule.isRequiresClarification() || rule.getConfidence() < 0.90D
+            || rule.getMetrics() == null || !rule.getMetrics().equals(llm.getMetrics())) return;
+        llm.setDimensions(rule.getDimensions() == null ? java.util.List.of() : rule.getDimensions());
     }
 }

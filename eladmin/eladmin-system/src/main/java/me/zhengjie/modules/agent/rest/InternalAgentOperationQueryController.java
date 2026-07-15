@@ -60,6 +60,15 @@ public class InternalAgentOperationQueryController {
         return ResponseEntity.ok(operationQueryService.activeCustomers());
     }
 
+    /** 查询当前客服授权数据范围内的客户档案总数。 */
+    @AnonymousPostMapping("/customer-profiles/count")
+    public ResponseEntity<AgentOperationCountDto> customerProfileCount(
+            @RequestHeader("X-Request-Id") String requestId, @RequestHeader("X-Agent-Session-Id") String sessionId,
+            @RequestHeader(INTERNAL_TOKEN_HEADER) String agentToken, @RequestHeader(ACCESS_CONTEXT_HEADER) String accessToken) {
+        require(agentToken, accessToken, sessionId, requestId, "customerProfile:list");
+        return ResponseEntity.ok(operationQueryService.customerProfileCount());
+    }
+
     /** 查询指定日期范围内到期的进行中订单数量。 */
     @AnonymousPostMapping("/expiring-orders")
     public ResponseEntity<AgentOperationCountDto> expiringOrders(

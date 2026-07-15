@@ -8,6 +8,7 @@ import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
@@ -32,6 +33,7 @@ class AgentOperationQueryServiceImplTest {
         MealPlanMapper planMapper = mock(MealPlanMapper.class);
         MealPlanCustomerMapper customerMapper = mock(MealPlanCustomerMapper.class);
         CustomerOrderMapper orderMapper = mock(CustomerOrderMapper.class);
+        CustomerProfileMapper profileMapper = mock(CustomerProfileMapper.class);
         ParentPackageMapper parentPackageMapper = mock(ParentPackageMapper.class);
         MealPlanService mealPlanService = mock(MealPlanService.class);
         MealPlan plan = new MealPlan(); plan.setId(10L); plan.setMealType("LUNCH");
@@ -39,7 +41,7 @@ class AgentOperationQueryServiceImplTest {
         when(planMapper.selectList(any())).thenReturn(List.of(plan));
         when(customerMapper.selectByMealPlanId(10L)).thenReturn(List.of(scheduled));
         when(mealPlanService.findExpectedCustomerOrders(eq(java.time.LocalDate.of(2026, 7, 13)), eq("LUNCH"))).thenReturn(List.of(order(1L), order(2L)));
-        AgentOperationQueryServiceImpl service = new AgentOperationQueryServiceImpl(planMapper, customerMapper, orderMapper, parentPackageMapper, mealPlanService);
+        AgentOperationQueryServiceImpl service = new AgentOperationQueryServiceImpl(planMapper, customerMapper, orderMapper, profileMapper, parentPackageMapper, mealPlanService);
         AgentOperationDailyRequest request = new AgentOperationDailyRequest(); request.setRecordDate("2026-07-13"); request.setMealType("LUNCH");
 
         AgentDailyCustomerStatsDto result = service.dailyCustomers(request);
@@ -59,6 +61,7 @@ class AgentOperationQueryServiceImplTest {
         MealPlanMapper planMapper = mock(MealPlanMapper.class);
         MealPlanCustomerMapper customerMapper = mock(MealPlanCustomerMapper.class);
         CustomerOrderMapper orderMapper = mock(CustomerOrderMapper.class);
+        CustomerProfileMapper profileMapper = mock(CustomerProfileMapper.class);
         ParentPackageMapper parentPackageMapper = mock(ParentPackageMapper.class);
         MealPlanService mealPlanService = mock(MealPlanService.class);
         MealPlan plan = new MealPlan(); plan.setId(10L); plan.setMealType("LUNCH");
@@ -67,7 +70,7 @@ class AgentOperationQueryServiceImplTest {
         when(planMapper.selectList(any())).thenReturn(List.of(plan));
         when(customerMapper.selectByMealPlanId(10L)).thenReturn(List.of(allowed, denied));
         when(mealPlanService.findExpectedCustomerOrders(eq(java.time.LocalDate.of(2026, 7, 13)), eq("LUNCH"))).thenReturn(List.of(order(1L), order(2L)));
-        AgentOperationQueryServiceImpl service = new AgentOperationQueryServiceImpl(planMapper, customerMapper, orderMapper, parentPackageMapper, mealPlanService);
+        AgentOperationQueryServiceImpl service = new AgentOperationQueryServiceImpl(planMapper, customerMapper, orderMapper, profileMapper, parentPackageMapper, mealPlanService);
         AgentOperationDailyRequest request = new AgentOperationDailyRequest(); request.setRecordDate("2026-07-13"); request.setMealType("LUNCH");
 
         AgentCustomerDataScopeContext.bind(Set.of(1L));
@@ -89,15 +92,37 @@ class AgentOperationQueryServiceImplTest {
         MealPlanMapper planMapper = mock(MealPlanMapper.class);
         MealPlanCustomerMapper customerMapper = mock(MealPlanCustomerMapper.class);
         CustomerOrderMapper orderMapper = mock(CustomerOrderMapper.class);
+        CustomerProfileMapper profileMapper = mock(CustomerProfileMapper.class);
         ParentPackageMapper parentPackageMapper = mock(ParentPackageMapper.class);
         MealPlanService mealPlanService = mock(MealPlanService.class);
         CustomerOrder exhausted = order(10L, 1L, 1, 0);
         CustomerOrder available = order(11L, 2L, 2, 0);
         when(orderMapper.selectList(any())).thenReturn(List.of(exhausted, available));
         when(orderMapper.sumVerifiedCountByOrderIds(List.of(10L, 11L))).thenReturn(List.of(verified(10L, "BREAKFAST", 1)));
-        AgentOperationQueryServiceImpl service = new AgentOperationQueryServiceImpl(planMapper, customerMapper, orderMapper, parentPackageMapper, mealPlanService);
+        AgentOperationQueryServiceImpl service = new AgentOperationQueryServiceImpl(planMapper, customerMapper, orderMapper, profileMapper, parentPackageMapper, mealPlanService);
 
         assertEquals(1L, service.activeCustomers().getTotal());
+    }
+
+    /** 客户档案总数必须在聚合前应用当前客服的数据范围。 */
+    @Test
+    void shouldCountCustomerProfilesWithinCurrentDataScope() {
+        MealPlanMapper planMapper = mock(MealPlanMapper.class);
+        MealPlanCustomerMapper customerMapper = mock(MealPlanCustomerMapper.class);
+        CustomerOrderMapper orderMapper = mock(CustomerOrderMapper.class);
+        CustomerProfileMapper profileMapper = mock(CustomerProfileMapper.class);
+        ParentPackageMapper parentPackageMapper = mock(ParentPackageMapper.class);
+        MealPlanService mealPlanService = mock(MealPlanService.class);
+        when(profileMapper.selectCount(any())).thenReturn(2L);
+        AgentOperationQueryServiceImpl service = new AgentOperationQueryServiceImpl(
+            planMapper, customerMapper, orderMapper, profileMapper, parentPackageMapper, mealPlanService);
+
+        AgentCustomerDataScopeContext.bind(Set.of(1L, 2L));
+        try {
+            assertEquals(2L, service.customerProfileCount().getTotal());
+        } finally {
+            AgentCustomerDataScopeContext.clear();
+        }
     }
 
     /** 套餐和来源分组必须复用有效订单集合，待排餐仅保留尚无成功排餐的客户餐次。 */
@@ -106,6 +131,7 @@ class AgentOperationQueryServiceImplTest {
         MealPlanMapper planMapper = mock(MealPlanMapper.class);
         MealPlanCustomerMapper customerMapper = mock(MealPlanCustomerMapper.class);
         CustomerOrderMapper orderMapper = mock(CustomerOrderMapper.class);
+        CustomerProfileMapper profileMapper = mock(CustomerProfileMapper.class);
         ParentPackageMapper parentPackageMapper = mock(ParentPackageMapper.class);
         MealPlanService mealPlanService = mock(MealPlanService.class);
         MealPlan plan = new MealPlan(); plan.setId(10L); plan.setMealType("LUNCH");
@@ -118,7 +144,7 @@ class AgentOperationQueryServiceImplTest {
         when(orderMapper.selectBatchIds(any())).thenReturn(List.of(scheduledOrder));
         when(parentPackageMapper.selectBatchIds(any())).thenReturn(List.of(parentPackage(101L, "轻食套餐"), parentPackage(102L, "营养套餐")));
         when(mealPlanService.findExpectedCustomerOrders(eq(java.time.LocalDate.of(2026, 7, 13)), eq("LUNCH"))).thenReturn(List.of(scheduledOrder, pendingOrder));
-        AgentOperationQueryServiceImpl service = new AgentOperationQueryServiceImpl(planMapper, customerMapper, orderMapper, parentPackageMapper, mealPlanService);
+        AgentOperationQueryServiceImpl service = new AgentOperationQueryServiceImpl(planMapper, customerMapper, orderMapper, profileMapper, parentPackageMapper, mealPlanService);
 
         AgentOperationDailyRequest packageRequest = new AgentOperationDailyRequest();
         packageRequest.setRecordDate("2026-07-13"); packageRequest.setMealType("LUNCH"); packageRequest.setDimensions(List.of("PACKAGE"));

@@ -67,4 +67,18 @@ public class AgentOperationStatsDto {
     private Map<String, Long> businessQueryToolDistribution = new LinkedHashMap<>();
 
     private Map<String, Long> businessQueryFailureTypeDistribution = new LinkedHashMap<>();
+
+    /** 业务查询语义规则兜底次数和比例，与诊断模型 fallback 分开统计。 */
+    private Long businessQuerySemanticFallbackCount;
+
+    private Double businessQuerySemanticFallbackRate;
+
+    /** 业务查询成功复用 Pending Context 的次数和比例。 */
+    private Long businessQueryPendingContextReuseCount;
+
+    private Double businessQueryPendingContextReuseRate;
+
+    private Map<String, Long> businessQuerySemanticSourceDistribution = new LinkedHashMap<>();
+
+    private Map<String, Long> businessQuerySemanticFallbackReasonDistribution = new LinkedHashMap<>();
 }

@@ -84,9 +84,12 @@ public class BusinessQueryChatService {
         response.setWarnings(warnings);
         if (partial) {
             boolean permissionDenied = warnings.contains("TOOL_PERMISSION_DENIED");
+            boolean invalidPlan = warnings.contains("PLAN_INVALID");
             response.setAssistantMessage(permissionDenied
                 ? "当前账号缺少查询该类业务数据的权限，未返回对象是否存在或相关明细的结论。"
-                : "部分查询未完成，当前不能给出完整结论；已取得的受控结果可供参考，请稍后重试或到业务页面核对。");
+                : invalidPlan
+                    ? "查询条件校验未通过，本次未执行业务查询，请调整查询条件后重试。"
+                    : "部分查询未完成，当前不能给出完整结论；请稍后重试或到业务页面核对。");
         }
     }
 

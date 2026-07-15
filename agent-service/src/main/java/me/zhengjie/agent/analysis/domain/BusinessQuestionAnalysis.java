@@ -32,11 +32,16 @@ public class BusinessQuestionAnalysis {
     private String referenceTurn;
     private MealScope mealScope;
     private BusinessCorrection correction;
+    private BusinessTemporalIntent temporal = new BusinessTemporalIntent();
     private double confidence;
     private boolean requiresClarification;
     private String clarificationQuestion;
     @JsonIgnore
     private String source = "RULE";
+    @JsonIgnore
+    private String fallbackReason;
+    @JsonIgnore
+    private String semanticCatalogVersion;
 
     public BusinessQuestionType getQuestionType() { return questionType; }
     public void setQuestionType(BusinessQuestionType questionType) { this.questionType = questionType; }
@@ -72,6 +77,8 @@ public class BusinessQuestionAnalysis {
     public void setMealScope(MealScope mealScope) { this.mealScope = mealScope; }
     public BusinessCorrection getCorrection() { return correction; }
     public void setCorrection(BusinessCorrection correction) { this.correction = correction; }
+    public BusinessTemporalIntent getTemporal() { return temporal; }
+    public void setTemporal(BusinessTemporalIntent temporal) { this.temporal = temporal; }
     public double getConfidence() { return confidence; }
     public void setConfidence(double confidence) { this.confidence = confidence; }
     public boolean isRequiresClarification() { return requiresClarification; }
@@ -80,4 +87,8 @@ public class BusinessQuestionAnalysis {
     public void setClarificationQuestion(String clarificationQuestion) { this.clarificationQuestion = clarificationQuestion; }
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
+    public String getFallbackReason() { return fallbackReason; }
+    public void setFallbackReason(String fallbackReason) { this.fallbackReason = fallbackReason; }
+    public String getSemanticCatalogVersion() { return semanticCatalogVersion; }
+    public void setSemanticCatalogVersion(String semanticCatalogVersion) { this.semanticCatalogVersion = semanticCatalogVersion; }
 }

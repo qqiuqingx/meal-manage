@@ -125,8 +125,15 @@ public class AgentQueryPlanValidator {
             AgentMetricDefinition definition = AgentMetricCatalog.definition(metric);
             if (aggregation && definition == null) {
                 errors.add(error("metrics", "METRIC_NOT_REGISTERED", "查询计划包含未登记指标"));
-            } else if (aggregation && definition != null && notBlank(plan.getMetricVersion()) && !definition.getMetricVersion().equals(plan.getMetricVersion())) {
+            } else if (aggregation && definition.getDomain() != plan.getDomain()
+                && plan.getDomain() != AgentQueryDomain.NATURAL_LANGUAGE_REPORT) {
+                errors.add(error("metrics", "METRIC_DOMAIN_MISMATCH", "指标不属于查询计划声明的领域"));
+            } else if (aggregation && notBlank(plan.getMetricVersion()) && !definition.getMetricVersion().equals(plan.getMetricVersion())) {
                 errors.add(error("metricVersion", "METRIC_VERSION_UNSUPPORTED", "指标口径版本不受支持"));
+            }
+            if (aggregation && definition != null && plan.getToolNames() != null && !plan.getToolNames().isEmpty()
+                && !plan.getToolNames().contains(definition.getToolName())) {
+                errors.add(error("toolNames", "METRIC_TOOL_MISMATCH", "指标必须使用目录登记的只读工具"));
             }
         }
     }
@@ -167,6 +174,20 @@ public class AgentQueryPlanValidator {
             }
         }
         validateMetricDateRanges(plan, errors);
+        validateSingleDateMetrics(plan, errors);
+    }
+
+    /** 每日指标只能落为单个业务日期，不能以日期范围替代。 */
+    private void validateSingleDateMetrics(AgentQueryPlan plan, List<AgentQueryPlanValidationError> errors) {
+        if (plan.getMetrics() == null) return;
+        AgentQueryFilters filters = plan.getFilters();
+        for (AgentQueryMetric metric : plan.getMetrics()) {
+            AgentMetricDefinition definition = AgentMetricCatalog.definition(metric);
+            if (definition != null && definition.isRequiresSingleDate()
+                && (filters == null || !notBlank(filters.getRecordDate()) || notBlank(filters.getStartDate()) || notBlank(filters.getEndDate()))) {
+                errors.add(error("filters", "METRIC_SINGLE_DATE_REQUIRED", "该指标必须解析为单个业务日期"));
+            }
+        }
     }
 
     private void validateMetricDateRanges(AgentQueryPlan plan, List<AgentQueryPlanValidationError> errors) {

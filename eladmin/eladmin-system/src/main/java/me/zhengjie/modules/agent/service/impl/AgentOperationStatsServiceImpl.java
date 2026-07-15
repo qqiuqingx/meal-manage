@@ -123,6 +123,12 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
         target.setBusinessQueryDomainDistribution(source.getDomainDistribution());
         target.setBusinessQueryToolDistribution(source.getToolDistribution());
         target.setBusinessQueryFailureTypeDistribution(source.getFailureTypeDistribution());
+        target.setBusinessQuerySemanticFallbackCount(source.getSemanticFallbackCount());
+        target.setBusinessQuerySemanticFallbackRate(source.getSemanticFallbackRate());
+        target.setBusinessQueryPendingContextReuseCount(source.getPendingContextReuseCount());
+        target.setBusinessQueryPendingContextReuseRate(source.getPendingContextReuseRate());
+        target.setBusinessQuerySemanticSourceDistribution(source.getSemanticSourceDistribution());
+        target.setBusinessQuerySemanticFallbackReasonDistribution(source.getSemanticFallbackReasonDistribution());
     }
 
     /**

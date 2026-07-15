@@ -1,6 +1,9 @@
 package me.zhengjie.agent.chat;
 
 import me.zhengjie.agent.analysis.BusinessQuestionAnalyzer;
+import me.zhengjie.agent.analysis.BusinessTemporalResolver;
+import me.zhengjie.agent.analysis.RuleBasedBusinessQuestionAnalyzer;
+import me.zhengjie.agent.config.BusinessTimeProperties;
 import me.zhengjie.agent.analysis.domain.BusinessQuestionAnalysis;
 import me.zhengjie.agent.analysis.domain.BusinessQueryTarget;
 import me.zhengjie.agent.analysis.domain.MealScope;
@@ -750,6 +753,121 @@ class MealPlanChatServiceImplTest {
         assertEquals("RULE", response.getQueryPlan().getAnalysisSource());
     }
 
+    @Test
+    void shouldAnswerSystemCustomerTotalWithoutDateOrActiveCustomerGuess() {
+        InMemoryMealPlanChatSessionStore store = store();
+        StubExtractor extractor = new StubExtractor(result(ChatIntent.OPERATION_STATISTICS_QUERY,
+            slots(null, null, null, null), List.of()));
+        BusinessQueryDataClient client = operationClient((date, mealType) -> Map.of());
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store, extractor, request -> new DiagnosisResponse(),
+            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+
+        AgentChatResponse response = service.chat(request("session-customer-total", "现在系统中还有多少客户"));
+
+        assertEquals(ChatStatus.ANSWERED, response.getStatus());
+        assertEquals("BUSINESS_QUERY_OPERATION_CUSTOMER_TOTAL", response.getResponseType());
+        assertEquals(me.zhengjie.agent.query.domain.AgentQueryMetric.CUSTOMER_PROFILE_COUNT,
+            response.getQueryPlan().getMetrics().get(0));
+        assertEquals(List.of("getCustomerProfileCount"), response.getQueryPlan().getToolNames());
+        assertNull(response.getQueryPlan().getFilters().getRecordDate());
+        assertTrue(response.getAssistantMessage().contains("客户档案总数为 12 位"));
+    }
+
+    /** 目标问题应按业务当天直接执行待排餐统计，不再追问日期或漂移到公共菜单。 */
+    @Test
+    void shouldExecuteCurrentDayUnscheduledCustomerQuestionWithoutClarification() {
+        InMemoryMealPlanChatSessionStore store = store();
+        StubExtractor extractor = new StubExtractor(result(ChatIntent.OPERATION_STATISTICS_QUERY,
+            slots(null, null, null, null), List.of()));
+        AtomicReference<String> recordDate = new AtomicReference<>();
+        BusinessQueryDataClient client = operationClient((date, mealType) -> {
+            recordDate.set(date);
+            return Map.of("recordDate", date, "expectedCustomerCount", 8, "scheduledCustomerCount", 5,
+                "unscheduledCustomerCount", 3, "verifiedCustomerCount", 2, "unverifiedCustomerCount", 3,
+                "mealPlanFailureCount", 0, "metricDefinitionId", "AGENT_DAILY_CUSTOMER_WORKLOAD_V1");
+        });
+        BusinessTimeProperties properties = new BusinessTimeProperties();
+        BusinessTemporalResolver resolver = new BusinessTemporalResolver(
+            Clock.fixed(Instant.parse("2026-07-14T04:00:00Z"), ZoneId.of("UTC")), properties);
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store, extractor, request -> new DiagnosisResponse(),
+            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client,
+            new AgentQueryPlanValidator(), new BusinessAnswerValidator(), new RuleBasedBusinessQuestionAnalyzer(),
+            new BusinessQueryPlanningService(), resolver, 30);
+
+        AgentChatResponse response = service.chat(request("target-session", "现在还有多少客户有餐数没有排餐"));
+
+        assertEquals(ChatStatus.ANSWERED, response.getStatus());
+        assertEquals("2026-07-14", recordDate.get());
+        assertEquals("BUSINESS_QUERY_OPERATION_UNSCHEDULED", response.getResponseType());
+        assertEquals("getDailyCustomerWorkload", response.getQueryPlan().getToolNames().get(0));
+        assertTrue(response.getAssistantMessage().contains("待排餐客户数为 3 客户"));
+        assertEquals("CURRENT_DAY", response.getSemanticTraceSummary().getTemporalExpression());
+        assertNull(response.getPendingBusinessQueryContext());
+    }
+
+    /** Pending 上下文由主系统带到新实例后，纯日期回复必须继续客户排餐查询。 */
+    @Test
+    void shouldResumeCustomerMealPlanAfterAgentInstanceSwitch() {
+        BusinessTimeProperties properties = new BusinessTimeProperties();
+        BusinessTemporalResolver resolver = new BusinessTemporalResolver(
+            Clock.fixed(Instant.parse("2026-07-14T04:00:00Z"), ZoneId.of("UTC")), properties);
+        InMemoryMealPlanChatSessionStore firstStore = store();
+        MealPlanChatServiceImpl firstService = new MealPlanChatServiceImpl(firstStore,
+            new StubExtractor(result(ChatIntent.BUSINESS_QUERY, slots(null, "B3303", null, null), List.of())),
+            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), null,
+            new AgentQueryPlanValidator(), new BusinessAnswerValidator(), new RuleBasedBusinessQuestionAnalyzer(),
+            new BusinessQueryPlanningService(), resolver, 30);
+
+        AgentChatResponse first = firstService.chat(request("pending-session", "查 B3303 的排餐"));
+
+        assertEquals(ChatStatus.NEED_MORE_INFO, first.getStatus());
+        assertEquals(BusinessQueryTarget.CUSTOMER_MEAL_PLAN,
+            first.getPendingBusinessQueryContext().getAnalysis().getQueryTarget());
+
+        AtomicReference<Long> customerId = new AtomicReference<>();
+        AtomicReference<String> recordDate = new AtomicReference<>();
+        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+            @Override public Map<String, Object> resolveCustomer(Long id, String code, String name) { return Map.of(); }
+            @Override public Map<String, Object> customerOverview(Long id, String code) {
+                return Map.of("present", true, "customerId", 3303L, "customerCode", "B3303", "customerName", "王五");
+            }
+            @Override public Map<String, Object> listOrders(Long id, Integer status, int page, int size) { return Map.of(); }
+            @Override public Map<String, Object> orderDetail(Long orderId, String orderCode, Long id) { return Map.of(); }
+            @Override public Map<String, Object> listVerifications(Long id, Long orderId, String mealType, int limit) { return Map.of(); }
+            @Override public Map<String, Object> listRefunds(Long id, Long orderId, int limit) { return Map.of(); }
+            @Override public Map<String, Object> listMealPlans(Long id, String date, String mealType) {
+                customerId.set(id); recordDate.set(date);
+                return Map.of("total", 1, "items", List.of(Map.of("customerMealPlanId", 11L,
+                    "customerId", id, "customerCode", "B3303", "recordDate", date, "mealTypeCode", "LUNCH",
+                    "generationStatus", "SUCCESS", "dishes", List.of(Map.of("dishId", 1, "dishName", "香菇滑鸡")))));
+            }
+            @Override public Map<String, Object> explainRule(String topic) { return Map.of(); }
+            @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
+        };
+        BusinessQuestionAnalyzer analyzerMustNotRun = (question, context) -> {
+            throw new AssertionError("纯日期回复必须复用 Pending Context");
+        };
+        MealPlanChatServiceImpl secondService = new MealPlanChatServiceImpl(store(),
+            new StubExtractor(result(ChatIntent.BUSINESS_QUERY, slots(null, null, "2026-07-14", null), List.of())),
+            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client,
+            new AgentQueryPlanValidator(), new BusinessAnswerValidator(), analyzerMustNotRun,
+            new BusinessQueryPlanningService(), resolver, 30);
+        AgentChatRequest resumed = request("pending-session", "今天");
+        resumed.setContextSlots(first.getSlots());
+        resumed.setPendingBusinessQueryContext(first.getPendingBusinessQueryContext());
+        resumed.setLastBusinessQueryContext(first.getLastBusinessQueryContext());
+
+        AgentChatResponse second = secondService.chat(resumed);
+
+        assertEquals(ChatStatus.ANSWERED, second.getStatus());
+        assertEquals("BUSINESS_QUERY_MEAL_PLAN", second.getResponseType());
+        assertEquals(3303L, customerId.get());
+        assertEquals("2026-07-14", recordDate.get());
+        assertEquals("listMealPlans", second.getQueryPlan().getToolNames().get(0));
+        assertTrue(second.getSemanticTraceSummary().isPendingContextReused());
+        assertNull(second.getPendingBusinessQueryContext());
+    }
+
     /** 同源多指标报表只调用一次每日聚合工具，并为每个指标保留独立事实。 */
     @Test
     void shouldAnswerControlledMultiMetricOperationReport() {
@@ -924,7 +1042,7 @@ class MealPlanChatServiceImplTest {
         assertEquals("BUSINESS_QUERY_ORDER", response.getResponseType());
         assertTrue(response.isPartial());
         assertTrue(response.getWarnings().contains("PLAN_INVALID"));
-        assertTrue(response.getAssistantMessage().contains("不能给出完整结论"));
+        assertTrue(response.getAssistantMessage().contains("本次未执行业务查询"));
         assertEquals(0, businessCalls.get());
     }
 
@@ -1032,6 +1150,26 @@ class MealPlanChatServiceImplTest {
         request.setSessionId(sessionId);
         request.setMessage(message);
         return request;
+    }
+
+    /** 创建仅覆盖运营统计的只读客户端，避免测试绕过真实 QueryPlan 和工具执行器。 */
+    private BusinessQueryDataClient operationClient(java.util.function.BiFunction<String, String, Map<String, Object>> workload) {
+        return new BusinessQueryDataClient() {
+            @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
+            @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
+            @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
+            @Override public Map<String, Object> orderDetail(Long orderId, String orderCode, Long customerId) { return Map.of(); }
+            @Override public Map<String, Object> listVerifications(Long customerId, Long orderId, String mealType, int limit) { return Map.of(); }
+            @Override public Map<String, Object> listRefunds(Long customerId, Long orderId, int limit) { return Map.of(); }
+            @Override public Map<String, Object> listMealPlans(Long customerId, String recordDate, String mealType) { return Map.of(); }
+            @Override public Map<String, Object> explainRule(String topic) { return Map.of(); }
+            @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
+            @Override public Map<String, Object> dailyCustomerWorkload(String date, String type) { return workload.apply(date, type); }
+            @Override public Map<String, Object> customerProfileCount() {
+                return Map.of("metricCode", "CUSTOMER_PROFILE_COUNT", "total", 12,
+                    "metricDefinitionId", "AGENT_CUSTOMER_PROFILE_COUNT_V1", "truncated", false);
+            }
+        };
     }
 
     private ChatExtractionResult result(ChatIntent intent, DiagnosisSlots slots, List<MissingSlot> missingSlots) {

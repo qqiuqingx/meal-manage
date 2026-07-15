@@ -9,6 +9,9 @@ import me.zhengjie.agent.domain.chat.MissingSlot;
 import me.zhengjie.agent.domain.chat.ChatStatus;
 import me.zhengjie.agent.query.domain.AgentQueryFact;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
+import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
+import me.zhengjie.agent.query.domain.PendingBusinessQueryContext;
+import me.zhengjie.agent.query.domain.SemanticTraceSummary;
 
 /**
  * 智能排查聊天响应。
@@ -35,6 +38,9 @@ public class AgentChatResponse {
     private boolean partial;
     private String queriedAt;
     private AgentQueryPlan queryPlan;
+    private PendingBusinessQueryContext pendingBusinessQueryContext;
+    private LastBusinessQueryContext lastBusinessQueryContext;
+    private SemanticTraceSummary semanticTraceSummary;
 
     public String getResponseType() {
         return responseType;
@@ -63,6 +69,12 @@ public class AgentChatResponse {
     public void setQueriedAt(String queriedAt) { this.queriedAt = queriedAt; }
     public AgentQueryPlan getQueryPlan() { return queryPlan; }
     public void setQueryPlan(AgentQueryPlan queryPlan) { this.queryPlan = queryPlan; }
+    public PendingBusinessQueryContext getPendingBusinessQueryContext() { return pendingBusinessQueryContext; }
+    public void setPendingBusinessQueryContext(PendingBusinessQueryContext pendingBusinessQueryContext) { this.pendingBusinessQueryContext = pendingBusinessQueryContext; }
+    public LastBusinessQueryContext getLastBusinessQueryContext() { return lastBusinessQueryContext; }
+    public void setLastBusinessQueryContext(LastBusinessQueryContext lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
+    public SemanticTraceSummary getSemanticTraceSummary() { return semanticTraceSummary; }
+    public void setSemanticTraceSummary(SemanticTraceSummary semanticTraceSummary) { this.semanticTraceSummary = semanticTraceSummary; }
 
     public String getRequestId() {
         return requestId;

@@ -38,6 +38,37 @@ class RuleBasedBusinessQuestionAnalyzerTest {
     }
 
     @Test
+    void shouldDistinguishMealBalanceCustomersFromDailyUnscheduledCustomers() {
+        BusinessQuestionAnalysis active = analyzer.analyze("现在还有多少客户有餐数", null);
+        BusinessQuestionAnalysis unscheduled = analyzer.analyze("现在还有多少客户有餐数没有排餐", null);
+
+        assertEquals(AgentQueryMetric.ACTIVE_CUSTOMER_COUNT, active.getMetrics().get(0));
+        assertEquals(AgentQueryMetric.DAILY_UNSCHEDULED_CUSTOMER_COUNT, unscheduled.getMetrics().get(0));
+        assertEquals(me.zhengjie.agent.analysis.domain.BusinessTemporalExpression.CURRENT_DAY,
+            unscheduled.getTemporal().getExpression());
+    }
+
+    @Test
+    void shouldRecognizeSystemCustomerCountAsProfileTotal() {
+        BusinessQuestionAnalysis result = analyzer.analyze("现在系统中还有多少客户", null);
+
+        assertEquals(AgentQueryMetric.CUSTOMER_PROFILE_COUNT, result.getMetrics().get(0));
+        assertTrue(!result.isRequiresClarification());
+    }
+
+    @Test
+    void shouldKeepCustomerMealPlanTargetWhenDateNeedsClarification() {
+        DiagnosisSlots slots = new DiagnosisSlots();
+        slots.setCustomerCode("B3303");
+
+        BusinessQuestionAnalysis result = analyzer.analyze("查 B3303 的排餐", slots);
+
+        assertEquals(BusinessQueryTarget.CUSTOMER_MEAL_PLAN, result.getQueryTarget());
+        assertEquals(AgentQueryDomain.MEAL_PLAN, result.getDomains().get(0));
+        assertTrue(result.isRequiresClarification());
+    }
+
+    @Test
     void shouldRecognizeSameSourceDailyMetricsAsControlledReport() {
         BusinessQuestionAnalysis result = analyzer.analyze("今天午餐已排餐和待核销客户分别多少", null);
 

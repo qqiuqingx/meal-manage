@@ -34,7 +34,7 @@ class DefaultAgentQueryPermissionServiceTest {
     void shouldExposeOnlyToolsAllowedByBusinessPermissions() {
         AgentAccessContext context = context("agentDiagnosis:list", "customerProfile:list", "mealPlan:list");
 
-        assertEquals(Arrays.asList("resolveCustomer", "listMealPlans", "listVerifications",
+        assertEquals(Arrays.asList("resolveCustomer", "getCustomerProfileCount", "listMealPlans", "listVerifications",
                 "getDailyCustomerWorkload", "getMealPlanFailureSummary", "explainRule"),
             service.availableToolNames(context));
     }
@@ -47,7 +47,7 @@ class DefaultAgentQueryPermissionServiceTest {
         assertDoesNotThrow(() -> service.require(context, "customerProfile:list", "customerOrder:list"));
         assertEquals(Arrays.asList("resolveCustomer", "customerOverview", "listOrders", "orderDetail", "listMealPlans",
                 "listVerifications", "listRefunds", "packageDetail", "listDishes", "listScheduledDishes", "previewDishCandidates", "explainRule",
-                "getDailyCustomerWorkload", "getActiveCustomerSummary", "getExpiringOrderSummary", "getMealPlanFailureSummary"),
+                "getDailyCustomerWorkload", "getCustomerProfileCount", "getActiveCustomerSummary", "getExpiringOrderSummary", "getMealPlanFailureSummary"),
             service.availableToolNames(context));
     }
 

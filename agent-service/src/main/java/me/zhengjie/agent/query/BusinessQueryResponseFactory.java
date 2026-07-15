@@ -6,6 +6,8 @@ import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import me.zhengjie.agent.query.domain.AgentQueryFact;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
+import me.zhengjie.agent.query.domain.AgentMetricCatalog;
+import me.zhengjie.agent.query.domain.AgentMetricDefinition;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -161,9 +163,12 @@ public class BusinessQueryResponseFactory {
         } else if ("BUSINESS_QUERY_OPERATION_REPORT".equals(responseType)) {
             addOperationReportFacts(facts, result);
         } else if (responseType.startsWith("BUSINESS_QUERY_OPERATION_")) {
-            facts.add(new AgentQueryFact("F1", operationFactLabel(responseType), operationFactValue(responseType, result), "个",
-                String.valueOf(result.getOrDefault("metricDefinitionId", "AGENT_OPERATION_STATISTICS")),
-                result.get("recordDate") == null ? null : String.valueOf(result.get("recordDate"))));
+            AgentMetricDefinition definition = AgentMetricCatalog.definitionByResponseType(responseType);
+            if (definition != null && result.containsKey(definition.getResultFieldKey())) {
+                facts.add(new AgentQueryFact("F1", definition.getDisplayName(), result.get(definition.getResultFieldKey()), definition.getResultUnit(),
+                    String.valueOf(result.getOrDefault("metricDefinitionId", definition.getMetricVersion())),
+                    result.get("recordDate") == null ? null : String.valueOf(result.get("recordDate"))));
+            }
         } else if (result.containsKey("total")) {
             String label = totalFactLabel(responseType);
             if (label == null) return facts;
@@ -205,25 +210,6 @@ public class BusinessQueryResponseFactory {
             result.get("scannedCount"), "条", "MEAL_PLAN_LIST", null));
     }
 
-    private String operationFactLabel(String responseType) {
-        if (responseType.endsWith("ACTIVE")) return "活跃客户数";
-        if (responseType.endsWith("EXPIRING")) return "即将到期订单数";
-        if (responseType.endsWith("FAILURE")) return "排餐失败数";
-        if (responseType.endsWith("UNSCHEDULED")) return "待排餐客户数";
-        if (responseType.endsWith("VERIFIED")) return "已核销客户数";
-        if (responseType.endsWith("SCHEDULED")) return "已排餐客户数";
-        return "待核销客户数";
-    }
-
-    private Object operationFactValue(String responseType, Map<String, Object> result) {
-        if (result.containsKey("total")) return result.get("total");
-        if (responseType.endsWith("FAILURE")) return result.getOrDefault("mealPlanFailureCount", 0);
-        if (responseType.endsWith("UNSCHEDULED")) return result.getOrDefault("unscheduledCustomerCount", 0);
-        if (responseType.endsWith("VERIFIED")) return result.getOrDefault("verifiedCustomerCount", 0);
-        if (responseType.endsWith("SCHEDULED")) return result.getOrDefault("scheduledCustomerCount", 0);
-        return result.getOrDefault("unverifiedCustomerCount", 0);
-    }
-
     /** 为多指标运营报表逐项生成事实，禁止将主系统字段名直接暴露为展示标签。 */
     private void addOperationReportFacts(List<AgentQueryFact> facts, Map<String, Object> result) {
         Object source = result.get("reportMetrics");
@@ -245,22 +231,12 @@ public class BusinessQueryResponseFactory {
         catch (IllegalArgumentException ignored) { return null; }
     }
     private String reportMetricLabel(AgentQueryMetric metric) {
-        if (metric == AgentQueryMetric.DAILY_SCHEDULED_CUSTOMER_COUNT) return "已排餐客户数";
-        if (metric == AgentQueryMetric.DAILY_VERIFIED_CUSTOMER_COUNT) return "已核销客户数";
-        if (metric == AgentQueryMetric.DAILY_UNVERIFIED_CUSTOMER_COUNT) return "待核销客户数";
-        if (metric == AgentQueryMetric.DAILY_EXPECTED_CUSTOMER_COUNT) return "应服务客户数";
-        if (metric == AgentQueryMetric.DAILY_UNSCHEDULED_CUSTOMER_COUNT) return "待排餐客户数";
-        if (metric == AgentQueryMetric.MEAL_PLAN_FAILURE_COUNT) return "排餐失败数";
-        return metric.name();
+        AgentMetricDefinition definition = AgentMetricCatalog.definition(metric);
+        return definition == null ? metric.name() : definition.getDisplayName();
     }
     private Object reportMetricValue(Map<String, Object> result, AgentQueryMetric metric) {
-        if (metric == AgentQueryMetric.DAILY_SCHEDULED_CUSTOMER_COUNT) return result.getOrDefault("scheduledCustomerCount", 0);
-        if (metric == AgentQueryMetric.DAILY_VERIFIED_CUSTOMER_COUNT) return result.getOrDefault("verifiedCustomerCount", 0);
-        if (metric == AgentQueryMetric.DAILY_UNVERIFIED_CUSTOMER_COUNT) return result.getOrDefault("unverifiedCustomerCount", 0);
-        if (metric == AgentQueryMetric.DAILY_EXPECTED_CUSTOMER_COUNT) return result.getOrDefault("expectedCustomerCount", 0);
-        if (metric == AgentQueryMetric.DAILY_UNSCHEDULED_CUSTOMER_COUNT) return result.getOrDefault("unscheduledCustomerCount", 0);
-        if (metric == AgentQueryMetric.MEAL_PLAN_FAILURE_COUNT) return result.getOrDefault("mealPlanFailureCount", 0);
-        return 0;
+        AgentMetricDefinition definition = AgentMetricCatalog.definition(metric);
+        return definition == null ? null : result.get(definition.getResultFieldKey());
     }
 
     /** 为过渡期客户餐数摘要补充其模板中每个确定性数字的事实来源。 */

@@ -40,6 +40,14 @@ class AgentBusinessQueryAuditServiceImplTest {
         response.setCached(true);
         response.setPartial(false);
         response.setInsightResult(Map.of("total", 2));
+        response.setSemanticTraceSummary(Map.of(
+            "semanticSource", "RULE_FALLBACK",
+            "fallbackReason", "MODEL_TIMEOUT",
+            "semanticCatalogVersion", "2026.07",
+            "temporalExpression", "CURRENT_DAY",
+            "resolvedRecordDate", "2026-07-14",
+            "pendingContextReused", true
+        ));
         response.setQueryPlan(Map.of(
             "domain", "CUSTOMER",
             "action", "OVERVIEW",
@@ -62,8 +70,13 @@ class AgentBusinessQueryAuditServiceImplTest {
         assertEquals(2, audit.getResultCount());
         assertTrue(audit.getCached());
         assertEquals(123L, audit.getCostMs());
-        assertEquals("RULE", audit.getAnalysisSource());
+        assertEquals("RULE_FALLBACK", audit.getAnalysisSource());
         assertEquals(0.95D, audit.getAnalysisConfidence());
+        assertEquals("MODEL_TIMEOUT", audit.getSemanticFallbackReason());
+        assertEquals("2026.07", audit.getSemanticCatalogVersion());
+        assertEquals("CURRENT_DAY", audit.getTemporalExpression());
+        assertEquals("2026-07-14", audit.getResolvedRecordDate());
+        assertTrue(audit.getPendingContextReused());
         assertEquals("[\"MEAL_BALANCE\"]", audit.getMetricCodes());
         assertEquals("VALID", audit.getAnswerValidationResult());
     }
@@ -100,11 +113,17 @@ class AgentBusinessQueryAuditServiceImplTest {
 
     @Test
     void shouldAggregateBusinessQueryAuditStats() {
-        when(auditMapper.selectList(any())).thenReturn(Arrays.asList(
-            audit("CUSTOMER", "[\"customerOverview\"]", "[\"MEAL_BALANCE\"]", true, false, null, "VALID", 100L),
-            audit("ORDER", "[\"listOrders\",\"customerOverview\"]", "[\"ORDER_COUNT\"]", false, true, "PLAN_INVALID", "PARTIAL", 300L),
-            audit("MEAL_PLAN", "[\"listMealPlans\"]", "[\"DAILY_UNVERIFIED_CUSTOMER_COUNT\"]", false, true, "TOOL_PERMISSION_DENIED", "PARTIAL", 200L)
-        ));
+        when(auditMapper.selectList(any())).thenAnswer(invocation -> {
+            List<AgentBusinessQueryAudit> audits = Arrays.asList(
+                audit("CUSTOMER", "[\"customerOverview\"]", "[\"MEAL_BALANCE\"]", true, false, null, "VALID", 100L),
+                audit("ORDER", "[\"listOrders\",\"customerOverview\"]", "[\"ORDER_COUNT\"]", false, true, "PLAN_INVALID", "PARTIAL", 300L),
+                audit("MEAL_PLAN", "[\"listMealPlans\"]", "[\"DAILY_UNVERIFIED_CUSTOMER_COUNT\"]", false, true, "TOOL_PERMISSION_DENIED", "PARTIAL", 200L)
+            );
+            audits.get(0).setAnalysisSource("LLM");
+            audits.get(1).setAnalysisSource("RULE_FALLBACK"); audits.get(1).setSemanticFallbackReason("MODEL_LOW_CONFIDENCE");
+            audits.get(2).setAnalysisSource("PENDING_CONTEXT"); audits.get(2).setPendingContextReused(true);
+            return audits;
+        });
 
         AgentBusinessQueryAuditStatsDto stats = service.stats(null);
 
@@ -123,6 +142,11 @@ class AgentBusinessQueryAuditServiceImplTest {
         assertEquals(2L, stats.getToolDistribution().get("customerOverview"));
         assertEquals(1L, stats.getMetricDistribution().get("DAILY_UNVERIFIED_CUSTOMER_COUNT"));
         assertEquals(1L, stats.getFailureTypeDistribution().get("PLAN_INVALID"));
+        assertEquals(1L, stats.getSemanticFallbackCount());
+        assertEquals(1D / 3D, stats.getSemanticFallbackRate());
+        assertEquals(1L, stats.getPendingContextReuseCount());
+        assertEquals(1L, stats.getSemanticSourceDistribution().get("PENDING_CONTEXT"));
+        assertEquals(1L, stats.getSemanticFallbackReasonDistribution().get("MODEL_LOW_CONFIDENCE"));
     }
 
     private AgentBusinessQueryAudit audit(String domain, String tools, String metrics, boolean cached, boolean partial,

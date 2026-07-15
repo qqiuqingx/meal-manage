@@ -2,6 +2,7 @@ package me.zhengjie.agent.chat;
 
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
+import me.zhengjie.agent.query.domain.PendingBusinessQueryContext;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +28,7 @@ public class DiagnosisConversationState {
     private List<DiagnosisConversationTurn> recentTurns = new ArrayList<>();
     private List<DiagnosisResponse> recentDiagnosisResults = new ArrayList<>();
     private LastBusinessQueryContext lastBusinessQueryContext;
+    private PendingBusinessQueryContext pendingBusinessQueryContext;
 
     /**
      * 创建默认会话状态，新会话默认进入槽位收集阶段。
@@ -86,6 +88,7 @@ public class DiagnosisConversationState {
         this.recentTurns = new ArrayList<>();
         this.recentDiagnosisResults = new ArrayList<>();
         this.lastBusinessQueryContext = null;
+        this.pendingBusinessQueryContext = null;
     }
 
     public String getStage() {
@@ -126,5 +129,13 @@ public class DiagnosisConversationState {
     /** 保存最近一次受控业务查询摘要，不保存工具原始响应。 */
     public void setLastBusinessQueryContext(LastBusinessQueryContext lastBusinessQueryContext) {
         this.lastBusinessQueryContext = lastBusinessQueryContext;
+    }
+
+    /** 返回等待补充日期、餐次或实体的受控查询上下文。 */
+    public PendingBusinessQueryContext getPendingBusinessQueryContext() { return pendingBusinessQueryContext; }
+
+    /** 保存待执行语义；调用方应在成功、重置、目标切换或过期时清空。 */
+    public void setPendingBusinessQueryContext(PendingBusinessQueryContext pendingBusinessQueryContext) {
+        this.pendingBusinessQueryContext = pendingBusinessQueryContext;
     }
 }

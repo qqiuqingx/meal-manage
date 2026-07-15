@@ -57,6 +57,15 @@ public class HybridMealPlanChatExtractor implements MealPlanChatExtractor {
                                         DiagnosisSlots existingSlots,
                                         DiagnosisConversationState conversationState) {
         ChatExtractionResult slots = slotExtractor.extract(message, existingSlots);
+        if (conversationState != null && conversationState.getPendingBusinessQueryContext() != null && isPureSlotReply(message)) {
+            slots.setIntent(ChatIntent.BUSINESS_QUERY);
+            slots.setRuleIntent("PENDING_CONTEXT_SLOT");
+            slots.setIntentConfidence(1.0D);
+            slots.setIntentReason("待执行查询纯槽位补充");
+            slots.setIntentSource("PENDING_CONTEXT");
+            slots.setLlmTriggered(false);
+            return slots;
+        }
         if (isContextCorrection(message, conversationState)) {
             slots.setIntent(ChatIntent.BUSINESS_QUERY);
             slots.setRuleIntent("CONTEXT_CORRECTION");
@@ -154,5 +163,13 @@ public class HybridMealPlanChatExtractor implements MealPlanChatExtractor {
             || intent == ChatIntent.DISH_CANDIDATE_QUERY
             || intent == ChatIntent.BUSINESS_RULE_QUERY
             || intent == ChatIntent.OPERATION_STATISTICS_QUERY;
+    }
+
+    /** 纯日期、餐次或客户/订单编号回复只用于补全 Pending Query，不重新判断业务领域。 */
+    private boolean isPureSlotReply(String message) {
+        if (message == null) return false;
+        String text = message.trim();
+        return text.matches("今天|今日|昨天|明天|本周|早餐|午餐|晚餐|\\d{4}-\\d{2}-\\d{2}")
+            || text.matches("(?i)[A-Z]\\d{3,}") || text.matches("\\d{1,18}");
     }
 }

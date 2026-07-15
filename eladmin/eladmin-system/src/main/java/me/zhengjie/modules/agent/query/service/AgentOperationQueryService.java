@@ -11,6 +11,8 @@ public interface AgentOperationQueryService {
     AgentDailyCustomerStatsDto dailyCustomers(AgentOperationDailyRequest request);
     /** 查询存在进行中且仍有餐数余额的客户去重数。 */
     AgentOperationCountDto activeCustomers();
+    /** 查询当前授权数据范围内已录入的客户档案总数。 */
+    AgentOperationCountDto customerProfileCount();
     /** 查询日期范围内到期的进行中订单数。 */
     AgentOperationCountDto expiringOrders(AgentOperationOrderRequest request);
 }

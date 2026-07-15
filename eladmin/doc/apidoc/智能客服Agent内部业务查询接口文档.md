@@ -131,3 +131,11 @@
 业务查询完成后，主系统仅将前端恢复所需的受控卡片快照写入 `agent_chat_message.business_result_json`：响应类型、已脱敏的结构化结果、事实、告警、同轮缓存标记、部分结果标记、查询时间和 QueryPlan。不会保存内部工具原始响应、模型提示词、手机号明文、完整地址或任何金额字段。
 
 已有数据库需先执行 `eladmin/sql/agent_chat_message_business_query_migration.sql`。回滚时确认不再需要恢复历史业务查询卡片后，按脚本注释删除该列即可。
+
+## 5. 统一语义与业务时间约束
+
+- LLM 只能选择 `AgentMetricCatalog` 登记的指标、领域、维度和相对时间枚举，不能指定本文件中的 URL、工具名、Java 结果字段或 SQL。
+- 服务端按指标目录将语义编译为固定工具。`DAILY_UNSCHEDULED_CUSTOMER_COUNT` 只能调用 `getDailyCustomerWorkload`，回答只能读取 `unscheduledCustomerCount`，缺失该字段时返回受控错误，不能改读其他计数。
+- 每日指标必须解析为单个 `recordDate`；`BusinessTemporalResolver` 使用 `Asia/Shanghai` 和可注入 `Clock` 处理 `CURRENT_DAY`、`PREVIOUS_DAY`、`NEXT_DAY`、`CURRENT_WEEK`。
+- 主系统聊天会话保存 `pending_business_query_json` 与 `last_business_query_context_json`，每轮通过内部聊天请求/响应透传。纯日期、餐次或编号回复优先续接 Pending，避免实例切换后的业务目标漂移。
+- 语义追踪只记录来源、稳定 fallback 原因、目录版本、时间枚举、解析日期和 Pending 复用标记。审计升级脚本为 `eladmin/sql/alter_agent_business_query_audit_semantic_trace.sql`。

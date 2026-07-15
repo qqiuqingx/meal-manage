@@ -13,6 +13,8 @@ import me.zhengjie.modules.customer.order.domain.dto.OrderMealBalanceDto;
 import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.order.service.OrderMealBalanceCalculator;
+import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.meal.domain.MealPlan;
@@ -39,6 +41,7 @@ public class AgentOperationQueryServiceImpl implements AgentOperationQueryServic
     private final MealPlanMapper mealPlanMapper;
     private final MealPlanCustomerMapper mealPlanCustomerMapper;
     private final CustomerOrderMapper customerOrderMapper;
+    private final CustomerProfileMapper customerProfileMapper;
     private final ParentPackageMapper parentPackageMapper;
     private final MealPlanService mealPlanService;
 
@@ -154,6 +157,18 @@ public class AgentOperationQueryServiceImpl implements AgentOperationQueryServic
             if (balance.getRemainingBreakfast() > 0 || balance.getRemainingLunchDinner() > 0) customers.add(order.getCustomerId());
         }
         return count("ACTIVE_CUSTOMER_COUNT", "AGENT_ACTIVE_CUSTOMER_V1", customers.size());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public AgentOperationCountDto customerProfileCount() {
+        Set<Long> scopedCustomerIds = AgentCustomerDataScopeContext.customerIds();
+        if (scopedCustomerIds != null && scopedCustomerIds.isEmpty()) {
+            return count("CUSTOMER_PROFILE_COUNT", "AGENT_CUSTOMER_PROFILE_COUNT_V1", 0);
+        }
+        Long total = customerProfileMapper.selectCount(new LambdaQueryWrapper<CustomerProfile>()
+            .in(scopedCustomerIds != null, CustomerProfile::getId, scopedCustomerIds));
+        return count("CUSTOMER_PROFILE_COUNT", "AGENT_CUSTOMER_PROFILE_COUNT_V1", total == null ? 0 : total);
     }
 
     /** 批量汇总未删除核销数，供活跃客户统计复用订单余额统一口径。 */

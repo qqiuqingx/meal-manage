@@ -12,10 +12,11 @@ import me.zhengjie.agent.analysis.domain.BusinessInteractionMode;
 import me.zhengjie.agent.analysis.domain.BusinessQueryTarget;
 import me.zhengjie.agent.analysis.domain.MealScope;
 import me.zhengjie.agent.analysis.domain.CorrectionReason;
+import me.zhengjie.agent.analysis.domain.BusinessTemporalExpression;
+import me.zhengjie.agent.analysis.domain.BusinessTemporalIntent;
 import me.zhengjie.agent.query.domain.BusinessCorrection;
 import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -46,14 +47,19 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
             operation(analysis, AgentQueryMetric.MEAL_PLAN_FAILURE_COUNT, text);
         } else if (contains(text, "待核销", "没核销", "未核销", "尚未核销")) {
             operation(analysis, AgentQueryMetric.DAILY_UNVERIFIED_CUSTOMER_COUNT, text);
-        } else if (contains(text, "待排餐", "没排餐", "未排餐")) {
+        } else if (contains(text, "待排餐", "没排餐", "未排餐", "没有排餐", "还没安排餐", "还没给他们排")) {
             operation(analysis, AgentQueryMetric.DAILY_UNSCHEDULED_CUSTOMER_COUNT, text);
         } else if (contains(text, "已排餐", "排餐客户", "排了多少", "生成排餐", "排餐的客户")) {
             operation(analysis, AgentQueryMetric.DAILY_SCHEDULED_CUSTOMER_COUNT, text);
-        } else if (contains(text, "活跃客户", "进行中客户")) {
+        } else if (isCustomerProfileCountQuestion(text)) {
+            operation(analysis, AgentQueryMetric.CUSTOMER_PROFILE_COUNT, text);
+        } else if (contains(text, "活跃客户", "进行中客户")
+            || text.contains("有餐数") && !contains(text, "没排餐", "未排餐", "没有排餐", "还没安排餐")) {
             operation(analysis, AgentQueryMetric.ACTIVE_CUSTOMER_COUNT, text);
         } else if (contains(text, "即将到期", "快到期", "会到期", "到期订单")) {
             operation(analysis, AgentQueryMetric.EXPIRING_ORDER_COUNT, text);
+        } else if (isCustomerMealPlanQuestion(text, analysis.getEntities())) {
+            customerMealPlan(analysis, text);
         } else if (contains(text, "核销", "使用了多少餐")) {
             analysis.setDomains(List.of(AgentQueryDomain.VERIFICATION));
             analysis.setMetrics(List.of(AgentQueryMetric.VERIFICATION_COUNT));
@@ -76,7 +82,36 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
             analysis.setRequiresClarification(true);
             analysis.setClarificationQuestion("请说明想查询客户、订单、排餐、核销、退餐或运营统计中的哪类数据。");
         }
+        applyTemporalIntent(analysis, text);
         return analysis;
+    }
+
+    /**
+     * 构造带明确客户标识的排餐事实查询；缺少日期时保存为可续接澄清，不猜测公共菜单。
+     *
+     * @param analysis 当前受控分析结果
+     * @param text 用户问题
+     */
+    private void customerMealPlan(BusinessQuestionAnalysis analysis, String text) {
+        analysis.setDomains(List.of(AgentQueryDomain.MEAL_PLAN));
+        analysis.setQueryTarget(BusinessQueryTarget.CUSTOMER_MEAL_PLAN);
+        analysis.setConfidence(0.94D);
+        boolean hasResolvedDate = analysis.getFilters() != null && (analysis.getFilters().getRecordDate() != null
+            || analysis.getFilters().getStartDate() != null && analysis.getFilters().getEndDate() != null);
+        boolean hasRelativeDate = contains(text, "今天", "今日", "昨天", "昨日", "明天", "明日", "本周", "这周");
+        if (!hasResolvedDate && !hasRelativeDate) {
+            analysis.setRequiresClarification(true);
+            analysis.setClarificationQuestion("请确认要查询的排餐日期，例如今天、明天或 2026-07-14。");
+        }
+    }
+
+    /** 带客户实体且明确询问排餐记录时，才启用客户排餐高精度兜底。 */
+    private boolean isCustomerMealPlanQuestion(String text, AgentEntityReference entities) {
+        boolean hasCustomer = entities != null && (entities.getCustomerId() != null
+            || entities.getCustomerCode() != null && !entities.getCustomerCode().isBlank()
+            || entities.getCustomerName() != null && !entities.getCustomerName().isBlank());
+        return hasCustomer && contains(text, "排餐", "餐单", "吃什么")
+            && !contains(text, "为什么", "失败", "过敏", "候选菜", "公共菜单");
     }
 
     /** 构造公共菜单的高精度离线回退，未指定餐次时固定为全部可用餐次。 */
@@ -88,6 +123,7 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
         if (scope == MealScope.LUNCH || scope == MealScope.DINNER) analysis.getFilters().setMealType(scope.name());
         else analysis.getFilters().setMealType(null);
         analysis.setConfidence(0.82D);
+        applyTemporalIntent(analysis, text);
         return analysis;
     }
 
@@ -147,12 +183,12 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
         } else if (!dimensions.isEmpty()) analysis.setDimensions(dimensions);
         analysis.setConfidence(metrics == null || metrics.isEmpty() ? 0.7D : 0.96D);
         AgentQueryFilters filters = analysis.getFilters();
-        if (filters.getRecordDate() == null && contains(text, "今天", "今日")) filters.setRecordDate(LocalDate.now().toString());
         if (filters.getMealType() == null) {
             if (contains(text, "早餐")) filters.setMealType("BREAKFAST");
             else if (contains(text, "午餐")) filters.setMealType("LUNCH");
             else if (contains(text, "晚餐")) filters.setMealType("DINNER");
         }
+        applyTemporalIntent(analysis, text);
     }
 
     /**
@@ -180,6 +216,12 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
     private boolean isRemainingCustomerQuestion(String text) {
         return contains(text, "还有多少客户", "几个人没弄完", "还有几个人", "剩下的客户", "剩余客户",
             "还有谁没有处理", "没完成的客户", "今天还有多少人", "还差多少客户", "今天没做完的是谁");
+    }
+
+    /** 判断用户是否明确查询系统已录入的客户档案总数，而不是活跃或待办客户。 */
+    private boolean isCustomerProfileCountQuestion(String text) {
+        return contains(text, "客户总数", "客户档案总数", "录入了多少客户", "录入多少客户")
+            || contains(text, "系统中有多少客户", "系统中还有多少客户", "系统里有多少客户", "系统里还有多少客户");
     }
 
     private void ambiguity(BusinessQuestionAnalysis analysis, String field, List<String> options, String question) {
@@ -218,5 +260,19 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
     private boolean contains(String text, String... words) {
         for (String word : words) if (text.contains(word)) return true;
         return false;
+    }
+
+    /** 高精度兜底只识别相对时间枚举，具体日期统一由 BusinessTemporalResolver 按业务时区生成。 */
+    private void applyTemporalIntent(BusinessQuestionAnalysis analysis, String text) {
+        if (analysis == null || analysis.getFilters() != null && (analysis.getFilters().getRecordDate() != null
+            || analysis.getFilters().getStartDate() != null)) return;
+        BusinessTemporalExpression expression = BusinessTemporalExpression.UNSPECIFIED;
+        if (contains(text, "昨天", "昨日")) expression = BusinessTemporalExpression.PREVIOUS_DAY;
+        else if (contains(text, "明天", "明日")) expression = BusinessTemporalExpression.NEXT_DAY;
+        else if (contains(text, "本周", "这周")) expression = BusinessTemporalExpression.CURRENT_WEEK;
+        else if (contains(text, "今天", "今日", "现在", "当前", "目前", "截至现在")) expression = BusinessTemporalExpression.CURRENT_DAY;
+        BusinessTemporalIntent temporal = new BusinessTemporalIntent();
+        temporal.setExpression(expression);
+        analysis.setTemporal(temporal);
     }
 }

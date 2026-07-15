@@ -22,6 +22,9 @@ spring:
           model: ${AGENT_DEEPSEEK_MODEL:${AGENT_OPENAI_MODEL:deepseek-chat}}
 
 agent:
+  business-time:
+    zone-id: ${AGENT_BUSINESS_TIME_ZONE_ID:Asia/Shanghai}
+    default-daily-expression: ${AGENT_BUSINESS_TIME_DEFAULT_DAILY_EXPRESSION:CURRENT_DAY}
   context-base-url: ${AGENT_CONTEXT_BASE_URL:http://localhost:8000}
   context-path: /api/internal/agent/meal-plan/context
   internal-token: ${AGENT_INTERNAL_TOKEN:}
@@ -45,6 +48,11 @@ agent:
       business-keyword-fast-path-enabled: ${AGENT_CHAT_BUSINESS_KEYWORD_FAST_PATH_ENABLED:false}
       correction-replan-enabled: ${AGENT_CHAT_CORRECTION_REPLAN_ENABLED:true}
       unchanged-plan-on-correction: ${AGENT_CHAT_UNCHANGED_PLAN_ON_CORRECTION:CLARIFY}
+    business-semantic:
+      mode: ${AGENT_CHAT_BUSINESS_SEMANTIC_MODE:llm_first}
+      confidence-threshold: ${AGENT_CHAT_BUSINESS_SEMANTIC_CONFIDENCE_THRESHOLD:0.80}
+      pending-context-enabled: ${AGENT_CHAT_PENDING_CONTEXT_ENABLED:true}
+      pending-context-ttl-minutes: ${AGENT_CHAT_PENDING_CONTEXT_TTL_MINUTES:30}
     scheduled-menu:
       default-meal-scopes: ${AGENT_CHAT_SCHEDULED_MENU_DEFAULT_MEAL_SCOPES:LUNCH,DINNER}
       include-global-rice-candidates: ${AGENT_CHAT_SCHEDULED_MENU_INCLUDE_GLOBAL_RICE_CANDIDATES:false}

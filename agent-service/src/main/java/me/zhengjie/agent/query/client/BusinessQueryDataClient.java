@@ -172,6 +172,11 @@ public interface BusinessQueryDataClient {
         throw new UnsupportedOperationException("active customer summary client is not configured");
     }
 
+    /** 查询当前授权范围内的客户档案总数。 */
+    default Map<String, Object> customerProfileCount() {
+        throw new UnsupportedOperationException("customer profile count client is not configured");
+    }
+
     /** 查询日期范围内到期的进行中订单数。 */
     default Map<String, Object> expiringOrderSummary(String startDate, String endDate) {
         throw new UnsupportedOperationException("expiring order summary client is not configured");

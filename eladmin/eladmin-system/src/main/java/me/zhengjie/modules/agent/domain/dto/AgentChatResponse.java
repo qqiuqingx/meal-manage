@@ -58,6 +58,12 @@ public class AgentChatResponse {
 
     /** agent-service 生成并校验后的受控查询计划摘要。 */
     private Map<String, Object> queryPlan = new LinkedHashMap<>();
+    /** Agent 返回的待补条件受控上下文，由主系统原样持久化但不允许前端构造。 */
+    private Map<String, Object> pendingBusinessQueryContext;
+    /** Agent 返回的最近业务查询脱敏摘要。 */
+    private Map<String, Object> lastBusinessQueryContext;
+    /** 不含问题原文、Prompt 和业务结果的语义追踪摘要。 */
+    private Map<String, Object> semanticTraceSummary;
 
     public String getRequestId() {
         return requestId;
@@ -163,4 +169,10 @@ public class AgentChatResponse {
     public void setQueriedAt(String queriedAt) { this.queriedAt = queriedAt; }
     public Map<String, Object> getQueryPlan() { return queryPlan; }
     public void setQueryPlan(Map<String, Object> queryPlan) { this.queryPlan = queryPlan; }
+    public Map<String, Object> getPendingBusinessQueryContext() { return pendingBusinessQueryContext; }
+    public void setPendingBusinessQueryContext(Map<String, Object> pendingBusinessQueryContext) { this.pendingBusinessQueryContext = pendingBusinessQueryContext; }
+    public Map<String, Object> getLastBusinessQueryContext() { return lastBusinessQueryContext; }
+    public void setLastBusinessQueryContext(Map<String, Object> lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
+    public Map<String, Object> getSemanticTraceSummary() { return semanticTraceSummary; }
+    public void setSemanticTraceSummary(Map<String, Object> semanticTraceSummary) { this.semanticTraceSummary = semanticTraceSummary; }
 }

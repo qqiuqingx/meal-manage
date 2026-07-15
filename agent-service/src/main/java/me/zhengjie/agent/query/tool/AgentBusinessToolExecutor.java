@@ -128,6 +128,7 @@ public class AgentBusinessToolExecutor {
             List<String> dimensions = plan.getDimensions() == null ? List.of() : plan.getDimensions().stream().map(Enum::name).collect(java.util.stream.Collectors.toList());
             return client.dailyCustomerWorkload(filters.getRecordDate(), filters.getMealType(), dimensions);
         }
+        if ("getCustomerProfileCount".equals(toolName)) return client.customerProfileCount();
         if ("getActiveCustomerSummary".equals(toolName)) return client.activeCustomerSummary();
         if ("getExpiringOrderSummary".equals(toolName)) return client.expiringOrderSummary(filters.getStartDate(), filters.getEndDate());
         throw new IllegalArgumentException("unsupported tool");

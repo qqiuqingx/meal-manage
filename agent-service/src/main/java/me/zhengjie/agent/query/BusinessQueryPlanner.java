@@ -74,6 +74,9 @@ public class BusinessQueryPlanner {
         else if ("BUSINESS_QUERY_OPERATION_ACTIVE".equals(responseType)) {
             operationPlan(plan, AgentQueryMetric.ACTIVE_CUSTOMER_COUNT, "getActiveCustomerSummary");
         }
+        else if ("BUSINESS_QUERY_OPERATION_CUSTOMER_TOTAL".equals(responseType)) {
+            operationPlan(plan, AgentQueryMetric.CUSTOMER_PROFILE_COUNT, "getCustomerProfileCount");
+        }
         else if ("BUSINESS_QUERY_OPERATION_EXPIRING".equals(responseType)) {
             operationPlan(plan, AgentQueryMetric.EXPIRING_ORDER_COUNT, "getExpiringOrderSummary");
         }

@@ -3,8 +3,14 @@ package me.zhengjie.agent.analysis;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.analysis.domain.BusinessQuestionAnalysis;
+import me.zhengjie.agent.analysis.domain.BusinessTemporalExpression;
+import me.zhengjie.agent.analysis.domain.BusinessTemporalIntent;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
+import me.zhengjie.agent.query.domain.AgentMetricCatalog;
+import me.zhengjie.agent.query.domain.AgentMetricDefinition;
+import me.zhengjie.agent.query.domain.AgentQueryMetric;
 import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
+import me.zhengjie.agent.security.AgentAccessContextHolder;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.deepseek.DeepSeekChatOptions;
@@ -23,23 +29,32 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
     private static final Logger log = LoggerFactory.getLogger(LlmBusinessQuestionAnalyzer.class);
     private static final Set<String> ROOT_FIELDS = Set.of("questionType", "queryTarget", "interactionMode", "referenceTurn",
         "domains", "entities", "filters", "mealScope", "correction", "metrics", "dimensions", "ambiguities", "subjects", "relations", "requestedFacts", "operation", "groupBy",
-        "confidence", "requiresClarification", "clarificationQuestion");
+        "temporal", "confidence", "requiresClarification", "clarificationQuestion");
     private static final Set<String> ENTITY_FIELDS = Set.of("customerId", "customerCode", "customerName", "orderId", "orderCode",
         "mealPlanRecordId", "packageId", "dishId");
     private static final Set<String> FILTER_FIELDS = Set.of("recordDate", "startDate", "endDate", "mealType", "orderStatus",
         "page", "size", "recentLimit");
     private static final Set<String> AMBIGUITY_FIELDS = Set.of("field", "options", "material");
     private static final Set<String> CORRECTION_FIELDS = Set.of("reason", "observations", "requiresReplan");
+    private static final Set<String> TEMPORAL_FIELDS = Set.of("expression", "explicitDate", "explicitStartDate", "explicitEndDate");
     private static final Set<String> NON_EXECUTABLE_MODEL_FIELDS = Set.of("observations", "analysisContext");
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
     private final BeanOutputConverter<BusinessQuestionAnalysis> outputConverter;
     private final DeepSeekChatOptions jsonResponseOptions;
+    private final BusinessSemanticPromptRenderer semanticPromptRenderer;
+    private final ThreadLocal<String> lastFailureReason = new ThreadLocal<>();
 
     public LlmBusinessQuestionAnalyzer(ChatClient.Builder builder, ObjectMapper objectMapper) {
+        this(builder, objectMapper, new BusinessSemanticPromptRenderer(new BusinessSemanticCatalog()));
+    }
+
+    public LlmBusinessQuestionAnalyzer(ChatClient.Builder builder, ObjectMapper objectMapper,
+                                       BusinessSemanticPromptRenderer semanticPromptRenderer) {
         this.chatClient = builder.build();
         this.objectMapper = objectMapper;
         this.outputConverter = new BeanOutputConverter<>(BusinessQuestionAnalysis.class, objectMapper);
+        this.semanticPromptRenderer = semanticPromptRenderer;
         this.jsonResponseOptions = DeepSeekChatOptions.builder()
             .responseFormat(ResponseFormat.builder().type(ResponseFormat.Type.JSON_OBJECT).build())
             .temperature(0D)
@@ -55,6 +70,7 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
     @Override
     public BusinessQuestionAnalysis analyze(String question, DiagnosisSlots context,
                                             LastBusinessQueryContext lastBusinessQueryContext) {
+        lastFailureReason.remove();
         try {
             String content = chatClient.prompt()
                 .system(systemPrompt())
@@ -64,32 +80,41 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
                 .content();
             JsonNode rawRoot = objectMapper.readTree(normalizeJson(content));
             if (containsForbiddenText(rawRoot)) {
+                lastFailureReason.set("MODEL_INVALID");
                 log.warn("业务语义模型结果被拒绝 reason=FORBIDDEN_TEXT rootFields={}", rootFieldNames(rawRoot));
                 return null;
             }
             JsonNode root = stripNonExecutableFields(rawRoot);
             String schemaViolation = schemaViolation(root);
             if (schemaViolation != null) {
+                lastFailureReason.set("MODEL_INVALID");
                 log.warn("业务语义模型结果被拒绝 reason={} rootFields={} nestedFields={}", schemaViolation,
                     rootFieldNames(root), rejectedNestedFields(root, schemaViolation));
                 return null;
             }
             BusinessQuestionAnalysis analysis = objectMapper.treeToValue(root, BusinessQuestionAnalysis.class);
             if (!validAnalysis(analysis)) {
+                lastFailureReason.set("MODEL_INVALID");
                 log.warn("业务语义模型结果被拒绝 reason=SEMANTIC_INVALID queryTarget={} interactionMode={} confidence={}",
                     analysis == null ? null : analysis.getQueryTarget(), analysis == null ? null : analysis.getInteractionMode(),
                     analysis == null ? null : analysis.getConfidence());
                 return null;
             }
             analysis.setSource("LLM");
+            analysis.setSemanticCatalogVersion(AgentMetricCatalog.VERSION);
+            lastFailureReason.remove();
             log.info("业务语义模型分析完成 queryTarget={} interactionMode={} mealScope={} confidence={} requiresClarification={}",
                 analysis.getQueryTarget(), analysis.getInteractionMode(), analysis.getMealScope(), analysis.getConfidence(), analysis.isRequiresClarification());
             return analysis;
         } catch (Exception exception) {
+            lastFailureReason.set(isTimeout(exception) ? "MODEL_TIMEOUT" : "MODEL_UNAVAILABLE");
             log.warn("业务语义模型分析失败 errorType={} errorMessage={}", exception.getClass().getSimpleName(), exception.getMessage());
             return null;
         }
     }
+
+    /** 返回当前线程最近一次模型分析失败的稳定原因，不包含异常原文。 */
+    public String getLastFailureReason() { return lastFailureReason.get(); }
 
     private String systemPrompt() {
         return "你是内部客服业务问题分析器，只输出符合 JSON Schema 的语义分析，不查库、不回答用户。"
@@ -102,7 +127,10 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
             + "该目标只表达诊断意图和受控实体、过滤条件，不输出工具名。"
             + "用户否定、质疑或指出上轮结果异常时 interactionMode 优先为 CORRECTION；CORRECTION 必须 referenceTurn=PREVIOUS_BUSINESS_QUERY，"
             + "correction.requiresReplan=true，且不能简单复制上轮语义。当天公共菜单未指定餐次时 mealScope=ALL_AVAILABLE，"
-            + "明确餐次时使用 LUNCH 或 DINNER。关键歧义必须 requiresClarification=true；不得根据常识补造业务数据。";
+            + "明确餐次时使用 LUNCH 或 DINNER。关键歧义必须 requiresClarification=true；不得根据常识补造业务数据。"
+            + "时间必须使用 temporal.expression 表达：现在/当前/目前/截至现在在每日指标中使用 CURRENT_DAY，昨天用 PREVIOUS_DAY，明天用 NEXT_DAY，本周用 CURRENT_WEEK。"
+            + "相对时间不得填写具体日期；明确日期使用 EXPLICIT_DATE，明确范围使用 EXPLICIT_RANGE。"
+            + "必须区分仍有餐数的活跃客户与当天应服务但未排餐客户，也必须区分已排餐与排了但未核销。";
     }
 
     /**
@@ -116,6 +144,7 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
     private String userPrompt(String question, DiagnosisSlots context, LastBusinessQueryContext lastBusinessQueryContext) throws Exception {
         return "只返回一个 JSON 对象，不要使用 Markdown。JSON 必须符合以下由 Spring AI 根据 Java DTO 生成的 Schema："
             + outputConverter.getFormat()
+            + semanticPromptRenderer.render(AgentAccessContextHolder.availableTools())
             + "跨客户范围查询的 entities 使用空对象{}，不得新增 scope、customerScope 或列表字段。"
             + "correction.observations 只能使用受控枚举文本，不得输出自由分析说明。"
             + "跨客户过敏分析的结构示例：{\"queryTarget\":\"MEAL_PLAN_ALLERGY_ANALYSIS\",\"entities\":{},\"subjects\":[\"MEAL_PLAN\",\"CUSTOMER\",\"DISH\"],\"relations\":[\"MEAL_PLAN_CUSTOMER\",\"MEAL_PLAN_DISH\"],\"requestedFacts\":[\"CUSTOMER_CODE\",\"DISH_NAME\",\"ALLERGY_FILTERED\",\"ALLERGY_REASONS\"],\"operation\":\"FILTER_AND_GROUP\",\"groupBy\":[\"CUSTOMER_CODE\"]}。"
@@ -146,6 +175,7 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
         if (ambiguities != null && !ambiguities.isNull() && (!ambiguities.isArray() || !safeAmbiguities(ambiguities))) return "AMBIGUITIES_SHAPE";
         JsonNode correction = root.get("correction");
         if (correction != null && !correction.isNull() && !safeCorrection(correction)) return "CORRECTION_SHAPE";
+        if (!safeScalarObject(root.get("temporal"), TEMPORAL_FIELDS)) return "TEMPORAL_SHAPE";
         if (!safeEnumArray(root.get("domains"))) return "DOMAINS_SHAPE";
         if (!safeEnumArray(root.get("metrics"))) return "METRICS_SHAPE";
         if (!safeEnumArray(root.get("dimensions"))) return "DIMENSIONS_SHAPE";
@@ -251,10 +281,40 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
     /** 校验纠错协议的必填关系，拒绝模型仅复制上轮查询的伪纠错。 */
     private boolean validAnalysis(BusinessQuestionAnalysis analysis) {
         if (analysis == null || analysis.getQuestionType() == null || analysis.getConfidence() < 0D || analysis.getConfidence() > 1D) return false;
+        if (!validTemporal(analysis.getTemporal()) || !validMetricDomains(analysis)) return false;
         if (analysis.getInteractionMode() == me.zhengjie.agent.analysis.domain.BusinessInteractionMode.CORRECTION) {
             return "PREVIOUS_BUSINESS_QUERY".equals(analysis.getReferenceTurn()) && analysis.getCorrection() != null
                 && analysis.getCorrection().isRequiresReplan();
         }
         return true;
+    }
+
+    /** 校验相对时间与显式日期字段互斥，具体日期仍由服务端 Resolver 解析。 */
+    private boolean validTemporal(BusinessTemporalIntent temporal) {
+        if (temporal == null || temporal.getExpression() == null) return true;
+        boolean hasDate = notBlank(temporal.getExplicitDate());
+        boolean hasStart = notBlank(temporal.getExplicitStartDate());
+        boolean hasEnd = notBlank(temporal.getExplicitEndDate());
+        if (temporal.getExpression() == BusinessTemporalExpression.EXPLICIT_DATE) return hasDate && !hasStart && !hasEnd;
+        if (temporal.getExpression() == BusinessTemporalExpression.EXPLICIT_RANGE) return !hasDate && hasStart && hasEnd;
+        return !hasDate && !hasStart && !hasEnd;
+    }
+
+    /** 指标必须登记在目录中，并且属于模型声明的业务领域。 */
+    private boolean validMetricDomains(BusinessQuestionAnalysis analysis) {
+        if (analysis.getMetrics() == null) return true;
+        for (AgentQueryMetric metric : analysis.getMetrics()) {
+            AgentMetricDefinition definition = AgentMetricCatalog.definition(metric);
+            if (definition == null || analysis.getDomains() == null || !analysis.getDomains().contains(definition.getDomain())) return false;
+        }
+        return true;
+    }
+
+    private boolean notBlank(String value) { return value != null && !value.trim().isEmpty(); }
+
+    private boolean isTimeout(Exception exception) {
+        String name = exception.getClass().getSimpleName().toLowerCase();
+        String message = exception.getMessage() == null ? "" : exception.getMessage().toLowerCase();
+        return name.contains("timeout") || message.contains("timeout") || message.contains("timed out");
     }
 }

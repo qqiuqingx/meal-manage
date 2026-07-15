@@ -30,13 +30,21 @@
 
 前端使用 `breakdownDimensions` 与 `metricDimensionBreakdown` 展示实际分组。后者以指标枚举名为第一层键、维度组合展示值为第二层键；每个指标独立聚合，禁止将已排餐分组复用于待核销、应服务或待排餐指标。已排餐、已核销和待核销按客户去重；应服务和待排餐按客户+餐次去重。一个客户可能对应多个套餐或来源归属时，分组之和不承诺等于跨维总数。响应始终只包含计数，不包含客户、订单或排餐明细。
 
-## 3. 活跃客户数
+## 3. 客户档案总数
+
+`POST /api/internal/agent/operations/customer-profiles/count`
+
+所需权限：`agentDiagnosis:list` + `customerProfile:list`。返回当前客服授权数据范围内已录入的客户档案数量，不附加业务日期，也不返回客户明细。
+
+## 4. 活跃客户数
 
 `POST /api/internal/agent/operations/active-customers`
 
 所需权限：`agentDiagnosis:list` + `customerOrder:list`。返回存在进行中且剩余餐数大于零的客户去重数。
 
-## 4. 即将到期订单数
+活跃客户接口当前只返回总数，不支持套餐或客户来源分组。
+
+## 5. 即将到期订单数
 
 `POST /api/internal/agent/operations/expiring-orders`
 

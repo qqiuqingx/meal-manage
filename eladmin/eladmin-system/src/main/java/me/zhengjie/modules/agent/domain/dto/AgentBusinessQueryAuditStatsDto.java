@@ -56,6 +56,18 @@ public class AgentBusinessQueryAuditStatsDto {
     /** 同一会话发起澄清后最终出现完整有效回答的比例。 */
     private Double clarificationSuccessRate = 0D;
 
+    /** LLM 失败或低置信度后使用规则兜底的次数。 */
+    private Long semanticFallbackCount = 0L;
+
+    /** 业务语义规则兜底次数占全部业务查询的比例。 */
+    private Double semanticFallbackRate = 0D;
+
+    /** 成功复用待补查询上下文的次数。 */
+    private Long pendingContextReuseCount = 0L;
+
+    /** Pending Context 复用次数占全部业务查询的比例。 */
+    private Double pendingContextReuseRate = 0D;
+
     /** 平均查询耗时毫秒。 */
     private Double averageCostMs = 0D;
 
@@ -76,4 +88,10 @@ public class AgentBusinessQueryAuditStatsDto {
 
     /** 未支持问题的稳定原因分布，可按次数取 Top N。 */
     private Map<String, Long> unsupportedReasonDistribution = new LinkedHashMap<>();
+
+    /** 按 LLM、RULE_FALLBACK、PENDING_CONTEXT 等受控语义来源统计。 */
+    private Map<String, Long> semanticSourceDistribution = new LinkedHashMap<>();
+
+    /** 按模型超时、非法输出、低置信度等稳定原因统计规则兜底。 */
+    private Map<String, Long> semanticFallbackReasonDistribution = new LinkedHashMap<>();
 }

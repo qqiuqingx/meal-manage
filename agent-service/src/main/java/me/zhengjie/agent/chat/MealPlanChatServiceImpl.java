@@ -4,6 +4,8 @@ import me.zhengjie.agent.client.DiagnosisToolDataClient;
 import me.zhengjie.agent.analysis.BusinessQuestionAnalyzer;
 import me.zhengjie.agent.analysis.LegacyBusinessQuestionAnalysisFactory;
 import me.zhengjie.agent.analysis.RuleBasedBusinessQuestionAnalyzer;
+import me.zhengjie.agent.analysis.BusinessTemporalResolver;
+import me.zhengjie.agent.config.BusinessTimeProperties;
 import me.zhengjie.agent.analysis.domain.BusinessQuestionAnalysis;
 import me.zhengjie.agent.query.client.BusinessQueryDataClient;
 import me.zhengjie.agent.query.AgentQueryPlanValidator;
@@ -15,6 +17,12 @@ import me.zhengjie.agent.query.BusinessResultValidator;
 import me.zhengjie.agent.query.BusinessAnswerComposer;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
 import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
+import me.zhengjie.agent.query.domain.PendingBusinessQueryContext;
+import me.zhengjie.agent.query.domain.SemanticTraceSummary;
+import me.zhengjie.agent.query.domain.AgentMetricCatalog;
+import me.zhengjie.agent.query.domain.AgentMetricDefinition;
+import me.zhengjie.agent.query.domain.AgentQueryFilters;
+import me.zhengjie.agent.query.domain.AgentQueryMetric;
 import me.zhengjie.agent.analysis.domain.BusinessInteractionMode;
 import me.zhengjie.agent.analysis.domain.BusinessQueryTarget;
 import me.zhengjie.agent.analysis.domain.MealScope;
@@ -44,6 +52,8 @@ import java.util.List;
 import java.util.Map;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.Clock;
+import java.time.ZoneId;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
@@ -76,6 +86,9 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
     private final BusinessQueryChatService businessQueryChatService;
     private final BusinessQuestionAnalyzer businessQuestionAnalyzer;
     private final BusinessQueryPlanningService businessQueryPlanningService;
+    private final BusinessTemporalResolver businessTemporalResolver;
+    private final int pendingContextTtlMinutes;
+    private boolean pendingContextEnabled = true;
 
     public MealPlanChatServiceImpl(MealPlanChatSessionStore sessionStore,
                                    MealPlanChatExtractor extractor,
@@ -122,7 +135,8 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
                                    AgentQueryPlanValidator queryPlanValidator,
                                    BusinessAnswerValidator businessAnswerValidator) {
         this(sessionStore, extractor, diagnosisService, followUpService, dataClient, businessQueryDataClient,
-            queryPlanValidator, businessAnswerValidator, new RuleBasedBusinessQuestionAnalyzer(), new BusinessQueryPlanningService());
+            queryPlanValidator, businessAnswerValidator, new RuleBasedBusinessQuestionAnalyzer(), new BusinessQueryPlanningService(),
+            defaultTemporalResolver(), 30);
     }
 
     /**
@@ -139,7 +153,6 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
      * @param businessQuestionAnalyzer 受控问题分析器
      * @param businessQueryPlanningService QueryPlan 2.0 规划器
      */
-    @Autowired
     public MealPlanChatServiceImpl(MealPlanChatSessionStore sessionStore,
                                    MealPlanChatExtractor extractor,
                                    MealPlanDiagnosisService diagnosisService,
@@ -150,6 +163,27 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
                                    BusinessAnswerValidator businessAnswerValidator,
                                    BusinessQuestionAnalyzer businessQuestionAnalyzer,
                                    BusinessQueryPlanningService businessQueryPlanningService) {
+        this(sessionStore, extractor, diagnosisService, followUpService, dataClient, businessQueryDataClient,
+            queryPlanValidator, businessAnswerValidator, businessQuestionAnalyzer, businessQueryPlanningService,
+            defaultTemporalResolver(), 30);
+    }
+
+    /**
+     * 创建完整聊天编排器；时间解析器和 Pending TTL 均由配置注入，便于固定时钟测试和多实例一致执行。
+     */
+    @Autowired
+    public MealPlanChatServiceImpl(MealPlanChatSessionStore sessionStore,
+                                   MealPlanChatExtractor extractor,
+                                   MealPlanDiagnosisService diagnosisService,
+                                   MealPlanFollowUpService followUpService,
+                                   DiagnosisToolDataClient dataClient,
+                                   BusinessQueryDataClient businessQueryDataClient,
+                                   AgentQueryPlanValidator queryPlanValidator,
+                                   BusinessAnswerValidator businessAnswerValidator,
+                                   BusinessQuestionAnalyzer businessQuestionAnalyzer,
+                                   BusinessQueryPlanningService businessQueryPlanningService,
+                                   BusinessTemporalResolver businessTemporalResolver,
+                                   @org.springframework.beans.factory.annotation.Value("${agent.chat.business-semantic.pending-context-ttl-minutes:30}") int pendingContextTtlMinutes) {
         this.sessionStore = sessionStore;
         this.extractor = extractor;
         this.diagnosisService = diagnosisService;
@@ -160,11 +194,25 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         this.businessQueryChatService = new BusinessQueryChatService(businessQueryDataClient, queryPlanValidator, businessAnswerValidator);
         this.businessQuestionAnalyzer = businessQuestionAnalyzer;
         this.businessQueryPlanningService = businessQueryPlanningService;
+        this.businessTemporalResolver = businessTemporalResolver;
+        this.pendingContextTtlMinutes = Math.max(1, pendingContextTtlMinutes);
+    }
+
+    /**
+     * 应用灰度开关；关闭时不恢复或保存 Pending Context，其余时间与 QueryPlan 行为保持不变。
+     *
+     * @param enabled 是否启用跨轮待补查询上下文
+     */
+    @Autowired
+    public void configurePendingContext(
+        @org.springframework.beans.factory.annotation.Value("${agent.chat.business-semantic.pending-context-enabled:true}") boolean enabled) {
+        this.pendingContextEnabled = enabled;
     }
 
     @Override
     public AgentChatResponse chat(AgentChatRequest request) {
         MealPlanChatSession session = sessionStore.getOrCreate(request.getSessionId());
+        hydrateBusinessContexts(session, request);
         // 主系统持久化上下文仅在当前 agent 实例缺少槽位时补充；本实例中的更新槽位优先保留。
         session.setSlots(mergeSlots(copy(request.getContextSlots()), session.getSlots()));
         long start = System.currentTimeMillis();
@@ -627,9 +675,18 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
      */
     private AgentChatResponse handleOperationStatistics(MealPlanChatSession session, String message,
                                                         BusinessQueryOrchestrator orchestrator) {
-        String text = message == null ? "" : message;
         BusinessQuestionAnalysis analysis = businessQuestionAnalyzer.analyze(message, session.getSlots());
+        analysis = resolveTemporalAnalysis(analysis, session, false);
+        return executeOperationAnalysis(session, message, orchestrator, analysis, false);
+    }
+
+    /** 执行已经完成时间落地的运营统计语义，供新问题和 Pending Context 续接共用。 */
+    private AgentChatResponse executeOperationAnalysis(MealPlanChatSession session, String message,
+                                                       BusinessQueryOrchestrator orchestrator,
+                                                       BusinessQuestionAnalysis analysis,
+                                                       boolean pendingReused) {
         if (analysis == null || analysis.isRequiresClarification()) {
+            if (analysis != null) savePendingContext(session, analysis, missingFields(analysis), message);
             String clarification = analysis == null || !isNotBlank(analysis.getClarificationQuestion())
                 ? "你想查今天待排餐、待配送还是待核销的客户数？" : analysis.getClarificationQuestion();
             return response(session, ChatStatus.NEED_MORE_INFO, clarification, null,
@@ -645,22 +702,29 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
                 List.of(), List.of("今天待核销客户", "今天待排餐客户"), "BUSINESS_QUERY_OPERATION_CLARIFICATION");
         }
         boolean report = queryPlan.getMetrics() != null && queryPlan.getMetrics().size() > 1;
-        if (requiresRecordDate(queryPlan) && !isNotBlank(session.getSlots().getRecordDate())) {
+        if (requiresRecordDate(queryPlan) && (queryPlan.getFilters() == null || !isNotBlank(queryPlan.getFilters().getRecordDate()))) {
+            savePendingContext(session, analysis, List.of("recordDate"), message);
             return response(session, ChatStatus.NEED_MORE_INFO, "请补充统计日期，例如今天、明天或 2026-07-13。", null,
                 List.of(MissingSlot.RECORD_DATE), List.of("今天", "明天"), "BUSINESS_QUERY_OPERATION_CLARIFICATION");
         }
-        String responseType = report ? "BUSINESS_QUERY_OPERATION_REPORT" : operationResponseType(text);
-        String tool = queryPlan.getToolNames() == null || queryPlan.getToolNames().isEmpty()
-            ? operationTool(responseType) : queryPlan.getToolNames().get(0);
-        String label = operationMetricLabel(responseType);
+        AgentQueryMetric primaryMetric = queryPlan.getMetrics().get(0);
+        AgentMetricDefinition metricDefinition = AgentMetricCatalog.definition(primaryMetric);
+        if (metricDefinition == null) return response(session, ChatStatus.ERROR, "运营指标未登记，已停止执行。", null,
+            List.of(), List.of(), "BUSINESS_QUERY_OPERATION");
+        String responseType = report ? "BUSINESS_QUERY_OPERATION_REPORT" : metricDefinition.getResponseType();
+        String tool = queryPlan.getToolNames().get(0);
         ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, queryPlan, tool, null, List.of());
         Map<String, Object> result = report ? operationReportResult(execution.result(), queryPlan) : execution.result();
         String answer = report ? composer().operationReport(result, queryPlan.getMetrics())
-            : composer().operationStatistics(result, label);
+            : composer().operationStatistics(result, primaryMetric);
+        session.getConversationState().setPendingBusinessQueryContext(null);
+        applyResolvedFiltersToSlots(session, queryPlan.getFilters());
         AgentChatResponse response = insightResponse(session, responseType, result, answer,
             List.of("今天待核销客户", "今天已排餐客户", "活跃客户"));
         response.setQueryPlan(queryPlan);
         applyToolExecution(response, execution);
+        response.setSemanticTraceSummary(semanticTrace(analysis, pendingReused));
+        captureLastBusinessQueryContext(session, response);
         return response;
     }
 
@@ -674,22 +738,39 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
      */
     private AgentChatResponse handleSemanticBusinessQuery(MealPlanChatSession session, String message,
                                                           BusinessQueryOrchestrator orchestrator) {
-        BusinessQuestionAnalysis analysis = businessQuestionAnalyzer.analyze(message, session.getSlots(),
-            session.getConversationState().getLastBusinessQueryContext());
+        BusinessQuestionAnalysis analysis = resolvePendingAnalysis(session, message);
+        boolean pendingReused = analysis != null;
+        if (analysis == null) {
+            if (session.getConversationState().getPendingBusinessQueryContext() != null && !isPureSlotReply(message)) {
+                session.getConversationState().setPendingBusinessQueryContext(null);
+            }
+            analysis = businessQuestionAnalyzer.analyze(message, session.getSlots(),
+                session.getConversationState().getLastBusinessQueryContext());
+            analysis = resolveTemporalAnalysis(analysis, session, false);
+        }
         if (analysis == null) return null;
-        if (analysis.isRequiresClarification() && ("LLM".equals(analysis.getSource())
-            || analysis.getQueryTarget() == BusinessQueryTarget.SCHEDULED_MENU
-            || analysis.getInteractionMode() == BusinessInteractionMode.CORRECTION)) {
-            return response(session, ChatStatus.NEED_MORE_INFO,
+        if (analysis.isRequiresClarification()) {
+            // 未识别出任何领域时保留既有细粒度意图兼容入口；已识别领域的歧义统一由语义层追问。
+            if (analysis.getDomains() == null || analysis.getDomains().isEmpty()) return null;
+            savePendingContext(session, analysis, missingFields(analysis), message);
+            AgentChatResponse clarification = response(session, ChatStatus.NEED_MORE_INFO,
                 isNotBlank(analysis.getClarificationQuestion()) ? analysis.getClarificationQuestion() : "请补充需要查询的业务对象或条件。",
                 null, List.of(), List.of("今天菜单", "客户订单"), "BUSINESS_QUERY_CLARIFICATION");
+            clarification.setSemanticTraceSummary(semanticTrace(analysis, pendingReused));
+            return clarification;
         }
-        if (analysis.isRequiresClarification()) return null;
+        if (analysis.getDomains() != null && (analysis.getDomains().contains(me.zhengjie.agent.query.domain.AgentQueryDomain.OPERATION_STATISTICS)
+            || analysis.getDomains().contains(me.zhengjie.agent.query.domain.AgentQueryDomain.NATURAL_LANGUAGE_REPORT))) {
+            return executeOperationAnalysis(session, message, orchestrator, analysis, pendingReused);
+        }
         if (analysis.getQueryTarget() == BusinessQueryTarget.MEAL_PLAN_DIAGNOSIS) {
             return handleSemanticMealPlanDiagnosis(session, analysis);
         }
         if (analysis.getQueryTarget() == BusinessQueryTarget.MEAL_PLAN_ALLERGY_ANALYSIS) {
             return handleMealPlanAllergyAnalysis(session, analysis, orchestrator);
+        }
+        if (analysis.getQueryTarget() == BusinessQueryTarget.CUSTOMER_MEAL_PLAN) {
+            return handleCustomerMealPlanQuery(session, analysis, orchestrator, pendingReused);
         }
         if (analysis.getQueryTarget() != BusinessQueryTarget.SCHEDULED_MENU) return null;
         if (!isNotBlank(analysis.getFilters().getRecordDate())) {
@@ -702,6 +783,7 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         }
         AgentQueryPlan queryPlan = businessQueryPlanningService.plan(analysis);
         if (queryPlan == null) {
+            savePendingContext(session, analysis, List.of("recordDate", "mealType"), message);
             return response(session, ChatStatus.NEED_MORE_INFO, "公共菜单仅支持查询午餐或晚餐，请确认需要的餐次。", null,
                 List.of(), List.of("今天午餐菜单", "今天晚餐菜单"), "BUSINESS_QUERY_SCHEDULED_MENU");
         }
@@ -723,11 +805,69 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_SCHEDULED_MENU", result, answer,
             List.of("今天午餐菜单", "今天晚餐菜单", "清空会话"));
         response.setQueryPlan(queryPlan);
+        response.setSemanticTraceSummary(semanticTrace(analysis, pendingReused));
+        session.getConversationState().setPendingBusinessQueryContext(null);
         applyToolExecution(response, execution);
         applyResultValidation(response, queryPlan, result);
         captureLastBusinessQueryContext(session, response);
         session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
         return response;
+    }
+
+    /**
+     * 执行客户排餐语义计划。客户编号先解析为内部 ID，成功后清除 Pending 并记录本轮语义追踪。
+     *
+     * @param session 当前会话
+     * @param analysis 已补齐日期的受控客户排餐语义
+     * @param orchestrator 本轮只读工具编排器
+     * @param pendingReused 是否来自上一轮待补上下文
+     * @return 客户解析结果、受控错误或排餐查询响应
+     */
+    private AgentChatResponse handleCustomerMealPlanQuery(MealPlanChatSession session,
+                                                          BusinessQuestionAnalysis analysis,
+                                                          BusinessQueryOrchestrator orchestrator,
+                                                          boolean pendingReused) {
+        if (businessQueryDataClient == null) {
+            return response(session, ChatStatus.ERROR, "排餐查询服务暂不可用，请稍后重试。", null,
+                List.of(), List.of(), "BUSINESS_QUERY_MEAL_PLAN");
+        }
+        syncSemanticCustomerToSlots(session.getSlots(), analysis);
+        AgentQueryPlan queryPlan = businessQueryPlanningService.plan(analysis);
+        if (queryPlan == null || !isNotBlank(analysis.getFilters().getRecordDate())) {
+            savePendingContext(session, analysis, List.of("recordDate"), "");
+            return response(session, ChatStatus.NEED_MORE_INFO, "请确认要查询的排餐日期，例如今天、明天或 2026-07-14。",
+                null, List.of(MissingSlot.RECORD_DATE), List.of("今天", "明天"), "BUSINESS_QUERY_CLARIFICATION");
+        }
+        if (queryPlan.getEntities().getCustomerId() == null) {
+            ResolvedCustomer resolved = resolveCustomerForBusinessQuery(orchestrator, session);
+            if (resolved.response() != null) {
+                session.getConversationState().setPendingBusinessQueryContext(null);
+                return resolved.response();
+            }
+            session.getSlots().setCustomerId(resolved.customerId());
+            queryPlan.getEntities().setCustomerId(resolved.customerId());
+        }
+        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, queryPlan, "listMealPlans", null, List.of());
+        Map<String, Object> result = execution.result();
+        session.getConversationState().setPendingBusinessQueryContext(null);
+        applyResolvedFiltersToSlots(session, queryPlan.getFilters());
+        AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_MEAL_PLAN", result,
+            composer().mealPlan(result), CUSTOMER_INSIGHT_QUICK_REPLIES);
+        response.setQueryPlan(queryPlan);
+        response.setSemanticTraceSummary(semanticTrace(analysis, pendingReused));
+        applyToolExecution(response, execution);
+        applyResultValidation(response, queryPlan, result);
+        captureLastBusinessQueryContext(session, response);
+        session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
+        return response;
+    }
+
+    /** 将模型或 Pending 中的客户实体补到确定性槽位，供统一客户解析工具使用。 */
+    private void syncSemanticCustomerToSlots(DiagnosisSlots slots, BusinessQuestionAnalysis analysis) {
+        if (slots == null || analysis == null || analysis.getEntities() == null) return;
+        if (slots.getCustomerId() == null) slots.setCustomerId(analysis.getEntities().getCustomerId());
+        if (!isNotBlank(slots.getCustomerCode())) slots.setCustomerCode(analysis.getEntities().getCustomerCode());
+        if (!isNotBlank(slots.getCustomerName())) slots.setCustomerName(analysis.getEntities().getCustomerName());
     }
 
     /**
@@ -867,34 +1007,6 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         result.put("reportMetrics", queryPlan.getMetrics().stream().map(Enum::name).collect(java.util.stream.Collectors.toList()));
         return result;
     }
-
-    private String operationResponseType(String text) {
-        if (text.contains("活跃") || text.contains("进行中客户")) return "BUSINESS_QUERY_OPERATION_ACTIVE";
-        if (text.contains("到期")) return "BUSINESS_QUERY_OPERATION_EXPIRING";
-        if (text.contains("失败")) return "BUSINESS_QUERY_OPERATION_FAILURE";
-        if (text.contains("已核销")) return "BUSINESS_QUERY_OPERATION_VERIFIED";
-        if (text.contains("待排餐") || text.contains("没排餐") || text.contains("未排餐")) return "BUSINESS_QUERY_OPERATION_UNSCHEDULED";
-        if (text.contains("已排餐") || text.contains("排餐客户")) return "BUSINESS_QUERY_OPERATION_SCHEDULED";
-        return "BUSINESS_QUERY_OPERATION_DAILY";
-    }
-
-    private String operationTool(String responseType) {
-        if ("BUSINESS_QUERY_OPERATION_ACTIVE".equals(responseType)) return "getActiveCustomerSummary";
-        if ("BUSINESS_QUERY_OPERATION_EXPIRING".equals(responseType)) return "getExpiringOrderSummary";
-        if ("BUSINESS_QUERY_OPERATION_FAILURE".equals(responseType)) return "getMealPlanFailureSummary";
-        return "getDailyCustomerWorkload";
-    }
-
-    private String operationMetricLabel(String responseType) {
-        if ("BUSINESS_QUERY_OPERATION_ACTIVE".equals(responseType)) return "活跃客户数";
-        if ("BUSINESS_QUERY_OPERATION_EXPIRING".equals(responseType)) return "即将到期订单数";
-        if ("BUSINESS_QUERY_OPERATION_FAILURE".equals(responseType)) return "排餐失败数";
-        if ("BUSINESS_QUERY_OPERATION_UNSCHEDULED".equals(responseType)) return "待排餐客户数";
-        if ("BUSINESS_QUERY_OPERATION_VERIFIED".equals(responseType)) return "已核销客户数";
-        if ("BUSINESS_QUERY_OPERATION_SCHEDULED".equals(responseType)) return "已排餐客户数";
-        return "待核销客户数";
-    }
-
 
     /**
      * 将一个或多个工具执行状态合并进响应，暴露缓存命中、部分失败和受控告警。
@@ -1200,6 +1312,10 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         context.setDomain(response.getQueryPlan().getDomain() == null ? null : response.getQueryPlan().getDomain().name());
         context.setQueryPlanFingerprint(queryPlanFingerprint(response.getQueryPlan()));
         context.setRecordDate(response.getQueryPlan().getFilters() == null ? null : response.getQueryPlan().getFilters().getRecordDate());
+        context.setStartDate(response.getQueryPlan().getFilters() == null ? null : response.getQueryPlan().getFilters().getStartDate());
+        context.setEndDate(response.getQueryPlan().getFilters() == null ? null : response.getQueryPlan().getFilters().getEndDate());
+        context.setMetric(response.getQueryPlan().getMetrics() == null || response.getQueryPlan().getMetrics().isEmpty()
+            ? null : response.getQueryPlan().getMetrics().get(0).name());
         context.setMealScope(response.getQueryPlan().getMealScope());
         context.setAssistantSummary(limitText(response.getAssistantMessage(), 160));
         context.setQueriedAt(OffsetDateTime.now(ZoneOffset.ofHours(8)));
@@ -1229,6 +1345,7 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         }
         context.setResultShape(shape);
         session.getConversationState().setLastBusinessQueryContext(context);
+        response.setLastBusinessQueryContext(context);
     }
 
     /** 计算不可逆的受控查询计划指纹，用于阻止纠错轮重复执行同一计划。 */
@@ -1422,7 +1539,182 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         response.setQuickReplies(quickReplies);
         response.setConversationStage(session.getConversationState().getStage());
         response.setResponseType(responseType);
+        response.setPendingBusinessQueryContext(session.getConversationState().getPendingBusinessQueryContext());
+        response.setLastBusinessQueryContext(session.getConversationState().getLastBusinessQueryContext());
         return response;
+    }
+
+    /** 主系统持久化上下文是跨实例真相源；每轮请求先恢复到本地会话状态。 */
+    private void hydrateBusinessContexts(MealPlanChatSession session, AgentChatRequest request) {
+        if (session == null || request == null) return;
+        if (request.getPendingBusinessQueryContext() != null) {
+            session.getConversationState().setPendingBusinessQueryContext(request.getPendingBusinessQueryContext());
+        }
+        if (request.getLastBusinessQueryContext() != null) {
+            session.getConversationState().setLastBusinessQueryContext(request.getLastBusinessQueryContext());
+        }
+    }
+
+    /**
+     * 纯槽位回复优先复用待执行语义；过期或仍缺条件时更新 Pending，不调用模型重新选择领域。
+     */
+    private BusinessQuestionAnalysis resolvePendingAnalysis(MealPlanChatSession session, String message) {
+        if (!pendingContextEnabled) {
+            session.getConversationState().setPendingBusinessQueryContext(null);
+            return null;
+        }
+        PendingBusinessQueryContext pending = session.getConversationState().getPendingBusinessQueryContext();
+        if (pending == null || !isPureSlotReply(message)) return null;
+        OffsetDateTime now = OffsetDateTime.now(businessTemporalResolver.getZoneId());
+        if (pending.isExpired(now) || pending.getAnalysis() == null) {
+            session.getConversationState().setPendingBusinessQueryContext(null);
+            return null;
+        }
+        BusinessQuestionAnalysis analysis = pending.getAnalysis();
+        analysis.setRequiresClarification(false);
+        analysis.setClarificationQuestion(null);
+        analysis.setAmbiguities(new ArrayList<>());
+        analysis = resolveTemporalAnalysis(analysis, session, true);
+        List<String> unresolved = unresolvedPendingFields(pending.getMissingFields(), analysis);
+        if (!unresolved.isEmpty()) {
+            analysis.setRequiresClarification(true);
+            analysis.setClarificationQuestion("还需要补充：" + String.join("、", unresolved) + "。");
+            pending.setMissingFields(unresolved);
+            session.getConversationState().setPendingBusinessQueryContext(pending);
+        }
+        return analysis;
+    }
+
+    /** 校验 Pending 声明的缺失字段是否已由本轮确定性槽位补齐。 */
+    private List<String> unresolvedPendingFields(List<String> fields, BusinessQuestionAnalysis analysis) {
+        if (fields == null || fields.isEmpty()) return List.of();
+        List<String> unresolved = new ArrayList<>();
+        for (String field : fields) {
+            boolean resolved;
+            if ("recordDate".equals(field)) {
+                AgentQueryFilters filters = analysis.getFilters();
+                resolved = filters != null && (isNotBlank(filters.getRecordDate())
+                    || isNotBlank(filters.getStartDate()) && isNotBlank(filters.getEndDate()));
+            } else if ("mealType".equals(field)) {
+                resolved = analysis.getFilters() != null && isNotBlank(analysis.getFilters().getMealType());
+            } else if ("customer".equals(field) || "customerOrOrder".equals(field)) {
+                resolved = analysis.getEntities() != null && (analysis.getEntities().getCustomerId() != null
+                    || isNotBlank(analysis.getEntities().getCustomerCode()) || isNotBlank(analysis.getEntities().getCustomerName())
+                    || "customerOrOrder".equals(field) && (analysis.getEntities().getOrderId() != null || isNotBlank(analysis.getEntities().getOrderCode())));
+            } else {
+                resolved = false;
+            }
+            if (!resolved) unresolved.add(field);
+        }
+        return unresolved;
+    }
+
+    /** 仅日期、餐次或编号可直接补 Pending；包含新业务谓词的输入必须重新分析。 */
+    private boolean isPureSlotReply(String message) {
+        if (message == null) return false;
+        String text = message.trim();
+        return text.matches("今天|今日|昨天|明天|本周|早餐|午餐|晚餐|\\d{4}-\\d{2}-\\d{2}")
+            || text.matches("(?i)[A-Z]\\d{3,}") || text.matches("\\d{1,18}");
+    }
+
+    /** 合并确定性槽位后解析相对时间，确保 QueryPlan 只接收 yyyy-MM-dd 日期。 */
+    private BusinessQuestionAnalysis resolveTemporalAnalysis(BusinessQuestionAnalysis analysis,
+                                                             MealPlanChatSession session,
+                                                             boolean pendingReused) {
+        if (analysis == null) return null;
+        mergeDeterministicSlots(analysis, session.getSlots());
+        if (pendingReused) analysis.setSource("PENDING_CONTEXT");
+        return businessTemporalResolver.resolve(analysis, session.getConversationState().getPendingBusinessQueryContext(),
+            session.getConversationState().getLastBusinessQueryContext());
+    }
+
+    /** 本轮明确提取的实体、日期和餐次优先于模型推断。 */
+    private void mergeDeterministicSlots(BusinessQuestionAnalysis analysis, DiagnosisSlots slots) {
+        if (slots == null) return;
+        if (analysis.getEntities() == null) analysis.setEntities(new me.zhengjie.agent.query.domain.AgentEntityReference());
+        if (slots.getCustomerId() != null) analysis.getEntities().setCustomerId(slots.getCustomerId());
+        if (isNotBlank(slots.getCustomerCode())) analysis.getEntities().setCustomerCode(slots.getCustomerCode());
+        if (isNotBlank(slots.getCustomerName())) analysis.getEntities().setCustomerName(slots.getCustomerName());
+        if (slots.getOrderId() != null) analysis.getEntities().setOrderId(slots.getOrderId());
+        if (isNotBlank(slots.getOrderCode())) analysis.getEntities().setOrderCode(slots.getOrderCode());
+        AgentQueryFilters filters = analysis.getFilters() == null ? new AgentQueryFilters() : analysis.getFilters();
+        analysis.setFilters(filters);
+        if (isNotBlank(slots.getRecordDate())) filters.setRecordDate(slots.getRecordDate());
+        if (isNotBlank(slots.getStartDate()) && isNotBlank(slots.getEndDate())) {
+            filters.setRecordDate(null); filters.setStartDate(slots.getStartDate()); filters.setEndDate(slots.getEndDate());
+        }
+        if (isNotBlank(slots.getMealType())) filters.setMealType(slots.getMealType());
+    }
+
+    /** 保存待补语义，过期时间按配置业务时区生成，摘要仅包含登记指标或领域。 */
+    private void savePendingContext(MealPlanChatSession session, BusinessQuestionAnalysis analysis,
+                                    List<String> missingFields, String ignoredOriginalQuestion) {
+        if (session == null || analysis == null) return;
+        if (!pendingContextEnabled) {
+            session.getConversationState().setPendingBusinessQueryContext(null);
+            return;
+        }
+        OffsetDateTime now = OffsetDateTime.now(businessTemporalResolver.getZoneId());
+        PendingBusinessQueryContext pending = new PendingBusinessQueryContext();
+        pending.setAnalysis(analysis);
+        pending.setMissingFields(missingFields == null ? List.of() : new ArrayList<>(missingFields));
+        AgentMetricDefinition definition = analysis.getMetrics() == null || analysis.getMetrics().isEmpty()
+            ? null : AgentMetricCatalog.definition(analysis.getMetrics().get(0));
+        pending.setOriginalQuestionSummary(limitText(definition == null
+            ? (analysis.getDomains() == null || analysis.getDomains().isEmpty() ? "受控业务查询" : analysis.getDomains().get(0).name())
+            : definition.getSemanticDescription(), 120));
+        pending.setSourceRequestId(MDC.get(REQUEST_ID_KEY));
+        pending.setCreatedAt(now);
+        pending.setExpiresAt(now.plusMinutes(pendingContextTtlMinutes));
+        session.getConversationState().setPendingBusinessQueryContext(pending);
+    }
+
+    /** 根据受控分析结构生成待补字段，不使用用户原文猜测缺失项。 */
+    private List<String> missingFields(BusinessQuestionAnalysis analysis) {
+        List<String> missing = new ArrayList<>();
+        if (analysis == null) return missing;
+        if (analysis.getFilters() == null || !isNotBlank(analysis.getFilters().getRecordDate())
+            && !(isNotBlank(analysis.getFilters().getStartDate()) && isNotBlank(analysis.getFilters().getEndDate()))) {
+            missing.add("recordDate");
+        }
+        if (analysis.getAmbiguities() != null) analysis.getAmbiguities().forEach(item -> {
+            if (item != null && isNotBlank(item.getField()) && !missing.contains(item.getField())) missing.add(item.getField());
+        });
+        return missing;
+    }
+
+    /** 将解析后的日期同步到响应槽位，供主系统会话字段和下一轮确定性提取复用。 */
+    private void applyResolvedFiltersToSlots(MealPlanChatSession session, AgentQueryFilters filters) {
+        if (session == null || filters == null) return;
+        session.getSlots().setRecordDate(filters.getRecordDate());
+        session.getSlots().setStartDate(filters.getStartDate());
+        session.getSlots().setEndDate(filters.getEndDate());
+        if (isNotBlank(filters.getMealType())) session.getSlots().setMealType(filters.getMealType());
+    }
+
+    /** 创建不含原始问题、Prompt 和结果数据的语义追踪摘要。 */
+    private SemanticTraceSummary semanticTrace(BusinessQuestionAnalysis analysis, boolean pendingReused) {
+        SemanticTraceSummary trace = new SemanticTraceSummary();
+        trace.setSemanticSource(analysis == null ? null : analysis.getSource());
+        trace.setFallbackReason(analysis == null ? null : analysis.getFallbackReason());
+        trace.setSemanticConfidence(analysis == null ? null : analysis.getConfidence());
+        trace.setSemanticCatalogVersion(analysis == null || analysis.getSemanticCatalogVersion() == null
+            ? AgentMetricCatalog.VERSION : analysis.getSemanticCatalogVersion());
+        if (analysis != null && analysis.getTemporal() != null && analysis.getTemporal().getExpression() != null) {
+            trace.setTemporalExpression(analysis.getTemporal().getExpression().name());
+        }
+        if (analysis != null && analysis.getFilters() != null) {
+            trace.setResolvedRecordDate(analysis.getFilters().getRecordDate());
+            trace.setResolvedStartDate(analysis.getFilters().getStartDate());
+            trace.setResolvedEndDate(analysis.getFilters().getEndDate());
+        }
+        trace.setPendingContextReused(pendingReused);
+        return trace;
+    }
+
+    private static BusinessTemporalResolver defaultTemporalResolver() {
+        BusinessTimeProperties properties = new BusinessTimeProperties();
+        return new BusinessTemporalResolver(Clock.system(ZoneId.of("Asia/Shanghai")), properties);
     }
 
     /**

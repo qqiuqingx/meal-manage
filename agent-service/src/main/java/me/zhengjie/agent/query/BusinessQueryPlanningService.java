@@ -3,6 +3,7 @@ package me.zhengjie.agent.query;
 import me.zhengjie.agent.analysis.domain.BusinessQuestionAnalysis;
 import me.zhengjie.agent.query.domain.AgentEntityReference;
 import me.zhengjie.agent.query.domain.AgentMetricCatalog;
+import me.zhengjie.agent.query.domain.AgentMetricDefinition;
 import me.zhengjie.agent.query.domain.AgentQueryDomain;
 import me.zhengjie.agent.query.domain.AgentQueryFilters;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
@@ -29,6 +30,7 @@ public class BusinessQueryPlanningService {
         plan.setDimensions(analysis.getDimensions());
         plan.setAnalysisSource(analysis.getSource());
         plan.setAnalysisConfidence(analysis.getConfidence());
+        normalizeOptionalLimits(plan.getFilters());
         AgentQueryDomain domain = analysis.getDomains().get(0);
         plan.setDomain(domain);
         if (analysis.getQueryTarget() == BusinessQueryTarget.MEAL_PLAN_ALLERGY_ANALYSIS) return mealPlanAllergyPlan(plan, analysis);
@@ -114,16 +116,21 @@ public class BusinessQueryPlanningService {
 
     private List<String> statisticTools(BusinessQuestionAnalysis analysis) {
         if (analysis.getMetrics() == null || analysis.getMetrics().isEmpty()) return List.of();
-        switch (analysis.getMetrics().get(0)) {
-            case ACTIVE_CUSTOMER_COUNT:
-                return List.of("getActiveCustomerSummary");
-            case EXPIRING_ORDER_COUNT:
-                return List.of("getExpiringOrderSummary");
-            case MEAL_PLAN_FAILURE_COUNT:
-                return List.of("getMealPlanFailureSummary");
-            default:
-                return List.of("getDailyCustomerWorkload");
+        AgentMetricDefinition first = AgentMetricCatalog.definition(analysis.getMetrics().get(0));
+        if (first == null || first.getToolName() == null) return List.of();
+        for (me.zhengjie.agent.query.domain.AgentQueryMetric metric : analysis.getMetrics()) {
+            AgentMetricDefinition definition = AgentMetricCatalog.definition(metric);
+            if (definition == null || !first.getToolName().equals(definition.getToolName())) return List.of();
         }
+        return List.of(first.getToolName());
+    }
+
+    /** 将可选整数字段的模型默认零值还原为未指定，避免无关字段使整个计划失效。 */
+    private void normalizeOptionalLimits(AgentQueryFilters filters) {
+        if (filters == null) return;
+        if (Integer.valueOf(0).equals(filters.getPage())) filters.setPage(null);
+        if (Integer.valueOf(0).equals(filters.getSize())) filters.setSize(null);
+        if (Integer.valueOf(0).equals(filters.getRecentLimit())) filters.setRecentLimit(null);
     }
 
     private boolean notBlank(String value) { return value != null && !value.trim().isEmpty(); }

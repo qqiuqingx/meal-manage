@@ -277,6 +277,12 @@ public class HttpBusinessQueryDataClient implements BusinessQueryDataClient {
 
     /** {@inheritDoc} */
     @Override
+    public Map<String, Object> customerProfileCount() {
+        return post("/api/internal/agent/operations/customer-profiles/count", Map.of(), Map.class);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public Map<String, Object> expiringOrderSummary(String startDate, String endDate) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("startDate", startDate); body.put("endDate", endDate);
