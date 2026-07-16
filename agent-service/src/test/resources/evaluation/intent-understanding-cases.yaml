@@ -1,0 +1,19 @@
+cases:
+  - id: context-set-001
+    turns:
+      - user: 现在仍有可用餐数的活跃客户数是多少
+        expected: { goal: QUERY, measures: [ACTIVE_CUSTOMER_COUNT], operations: [COUNT] }
+      - user: 他们分别还剩多少餐呢
+        expected: { interactionMode: FOLLOW_UP, targetEntity: CUSTOMER, contextHandleKind: ENTITY_SET, contextEntityType: CUSTOMER, measures: [REMAINING_BREAKFAST, REMAINING_LUNCH_DINNER], dimensions: [CUSTOMER], operations: [PROJECT, GROUP], outputShape: DETAIL_LIST, requiresClarification: false }
+  - id: context-set-missing-001
+    turns:
+      - user: 他们分别还剩多少餐呢
+        expected: { clarificationCode: CONTEXT_REFERENCE_MISSING, requiresClarification: true }
+  - id: interaction-reset-001
+    turns:
+      - user: 清空会话
+        expected: { interactionMode: RESET }
+  - id: interaction-retry-001
+    turns:
+      - user: 按原条件再查一次
+        expected: { interactionMode: RETRY }

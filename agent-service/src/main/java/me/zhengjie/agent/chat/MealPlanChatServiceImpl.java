@@ -6,6 +6,9 @@ import me.zhengjie.agent.analysis.LegacyBusinessQuestionAnalysisFactory;
 import me.zhengjie.agent.analysis.RuleBasedBusinessQuestionAnalyzer;
 import me.zhengjie.agent.analysis.BusinessTemporalResolver;
 import me.zhengjie.agent.analysis.ContextReferenceResolver;
+import me.zhengjie.agent.analysis.ConversationUnderstandingService;
+import me.zhengjie.agent.analysis.ConversationUnderstandingValidator;
+import me.zhengjie.agent.query.MultiIntentPlanningService;
 import me.zhengjie.agent.config.BusinessTimeProperties;
 import me.zhengjie.agent.analysis.domain.BusinessQuestionAnalysis;
 import me.zhengjie.agent.query.client.BusinessQueryDataClient;
@@ -97,6 +100,10 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
     private final BusinessTemporalResolver businessTemporalResolver;
     private final int pendingContextTtlMinutes;
     private boolean pendingContextEnabled = true;
+    private ConversationUnderstandingService conversationUnderstandingService;
+    private ConversationUnderstandingValidator conversationUnderstandingValidator;
+    private MultiIntentPlanningService multiIntentPlanningService;
+    private String conversationUnderstandingMode = "shadow";
 
     public MealPlanChatServiceImpl(MealPlanChatSessionStore sessionStore,
                                    MealPlanChatExtractor extractor,
@@ -215,6 +222,16 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
     public void configurePendingContext(
         @org.springframework.beans.factory.annotation.Value("${agent.chat.business-semantic.pending-context-enabled:true}") boolean enabled) {
         this.pendingContextEnabled = enabled;
+    }
+
+    /** 配置可灰度启用的多帧会话理解服务，默认 shadow 模式不改变既有执行路径。 */
+    @Autowired
+    public void configureConversationUnderstanding(ConversationUnderstandingService service,
+                                                   ConversationUnderstandingValidator validator,
+                                                   MultiIntentPlanningService planner,
+                                                   @org.springframework.beans.factory.annotation.Value("${agent.chat.conversation-understanding.mode:shadow}") String mode) {
+        this.conversationUnderstandingService = service; this.conversationUnderstandingValidator = validator;
+        this.multiIntentPlanningService = planner; this.conversationUnderstandingMode = mode == null ? "shadow" : mode;
     }
 
     @Override
@@ -746,6 +763,8 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
      */
     private AgentChatResponse handleSemanticBusinessQuery(MealPlanChatSession session, String message,
                                                           BusinessQueryOrchestrator orchestrator) {
+        AgentChatResponse multiFrameResponse = handleMultiFrameUnderstanding(session, message, orchestrator);
+        if (multiFrameResponse != null) return multiFrameResponse;
         BusinessQuestionAnalysis analysis = resolvePendingAnalysis(session, message);
         boolean pendingReused = analysis != null;
         if (analysis == null) {
@@ -821,6 +840,39 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         applyResultValidation(response, queryPlan, result);
         captureLastBusinessQueryContext(session, response);
         session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
+        return response;
+    }
+
+    /** 执行已登记的多帧能力；shadow 只完成理解而不调用任何新增业务工具。 */
+    private AgentChatResponse handleMultiFrameUnderstanding(MealPlanChatSession session, String message, BusinessQueryOrchestrator orchestrator) {
+        if (conversationUnderstandingService == null || multiIntentPlanningService == null || !"new".equalsIgnoreCase(conversationUnderstandingMode)) return null;
+        LastBusinessQueryContext last = session.getConversationState().getLastBusinessQueryContext();
+        me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult understanding = conversationUnderstandingService.understand(message, session.getSlots(), last == null ? List.of() : last.getContextHandles());
+        if (understanding == null || understanding.isRequiresClarification() || understanding.getFrames().isEmpty()) return null;
+        ContextReferenceResolver resolver = new ContextReferenceResolver();
+        for (me.zhengjie.agent.analysis.domain.SemanticRequestFrame frame : understanding.getFrames()) {
+            ContextReferenceResolver.Resolution resolution = resolver.resolve(frame, last == null ? List.of() : last.getContextHandles(), OffsetDateTime.now(ZoneOffset.ofHours(8)));
+            if (resolution.status() == ContextReferenceResolver.Status.MISSING || resolution.status() == ContextReferenceResolver.Status.AMBIGUOUS) return response(session, ChatStatus.NEED_MORE_INFO,
+                resolution.status() == ContextReferenceResolver.Status.MISSING ? "你指的是哪些客户？" : "当前存在多个可引用对象，请说明要查看哪一批。", null, List.of(), List.of(), resolution.status() == ContextReferenceResolver.Status.MISSING ? "CONTEXT_REFERENCE_MISSING" : "CONTEXT_REFERENCE_AMBIGUOUS");
+        }
+        if (conversationUnderstandingValidator.validate(understanding) != null) return null;
+        List<AgentQueryPlan> plans = multiIntentPlanningService.plan(understanding);
+        if (plans.size() != 1 || businessQueryDataClient == null) return null;
+        AgentQueryPlan plan = plans.get(0);
+        me.zhengjie.agent.query.domain.ConversationTask task = new me.zhengjie.agent.query.domain.ConversationTask();
+        task.setTaskId("task-" + java.util.UUID.randomUUID()); task.setStatus(me.zhengjie.agent.query.domain.ConversationTaskStatus.ACTIVE);
+        task.setUnderstanding(understanding); task.setUpdatedAt(OffsetDateTime.now(ZoneOffset.ofHours(8)));
+        session.getConversationState().getTaskStack().add(task);
+        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, plan, plan.getToolNames().get(0), null, List.of());
+        task.setStatus(execution.partial() ? me.zhengjie.agent.query.domain.ConversationTaskStatus.FAILED
+            : me.zhengjie.agent.query.domain.ConversationTaskStatus.COMPLETED);
+        task.setFailureCode(execution.partial() && execution.warnings() != null && !execution.warnings().isEmpty() ? execution.warnings().get(0) : null);
+        task.setUpdatedAt(OffsetDateTime.now(ZoneOffset.ofHours(8)));
+        Map<String, Object> result = execution.result();
+        AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES", result,
+            "已按上一轮授权客户集合展示餐数余额明细。", List.of("活跃客户数", "清空会话"));
+        response.setQueryPlan(plan); applyToolExecution(response, execution);
+        response.setActiveTaskStack(session.getConversationState().getTaskStack());
         return response;
     }
 
@@ -1353,6 +1405,7 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
             copyMap(session.getSlots().getSlotConfidence()), session.getConversationState().getStage(),
             responseType, insightResult, message, quickReplies);
         captureLastBusinessQueryContext(session, response);
+        response.setActiveTaskStack(session.getConversationState().getTaskStack());
         return response;
     }
 
