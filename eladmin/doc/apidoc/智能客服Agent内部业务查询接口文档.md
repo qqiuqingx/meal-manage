@@ -39,7 +39,7 @@
 
 权限：`agentDiagnosis:list` + `customerProfile:list` + `customerOrder:list`
 
-返回客户档案摘要、脱敏联系方式与地址、饮食限制、订单数、早餐/午晚餐余额、已签父/子套餐摘要及最近核销/退餐摘要。套餐和历史摘要均不包含任何价格或金额。客户不存在时返回 `present=false`。
+返回客户档案摘要、档案创建时间 `createTime`、首次购买时间 `firstPurchaseTime`、脱敏联系方式与地址、饮食限制、订单数、早餐/午晚餐余额、已签父/子套餐摘要及最近核销/退餐摘要。`firstPurchaseTime` 优先取首笔订单成交时间，缺失时回退订单创建时间；无订单时为空。套餐和历史摘要均不包含任何价格或金额。客户不存在时返回 `present=false`。
 
 ### 3.3 客户订单列表
 

@@ -808,6 +808,10 @@ export default {
         if (result.scannedCount !== undefined && result.totalCount !== undefined) {
           return `结果未完整，当前已扫描 ${result.scannedCount} 条记录，共 ${result.totalCount} 条。请缩小查询范围后重试。`
         }
+        if (result.truncated && Array.isArray(result.items)) {
+          const remaining = Math.max((Number(result.total) || 0) - result.items.length, 0)
+          return `受安全展示上限限制，本次展示 ${result.items.length} 位客户${remaining > 0 ? `，还有 ${remaining} 位未展示` : ''}。`
+        }
         return '结果已按安全上限截断，请缩小查询范围后重试。'
       }
       return warnings.join('；')

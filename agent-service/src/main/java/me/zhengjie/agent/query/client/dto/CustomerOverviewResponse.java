@@ -15,6 +15,8 @@ public class CustomerOverviewResponse {
     private Long customerId;
     private String customerCode;
     private String customerName;
+    private String createTime;
+    private String firstPurchaseTime;
     private String maskedPhone;
     private List<String> allergyTags = new ArrayList<>();
     private List<Integer> excludedDishIds = new ArrayList<>();
@@ -35,6 +37,10 @@ public class CustomerOverviewResponse {
     public void setCustomerCode(String customerCode) { this.customerCode = customerCode; }
     public String getCustomerName() { return customerName; }
     public void setCustomerName(String customerName) { this.customerName = customerName; }
+    public String getCreateTime() { return createTime; }
+    public void setCreateTime(String createTime) { this.createTime = createTime; }
+    public String getFirstPurchaseTime() { return firstPurchaseTime; }
+    public void setFirstPurchaseTime(String firstPurchaseTime) { this.firstPurchaseTime = firstPurchaseTime; }
     public String getMaskedPhone() { return maskedPhone; }
     public void setMaskedPhone(String maskedPhone) { this.maskedPhone = maskedPhone; }
     public List<String> getAllergyTags() { return allergyTags; }
@@ -67,7 +73,8 @@ public class CustomerOverviewResponse {
     public Map<String, Object> toPresentationMap() {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("present", present); result.put("customerId", customerId); result.put("customerCode", customerCode);
-        result.put("customerName", customerName); result.put("maskedPhone", maskedPhone); result.put("allergyTags", allergyTags);
+        result.put("customerName", customerName); result.put("createTime", createTime); result.put("firstPurchaseTime", firstPurchaseTime);
+        result.put("maskedPhone", maskedPhone); result.put("allergyTags", allergyTags);
         result.put("excludedDishIds", excludedDishIds); result.put("excludedDates", excludedDates.stream().map(ExcludedDateRule::toPresentationMap).toList()); result.put("specialRequirements", specialRequirements);
         result.put("totalOrderCount", totalOrderCount); result.put("activeOrderCount", activeOrderCount);
         result.put("mealBalance", mealBalance == null ? null : mealBalance.toPresentationMap());

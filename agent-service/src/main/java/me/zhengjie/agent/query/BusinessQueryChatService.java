@@ -71,9 +71,11 @@ public class BusinessQueryChatService {
         List<String> warnings = new ArrayList<>(response.getWarnings() == null ? List.of() : response.getWarnings());
         boolean partial = response.isPartial();
         boolean cached = response.isCached();
+        boolean executionFailed = false;
         for (ToolExecutionResult execution : executions) {
             if (execution == null) continue;
             partial = partial || execution.partial();
+            executionFailed = executionFailed || execution.partial();
             cached = cached || execution.cached();
             if (execution.warnings() != null) {
                 execution.warnings().forEach(warning -> { if (!warnings.contains(warning)) warnings.add(warning); });
@@ -82,7 +84,8 @@ public class BusinessQueryChatService {
         response.setPartial(partial);
         response.setCached(cached);
         response.setWarnings(warnings);
-        if (partial) {
+        // 安全分页截断属于有效查询结果，只由结构化 truncated 提示；不能覆盖正常业务回答。
+        if (executionFailed) {
             boolean permissionDenied = warnings.contains("TOOL_PERMISSION_DENIED");
             boolean invalidPlan = warnings.contains("PLAN_INVALID");
             response.setAssistantMessage(permissionDenied

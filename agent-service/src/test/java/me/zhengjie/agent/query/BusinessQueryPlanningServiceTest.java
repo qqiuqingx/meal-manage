@@ -114,6 +114,21 @@ class BusinessQueryPlanningServiceTest {
         assertNull(plan.getFilters().getRecentLimit());
     }
 
+    /** 活跃客户余额明细必须固定请求安全上限 50，不能落入执行器默认的 10 条分页。 */
+    @Test
+    void shouldUseFiftyItemPageForActiveCustomerBalanceDetail() {
+        BusinessQuestionAnalysis analysis = analysis(AgentQueryDomain.OPERATION_STATISTICS);
+        analysis.setMetrics(List.of(AgentQueryMetric.ACTIVE_CUSTOMER_MEAL_BALANCE_DETAIL));
+
+        var plan = service.plan(analysis);
+
+        assertEquals(AgentQueryAction.BREAKDOWN, plan.getAction());
+        assertEquals(50, plan.getLimit());
+        assertEquals(1, plan.getFilters().getPage());
+        assertEquals(50, plan.getFilters().getSize());
+        assertEquals(List.of("listActiveCustomerMealBalances"), plan.getToolNames());
+    }
+
     private BusinessQuestionAnalysis analysis(AgentQueryDomain domain) {
         BusinessQuestionAnalysis analysis = new BusinessQuestionAnalysis();
         analysis.setDomains(List.of(domain));

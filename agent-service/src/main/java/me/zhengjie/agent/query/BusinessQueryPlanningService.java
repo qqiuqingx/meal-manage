@@ -99,10 +99,19 @@ public class BusinessQueryPlanningService {
     /** 组装版本化聚合计划，指标和工具均由服务端目录决定。 */
     private AgentQueryPlan aggregationPlan(AgentQueryPlan plan, BusinessQuestionAnalysis analysis) {
         plan.setVersion(AgentQueryPlan.SCHEMA_VERSION_V2);
-        plan.setAction(analysis.getDimensions() == null || analysis.getDimensions().isEmpty() ? AgentQueryAction.SUMMARY : AgentQueryAction.BREAKDOWN);
+        if (analysis.getMetrics() != null
+            && analysis.getMetrics().contains(me.zhengjie.agent.query.domain.AgentQueryMetric.ACTIVE_CUSTOMER_MEAL_BALANCE_DETAIL)) {
+            plan.setAction(AgentQueryAction.BREAKDOWN);
+            plan.setDimensions(List.of(me.zhengjie.agent.query.domain.AgentQueryDimension.CUSTOMER));
+            plan.setLimit(50);
+            plan.getFilters().setPage(1);
+            plan.getFilters().setSize(50);
+        } else {
+            plan.setAction(analysis.getDimensions() == null || analysis.getDimensions().isEmpty() ? AgentQueryAction.SUMMARY : AgentQueryAction.BREAKDOWN);
+            plan.setLimit(100);
+        }
         plan.setMetricVersion(AgentMetricCatalog.VERSION);
         plan.setTimezone("Asia/Shanghai");
-        plan.setLimit(100);
         plan.setToolNames(statisticTools(analysis));
         return plan;
     }

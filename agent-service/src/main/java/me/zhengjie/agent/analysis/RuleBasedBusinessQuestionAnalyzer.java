@@ -53,6 +53,10 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
             operation(analysis, AgentQueryMetric.DAILY_SCHEDULED_CUSTOMER_COUNT, text);
         } else if (isCustomerProfileCountQuestion(text)) {
             operation(analysis, AgentQueryMetric.CUSTOMER_PROFILE_COUNT, text);
+        } else if (isCustomerOverviewQuestion(text)) {
+            analysis.setDomains(List.of(AgentQueryDomain.CUSTOMER));
+            analysis.setQueryTarget(BusinessQueryTarget.CUSTOMER);
+            analysis.setConfidence(0.94D);
         } else if (contains(text, "活跃客户", "进行中客户")
             || text.contains("有餐数") && !contains(text, "没排餐", "未排餐", "没有排餐", "还没安排餐")) {
             operation(analysis, AgentQueryMetric.ACTIVE_CUSTOMER_COUNT, text);
@@ -68,7 +72,7 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
             analysis.setDomains(List.of(AgentQueryDomain.REFUND));
             analysis.setMetrics(List.of(AgentQueryMetric.REFUND_COUNT));
             analysis.setConfidence(0.92D);
-        } else if (contains(text, "订单", "还有几餐", "剩余餐数")) {
+        } else if (isMealBalanceQuestion(text)) {
             analysis.setDomains(List.of(AgentQueryDomain.ORDER));
             analysis.setMetrics(List.of(AgentQueryMetric.MEAL_BALANCE));
             analysis.setConfidence(0.75D);
@@ -218,10 +222,27 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
             "还有谁没有处理", "没完成的客户", "今天还有多少人", "还差多少客户", "今天没做完的是谁");
     }
 
+    /**
+     * 识别客户或客户集合的餐数余额问法，覆盖“还剩多少餐”等自然表达。
+     * 客户实体或上一轮客户集合由服务层受控解析，本方法只选择餐数余额指标。
+     */
+    private boolean isMealBalanceQuestion(String text) {
+        return contains(text, "订单", "还有几餐", "还剩几餐", "还剩多少餐", "剩多少餐", "剩余餐数",
+            "餐数余额", "还能吃几餐", "餐数明细");
+    }
+
     /** 判断用户是否明确查询系统已录入的客户档案总数，而不是活跃或待办客户。 */
     private boolean isCustomerProfileCountQuestion(String text) {
         return contains(text, "客户总数", "客户档案总数", "录入了多少客户", "录入多少客户")
             || contains(text, "系统中有多少客户", "系统中还有多少客户", "系统里有多少客户", "系统里还有多少客户");
+    }
+
+    /** 识别客户基本信息、档案创建时间或首次购买时间查询，统一使用受控客户概览。 */
+    private boolean isCustomerOverviewQuestion(String text) {
+        return contains(text, "客户信息", "客户档案", "基本信息", "客户情况", "目前什么情况", "当前什么情况",
+            "什么时候添加", "何时添加", "添加时间", "什么时候创建", "何时创建", "创建时间",
+            "什么时候录入", "录入时间", "什么时候购买", "何时购买", "购买时间", "什么时候买",
+            "首次购买", "首单时间", "成交时间");
     }
 
     private void ambiguity(BusinessQuestionAnalysis analysis, String field, List<String> options, String question) {

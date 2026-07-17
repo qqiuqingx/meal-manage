@@ -58,6 +58,8 @@
 
 响应包含 `total`、`items`、`page`、`size`、`truncated`、`metricDefinitionId`、`queriedAt` 和 `timezone`。每个明细仅包含 `customerCode`、`customerNameMasked`、`remainingBreakfast`、`remainingLunchDinner` 和 `remainingTotal`；不返回手机号、地址、金额或备注。早餐与午晚餐分别按所有进行中订单汇总，午餐和晚餐共享同一个餐数池。
 
+自然语言追问默认固定请求 `page=1,size=50`。`truncated=true` 仅表示仍有后续客户未展示，属于安全分页结果而非工具失败；前端按实际 `items` 数量提示本次展示数和未展示数，不写死“前 50 位”。
+
 ## 6. 即将到期订单数
 
 `POST /api/internal/agent/operations/expiring-orders`

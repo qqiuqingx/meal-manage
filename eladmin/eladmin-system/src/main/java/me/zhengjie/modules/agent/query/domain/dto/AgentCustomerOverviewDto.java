@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.time.LocalDateTime;
 
 /**
  * Agent 专用客户综合概览，所有字段均为非金额且可审计的只读数据。
@@ -19,6 +20,10 @@ public class AgentCustomerOverviewDto {
     private String customerCode;
     /** 客户姓名。 */
     private String customerName;
+    /** 客户档案创建时间。 */
+    private LocalDateTime createTime;
+    /** 客户首笔订单的购买时间，优先使用成交时间。 */
+    private LocalDateTime firstPurchaseTime;
     /** 默认脱敏手机号。 */
     private String maskedPhone;
     /** 客户类型/套餐分类展示值，当前无数据时为空。 */

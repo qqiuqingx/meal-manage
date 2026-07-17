@@ -20,6 +20,8 @@ import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
+import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
@@ -39,6 +41,7 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
 
     private final CustomerProfileMapper customerProfileMapper;
     private final CustomerProfileAddressMapper customerProfileAddressMapper;
+    private final CustomerOrderMapper customerOrderMapper;
     private final AgentOrderQueryService agentOrderQueryService;
     private final AgentHistoryQueryService agentHistoryQueryService;
 
@@ -75,6 +78,8 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
         overview.setCustomerId(profile.getId());
         overview.setCustomerCode(profile.getCustomerCode());
         overview.setCustomerName(profile.getCustomerName());
+        overview.setCreateTime(profile.getCreateTime());
+        overview.setFirstPurchaseTime(firstPurchaseTime(profile.getId()));
         overview.setMaskedPhone(maskPhone(profile.getPhone()));
         overview.setAllergyTags(profile.getAllergyTags() == null ? Collections.emptyList() : profile.getAllergyTags());
         overview.setExcludedDishIds(profile.getExcludedDishIds() == null ? Collections.emptyList() : profile.getExcludedDishIds());
@@ -84,6 +89,21 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
         fillOrderSummary(overview);
         fillRecentHistory(overview);
         return overview;
+    }
+
+    /**
+     * 查询客户首笔订单的购买时间；优先使用成交时间，历史数据缺失时回退订单创建时间。
+     *
+     * @param customerId 已通过客服数据范围校验的客户 ID
+     * @return 首笔订单购买时间，无订单时返回 null
+     */
+    private java.time.LocalDateTime firstPurchaseTime(Long customerId) {
+        CustomerOrder firstOrder = customerOrderMapper.selectOne(new LambdaQueryWrapper<CustomerOrder>()
+                .eq(CustomerOrder::getCustomerId, customerId)
+                .orderByAsc(CustomerOrder::getCreateTime)
+                .last("LIMIT 1"));
+        if (firstOrder == null) return null;
+        return firstOrder.getDealTime() == null ? firstOrder.getCreateTime() : firstOrder.getDealTime();
     }
 
     /** 填充客户最近核销与退餐摘要，查询仍受客户 ID 约束且不读取金额字段。 */

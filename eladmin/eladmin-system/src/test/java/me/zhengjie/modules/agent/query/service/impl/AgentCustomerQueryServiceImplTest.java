@@ -3,9 +3,13 @@ package me.zhengjie.modules.agent.query.service.impl;
 import me.zhengjie.modules.agent.query.domain.dto.AgentListResultDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerCandidateDto;
 import me.zhengjie.modules.agent.query.service.AgentOrderQueryService;
+import me.zhengjie.modules.agent.query.service.AgentHistoryQueryService;
+import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerOverviewDto;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
+import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -14,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,7 +33,9 @@ import static org.mockito.Mockito.when;
 class AgentCustomerQueryServiceImplTest {
     @Mock private CustomerProfileMapper customerProfileMapper;
     @Mock private CustomerProfileAddressMapper customerProfileAddressMapper;
+    @Mock private CustomerOrderMapper customerOrderMapper;
     @Mock private AgentOrderQueryService agentOrderQueryService;
+    @Mock private AgentHistoryQueryService agentHistoryQueryService;
     @InjectMocks private AgentCustomerQueryServiceImpl service;
 
     @Test
@@ -54,6 +61,29 @@ class AgentCustomerQueryServiceImplTest {
         assertEquals(2, result.getTotal());
         assertFalse(result.isTruncated());
         verify(customerProfileMapper, never()).selectByIdWithJson(any());
+    }
+
+    /** 客户概览应返回档案创建时间，并以首单成交时间作为首次购买时间。 */
+    @Test
+    void shouldReturnCustomerCreationAndFirstPurchaseTime() {
+        CustomerProfile profile = profile(68L, "B2200", "新客户", "13800138000");
+        profile.setCreateTime(LocalDateTime.of(2026, 7, 1, 9, 0));
+        CustomerOrder firstOrder = new CustomerOrder();
+        firstOrder.setCreateTime(LocalDateTime.of(2026, 7, 2, 9, 30));
+        firstOrder.setDealTime(LocalDateTime.of(2026, 7, 2, 10, 0));
+        when(customerProfileMapper.selectList(any())).thenReturn(List.of(profile));
+        when(customerProfileMapper.selectByIdWithJson(68L)).thenReturn(profile);
+        when(customerOrderMapper.selectOne(any())).thenReturn(firstOrder);
+        when(customerProfileAddressMapper.selectList(any())).thenReturn(List.of());
+        when(agentOrderQueryService.listForOverview(68L)).thenReturn(new me.zhengjie.modules.agent.query.domain.dto.AgentListResultDto<>());
+        when(agentHistoryQueryService.listVerifications(any())).thenReturn(new me.zhengjie.modules.agent.query.domain.dto.AgentListResultDto<>());
+        when(agentHistoryQueryService.listRefunds(any())).thenReturn(new me.zhengjie.modules.agent.query.domain.dto.AgentListResultDto<>());
+
+        AgentCustomerOverviewDto result = service.getOverview(null, "B2200");
+
+        assertTrue(result.isPresent());
+        assertEquals(profile.getCreateTime(), result.getCreateTime());
+        assertEquals(firstOrder.getDealTime(), result.getFirstPurchaseTime());
     }
 
     /** 构造最小客户档案。 */

@@ -15,6 +15,7 @@ class CustomerOverviewResponseTest {
     @Test
     void shouldIgnoreUnknownOverviewAndNestedFields() throws Exception {
         String json = "{\"present\":true,\"customerId\":71,\"customerCode\":\"B3303\","
+            + "\"createTime\":\"2026-07-01T09:00:00\",\"firstPurchaseTime\":\"2026-07-02T10:30:00\","
             + "\"addresses\":[{\"maskedAddress\":\"***\"}],\"mealBalance\":{\"remainingBreakfast\":2},"
             + "\"latestRefund\":{\"refundId\":9,\"customerId\":71,\"verifiedLunchDinnerCount\":1,\"operateTime\":\"2026-07-13 09:30:00\"}}";
 
@@ -25,6 +26,8 @@ class CustomerOverviewResponseTest {
         assertEquals(2, response.getMealBalance().getRemainingBreakfast());
         assertEquals(9L, response.getLatestRefund().getRefundId());
         assertEquals("2026-07-13 09:30:00", response.getLatestRefund().getOperateTime());
+        assertEquals("2026-07-01T09:00:00", presentation.get("createTime"));
+        assertEquals("2026-07-02T10:30:00", presentation.get("firstPurchaseTime"));
         assertFalse(presentation.containsKey("addresses"));
         assertTrue(((Map<?, ?>) presentation.get("latestRefund")).containsKey("refundId"));
     }

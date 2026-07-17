@@ -48,6 +48,30 @@ class RuleBasedBusinessQuestionAnalyzerTest {
             unscheduled.getTemporal().getExpression());
     }
 
+    /** 集合追问的自然说法必须落到餐数余额指标，不能被规则兜底误判为未知问题。 */
+    @Test
+    void shouldRecognizeNaturalMealBalanceFollowUp() {
+        BusinessQuestionAnalysis result = analyzer.analyze("他们分别还剩多少餐呢", null);
+
+        assertEquals(AgentQueryDomain.ORDER, result.getDomains().get(0));
+        assertEquals(AgentQueryMetric.MEAL_BALANCE, result.getMetrics().get(0));
+        assertTrue(!result.isRequiresClarification());
+    }
+
+    /** 客户创建和首次购买时间属于客户概览，不应回退为未知业务澄清。 */
+    @Test
+    void shouldRecognizeCustomerTimelineQuestions() {
+        BusinessQuestionAnalysis created = analyzer.analyze("B2200 这个客户是什么时候添加的", null);
+        BusinessQuestionAnalysis purchased = analyzer.analyze("B2200 这个客户是什么时候购买的呢", null);
+        BusinessQuestionAnalysis overview = analyzer.analyze("查一下 B2200 的客户信息", null);
+
+        assertEquals(BusinessQueryTarget.CUSTOMER, created.getQueryTarget());
+        assertEquals(AgentQueryDomain.CUSTOMER, created.getDomains().get(0));
+        assertEquals(BusinessQueryTarget.CUSTOMER, purchased.getQueryTarget());
+        assertTrue(!purchased.isRequiresClarification());
+        assertEquals(BusinessQueryTarget.CUSTOMER, overview.getQueryTarget());
+    }
+
     @Test
     void shouldRecognizeSystemCustomerCountAsProfileTotal() {
         BusinessQuestionAnalysis result = analyzer.analyze("现在系统中还有多少客户", null);

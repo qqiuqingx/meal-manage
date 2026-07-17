@@ -18,10 +18,20 @@ public class BusinessAnswerComposer {
     public String customerOverview(Map<String, Object> result) {
         if (result == null || !Boolean.TRUE.equals(result.get("present"))) return "未找到该客户，或当前无权查看客户档案。";
         Map<String, Object> balance = result.get("mealBalance") instanceof Map ? (Map<String, Object>) result.get("mealBalance") : Map.of();
-        return String.format("%s（%s）当前有 %s 笔进行中订单，剩余早餐 %s 餐、午晚餐 %s 餐。",
+        String createTime = displayTime(result.get("createTime"), "创建时间暂无记录");
+        String purchaseSummary = result.get("firstPurchaseTime") == null || String.valueOf(result.get("firstPurchaseTime")).isBlank()
+            ? "暂无购买订单" : "首次购买于 " + displayTime(result.get("firstPurchaseTime"), "");
+        return String.format("%s（%s）客户档案创建于 %s，%s。当前有 %s 笔进行中订单，剩余早餐 %s 餐、午晚餐 %s 餐。",
             result.getOrDefault("customerCode", ""), result.getOrDefault("customerName", ""),
+            createTime, purchaseSummary,
             result.getOrDefault("activeOrderCount", 0), balance.getOrDefault("remainingBreakfast", 0),
             balance.getOrDefault("remainingLunchDinner", 0));
+    }
+
+    /** 将主系统 ISO 时间转为客服可读文本；空值使用明确业务说明。 */
+    private String displayTime(Object value, String emptyText) {
+        if (value == null || String.valueOf(value).isBlank()) return emptyText;
+        return String.valueOf(value).replace('T', ' ');
     }
 
     /** 构造无金额订单列表或详情摘要话术。 */
@@ -194,10 +204,22 @@ public class BusinessAnswerComposer {
         if (result == null || result.isEmpty() || definition == null) return "运营统计查询未返回可用结果，请稍后重试。";
         Object value = result.get(definition.getResultFieldKey());
         if (value == null) return "运营统计结果缺少登记指标字段，已停止展示，请稍后重试。";
+        if (metric == AgentQueryMetric.ACTIVE_CUSTOMER_COUNT) {
+            return "当前仍有可用餐数的活跃客户共 " + number(value) + " 位。";
+        }
         String date = String.valueOf(result.getOrDefault("recordDate", "当前口径"));
         String metricDefinition = String.valueOf(result.getOrDefault("metricDefinitionId", definition.getMetricVersion()));
         return date + definition.getDisplayName() + "为 " + number(value) + " " + definition.getResultUnit()
             + "。统计口径：" + metricDefinition + "。";
+    }
+
+    /** 构造活跃客户餐数余额明细摘要，逐客户数值由受控明细卡展示。 */
+    public String activeCustomerBalances(Map<String, Object> result) {
+        if (result == null || result.isEmpty()) return "活跃客户餐数余额查询未返回可用结果，请稍后重试。";
+        int shown = result.get("items") instanceof List ? ((List<?>) result.get("items")).size() : 0;
+        Object total = result.getOrDefault("total", shown);
+        return "当前仍有可用餐数的活跃客户共 " + number(total) + " 位，已展示 " + shown
+            + " 位客户各自的早餐、午晚餐和合计剩余餐数。";
     }
 
     /**

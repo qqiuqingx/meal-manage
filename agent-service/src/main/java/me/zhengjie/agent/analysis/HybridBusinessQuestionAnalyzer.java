@@ -74,6 +74,8 @@ public class HybridBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer 
     private boolean shouldUseRuleGuardrail(BusinessQuestionAnalysis llm, BusinessQuestionAnalysis rule) {
         if (rule == null) return false;
         if (rule.isRequiresClarification()) return true;
+        if (rule.getConfidence() >= 0.90D && rule.getQueryTarget() == me.zhengjie.agent.analysis.domain.BusinessQueryTarget.CUSTOMER
+            && llm.getQueryTarget() != me.zhengjie.agent.analysis.domain.BusinessQueryTarget.CUSTOMER) return true;
         return rule.getConfidence() >= 0.90D && rule.getMetrics() != null && !rule.getMetrics().isEmpty()
             && !rule.getMetrics().equals(llm.getMetrics());
     }

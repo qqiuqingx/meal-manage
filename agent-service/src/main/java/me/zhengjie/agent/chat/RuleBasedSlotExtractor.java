@@ -53,7 +53,9 @@ public class RuleBasedSlotExtractor {
 
     // 客户概览查询关键词，不要求日期和餐次。
     private static final Pattern CUSTOMER_OVERVIEW_PATTERN = Pattern.compile(
-            "目前什么情况|当前什么情况|客户情况|客户档案|基本信息|是谁[？?]?|客户信息",
+            "目前什么情况|当前什么情况|客户情况|客户档案|基本信息|是谁[？?]?|客户信息|"
+                + "什么时候添加|何时添加|添加时间|什么时候创建|何时创建|创建时间|什么时候录入|录入时间|"
+                + "什么时候购买|何时购买|购买时间|什么时候买|首次购买|首单时间|成交时间",
             Pattern.CASE_INSENSITIVE
     );
 

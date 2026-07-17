@@ -42,4 +42,18 @@ class BusinessQueryChatServiceTest {
         assertEquals(List.of("TOOL_PERMISSION_DENIED"), response.getWarnings());
         assertTrue(response.getAssistantMessage().contains("缺少查询"));
     }
+
+    /** 安全分页截断是有效结果，不得被成功工具执行覆盖成“部分查询未完成”。 */
+    @Test
+    void shouldKeepBusinessAnswerWhenOnlyResultIsTruncated() {
+        BusinessQueryChatService service = new BusinessQueryChatService(null, new AgentQueryPlanValidator(), new BusinessAnswerValidator());
+        AgentChatResponse response = new AgentChatResponse();
+        response.setAssistantMessage("当前共 60 位客户，本次展示 50 位。");
+        response.setPartial(true);
+
+        service.applyToolExecution(response, ToolExecutionResult.success(java.util.Map.of("truncated", true)));
+
+        assertTrue(response.isPartial());
+        assertEquals("当前共 60 位客户，本次展示 50 位。", response.getAssistantMessage());
+    }
 }

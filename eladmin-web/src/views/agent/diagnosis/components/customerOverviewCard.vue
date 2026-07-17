@@ -5,6 +5,8 @@
       <el-descriptions :column="2" border size="small">
         <el-descriptions-item label="客户编号">{{ result.customerCode || '-' }}</el-descriptions-item>
         <el-descriptions-item label="客户姓名">{{ result.customerName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="档案创建时间">{{ formatTime(result.createTime) }}</el-descriptions-item>
+        <el-descriptions-item label="首次购买时间">{{ formatTime(result.firstPurchaseTime) }}</el-descriptions-item>
         <el-descriptions-item label="联系电话">{{ result.maskedPhone || '-' }}</el-descriptions-item>
         <el-descriptions-item label="进行中订单">{{ result.activeOrderCount || 0 }} 笔</el-descriptions-item>
         <el-descriptions-item label="剩余早餐">{{ balance.remainingBreakfast || 0 }} 餐</el-descriptions-item>
@@ -35,6 +37,7 @@ export default {
     }
   },
   methods: {
+    formatTime(value) { return value ? String(value).replace('T', ' ') : '-' },
     mealTypeText(value) { return ({ BREAKFAST: '早餐', LUNCH: '午餐', DINNER: '晚餐' })[value] || value || '-' }
   }
 }

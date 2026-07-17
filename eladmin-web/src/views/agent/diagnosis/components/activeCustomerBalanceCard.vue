@@ -8,7 +8,6 @@
       <el-table-column prop="remainingLunchDinner" label="午晚餐剩余" width="110" align="right" />
       <el-table-column prop="remainingTotal" label="合计" width="80" align="right" />
     </el-table>
-    <el-alert v-if="result.truncated" title="结果已截断，当前仅展示前 50 位客户。" type="warning" :closable="false" show-icon />
   </div>
 </template>
 
@@ -22,5 +21,4 @@ export default {
 
 <style scoped>
 .summary { margin-bottom: 8px; color: #606266; font-size: 13px; }
-.el-alert { margin-top: 8px; }
 </style>

@@ -801,6 +801,10 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         if (analysis.getQueryTarget() == BusinessQueryTarget.CUSTOMER_MEAL_PLAN) {
             return handleCustomerMealPlanQuery(session, analysis, orchestrator, pendingReused);
         }
+        if (analysis.getQueryTarget() == BusinessQueryTarget.CUSTOMER
+            || analysis.getDomains() != null && analysis.getDomains().contains(AgentQueryDomain.CUSTOMER)) {
+            return handleCustomerOverviewQuery(session, analysis, orchestrator, pendingReused);
+        }
         if (analysis.getQueryTarget() != BusinessQueryTarget.SCHEDULED_MENU) return null;
         if (!isNotBlank(analysis.getFilters().getRecordDate())) {
             return response(session, ChatStatus.NEED_MORE_INFO, "请补充菜单日期，例如今天、明天或 2026-07-13。", null,
@@ -911,10 +915,7 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         plan.setToolNames(List.of("listActiveCustomerMealBalances")); plan.setMetricVersion(AgentMetricCatalog.VERSION); plan.setTimezone("Asia/Shanghai"); plan.setAnalysisSource(analysis.getSource()); plan.setAnalysisConfidence(analysis.getConfidence());
         ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, plan, "listActiveCustomerMealBalances", null, List.of());
         Map<String, Object> result = execution.result();
-        int shown = result.get("items") instanceof List ? ((List<?>) result.get("items")).size() : 0;
-        Object total = result.getOrDefault("total", 0);
-        String answer = "当前口径活跃客户共 " + total + " 位，已展示 " + shown + " 位的早餐、午晚餐及合计剩余餐数"
-            + (Boolean.TRUE.equals(result.get("truncated")) ? "；结果已截断，请缩小范围后继续查询。" : "。");
+        String answer = composer().activeCustomerBalances(result);
         AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES", result, answer, List.of("活跃客户数", "清空会话"));
         response.setQueryPlan(plan); applyToolExecution(response, execution); response.setSemanticTraceSummary(semanticTrace(analysis, false));
         return response;
@@ -974,6 +975,45 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         if (slots.getCustomerId() == null) slots.setCustomerId(analysis.getEntities().getCustomerId());
         if (!isNotBlank(slots.getCustomerCode())) slots.setCustomerCode(analysis.getEntities().getCustomerCode());
         if (!isNotBlank(slots.getCustomerName())) slots.setCustomerName(analysis.getEntities().getCustomerName());
+    }
+
+    /**
+     * 执行单客户综合概览查询，包含档案创建时间和首笔订单购买时间。
+     *
+     * @param session 当前会话
+     * @param analysis 已验证的客户查询语义
+     * @param orchestrator 受控只读工具编排器
+     * @param pendingReused 是否从待补上下文恢复
+     * @return 客户概览或客户槽位追问
+     */
+    private AgentChatResponse handleCustomerOverviewQuery(MealPlanChatSession session,
+                                                           BusinessQuestionAnalysis analysis,
+                                                           BusinessQueryOrchestrator orchestrator,
+                                                           boolean pendingReused) {
+        if (businessQueryDataClient == null) {
+            return response(session, ChatStatus.ERROR, "客户信息查询服务暂不可用，请稍后重试。", null,
+                List.of(), List.of(), "BUSINESS_QUERY_CUSTOMER");
+        }
+        syncSemanticCustomerToSlots(session.getSlots(), analysis);
+        if (session.getSlots().getCustomerId() == null && !isNotBlank(session.getSlots().getCustomerCode())
+            && !isNotBlank(session.getSlots().getCustomerName())) {
+            return response(session, ChatStatus.NEED_MORE_INFO, "请提供客户编号，例如：B2200。", null,
+                List.of(MissingSlot.CUSTOMER), List.of("客户编号 B2200"), "SLOT_REQUIRED");
+        }
+        AgentQueryPlan queryPlan = businessQueryPlanningService.plan(analysis);
+        if (queryPlan == null) return null;
+        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, queryPlan, "customerOverview", null, List.of());
+        Map<String, Object> result = execution.result();
+        session.getConversationState().setPendingBusinessQueryContext(null);
+        AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_CUSTOMER", result,
+            composer().customerOverview(result), CUSTOMER_INSIGHT_QUICK_REPLIES);
+        response.setQueryPlan(queryPlan);
+        response.setSemanticTraceSummary(semanticTrace(analysis, pendingReused));
+        applyToolExecution(response, execution);
+        applyResultValidation(response, queryPlan, result);
+        captureLastBusinessQueryContext(session, response);
+        session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
+        return response;
     }
 
     /**
