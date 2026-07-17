@@ -326,4 +326,32 @@ class AgentChatSessionServiceImplTest {
         assertNull(updated.getValue().getPendingBusinessQueryJson());
         assertTrue(updated.getValue().getLastBusinessQueryContextJson().contains("DAILY_UNSCHEDULED_CUSTOMER_COUNT"));
     }
+
+    /** 两个 Agent 实例交替请求时，受控任务栈必须从主系统恢复并由下一轮回写。 */
+    @Test
+    void shouldRoundTripPersistedTaskStackAcrossAgentInstances() {
+        AgentChatSession session = new AgentChatSession();
+        session.setId(1L); session.setSessionId("task-stack-session"); session.setOperator("system"); session.setArchived(false);
+        session.setActiveTaskStackJson("{\"tasks\":[{\"taskId\":\"task-1\",\"status\":\"SUSPENDED\"}]}");
+        when(sessionMapper.selectOne(any())).thenReturn(session);
+        when(messageMapper.selectOne(any())).thenReturn(null);
+        when(messageMapper.insert(any(AgentChatMessage.class))).thenReturn(1);
+        when(sessionMapper.updateById(any(AgentChatSession.class))).thenReturn(1);
+        when(accessContextService.issue(any(), any())).thenReturn("signed-context");
+        AgentChatResponse response = new AgentChatResponse();
+        response.setSessionId("task-stack-session"); response.setRequestId("task-stack-request"); response.setStatus("ANSWERED");
+        response.setAssistantMessage("已恢复原任务"); response.setConversationStage("DIAGNOSED"); response.setSlots(new DiagnosisSlots());
+        response.setActiveTaskStack(Map.of("tasks", Collections.singletonList(Map.of("taskId", "task-1", "status", "ACTIVE"))));
+        when(diagnosisFacadeService.chatMealPlan(any(AgentChatRequest.class), any(), any())).thenReturn(response);
+
+        AgentChatRequest request = new AgentChatRequest(); request.setSessionId("task-stack-session"); request.setMessage("继续原来的查询");
+        service.chat(request, "task-stack-request");
+
+        ArgumentCaptor<AgentChatRequest> downstream = ArgumentCaptor.forClass(AgentChatRequest.class);
+        verify(diagnosisFacadeService).chatMealPlan(downstream.capture(), any(), any());
+        assertEquals("SUSPENDED", ((Map<?, ?>) ((java.util.List<?>) downstream.getValue().getActiveTaskStack().get("tasks")).get(0)).get("status"));
+        ArgumentCaptor<AgentChatSession> updated = ArgumentCaptor.forClass(AgentChatSession.class);
+        verify(sessionMapper).updateById(updated.capture());
+        assertTrue(updated.getValue().getActiveTaskStackJson().contains("ACTIVE"));
+    }
 }

@@ -14,3 +14,55 @@ capabilities:
     requiredPermissions: [customerOrder:list]
     plannerProfile: ACTIVE_CUSTOMER_BALANCE_DETAIL_V1
     riskLevel: INTERNAL_SENSITIVE_LIST
+  - capabilityId: CUSTOMER_ORDER_LIST_V1
+    displayName: 单客户订单明细
+    frame:
+      goal: QUERY
+      targetEntity: ORDER
+      allowedScopeKinds: [EXPLICIT, SESSION_FOCUS, AUTHORIZED_SCOPE]
+      requiredMeasures: []
+      allowedDimensions: []
+      allowedOperations: [LIST]
+      allowedOutputShapes: [DETAIL_LIST]
+    requiredPermissions: [customerOrder:list]
+    plannerProfile: CUSTOMER_ORDER_LIST_V1
+    riskLevel: INTERNAL
+  - capabilityId: CUSTOMER_VERIFICATION_LIST_V1
+    displayName: 单客户核销记录
+    frame:
+      goal: QUERY
+      targetEntity: VERIFICATION
+      allowedScopeKinds: [EXPLICIT, SESSION_FOCUS, AUTHORIZED_SCOPE]
+      requiredMeasures: []
+      allowedDimensions: []
+      allowedOperations: [LIST]
+      allowedOutputShapes: [DETAIL_LIST]
+    requiredPermissions: [mealVerification:list]
+    plannerProfile: CUSTOMER_VERIFICATION_LIST_V1
+    riskLevel: INTERNAL
+  - capabilityId: CUSTOMER_REFUND_LIST_V1
+    displayName: 单客户退餐记录
+    frame:
+      goal: QUERY
+      targetEntity: REFUND
+      allowedScopeKinds: [EXPLICIT, SESSION_FOCUS, AUTHORIZED_SCOPE]
+      requiredMeasures: []
+      allowedDimensions: []
+      allowedOperations: [LIST]
+      allowedOutputShapes: [DETAIL_LIST]
+    requiredPermissions: [mealRefund:list]
+    plannerProfile: CUSTOMER_REFUND_LIST_V1
+    riskLevel: INTERNAL
+  - capabilityId: CUSTOMER_MEAL_PLAN_LIST_V1
+    displayName: 单客户排餐明细
+    frame:
+      goal: QUERY
+      targetEntity: MEAL_PLAN
+      allowedScopeKinds: [EXPLICIT, SESSION_FOCUS, AUTHORIZED_SCOPE]
+      requiredMeasures: []
+      allowedDimensions: []
+      allowedOperations: [LIST]
+      allowedOutputShapes: [DETAIL_LIST]
+    requiredPermissions: [mealPlan:list]
+    plannerProfile: CUSTOMER_MEAL_PLAN_LIST_V1
+    riskLevel: INTERNAL

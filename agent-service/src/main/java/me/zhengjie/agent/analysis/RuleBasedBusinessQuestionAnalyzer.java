@@ -239,6 +239,7 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
 
     /** 识别客户基本信息、档案创建时间或首次购买时间查询，统一使用受控客户概览。 */
     private boolean isCustomerOverviewQuestion(String text) {
+        if (isRemainingCustomerQuestion(text)) return false;
         return contains(text, "客户信息", "客户档案", "基本信息", "客户情况", "目前什么情况", "当前什么情况",
             "什么时候添加", "何时添加", "添加时间", "什么时候创建", "何时创建", "创建时间",
             "什么时候录入", "录入时间", "什么时候购买", "何时购买", "购买时间", "什么时候买",

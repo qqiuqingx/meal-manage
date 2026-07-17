@@ -12,9 +12,10 @@ class MultiIntentPlanningServiceTest {
     @Test
     void compilesActiveCustomerBalanceFrame() {
         SemanticScope scope = new SemanticScope();
-        scope.setType(SemanticScope.Type.CONTEXT_REFERENCE); scope.setResolvedHandleId("ctx-active");
+        scope.setType(SemanticScope.Type.CONTEXT_REFERENCE); scope.setRequiredKind(ContextHandleKind.ENTITY_SET); scope.setResolvedHandleId("ctx-active"); scope.setResolvedDefinitionId("AGENT_ACTIVE_CUSTOMER_V1");
         SemanticRequestFrame frame = new SemanticRequestFrame();
         frame.setGoal(SemanticGoal.QUERY); frame.setTargetEntity(SemanticEntityType.CUSTOMER); frame.setScope(scope);
+        frame.setMeasures(List.of(AgentQueryMetric.MEAL_BALANCE));
         frame.setOperations(List.of(SemanticOperation.PROJECT, SemanticOperation.GROUP)); frame.setOutputShape(SemanticOutputShape.DETAIL_LIST);
         ConversationUnderstandingResult result = new ConversationUnderstandingResult(); result.setFrames(List.of(frame));
         assertEquals(1, new MultiIntentPlanningService().plan(result).size());
@@ -28,5 +29,14 @@ class MultiIntentPlanningServiceTest {
         frame.setGoal(SemanticGoal.EXPLAIN); frame.setTargetEntity(SemanticEntityType.CUSTOMER); frame.setOutputShape(SemanticOutputShape.DETAIL);
         ConversationUnderstandingResult result = new ConversationUnderstandingResult(); result.setFrames(List.of(frame));
         assertTrue(new MultiIntentPlanningService().plan(result).isEmpty());
+    }
+
+    @Test
+    void compilesCustomerOrderListFrame() {
+        SemanticRequestFrame frame = new SemanticRequestFrame();
+        frame.setGoal(SemanticGoal.QUERY); frame.setTargetEntity(SemanticEntityType.ORDER); frame.setOutputShape(SemanticOutputShape.DETAIL_LIST);
+        frame.setOperations(List.of(SemanticOperation.LIST));
+        ConversationUnderstandingResult result = new ConversationUnderstandingResult(); result.setFrames(List.of(frame));
+        assertEquals("listOrders", new MultiIntentPlanningService().plan(result).get(0).getToolNames().get(0));
     }
 }

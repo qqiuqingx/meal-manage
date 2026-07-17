@@ -15,4 +15,25 @@ class ConversationUnderstandingValidatorTest {
         ConversationUnderstandingResult result = new ConversationUnderstandingResult(); result.setFrames(List.of(frame));
         assertEquals("CONTEXT_REFERENCE_MISSING", new ConversationUnderstandingValidator().validate(result));
     }
+
+    @Test
+    void rejectsCyclicFrameDependencies() {
+        SemanticRequestFrame first = frame("f1"); first.setDependsOnFrameIds(List.of("f2"));
+        SemanticRequestFrame second = frame("f2"); second.setDependsOnFrameIds(List.of("f1"));
+        ConversationUnderstandingResult result = new ConversationUnderstandingResult(); result.setFrames(List.of(first, second));
+        assertEquals("FRAME_DEPENDENCY_CYCLE", new ConversationUnderstandingValidator().validate(result));
+    }
+
+    @Test
+    void rejectsDependencyThatWouldExecuteAfterDependentFrame() {
+        SemanticRequestFrame first = frame("f1"); first.setDependsOnFrameIds(List.of("f2"));
+        SemanticRequestFrame second = frame("f2");
+        ConversationUnderstandingResult result = new ConversationUnderstandingResult(); result.setFrames(List.of(first, second));
+        assertEquals("FRAME_DEPENDENCY_ORDER_INVALID", new ConversationUnderstandingValidator().validate(result));
+    }
+
+    private SemanticRequestFrame frame(String id) {
+        SemanticRequestFrame frame = new SemanticRequestFrame(); frame.setFrameId(id); frame.setGoal(SemanticGoal.QUERY);
+        frame.setTargetEntity(SemanticEntityType.CUSTOMER); frame.setOutputShape(SemanticOutputShape.DETAIL_LIST); return frame;
+    }
 }

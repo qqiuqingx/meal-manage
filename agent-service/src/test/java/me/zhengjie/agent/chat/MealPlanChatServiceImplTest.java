@@ -36,6 +36,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -1125,6 +1126,114 @@ class MealPlanChatServiceImplTest {
         assertTrue(response.getAssistantMessage().contains("多个同名客户"));
     }
 
+    /** 新协议必须在已登记活跃客户集合上执行固定余额明细计划，而非回退到单客户追问。 */
+    @Test
+    void shouldExecuteRegisteredActiveCustomerBalanceFrame() {
+        InMemoryMealPlanChatSessionStore store = store();
+        StubExtractor extractor = new StubExtractor(result(ChatIntent.BUSINESS_QUERY, new DiagnosisSlots(), List.of()));
+        AtomicInteger balanceCalls = new AtomicInteger();
+        BusinessQueryDataClient client = operationClient((date, type) -> Map.of());
+        client = new ActiveBalanceClient(client, balanceCalls);
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store, extractor, request -> new DiagnosisResponse(),
+            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+        service.configureConversationUnderstanding((message, slots, handles) -> activeCustomerBalanceUnderstanding(),
+            new me.zhengjie.agent.analysis.ConversationUnderstandingValidator(), new me.zhengjie.agent.query.MultiIntentPlanningService(), "new");
+
+        AgentChatRequest request = request("active-customer-session", "他们分别还剩多少餐");
+        request.setLastBusinessQueryContext(activeCustomerContext("AGENT_ACTIVE_CUSTOMER_V1"));
+        AgentChatResponse response = service.chat(request);
+
+        assertEquals(ChatStatus.ANSWERED, response.getStatus());
+        assertEquals("BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES", response.getResponseType());
+        assertEquals(1, balanceCalls.get());
+        assertEquals("listActiveCustomerMealBalances", response.getQueryPlan().getToolNames().get(0));
+        assertEquals(1, response.getResultBlocks().size());
+        assertEquals("COMPLETED", response.getResultBlocks().get(0).getStatus());
+    }
+
+    /**
+     * 线上默认 shadow 模式仍须通过规则语义复用上一轮活跃客户集合，
+     * 不能因“还剩多少餐”的自然表达回退为单客户编号追问。
+     */
+    @Test
+    void shouldExpandActiveCustomerBalancesInShadowModeForNaturalFollowUp() {
+        InMemoryMealPlanChatSessionStore store = store();
+        ChatExtractionResult extraction = result(ChatIntent.BUSINESS_QUERY, new DiagnosisSlots(), List.of());
+        extraction.setRuleIntent(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY.name());
+        AtomicInteger balanceCalls = new AtomicInteger();
+        BusinessQueryDataClient client = new ActiveBalanceClient(operationClient((date, type) -> Map.of()), balanceCalls);
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store, new StubExtractor(extraction),
+            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+
+        AgentChatRequest request = request("active-customer-shadow-session", "他们分别还剩多少餐呢");
+        request.setLastBusinessQueryContext(activeCustomerContext("AGENT_ACTIVE_CUSTOMER_V1"));
+        AgentChatResponse response = service.chat(request);
+
+        assertEquals(ChatStatus.ANSWERED, response.getStatus());
+        assertEquals("BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES", response.getResponseType());
+        assertEquals(1, balanceCalls.get());
+        assertTrue(response.getAssistantMessage().contains("各自的早餐、午晚餐和合计剩余餐数"));
+    }
+
+    /** 客户档案创建和首次购买时间应直接走客户概览，不再返回业务类别澄清。 */
+    @Test
+    void shouldAnswerCustomerCreationAndPurchaseTime() {
+        InMemoryMealPlanChatSessionStore store = store();
+        BusinessQueryDataClient base = operationClient((date, type) -> Map.of());
+        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+            @Override public Map<String, Object> resolveCustomer(Long id, String code, String name) { return base.resolveCustomer(id, code, name); }
+            @Override public Map<String, Object> customerOverview(Long id, String code) {
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("present", true); result.put("customerId", 68L); result.put("customerCode", "B2200");
+                result.put("customerName", "新客户"); result.put("createTime", "2026-07-01T09:00:00");
+                result.put("firstPurchaseTime", "2026-07-02T10:00:00"); result.put("activeOrderCount", 1);
+                result.put("mealBalance", Map.of("remainingBreakfast", 0, "remainingLunchDinner", 7));
+                return result;
+            }
+            @Override public Map<String, Object> listOrders(Long id, Integer status, int page, int size) { return base.listOrders(id, status, page, size); }
+            @Override public Map<String, Object> orderDetail(Long id, String code, Long customerId) { return base.orderDetail(id, code, customerId); }
+            @Override public Map<String, Object> listVerifications(Long customerId, Long orderId, String mealType, int limit) { return base.listVerifications(customerId, orderId, mealType, limit); }
+            @Override public Map<String, Object> listRefunds(Long customerId, Long orderId, int limit) { return base.listRefunds(customerId, orderId, limit); }
+            @Override public Map<String, Object> listMealPlans(Long customerId, String recordDate, String mealType) { return base.listMealPlans(customerId, recordDate, mealType); }
+            @Override public Map<String, Object> explainRule(String topic) { return base.explainRule(topic); }
+            @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return base.listDishes(dishIds); }
+        };
+        StubExtractor extractor = new StubExtractor(
+            result(ChatIntent.BUSINESS_QUERY, slots(null, "B2200", null, null), List.of()),
+            result(ChatIntent.BUSINESS_QUERY, new DiagnosisSlots(), List.of()));
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store, extractor, request -> new DiagnosisResponse(),
+            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+
+        AgentChatResponse created = service.chat(request("customer-time-session", "B2200 这个客户是什么时候添加的"));
+        AgentChatResponse purchased = service.chat(request("customer-time-session", "什么时候购买的呢"));
+
+        assertEquals("BUSINESS_QUERY_CUSTOMER", created.getResponseType());
+        assertTrue(created.getAssistantMessage().contains("客户档案创建于 2026-07-01 09:00:00"));
+        assertEquals("BUSINESS_QUERY_CUSTOMER", purchased.getResponseType());
+        assertTrue(purchased.getAssistantMessage().contains("首次购买于 2026-07-02 10:00:00"));
+    }
+
+    /** 集合定义或指标组合未登记时必须拒绝执行，不得将其伪装为活跃客户明细。 */
+    @Test
+    void shouldRejectUnregisteredContextCombinationBeforeToolExecution() {
+        InMemoryMealPlanChatSessionStore store = store();
+        StubExtractor extractor = new StubExtractor(result(ChatIntent.BUSINESS_QUERY, new DiagnosisSlots(), List.of()));
+        AtomicInteger balanceCalls = new AtomicInteger();
+        BusinessQueryDataClient client = new ActiveBalanceClient(operationClient((date, type) -> Map.of()), balanceCalls);
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store, extractor, request -> new DiagnosisResponse(),
+            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+        service.configureConversationUnderstanding((message, slots, handles) -> activeCustomerBalanceUnderstanding(me.zhengjie.agent.query.domain.AgentQueryMetric.REFUND_COUNT),
+            new me.zhengjie.agent.analysis.ConversationUnderstandingValidator(), new me.zhengjie.agent.query.MultiIntentPlanningService(), "new");
+
+        AgentChatRequest request = request("unsupported-combination-session", "他们的退款情况");
+        request.setLastBusinessQueryContext(activeCustomerContext("AGENT_ACTIVE_CUSTOMER_V1"));
+        AgentChatResponse response = service.chat(request);
+
+        assertEquals(ChatStatus.NEED_MORE_INFO, response.getStatus());
+        assertEquals("CAPABILITY_NOT_AVAILABLE", response.getResponseType());
+        assertEquals(0, balanceCalls.get());
+    }
+
     private MealPlanChatServiceImpl service(InMemoryMealPlanChatSessionStore store,
                                             MealPlanChatExtractor extractor,
                                             MealPlanDiagnosisService diagnosisService) {
@@ -1150,6 +1259,63 @@ class MealPlanChatServiceImplTest {
         request.setSessionId(sessionId);
         request.setMessage(message);
         return request;
+    }
+
+    /** 构造不含客户明细、可被 Resolver 重新绑定的活跃客户集合上下文。 */
+    private me.zhengjie.agent.query.domain.LastBusinessQueryContext activeCustomerContext(String definitionId) {
+        me.zhengjie.agent.analysis.domain.ConversationContextHandle handle = new me.zhengjie.agent.analysis.domain.ConversationContextHandle();
+        handle.setHandleId("ctx-active-customers"); handle.setKind(me.zhengjie.agent.analysis.domain.ContextHandleKind.ENTITY_SET);
+        handle.setEntityType(me.zhengjie.agent.analysis.domain.SemanticEntityType.CUSTOMER); handle.setDefinitionId(definitionId);
+        handle.setSalience(1D); handle.setExpiresAt(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC).plusHours(1));
+        me.zhengjie.agent.query.domain.LastBusinessQueryContext context = new me.zhengjie.agent.query.domain.LastBusinessQueryContext();
+        context.setContextHandles(List.of(handle)); return context;
+    }
+
+    /** 构造合法的集合余额语义帧，模型不提供句柄 ID 或工具名。 */
+    private me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult activeCustomerBalanceUnderstanding() {
+        return activeCustomerBalanceUnderstanding(me.zhengjie.agent.query.domain.AgentQueryMetric.MEAL_BALANCE);
+    }
+
+    /** 构造指定指标的集合帧，用于验证未登记组合不能进入工具执行。 */
+    private me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult activeCustomerBalanceUnderstanding(
+        me.zhengjie.agent.query.domain.AgentQueryMetric metric) {
+        me.zhengjie.agent.analysis.domain.SemanticScope scope = new me.zhengjie.agent.analysis.domain.SemanticScope();
+        scope.setType(me.zhengjie.agent.analysis.domain.SemanticScope.Type.CONTEXT_REFERENCE);
+        scope.setRequiredKind(me.zhengjie.agent.analysis.domain.ContextHandleKind.ENTITY_SET);
+        scope.setRequiredEntityType(me.zhengjie.agent.analysis.domain.SemanticEntityType.CUSTOMER);
+        me.zhengjie.agent.analysis.domain.SemanticRequestFrame frame = new me.zhengjie.agent.analysis.domain.SemanticRequestFrame();
+        frame.setFrameId("balance-frame"); frame.setGoal(me.zhengjie.agent.analysis.domain.SemanticGoal.QUERY);
+        frame.setTargetEntity(me.zhengjie.agent.analysis.domain.SemanticEntityType.CUSTOMER); frame.setScope(scope);
+        frame.setMeasures(List.of(metric));
+        frame.setOperations(List.of(me.zhengjie.agent.analysis.domain.SemanticOperation.PROJECT, me.zhengjie.agent.analysis.domain.SemanticOperation.GROUP));
+        frame.setOutputShape(me.zhengjie.agent.analysis.domain.SemanticOutputShape.DETAIL_LIST);
+        me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult result = new me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult();
+        result.setInteractionMode(me.zhengjie.agent.analysis.domain.BusinessInteractionMode.FOLLOW_UP); result.setFrames(List.of(frame));
+        return result;
+    }
+
+    /** 仅实现本场景会调用的明细接口，其余能力委托基础客户端。 */
+    private static class ActiveBalanceClient implements BusinessQueryDataClient {
+        private final BusinessQueryDataClient delegate;
+        private final AtomicInteger calls;
+        private ActiveBalanceClient(BusinessQueryDataClient delegate, AtomicInteger calls) { this.delegate = delegate; this.calls = calls; }
+        @Override public Map<String, Object> resolveCustomer(Long id, String code, String name) { return delegate.resolveCustomer(id, code, name); }
+        @Override public Map<String, Object> customerOverview(Long id, String code) { return delegate.customerOverview(id, code); }
+        @Override public Map<String, Object> listOrders(Long id, Integer status, int page, int size) { return delegate.listOrders(id, status, page, size); }
+        @Override public Map<String, Object> orderDetail(Long id, String code, Long customerId) { return delegate.orderDetail(id, code, customerId); }
+        @Override public Map<String, Object> listVerifications(Long customerId, Long orderId, String mealType, int limit) { return delegate.listVerifications(customerId, orderId, mealType, limit); }
+        @Override public Map<String, Object> listRefunds(Long customerId, Long orderId, int limit) { return delegate.listRefunds(customerId, orderId, limit); }
+        @Override public Map<String, Object> listMealPlans(Long customerId, String recordDate, String mealType) { return delegate.listMealPlans(customerId, recordDate, mealType); }
+        @Override public Map<String, Object> explainRule(String topic) { return delegate.explainRule(topic); }
+        @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return delegate.listDishes(dishIds); }
+        @Override public me.zhengjie.agent.query.client.dto.ActiveCustomerBalanceResponse activeCustomerBalances(int page, int size) {
+            calls.incrementAndGet();
+            me.zhengjie.agent.query.client.dto.ActiveCustomerBalanceResponse response = new me.zhengjie.agent.query.client.dto.ActiveCustomerBalanceResponse();
+            response.setMetricDefinitionId("AGENT_ACTIVE_CUSTOMER_V1"); response.setTotal(1L); response.setPage(page); response.setSize(size);
+            response.setItems(List.of(Map.of("customerCode", "B3303", "customerNameMasked", "张*", "remainingBreakfast", 2,
+                "remainingLunchDinner", 4, "remainingTotal", 6)));
+            return response;
+        }
     }
 
     /** 创建仅覆盖运营统计的只读客户端，避免测试绕过真实 QueryPlan 和工具执行器。 */

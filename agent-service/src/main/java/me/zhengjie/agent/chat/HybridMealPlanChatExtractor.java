@@ -165,11 +165,14 @@ public class HybridMealPlanChatExtractor implements MealPlanChatExtractor {
             || intent == ChatIntent.OPERATION_STATISTICS_QUERY;
     }
 
-    /** 纯日期、餐次或客户/订单编号回复只用于补全 Pending Query，不重新判断业务领域。 */
+    /** 允许多个确定性槽位组合续接 Pending；存在剩余业务文本时必须重新判断领域。 */
     private boolean isPureSlotReply(String message) {
         if (message == null) return false;
         String text = message.trim();
-        return text.matches("今天|今日|昨天|明天|本周|早餐|午餐|晚餐|\\d{4}-\\d{2}-\\d{2}")
-            || text.matches("(?i)[A-Z]\\d{3,}") || text.matches("\\d{1,18}");
+        if (text.isEmpty()) return false;
+        String remainder = text.replaceAll("今天|今日|昨天|昨日|明天|明日|本周|这周|下周|早餐|午餐|晚餐", "")
+            .replaceAll("\\d{4}-\\d{2}-\\d{2}", "").replaceAll("(?i)[A-Z]\\d{3,}", "").replaceAll("\\d{1,18}", "")
+            .replaceAll("[，,、/\\s]+", "");
+        return remainder.isEmpty();
     }
 }

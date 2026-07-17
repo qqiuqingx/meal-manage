@@ -15,6 +15,8 @@ import java.util.Set;
 /** LLM 会话理解适配器；模型只描述句柄类型，具体句柄必须由 Resolver 在服务端绑定。 */
 public class LlmConversationUnderstandingService implements ConversationUnderstandingService {
     private static final Set<String> ROOT = Set.of("schemaVersion", "questionType", "interactionMode", "referenceTurn", "frames", "ambiguities", "modelConfidence", "requiresClarification", "clarificationCode", "clarificationQuestion", "unknownReason");
+    private static final Set<String> FRAME = Set.of("frameId", "goal", "targetEntity", "scope", "measures", "dimensions", "operations", "constraints", "outputShape", "missingInformation", "dependsOnFrameIds", "confidence");
+    private static final Set<String> SCOPE = Set.of("type", "requiredKind", "requiredEntityType");
     private final ChatClient client;
     private final ObjectMapper mapper;
     private final BeanOutputConverter<ConversationUnderstandingResult> converter;
@@ -31,13 +33,26 @@ public class LlmConversationUnderstandingService implements ConversationUndersta
                 .user("Schema:" + converter.getFormat() + "。frames 最多三个。当前消息：" + safe(message) + "；确定性槽位：" + mapper.writeValueAsString(slots) + "；可引用句柄摘要：" + mapper.writeValueAsString(handles == null ? List.of() : handles))
                 .options(options).call().content();
             JsonNode node = mapper.readTree(stripFence(raw));
-            if (!node.isObject() || node.fieldNames().hasNext() && hasUnknown(node) || containsForbidden(node)) return clarification("MODEL_INVALID");
+            if (!node.isObject() || node.fieldNames().hasNext() && hasUnknown(node) || hasUnsafeFrames(node) || containsForbidden(node)) return clarification("MODEL_INVALID");
             ConversationUnderstandingResult result = mapper.treeToValue(node, ConversationUnderstandingResult.class);
             String invalid = validator.validate(result);
             return invalid == null ? result : clarification(invalid);
         } catch (Exception ignored) { return clarification("MODEL_UNAVAILABLE"); }
     }
     private boolean hasUnknown(JsonNode node) { java.util.Iterator<String> fields = node.fieldNames(); while (fields.hasNext()) if (!ROOT.contains(fields.next())) return true; return false; }
+    /** 帧和范围对象只允许协议声明字段，防止模型用嵌套 JSON 夹带执行指令。 */
+    private boolean hasUnsafeFrames(JsonNode root) {
+        JsonNode frames = root.get("frames");
+        if (frames == null || frames.isNull()) return false;
+        if (!frames.isArray() || frames.size() > 3) return true;
+        for (JsonNode frame : frames) {
+            if (!frame.isObject() || hasUnknown(frame, FRAME)) return true;
+            JsonNode scope = frame.get("scope");
+            if (scope != null && !scope.isNull() && (!scope.isObject() || hasUnknown(scope, SCOPE))) return true;
+        }
+        return false;
+    }
+    private boolean hasUnknown(JsonNode node, Set<String> allowed) { java.util.Iterator<String> fields = node.fieldNames(); while (fields.hasNext()) if (!allowed.contains(fields.next())) return true; return false; }
     private boolean containsForbidden(JsonNode node) { if (node.isTextual()) { String value = node.asText().toLowerCase(); return value.contains("select ") || value.contains("http://") || value.contains("https://") || value.contains("/api/"); } for (JsonNode child : node) if (containsForbidden(child)) return true; return false; }
     private ConversationUnderstandingResult clarification(String code) { ConversationUnderstandingResult result = new ConversationUnderstandingResult(); result.setRequiresClarification(true); result.setClarificationCode(code); result.setClarificationQuestion("请补充需要查询的业务对象或条件。"); return result; }
     private String safe(String value) { return value == null ? "" : value; }

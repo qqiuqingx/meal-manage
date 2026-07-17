@@ -17,6 +17,8 @@ import me.zhengjie.agent.analysis.ConversationUnderstandingValidator;
 import me.zhengjie.agent.analysis.IntentConfidencePolicy;
 import me.zhengjie.agent.analysis.ConversationUnderstandingService;
 import me.zhengjie.agent.analysis.LlmConversationUnderstandingService;
+import me.zhengjie.agent.analysis.SemanticCapabilityCatalog;
+import me.zhengjie.agent.analysis.SemanticCapabilityCatalogLoader;
 import me.zhengjie.agent.validator.DiagnosisResultValidator;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.ObjectProvider;
@@ -96,7 +98,9 @@ public class AgentServiceConfig {
 
     /** 创建多语义帧的固定计划编译器。 */
     @Bean
-    public MultiIntentPlanningService multiIntentPlanningService() { return new MultiIntentPlanningService(); }
+    public MultiIntentPlanningService multiIntentPlanningService(SemanticCapabilityCatalog semanticCapabilityCatalog) {
+        return new MultiIntentPlanningService(semanticCapabilityCatalog);
+    }
 
     /** 创建会话理解协议校验器，非法帧不能进入查询编排。 */
     @Bean
@@ -115,4 +119,8 @@ public class AgentServiceConfig {
         return builder == null ? (message, slots, handles) -> { me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult result = new me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult(); result.setRequiresClarification(true); result.setClarificationCode("MODEL_UNAVAILABLE"); return result; }
             : new LlmConversationUnderstandingService(builder, objectMapper, validator);
     }
+
+    /** 加载并校验受控语义能力目录；启动失败优于静默开放未知能力。 */
+    @Bean
+    public SemanticCapabilityCatalog semanticCapabilityCatalog() { return new SemanticCapabilityCatalogLoader().load(); }
 }

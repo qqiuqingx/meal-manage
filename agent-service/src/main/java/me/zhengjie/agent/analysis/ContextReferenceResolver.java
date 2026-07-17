@@ -23,6 +23,7 @@ public class ContextReferenceResolver {
         if (candidates.isEmpty()) return Resolution.missing();
         if (candidates.size() > 1 && candidates.get(0).score() - candidates.get(1).score() < AMBIGUOUS_DELTA) return Resolution.ambiguous();
         scope.setResolvedHandleId(candidates.get(0).handle().getHandleId());
+        scope.setResolvedDefinitionId(candidates.get(0).handle().getDefinitionId());
         return Resolution.resolved(candidates.get(0).handle());
     }
 

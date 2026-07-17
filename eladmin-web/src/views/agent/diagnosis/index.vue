@@ -239,6 +239,17 @@
                   <business-package-card v-if="message.responseType === 'BUSINESS_QUERY_PACKAGE'" :result="message.insightResult" />
                   <business-operation-stats-card v-if="message.responseType && message.responseType.indexOf('BUSINESS_QUERY_OPERATION_') === 0 && message.responseType !== 'BUSINESS_QUERY_OPERATION_CLARIFICATION'" :result="message.insightResult" />
                   <active-customer-balance-card v-if="message.responseType === 'BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES'" :result="message.insightResult" />
+                  <template v-for="(block, blockIndex) in message.resultBlocks || []">
+                    <div v-if="blockIndex > 0" :key="block.frameId || blockIndex" class="multi-result-block">
+                      <div class="block-title">后续请求结果</div>
+                      <active-customer-balance-card v-if="block.responseType === 'BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES'" :result="block.result" />
+                      <business-order-list-card v-if="block.responseType === 'BUSINESS_QUERY_ORDER'" :result="block.result" />
+                      <business-history-card v-if="block.responseType === 'BUSINESS_QUERY_VERIFICATION'" :result="block.result" type="verification" />
+                      <business-history-card v-if="block.responseType === 'BUSINESS_QUERY_REFUND'" :result="block.result" type="refund" />
+                      <business-meal-plan-card v-if="block.responseType === 'BUSINESS_QUERY_MEAL_PLAN'" :result="block.result" />
+                      <el-alert v-if="block.status === 'FAILED'" title="该请求未完成，请缩小范围或稍后重试。" type="warning" :closable="false" />
+                    </div>
+                  </template>
                   <el-alert
                     v-if="message.partial || (message.warnings && message.warnings.length)"
                     :title="queryWarningText(message)"
@@ -843,7 +854,8 @@ export default {
         cached: response.cached === true,
         partial: response.partial === true,
         queriedAt: response.queriedAt,
-        queryPlan: response.queryPlan
+        queryPlan: response.queryPlan,
+        resultBlocks: response.resultBlocks || []
       })
       this.loadActionAudits()
     },
@@ -947,6 +959,7 @@ export default {
           cached: business.cached === true,
           partial: business.partial === true,
           queriedAt: business.queriedAt,
+          resultBlocks: business.resultBlocks || [],
           queryPlan: business.queryPlan
         }
       })

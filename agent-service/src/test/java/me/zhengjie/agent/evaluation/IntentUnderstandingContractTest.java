@@ -15,11 +15,12 @@ class IntentUnderstandingContractTest {
             assertNotNull(input);
             Map<String, Object> root = new Yaml().load(input);
             List<Map<String, Object>> cases = (List<Map<String, Object>>) root.get("cases");
-            assertTrue(cases.size() >= 4);
+            assertTrue(cases.size() >= 20);
             for (Map<String, Object> item : cases) {
                 assertNotNull(item.get("id"));
                 assertFalse(((List<?>) item.get("turns")).isEmpty());
             }
+            assertTrue(new IntentUnderstandingCaseGenerator().expand(cases).size() >= 300);
         } catch (Exception exception) { throw new AssertionError(exception); }
     }
 }

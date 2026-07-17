@@ -642,6 +642,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         snapshot.put("pendingBusinessQueryContext", response.getPendingBusinessQueryContext());
         snapshot.put("lastBusinessQueryContext", response.getLastBusinessQueryContext());
         snapshot.put("activeTaskStack", response.getActiveTaskStack());
+        snapshot.put("resultBlocks", response.getResultBlocks());
         snapshot.put("semanticTraceSummary", response.getSemanticTraceSummary());
         return snapshot;
     }
@@ -671,6 +672,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
             ? (Map<String, Object>) snapshot.get("lastBusinessQueryContext") : null);
         response.setActiveTaskStack(snapshot.get("activeTaskStack") instanceof Map
             ? (Map<String, Object>) snapshot.get("activeTaskStack") : null);
+        response.setResultBlocks(snapshot.get("resultBlocks") instanceof List
+            ? (List<Map<String, Object>>) snapshot.get("resultBlocks") : Collections.emptyList());
         response.setSemanticTraceSummary(snapshot.get("semanticTraceSummary") instanceof Map
             ? (Map<String, Object>) snapshot.get("semanticTraceSummary") : null);
     }
