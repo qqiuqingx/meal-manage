@@ -28,6 +28,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAuditService {
+    private static final int MAX_SEMANTIC_FALLBACK_REASON_LENGTH = 32;
+    private static final String LEGACY_RULE_GUARDRAIL_CONFLICT = "MODEL_CONFLICTS_WITH_RULE_GUARDRAIL";
+    private static final String RULE_GUARDRAIL_CONFLICT = "MODEL_RULE_GUARDRAIL_CONFLICT";
     private final AgentBusinessQueryAuditMapper auditMapper;
 
     /** {@inheritDoc} */
@@ -50,7 +53,7 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
         audit.setAnalysisSource(firstNonBlank(string(semanticTrace.get("semanticSource")), string(plan.get("analysisSource"))));
         audit.setAnalysisConfidence(semanticTrace.get("semanticConfidence") == null
             ? doubleValue(plan.get("analysisConfidence")) : doubleValue(semanticTrace.get("semanticConfidence")));
-        audit.setSemanticFallbackReason(string(semanticTrace.get("fallbackReason")));
+        audit.setSemanticFallbackReason(normalizeSemanticFallbackReason(semanticTrace.get("fallbackReason")));
         audit.setSemanticCatalogVersion(string(semanticTrace.get("semanticCatalogVersion")));
         audit.setTemporalExpression(string(semanticTrace.get("temporalExpression")));
         audit.setResolvedRecordDate(string(semanticTrace.get("resolvedRecordDate")));
@@ -72,6 +75,23 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
     /** 返回首个非空追踪值，兼容升级前仅在 QueryPlan 中记录来源的响应。 */
     private String firstNonBlank(String first, String second) {
         return first == null || first.trim().isEmpty() ? second : first;
+    }
+
+    /**
+     * 将语义降级原因收敛为数据库允许的稳定码，并兼容已发布 Agent 返回的旧冲突码。
+     *
+     * @param value Agent 返回的降级原因
+     * @return 最长 32 位的稳定原因码；非法值统一记为 MODEL_INVALID
+     */
+    private String normalizeSemanticFallbackReason(Object value) {
+        String reason = string(value);
+        if (reason == null || reason.trim().isEmpty()) return null;
+        reason = reason.trim();
+        if (LEGACY_RULE_GUARDRAIL_CONFLICT.equals(reason)) return RULE_GUARDRAIL_CONFLICT;
+        if (reason.length() > MAX_SEMANTIC_FALLBACK_REASON_LENGTH || !reason.matches("[A-Z][A-Z0-9_]*")) {
+            return "MODEL_INVALID";
+        }
+        return reason;
     }
 
     /**

@@ -128,6 +128,7 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
             + "用户否定、质疑或指出上轮结果异常时 interactionMode 优先为 CORRECTION；CORRECTION 必须 referenceTurn=PREVIOUS_BUSINESS_QUERY，"
             + "correction.requiresReplan=true，且不能简单复制上轮语义。当天公共菜单未指定餐次时 mealScope=ALL_AVAILABLE，"
             + "明确餐次时使用 LUNCH 或 DINNER。关键歧义必须 requiresClarification=true；不得根据常识补造业务数据。"
+            + "询问某客户是否曾经排过餐、有没有排过餐时使用 CUSTOMER_MEAL_PLAN；如果用户没有限定时间，保持 temporal=UNSPECIFIED 且不填写日期，表示全部历史，不要求澄清日期。"
             + "时间必须使用 temporal.expression 表达：现在/当前/目前/截至现在在每日指标中使用 CURRENT_DAY，昨天用 PREVIOUS_DAY，明天用 NEXT_DAY，本周用 CURRENT_WEEK。"
             + "相对时间不得填写具体日期；明确日期使用 EXPLICIT_DATE，明确范围使用 EXPLICIT_RANGE。"
             + "必须区分仍有餐数的活跃客户与当天应服务但未排餐客户，也必须区分已排餐与排了但未核销。";

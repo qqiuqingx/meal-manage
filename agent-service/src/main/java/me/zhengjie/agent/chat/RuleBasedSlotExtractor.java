@@ -75,7 +75,7 @@ public class RuleBasedSlotExtractor {
             Pattern.CASE_INSENSITIVE
     );
     private static final Pattern ACTIVE_ORDER_PATTERN = Pattern.compile("进行中订单|有效订单", Pattern.CASE_INSENSITIVE);
-    private static final Pattern MEAL_PLAN_QUERY_PATTERN = Pattern.compile("排餐了吗|排了吗|有没有排餐|有没有排|吃什么|吃了什么|排餐情况|菜单|菜品", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MEAL_PLAN_QUERY_PATTERN = Pattern.compile("排餐了吗|排了吗|排过餐吗|是否排过餐|有没有排过餐|有没有排餐|有没有排|吃什么|吃了什么|排餐情况|菜单|菜品", Pattern.CASE_INSENSITIVE);
     private static final Pattern REFUND_QUERY_PATTERN = Pattern.compile("退过餐|退餐记录|退餐情况|最近退餐|退了多少餐", Pattern.CASE_INSENSITIVE);
     private static final Pattern CUSTOMER_PACKAGE_QUERY_PATTERN = Pattern.compile("签.*套餐|什么套餐|套餐是什么|套餐详情|用.*套餐", Pattern.CASE_INSENSITIVE);
     private static final Pattern DISH_INGREDIENT_QUERY_PATTERN = Pattern.compile("菜.*配料|菜.*食材|配料.*什么|食材.*什么", Pattern.CASE_INSENSITIVE);

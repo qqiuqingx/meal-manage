@@ -39,23 +39,22 @@ class AgentQueryPlanValidatorTest {
     }
 
     @Test
-    void shouldRequestCustomerAndDateForMealPlanList() {
+    void shouldAcceptUnboundedMealPlanHistoryList() {
         AgentQueryPlan plan = new AgentQueryPlan();
         plan.setDomain(AgentQueryDomain.MEAL_PLAN);
         plan.setAction(AgentQueryAction.LIST);
+        plan.setToolNames(List.of("listMealPlans"));
 
         AgentQueryPlanValidationResult result = validator.validate(plan);
 
-        assertFalse(result.isValid());
-        assertTrue(result.requiresFollowUp());
-        assertTrue(result.missingFields().contains("customer"));
-        assertTrue(result.missingFields().contains("recordDate"));
+        assertTrue(result.isValid());
+        assertFalse(result.requiresFollowUp());
     }
 
     @Test
     void shouldRejectUnsafeOrOutOfBoundPlanValues() {
         AgentQueryPlan plan = new AgentQueryPlan();
-        plan.setDomain(AgentQueryDomain.MEAL_PLAN);
+        plan.setDomain(AgentQueryDomain.REFUND);
         plan.setAction(AgentQueryAction.LIST);
         AgentEntityReference entities = new AgentEntityReference();
         entities.setCustomerCode("B3303");

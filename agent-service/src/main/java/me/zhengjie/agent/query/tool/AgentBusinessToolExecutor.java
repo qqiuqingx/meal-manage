@@ -98,7 +98,7 @@ public class AgentBusinessToolExecutor {
         if (descriptor == null) return MAX_DATA_ITEMS + 1;
         AgentQueryFilters filters = plan.getFilters();
         int requested = descriptor.maxResults();
-        if ("listOrders".equals(toolName)) requested = size(filters);
+        if ("listOrders".equals(toolName) || "listMealPlans".equals(toolName)) requested = size(filters);
         else if ("listVerifications".equals(toolName) || "listRefunds".equals(toolName)) requested = recentLimit(filters);
         else if ("listDishes".equals(toolName) && dishIds != null) requested = dishIds.stream().distinct().limit(20).toList().size();
         return Math.min(Math.max(requested, 0), descriptor.maxResults());
@@ -112,10 +112,8 @@ public class AgentBusinessToolExecutor {
         if ("listOrders".equals(toolName)) return client.listOrdersTyped(entities.getCustomerId(), orderStatus(filters), page(filters), size(filters)).toPresentationMap();
         if ("orderDetail".equals(toolName)) return client.orderDetailTyped(entities.getOrderId(), entities.getOrderCode(), entities.getCustomerId()).toPresentationMap();
         if ("listMealPlans".equals(toolName)) {
-            if (AgentQueryPlan.SCHEMA_VERSION_V3.equals(plan.getVersion())) {
-                return client.listMealPlansRangeTyped(entities.getCustomerId(), filters.getRecordDate(), filters.getMealType(), page(filters), size(filters)).toPresentationMap();
-            }
-            return client.listMealPlansTyped(entities.getCustomerId(), filters.getRecordDate(), filters.getMealType(), entities.getMealPlanRecordId()).toPresentationMap();
+            return client.listMealPlansTyped(entities.getCustomerId(), filters.getRecordDate(), filters.getStartDate(),
+                filters.getEndDate(), filters.getMealType(), entities.getMealPlanRecordId(), page(filters), size(filters)).toPresentationMap();
         }
         if ("listVerifications".equals(toolName)) return client.listVerificationsTyped(entities.getCustomerId(), entities.getOrderId(), filters.getMealType(), recentLimit(filters), filters.getStartDate(), filters.getEndDate()).toPresentationMap();
         if ("listRefunds".equals(toolName)) return client.listRefundsTyped(entities.getCustomerId(), entities.getOrderId(), recentLimit(filters), filters.getStartDate(), filters.getEndDate()).toPresentationMap();
@@ -156,7 +154,8 @@ public class AgentBusinessToolExecutor {
     private String cacheKey(AgentQueryPlan plan, String toolName, String ruleTopic, List<Integer> dishIds) {
         return toolName + "|" + plan.getEntities().getCustomerId() + "|" + plan.getEntities().getCustomerCode() + "|"
             + plan.getEntities().getCustomerName() + "|" + plan.getEntities().getOrderId() + "|" + plan.getEntities().getOrderCode() + "|" + plan.getFilters().getRecordDate()
-            + "|" + plan.getEntities().getMealPlanRecordId() + "|" + plan.getFilters().getMealType() + "|" + plan.getFilters().getStartDate() + "|" + plan.getFilters().getEndDate() + "|" + ruleTopic + "|" + new ArrayList<>(dishIds == null ? List.of() : dishIds);
+            + "|" + plan.getEntities().getMealPlanRecordId() + "|" + plan.getFilters().getMealType() + "|" + plan.getFilters().getStartDate() + "|" + plan.getFilters().getEndDate()
+            + "|" + page(plan.getFilters()) + "|" + size(plan.getFilters()) + "|" + ruleTopic + "|" + new ArrayList<>(dishIds == null ? List.of() : dishIds);
     }
 
     /** 单次工具执行的受控结果，禁止透传异常详情或原始请求。 */

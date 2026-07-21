@@ -91,7 +91,7 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
     }
 
     /**
-     * 构造带明确客户标识的排餐事实查询；缺少日期时保存为可续接澄清，不猜测公共菜单。
+     * 构造带明确客户标识的排餐事实查询；日期为空时表示查询该客户全部历史排餐。
      *
      * @param analysis 当前受控分析结果
      * @param text 用户问题
@@ -100,13 +100,6 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
         analysis.setDomains(List.of(AgentQueryDomain.MEAL_PLAN));
         analysis.setQueryTarget(BusinessQueryTarget.CUSTOMER_MEAL_PLAN);
         analysis.setConfidence(0.94D);
-        boolean hasResolvedDate = analysis.getFilters() != null && (analysis.getFilters().getRecordDate() != null
-            || analysis.getFilters().getStartDate() != null && analysis.getFilters().getEndDate() != null);
-        boolean hasRelativeDate = contains(text, "今天", "今日", "昨天", "昨日", "明天", "明日", "本周", "这周");
-        if (!hasResolvedDate && !hasRelativeDate) {
-            analysis.setRequiresClarification(true);
-            analysis.setClarificationQuestion("请确认要查询的排餐日期，例如今天、明天或 2026-07-14。");
-        }
     }
 
     /** 带客户实体且明确询问排餐记录时，才启用客户排餐高精度兜底。 */
@@ -114,7 +107,7 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
         boolean hasCustomer = entities != null && (entities.getCustomerId() != null
             || entities.getCustomerCode() != null && !entities.getCustomerCode().isBlank()
             || entities.getCustomerName() != null && !entities.getCustomerName().isBlank());
-        return hasCustomer && contains(text, "排餐", "餐单", "吃什么")
+        return hasCustomer && contains(text, "排餐", "排过餐", "有没有排过", "曾经排", "餐单", "吃什么")
             && !contains(text, "为什么", "失败", "过敏", "候选菜", "公共菜单");
     }
 

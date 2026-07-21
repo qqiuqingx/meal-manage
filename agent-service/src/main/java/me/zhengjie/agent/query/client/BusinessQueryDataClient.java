@@ -81,7 +81,7 @@ public interface BusinessQueryDataClient {
         return RefundListResponse.fromLegacyMap(listRefunds(customerId, orderId, limit, startDate, endDate));
     }
 
-    /** 查询客户指定日期和餐次的排餐及菜品摘要。 */
+    /** 查询排餐及菜品摘要；客户、日期和餐次均可为空。 */
     Map<String, Object> listMealPlans(Long customerId, String recordDate, String mealType);
 
     /**
@@ -103,17 +103,36 @@ public interface BusinessQueryDataClient {
     }
 
     /**
+     * 按全部可选过滤条件分页查询历史排餐；过滤条件全为空时返回当前数据范围内的历史分页。
+     *
+     * @param customerId 客户 ID，可为空
+     * @param recordDate 单日日期，可为空
+     * @param startDate 起始日期，可为空
+     * @param endDate 结束日期，可为空
+     * @param mealType 餐次，可为空
+     * @param customerMealPlanId 客户排餐记录 ID，可为空
+     * @param page 页码，从 1 开始
+     * @param size 每页条数，最大 50
+     * @return 脱敏排餐分页
+     */
+    default MealPlanListResponse listMealPlansTyped(Long customerId, String recordDate, String startDate,
+                                                     String endDate, String mealType, Long customerMealPlanId,
+                                                     int page, int size) {
+        return listMealPlansTyped(customerId, recordDate, mealType, customerMealPlanId);
+    }
+
+    /**
      * 按单日、餐次和受控分页查询客户排餐范围；customerId 为 null 时由主系统 SQL 数据范围限制结果。
      *
      * @param customerId 单客户约束；范围查询传 null
-     * @param recordDate 必填单日日期
+     * @param recordDate 单日日期，可为空
      * @param mealType 单一餐次；为空时查询该日全部排餐餐次
      * @param page 页码，从 1 开始
      * @param size 每页条数，最大 50
      * @return 仅包含脱敏字段、客户编号与排餐过滤事实的结果
      */
     default MealPlanListResponse listMealPlansRangeTyped(Long customerId, String recordDate, String mealType, int page, int size) {
-        return listMealPlansTyped(customerId, recordDate, mealType, null);
+        return listMealPlansTyped(customerId, recordDate, null, null, mealType, null, page, size);
     }
 
     /** 按主套餐稳定 ID 查询父子套餐和餐品规格。 */

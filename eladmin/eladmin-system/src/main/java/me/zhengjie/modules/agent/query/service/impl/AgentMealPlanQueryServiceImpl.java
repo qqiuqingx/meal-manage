@@ -1,6 +1,7 @@
 package me.zhengjie.modules.agent.query.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import me.zhengjie.modules.agent.query.domain.dto.*;
 import me.zhengjie.modules.agent.query.service.AgentMealPlanQueryService;
@@ -22,7 +23,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.DateTimeException;
-import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Collections;
@@ -47,7 +47,11 @@ public class AgentMealPlanQueryServiceImpl implements AgentMealPlanQueryService 
     @Override
     public AgentListResultDto<AgentMealPlanSummaryDto> query(AgentMealPlanQueryRequest request) {
         if (request == null) throw new IllegalArgumentException("排餐查询请求不能为空");
+        int page = request.getPage() == null ? 1 : request.getPage();
+        int size = request.getSize() == null ? MAX_PAGE_SIZE : request.getSize();
+        if (page < 1 || size < 1 || size > MAX_PAGE_SIZE) throw new IllegalArgumentException("排餐查询分页参数无效");
         List<MealPlanCustomer> customers;
+        long total;
         Map<Long, MealPlan> plansById = new LinkedHashMap<>();
         if (request.getCustomerMealPlanId() != null) {
             MealPlanCustomer customer = mealPlanCustomerMapper.selectById(request.getCustomerMealPlanId());
@@ -56,43 +60,29 @@ public class AgentMealPlanQueryServiceImpl implements AgentMealPlanQueryService 
             }
             if (customer != null && !AgentCustomerDataScopeContext.allows(customer.getCustomerId())) customer = null;
             customers = customer == null ? Collections.emptyList() : List.of(customer);
+            total = customers.size();
             if (customer != null) plansById.put(customer.getMealPlanId(), mealPlanMapper.selectById(customer.getMealPlanId()));
         } else {
             if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND) return emptyResult(request);
-            LocalDate[] range = resolveDateRange(request);
-            if (request.getCustomerId() == null && (!hasText(request.getRecordDate()) || !hasText(request.getMealType()))) {
-                throw new IllegalArgumentException("范围排餐查询必须提供单日日期和餐次");
-            }
             if (request.getCustomerId() != null && !AgentCustomerDataScopeContext.allows(request.getCustomerId())) return emptyResult(request);
-            List<MealPlan> plans = mealPlanMapper.selectList(new LambdaQueryWrapper<MealPlan>()
-                    .eq(MealPlan::getDeleted, false)
-                    .ge(MealPlan::getRecordDate, range[0])
-                    .le(MealPlan::getRecordDate, range[1])
-                    .eq(hasText(request.getMealType()), MealPlan::getMealType, request.getMealType())
-                    .orderByAsc(MealPlan::getRecordDate).orderByAsc(MealPlan::getMealType));
-            if (plans == null) plans = Collections.emptyList();
-            for (MealPlan plan : plans) plansById.put(plan.getId(), plan);
-            if (plansById.isEmpty()) return emptyResult(request);
-            LambdaQueryWrapper<MealPlanCustomer> customerQuery = new LambdaQueryWrapper<MealPlanCustomer>()
-                .in(MealPlanCustomer::getMealPlanId, plansById.keySet())
-                .eq(MealPlanCustomer::getDeleted, false)
-                .eq(request.getCustomerId() != null, MealPlanCustomer::getCustomerId, request.getCustomerId())
-                .orderByAsc(MealPlanCustomer::getMealPlanId).orderByAsc(MealPlanCustomer::getId);
+            LocalDate[] range = resolveDateRange(request);
+            validateMealType(request.getMealType());
             Set<Long> scopedIds = AgentCustomerDataScopeContext.customerIds();
             if (scopedIds != null && scopedIds.isEmpty()) return emptyResult(request);
-            if (scopedIds != null) customerQuery.in(MealPlanCustomer::getCustomerId, scopedIds);
-            customers = mealPlanCustomerMapper.selectList(customerQuery);
+            Page<MealPlanCustomer> customerPage = mealPlanCustomerMapper.selectAgentPage(request.getCustomerId(),
+                range[0], range[1], range[2], request.getMealType(), scopedIds, new Page<>(page, size));
+            customers = customerPage == null || customerPage.getRecords() == null ? Collections.emptyList() : customerPage.getRecords();
+            total = customerPage == null ? 0L : customerPage.getTotal();
+            List<Long> planIds = customers.stream().map(MealPlanCustomer::getMealPlanId).filter(java.util.Objects::nonNull)
+                .distinct().collect(Collectors.toList());
+            if (!planIds.isEmpty()) {
+                List<MealPlan> plans = mealPlanMapper.selectByIds(planIds);
+                if (plans != null) for (MealPlan plan : plans) plansById.put(plan.getId(), plan);
+            }
         }
         AgentListResultDto<AgentMealPlanSummaryDto> result = new AgentListResultDto<>();
-        int page = request.getPage() == null ? 1 : request.getPage();
-        int size = request.getSize() == null ? MAX_PAGE_SIZE : request.getSize();
-        if (page < 1 || size < 1 || size > MAX_PAGE_SIZE) throw new IllegalArgumentException("排餐范围查询分页参数无效");
-        long total = customers.size();
-        int from = Math.min((page - 1) * size, customers.size());
-        int to = Math.min(from + size, customers.size());
-        customers = customers.subList(from, to);
         result.setTotal(total);
-        result.setPage(page); result.setSize(size); result.setTruncated(to < total);
+        result.setPage(page); result.setSize(size); result.setTruncated((long) page * size < total);
         result.setQueriedAt(java.time.OffsetDateTime.now(java.time.ZoneOffset.ofHours(8)).toString());
         Map<Long, String> addressByCustomer = addressesByCustomer(plansById);
         Map<Long, String> customerCodes = customerCodes(customers);
@@ -113,27 +103,34 @@ public class AgentMealPlanQueryServiceImpl implements AgentMealPlanQueryService 
     }
 
     /**
-     * 解析单日或有限日期范围。未传日期时拒绝，避免客服查询无界历史排餐。
+     * 解析全部可选的单日或开放日期范围。未传日期时返回空边界，表示查询全部历史。
      *
      * @param request 已校验的受控请求
-     * @return 起止日期，均包含在查询范围内
+     * @return 单日日期、起始日期、结束日期；未指定的位置为 null
      */
     private LocalDate[] resolveDateRange(AgentMealPlanQueryRequest request) {
         try {
             if (hasText(request.getRecordDate())) {
+                if (hasText(request.getStartDate()) || hasText(request.getEndDate())) {
+                    throw new IllegalArgumentException("排餐单日日期不能与日期范围同时使用");
+                }
                 LocalDate date = LocalDate.parse(request.getRecordDate());
-                return new LocalDate[]{date, date};
+                return new LocalDate[]{date, null, null};
             }
-            if (!hasText(request.getStartDate()) || !hasText(request.getEndDate())) {
-                throw new IllegalArgumentException("排餐查询必须提供日期或日期范围");
-            }
-            LocalDate start = LocalDate.parse(request.getStartDate());
-            LocalDate end = LocalDate.parse(request.getEndDate());
-            long days = ChronoUnit.DAYS.between(start, end);
-            if (days < 0 || days > 30) throw new IllegalArgumentException("排餐日期范围不能超过 31 天");
-            return new LocalDate[]{start, end};
+            LocalDate start = hasText(request.getStartDate()) ? LocalDate.parse(request.getStartDate()) : null;
+            LocalDate end = hasText(request.getEndDate()) ? LocalDate.parse(request.getEndDate()) : null;
+            if (start != null && end != null && start.isAfter(end)) throw new IllegalArgumentException("排餐开始日期不能晚于结束日期");
+            return new LocalDate[]{null, start, end};
         } catch (DateTimeException exception) {
             throw new IllegalArgumentException("排餐日期必须使用 yyyy-MM-dd 格式", exception);
+        }
+    }
+
+    /** 校验可选餐次，空值表示查询全部餐次。 */
+    private void validateMealType(String mealType) {
+        if (!hasText(mealType)) return;
+        if (!"BREAKFAST".equals(mealType) && !"LUNCH".equals(mealType) && !"DINNER".equals(mealType)) {
+            throw new IllegalArgumentException("排餐餐次仅支持 BREAKFAST、LUNCH 或 DINNER");
         }
     }
 

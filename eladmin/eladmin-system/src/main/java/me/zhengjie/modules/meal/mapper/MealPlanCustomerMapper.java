@@ -27,6 +27,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 排餐计划客户结果 Mapper
@@ -40,6 +41,26 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
      * 分页查询排餐计划客户列表
      */
     Page<MealPlanCustomer> selectPageByCriteria(@Param("criteria") MealPlanCustomerQueryCriteria criteria, Page<MealPlanCustomer> page);
+
+    /**
+     * 按全部可选过滤条件分页查询 Agent 可见的历史排餐记录。
+     *
+     * @param customerId 客户 ID，可为空
+     * @param recordDate 单日日期，可为空
+     * @param startDate 起始日期，可为空
+     * @param endDate 结束日期，可为空
+     * @param mealType 餐次，可为空
+     * @param scopedCustomerIds 当前客服受限客户集合；全量授权时为空
+     * @param page 受控分页参数
+     * @return 按排餐日期倒序排列的客户排餐分页
+     */
+    Page<MealPlanCustomer> selectAgentPage(@Param("customerId") Long customerId,
+                                           @Param("recordDate") LocalDate recordDate,
+                                           @Param("startDate") LocalDate startDate,
+                                           @Param("endDate") LocalDate endDate,
+                                           @Param("mealType") String mealType,
+                                           @Param("scopedCustomerIds") Set<Long> scopedCustomerIds,
+                                           Page<MealPlanCustomer> page);
 
     /**
      * 根据ID查询客户计划

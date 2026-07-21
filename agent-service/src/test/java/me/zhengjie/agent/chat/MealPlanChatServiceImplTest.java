@@ -2,9 +2,11 @@ package me.zhengjie.agent.chat;
 
 import me.zhengjie.agent.analysis.BusinessQuestionAnalyzer;
 import me.zhengjie.agent.analysis.BusinessTemporalResolver;
+import me.zhengjie.agent.analysis.HybridBusinessQuestionAnalyzer;
 import me.zhengjie.agent.analysis.RuleBasedBusinessQuestionAnalyzer;
 import me.zhengjie.agent.config.BusinessTimeProperties;
 import me.zhengjie.agent.analysis.domain.BusinessQuestionAnalysis;
+import me.zhengjie.agent.analysis.domain.BusinessInteractionMode;
 import me.zhengjie.agent.analysis.domain.BusinessQueryTarget;
 import me.zhengjie.agent.analysis.domain.MealScope;
 import me.zhengjie.agent.chat.impl.MealPlanFollowUpServiceImpl;
@@ -806,31 +808,18 @@ class MealPlanChatServiceImplTest {
         assertNull(response.getPendingBusinessQueryContext());
     }
 
-    /** Pending 上下文由主系统带到新实例后，纯日期回复必须继续客户排餐查询。 */
+    /** 客户概览后的代词追问应直接查询全部历史，并明确回答是否曾经排过餐。 */
     @Test
-    void shouldResumeCustomerMealPlanAfterAgentInstanceSwitch() {
+    void shouldAnswerHistoricalMealPlanExistenceForContextCustomer() {
         BusinessTimeProperties properties = new BusinessTimeProperties();
         BusinessTemporalResolver resolver = new BusinessTemporalResolver(
             Clock.fixed(Instant.parse("2026-07-14T04:00:00Z"), ZoneId.of("UTC")), properties);
-        InMemoryMealPlanChatSessionStore firstStore = store();
-        MealPlanChatServiceImpl firstService = new MealPlanChatServiceImpl(firstStore,
-            new StubExtractor(result(ChatIntent.BUSINESS_QUERY, slots(null, "B3303", null, null), List.of())),
-            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), null,
-            new AgentQueryPlanValidator(), new BusinessAnswerValidator(), new RuleBasedBusinessQuestionAnalyzer(),
-            new BusinessQueryPlanningService(), resolver, 30);
-
-        AgentChatResponse first = firstService.chat(request("pending-session", "查 B3303 的排餐"));
-
-        assertEquals(ChatStatus.NEED_MORE_INFO, first.getStatus());
-        assertEquals(BusinessQueryTarget.CUSTOMER_MEAL_PLAN,
-            first.getPendingBusinessQueryContext().getAnalysis().getQueryTarget());
-
         AtomicReference<Long> customerId = new AtomicReference<>();
         AtomicReference<String> recordDate = new AtomicReference<>();
         BusinessQueryDataClient client = new BusinessQueryDataClient() {
             @Override public Map<String, Object> resolveCustomer(Long id, String code, String name) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long id, String code) {
-                return Map.of("present", true, "customerId", 3303L, "customerCode", "B3303", "customerName", "王五");
+                return Map.of("present", true, "customerId", 68L, "customerCode", "B2200", "customerName", "新");
             }
             @Override public Map<String, Object> listOrders(Long id, Integer status, int page, int size) { return Map.of(); }
             @Override public Map<String, Object> orderDetail(Long orderId, String orderCode, Long id) { return Map.of(); }
@@ -838,34 +827,49 @@ class MealPlanChatServiceImplTest {
             @Override public Map<String, Object> listRefunds(Long id, Long orderId, int limit) { return Map.of(); }
             @Override public Map<String, Object> listMealPlans(Long id, String date, String mealType) {
                 customerId.set(id); recordDate.set(date);
-                return Map.of("total", 1, "items", List.of(Map.of("customerMealPlanId", 11L,
-                    "customerId", id, "customerCode", "B3303", "recordDate", date, "mealTypeCode", "LUNCH",
+                return Map.of("total", 3, "items", List.of(Map.of("customerMealPlanId", 11L,
+                    "customerId", id, "customerCode", "B2200", "recordDate", "2026-05-28", "mealTypeCode", "DINNER",
                     "generationStatus", "SUCCESS", "dishes", List.of(Map.of("dishId", 1, "dishName", "香菇滑鸡")))));
             }
             @Override public Map<String, Object> explainRule(String topic) { return Map.of(); }
             @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
         };
-        BusinessQuestionAnalyzer analyzerMustNotRun = (question, context) -> {
-            throw new AssertionError("纯日期回复必须复用 Pending Context");
+        BusinessQuestionAnalyzer model = (question, context) -> {
+            BusinessQuestionAnalysis analysis = new BusinessQuestionAnalysis();
+            analysis.setSource("LLM"); analysis.setConfidence(0.90D);
+            if (question.contains("添加")) {
+                analysis.setQueryTarget(BusinessQueryTarget.CUSTOMER);
+                analysis.setDomains(List.of(AgentQueryDomain.CUSTOMER));
+                analysis.getEntities().setCustomerCode("B2200");
+            } else {
+                analysis.setQueryTarget(BusinessQueryTarget.CUSTOMER_MEAL_PLAN);
+                analysis.setInteractionMode(BusinessInteractionMode.FOLLOW_UP);
+                analysis.setMealScope(MealScope.ALL_AVAILABLE);
+                analysis.setDomains(List.of(AgentQueryDomain.MEAL_PLAN));
+            }
+            return analysis;
         };
-        MealPlanChatServiceImpl secondService = new MealPlanChatServiceImpl(store(),
-            new StubExtractor(result(ChatIntent.BUSINESS_QUERY, slots(null, null, "2026-07-14", null), List.of())),
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store(),
+            new StubExtractor(
+                result(ChatIntent.BUSINESS_QUERY, slots(null, "B2200", null, null), List.of()),
+                result(ChatIntent.BUSINESS_QUERY, slots(null, null, null, null), List.of())),
             request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client,
-            new AgentQueryPlanValidator(), new BusinessAnswerValidator(), analyzerMustNotRun,
+            new AgentQueryPlanValidator(), new BusinessAnswerValidator(),
+            new HybridBusinessQuestionAnalyzer(new RuleBasedBusinessQuestionAnalyzer(), model),
             new BusinessQueryPlanningService(), resolver, 30);
-        AgentChatRequest resumed = request("pending-session", "今天");
-        resumed.setContextSlots(first.getSlots());
-        resumed.setPendingBusinessQueryContext(first.getPendingBusinessQueryContext());
-        resumed.setLastBusinessQueryContext(first.getLastBusinessQueryContext());
 
-        AgentChatResponse second = secondService.chat(resumed);
+        AgentChatResponse first = service.chat(request("history-session", "B2200 这个客户是什么时候添加的"));
+        AgentChatResponse second = service.chat(request("history-session", "他排过餐吗"));
 
+        assertEquals(ChatStatus.ANSWERED, first.getStatus());
         assertEquals(ChatStatus.ANSWERED, second.getStatus());
         assertEquals("BUSINESS_QUERY_MEAL_PLAN", second.getResponseType());
-        assertEquals(3303L, customerId.get());
-        assertEquals("2026-07-14", recordDate.get());
+        assertEquals(68L, customerId.get());
+        assertNull(recordDate.get());
         assertEquals("listMealPlans", second.getQueryPlan().getToolNames().get(0));
-        assertTrue(second.getSemanticTraceSummary().isPendingContextReused());
+        assertEquals(1, second.getQueryPlan().getFilters().getSize());
+        assertTrue(second.getAssistantMessage().contains("曾经排过餐，共 3 条记录"));
+        assertEquals("FOLLOW_UP", second.getSemanticTraceSummary().getInteractionMode());
         assertNull(second.getPendingBusinessQueryContext());
     }
 

@@ -57,6 +57,25 @@ class HybridBusinessQuestionAnalyzerTest {
         assertEquals("MODEL_UNAVAILABLE", result.getFallbackReason());
     }
 
+    /** 无领域、零置信度的通用规则澄清不能覆盖高置信模型识别出的上下文追问。 */
+    @Test
+    void shouldKeepHighConfidenceModelWhenRuleOnlyHasGenericClarification() {
+        BusinessQuestionAnalysis model = analysis("LLM", 0.90D, BusinessQueryTarget.CUSTOMER_MEAL_PLAN, MealScope.ALL_AVAILABLE);
+        BusinessQuestionAnalyzer llm = (question, context) -> model;
+        BusinessQuestionAnalyzer genericRule = (question, context) -> {
+            BusinessQuestionAnalysis unknown = new BusinessQuestionAnalysis();
+            unknown.setConfidence(0D); unknown.setRequiresClarification(true);
+            unknown.setClarificationQuestion("请说明要查询哪类数据");
+            return unknown;
+        };
+
+        BusinessQuestionAnalysis result = new HybridBusinessQuestionAnalyzer(genericRule, llm, 0.80D)
+            .analyze("他以前安排过膳食吗", new DiagnosisSlots());
+
+        assertEquals("LLM", result.getSource());
+        assertEquals(BusinessQueryTarget.CUSTOMER_MEAL_PLAN, result.getQueryTarget());
+    }
+
     @Test
     void shouldPreferHighPrecisionCustomerTotalRuleOverConflictingModelGuess() {
         BusinessQuestionAnalysis model = analysis("LLM", 0.95D, null, null);
@@ -71,7 +90,7 @@ class HybridBusinessQuestionAnalyzerTest {
 
         assertEquals(List.of(AgentQueryMetric.CUSTOMER_PROFILE_COUNT), result.getMetrics());
         assertEquals("RULE_FALLBACK", result.getSource());
-        assertEquals("MODEL_CONFLICTS_WITH_RULE_GUARDRAIL", result.getFallbackReason());
+        assertEquals("MODEL_RULE_GUARDRAIL_CONFLICT", result.getFallbackReason());
     }
 
     @Test

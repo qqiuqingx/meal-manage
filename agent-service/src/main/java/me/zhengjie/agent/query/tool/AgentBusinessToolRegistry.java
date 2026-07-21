@@ -38,7 +38,8 @@ public final class AgentBusinessToolRegistry {
         register(result, "customerOverview", AgentQueryDomain.CUSTOMER, AgentQueryAction.OVERVIEW, "customerProfile:list", 1, "customerId|customerCode", "AgentCustomerOverviewDto");
         register(result, "listOrders", AgentQueryDomain.ORDER, AgentQueryAction.LIST, "customerOrder:list", 20, "customerId|status|page|size", "AgentOrderSummaryDto[]");
         register(result, "orderDetail", AgentQueryDomain.ORDER, AgentQueryAction.DETAIL, "customerOrder:list", 1, "orderId|orderCode|customerId", "AgentOrderSummaryDto");
-        register(result, "listMealPlans", AgentQueryDomain.MEAL_PLAN, AgentQueryAction.LIST, "mealPlan:list", 31, "customerId|recordDate|mealType", "AgentMealPlanSummaryDto[]");
+        register(result, "listMealPlans", AgentQueryDomain.MEAL_PLAN, AgentQueryAction.LIST, "mealPlan:list", 50,
+            "customerId?|recordDate?|startDate?|endDate?|mealType?|customerMealPlanId?|page?|size?", "AgentMealPlanSummaryDto[]");
         register(result, "listVerifications", AgentQueryDomain.VERIFICATION, AgentQueryAction.LIST, "mealPlan:list", 50, "customerId|orderId|mealType|limit", "AgentVerificationLogDto[]");
         register(result, "listRefunds", AgentQueryDomain.REFUND, AgentQueryAction.LIST, "customerOrder:list+mealPlan:list", 50, "customerId|orderId|limit", "AgentRefundLogDto[]");
         register(result, "packageDetail", AgentQueryDomain.PACKAGE, AgentQueryAction.DETAIL, "package:list", 5, "parentPackageId", "AgentPackageSpecDto");

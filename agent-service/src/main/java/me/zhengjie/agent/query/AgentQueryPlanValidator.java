@@ -70,7 +70,7 @@ public class AgentQueryPlanValidator {
             errors.add(error("action", "ACTION_NOT_ALLOWED", "该领域不支持此查询动作"));
         }
         validateEntities(plan.getEntities(), errors);
-        validateFilters(plan.getFilters(), errors);
+        validateFilters(plan.getFilters(), plan.getDomain(), errors);
         validateToolSpecificConstraints(plan, errors);
         validateToolBudget(plan, errors);
         validateMetrics(plan, errors);
@@ -213,7 +213,6 @@ public class AgentQueryPlanValidator {
         AgentQueryFilters filters = plan.getFilters();
         boolean customer = entities != null && (entities.getCustomerId() != null || notBlank(entities.getCustomerCode()) || notBlank(entities.getCustomerName()));
         boolean order = entities != null && (entities.getOrderId() != null || notBlank(entities.getOrderCode()));
-        boolean mealPlan = entities != null && entities.getMealPlanRecordId() != null;
         boolean packageRef = entities != null && entities.getPackageId() != null;
         boolean recordDate = filters != null && notBlank(filters.getRecordDate());
         boolean aggregation = plan.getDomain() == AgentQueryDomain.OPERATION_STATISTICS
@@ -223,8 +222,7 @@ public class AgentQueryPlanValidator {
         }
         if (plan.getDomain() == AgentQueryDomain.ORDER && plan.getAction() == AgentQueryAction.DETAIL && !order) missing(missingFields, "order");
         if (plan.getDomain() == AgentQueryDomain.ORDER && plan.getAction() != AgentQueryAction.DETAIL && !customer && !order) missing(missingFields, "customerOrOrder");
-        if (plan.getDomain() == AgentQueryDomain.MEAL_PLAN && !AgentQueryPlan.SCHEMA_VERSION_V3.equals(plan.getVersion()) && !mealPlan && !customer) missing(missingFields, "customer");
-        if (plan.getDomain() == AgentQueryDomain.MEAL_PLAN && !mealPlan && !recordDate) missing(missingFields, "recordDate");
+        // 普通排餐列表的客户、日期、餐次均为可选过滤条件；V3 过敏分析仍由 validateV3 强制单日范围。
         if ((plan.getDomain() == AgentQueryDomain.VERIFICATION || plan.getDomain() == AgentQueryDomain.REFUND) && !customer && !order) missing(missingFields, "customerOrOrder");
         if (plan.getDomain() == AgentQueryDomain.PACKAGE && plan.getAction() == AgentQueryAction.DETAIL && !packageRef) missing(missingFields, "package");
         if (plan.getDomain() == AgentQueryDomain.DISH && plan.getAction() == AgentQueryAction.LIST && !recordDate) missing(missingFields, "recordDate");
@@ -252,14 +250,18 @@ public class AgentQueryPlanValidator {
         if (entities.getOrderId() != null && entities.getOrderId() <= 0) errors.add(error("entities.orderId", "ID_INVALID", "订单 ID 必须为正数"));
     }
 
-    private void validateFilters(AgentQueryFilters filters, List<AgentQueryPlanValidationError> errors) {
+    private void validateFilters(AgentQueryFilters filters, AgentQueryDomain domain,
+                                 List<AgentQueryPlanValidationError> errors) {
         if (filters == null) return;
         LocalDate recordDate = parseDate("filters.recordDate", filters.getRecordDate(), errors);
         LocalDate startDate = parseDate("filters.startDate", filters.getStartDate(), errors);
         LocalDate endDate = parseDate("filters.endDate", filters.getEndDate(), errors);
         if (startDate != null && endDate != null) {
             long days = ChronoUnit.DAYS.between(startDate, endDate);
-            if (days < 0 || days > MAX_DATE_RANGE_DAYS) errors.add(error("filters", "DATE_RANGE_INVALID", "日期范围必须在 0 至 31 天内"));
+            if (days < 0 || (domain != AgentQueryDomain.MEAL_PLAN && days > MAX_DATE_RANGE_DAYS)) {
+                errors.add(error("filters", "DATE_RANGE_INVALID", domain == AgentQueryDomain.MEAL_PLAN
+                    ? "排餐查询开始日期不能晚于结束日期" : "日期范围必须在 0 至 31 天内"));
+            }
         }
         if (recordDate != null && (startDate != null || endDate != null)) errors.add(error("filters", "DATE_FILTER_CONFLICT", "单日与日期范围条件不能同时使用"));
         if (notBlank(filters.getMealType()) && !MEAL_TYPES.contains(normalize(filters.getMealType()))) errors.add(error("filters.mealType", "MEAL_TYPE_INVALID", "餐次仅支持 BREAKFAST、LUNCH 或 DINNER"));

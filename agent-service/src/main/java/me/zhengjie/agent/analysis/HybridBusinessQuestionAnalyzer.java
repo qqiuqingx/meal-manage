@@ -9,6 +9,7 @@ import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
  */
 public class HybridBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
     private static final double DEFAULT_MODEL_CONFIDENCE_THRESHOLD = 0.80D;
+    private static final String MODEL_RULE_GUARDRAIL_CONFLICT = "MODEL_RULE_GUARDRAIL_CONFLICT";
     private final BusinessQuestionAnalyzer ruleAnalyzer;
     private final BusinessQuestionAnalyzer llmAnalyzer;
     private final double modelConfidenceThreshold;
@@ -46,7 +47,7 @@ public class HybridBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer 
             normalizeOptionalLimits(llm);
             if (shouldUseRuleGuardrail(llm, fallback)) {
                 fallback.setSource("RULE_FALLBACK");
-                fallback.setFallbackReason("MODEL_CONFLICTS_WITH_RULE_GUARDRAIL");
+                fallback.setFallbackReason(MODEL_RULE_GUARDRAIL_CONFLICT);
                 return fallback;
             }
             alignImplicitDimensions(llm, fallback);
@@ -70,10 +71,16 @@ public class HybridBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer 
         if (Integer.valueOf(0).equals(analysis.getFilters().getRecentLimit())) analysis.getFilters().setRecentLimit(null);
     }
 
-    /** 高精度规则识别出的关键歧义或明确指标优先于冲突的模型猜测。 */
+    /**
+     * 高精度规则识别出的实质歧义或明确指标优先于冲突的模型猜测。
+     * 通用的“未识别”澄清没有实质歧义证据，不能覆盖已通过阈值的模型语义。
+     */
     private boolean shouldUseRuleGuardrail(BusinessQuestionAnalysis llm, BusinessQuestionAnalysis rule) {
         if (rule == null) return false;
-        if (rule.isRequiresClarification()) return true;
+        if (rule.isRequiresClarification()) {
+            return rule.getAmbiguities() != null && rule.getAmbiguities().stream()
+                .anyMatch(ambiguity -> ambiguity != null && ambiguity.isMaterial());
+        }
         if (rule.getConfidence() >= 0.90D && rule.getQueryTarget() == me.zhengjie.agent.analysis.domain.BusinessQueryTarget.CUSTOMER
             && llm.getQueryTarget() != me.zhengjie.agent.analysis.domain.BusinessQueryTarget.CUSTOMER) return true;
         return rule.getConfidence() >= 0.90D && rule.getMetrics() != null && !rule.getMetrics().isEmpty()

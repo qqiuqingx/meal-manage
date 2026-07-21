@@ -434,8 +434,11 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
                 logChat(session, extraction, false, start);
                 return response;
             }
+            boolean historicalMealPlan = !isNotBlank(resolvedSlots.getRecordDate())
+                && !isNotBlank(resolvedSlots.getStartDate()) && !isNotBlank(resolvedSlots.getEndDate())
+                && resolvedSlots.getMealPlanRecordId() == null;
             AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_MEAL_PLAN", result,
-                composer().mealPlan(result), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                composer().mealPlan(result, historicalMealPlan), CUSTOMER_INSIGHT_QUICK_REPLIES);
             applyToolExecution(response, mealPlanExecution);
             session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
             sessionStore.save(session);
@@ -799,7 +802,7 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
             return handleMealPlanAllergyAnalysis(session, analysis, orchestrator);
         }
         if (analysis.getQueryTarget() == BusinessQueryTarget.CUSTOMER_MEAL_PLAN) {
-            return handleCustomerMealPlanQuery(session, analysis, orchestrator, pendingReused);
+            return handleCustomerMealPlanQuery(session, message, analysis, orchestrator, pendingReused);
         }
         if (analysis.getQueryTarget() == BusinessQueryTarget.CUSTOMER
             || analysis.getDomains() != null && analysis.getDomains().contains(AgentQueryDomain.CUSTOMER)) {
@@ -966,12 +969,14 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
      * 执行客户排餐语义计划。客户编号先解析为内部 ID，成功后清除 Pending 并记录本轮语义追踪。
      *
      * @param session 当前会话
-     * @param analysis 已补齐日期的受控客户排餐语义
+     * @param message 用户当前问题，仅用于在历史查询中识别存在性问法并缩小分页
+     * @param analysis 已验证的受控客户排餐语义；日期为空表示全部历史
      * @param orchestrator 本轮只读工具编排器
      * @param pendingReused 是否来自上一轮待补上下文
      * @return 客户解析结果、受控错误或排餐查询响应
      */
     private AgentChatResponse handleCustomerMealPlanQuery(MealPlanChatSession session,
+                                                          String message,
                                                           BusinessQuestionAnalysis analysis,
                                                           BusinessQueryOrchestrator orchestrator,
                                                           boolean pendingReused) {
@@ -981,10 +986,9 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         }
         syncSemanticCustomerToSlots(session.getSlots(), analysis);
         AgentQueryPlan queryPlan = businessQueryPlanningService.plan(analysis);
-        if (queryPlan == null || !isNotBlank(analysis.getFilters().getRecordDate())) {
-            savePendingContext(session, analysis, List.of("recordDate"), "");
-            return response(session, ChatStatus.NEED_MORE_INFO, "请确认要查询的排餐日期，例如今天、明天或 2026-07-14。",
-                null, List.of(MissingSlot.RECORD_DATE), List.of("今天", "明天"), "BUSINESS_QUERY_CLARIFICATION");
+        if (queryPlan == null) {
+            return response(session, ChatStatus.NEED_MORE_INFO, "请补充要查询的客户或排餐筛选条件。",
+                null, List.of(), List.of("查询客户排餐", "查询历史排餐"), "BUSINESS_QUERY_CLARIFICATION");
         }
         if (queryPlan.getEntities().getCustomerId() == null) {
             ResolvedCustomer resolved = resolveCustomerForBusinessQuery(orchestrator, session);
@@ -995,12 +999,17 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
             session.getSlots().setCustomerId(resolved.customerId());
             queryPlan.getEntities().setCustomerId(resolved.customerId());
         }
+        boolean historical = !hasMealPlanDateFilter(queryPlan) && queryPlan.getEntities().getMealPlanRecordId() == null;
+        if (historical && isMealPlanExistenceQuestion(message)) {
+            queryPlan.getFilters().setPage(1);
+            queryPlan.getFilters().setSize(1);
+        }
         ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, queryPlan, "listMealPlans", null, List.of());
         Map<String, Object> result = execution.result();
         clearPendingContext(session, true);
         applyResolvedFiltersToSlots(session, queryPlan.getFilters());
         AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_MEAL_PLAN", result,
-            composer().mealPlan(result), CUSTOMER_INSIGHT_QUICK_REPLIES);
+            composer().mealPlan(result, historical), CUSTOMER_INSIGHT_QUICK_REPLIES);
         response.setQueryPlan(queryPlan);
         response.setSemanticTraceSummary(semanticTrace(analysis, pendingReused));
         applyToolExecution(response, execution);
@@ -1008,6 +1017,19 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         captureLastBusinessQueryContext(session, response);
         session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
         return response;
+    }
+
+    /** 判断排餐计划是否包含任意单日或日期范围过滤。 */
+    private boolean hasMealPlanDateFilter(AgentQueryPlan plan) {
+        if (plan == null || plan.getFilters() == null) return false;
+        return isNotBlank(plan.getFilters().getRecordDate()) || isNotBlank(plan.getFilters().getStartDate())
+            || isNotBlank(plan.getFilters().getEndDate());
+    }
+
+    /** 识别历史排餐存在性问法，仅用于将已确定的历史查询收窄为一条，不参与业务意图分类。 */
+    private boolean isMealPlanExistenceQuestion(String message) {
+        return isNotBlank(message) && (message.contains("排过") || message.contains("曾经")
+            || message.contains("是否") || message.contains("有没有") || message.contains("排了吗"));
     }
 
     /** 将模型或 Pending 中的客户实体补到确定性槽位，供统一客户解析工具使用。 */

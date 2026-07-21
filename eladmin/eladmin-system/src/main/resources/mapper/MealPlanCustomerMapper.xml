@@ -70,6 +70,46 @@
         order by mpc.id asc
     </select>
 
+    <select id="selectAgentPage" resultMap="BaseResultMap">
+        select mpc.id, mpc.meal_plan_id, mpc.customer_id, mpc.customer_name, mpc.phone,
+               cp.customer_code, mpc.order_id, mpc.parent_package_id, mpc.child_package_id,
+               mpc.status, mpc.is_verified, mpc.verification_time, mpc.verification_operator,
+               mpc.fail_reason, mpc.meat_required_count, mpc.veg_required_count,
+               mpc.include_soup, mpc.include_rice, mpc.supplementary_main_count,
+               mpc.supplementary_side_count, mpc.supplementary_veg_count,
+               mpc.supplementary_rice_count, mpc.supplementary_soup_count,
+               cp.special_requirements, cp.production_date,
+               mpc.create_by, mpc.update_by, mpc.deleted, mpc.create_time, mpc.update_time
+        from meal_plan_customer mpc
+        join meal_plan mp on mp.id = mpc.meal_plan_id and mp.deleted = 0
+        left join customer_profile cp on cp.id = mpc.customer_id
+        <where>
+            mpc.deleted = 0
+            <if test="customerId != null">
+                and mpc.customer_id = #{customerId}
+            </if>
+            <if test="recordDate != null">
+                and mp.record_date = #{recordDate}
+            </if>
+            <if test="startDate != null">
+                and mp.record_date &gt;= #{startDate}
+            </if>
+            <if test="endDate != null">
+                and mp.record_date &lt;= #{endDate}
+            </if>
+            <if test="mealType != null and mealType != ''">
+                and mp.meal_type = #{mealType}
+            </if>
+            <if test="scopedCustomerIds != null">
+                and mpc.customer_id in
+                <foreach collection="scopedCustomerIds" item="scopedCustomerId" open="(" separator="," close=")">
+                    #{scopedCustomerId}
+                </foreach>
+            </if>
+        </where>
+        order by mp.record_date desc, mp.id desc, mpc.id desc
+    </select>
+
     <select id="selectById" resultMap="BaseResultMap">
         select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
                status, is_verified, verification_time, verification_operator, fail_reason,

@@ -151,7 +151,7 @@ public class InternalAgentBusinessQueryController {
         return ResponseEntity.ok(historyQueryService.listRefunds(request));
     }
 
-    /** 查询客户或跨客户单日范围的排餐及菜品明细；范围查询可省略餐次以覆盖全天。 */
+    /** 按全部可选过滤条件分页查询历史排餐及菜品明细；空条件表示当前数据范围内的全部历史。 */
     @AnonymousPostMapping("/meal-plans/list")
     public ResponseEntity<AgentListResultDto<AgentMealPlanSummaryDto>> listMealPlans(
             @RequestHeader(value = "X-Request-Id") String requestId,

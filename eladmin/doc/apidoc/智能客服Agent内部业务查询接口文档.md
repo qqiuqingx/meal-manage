@@ -73,7 +73,25 @@
 
 `POST /api/internal/agent/query/meal-plans/list`
 
-权限：`agentDiagnosis:list` + `mealPlan:list`。支持 `customerId + recordDate`、`customerId + startDate + endDate`（最多 31 天）或受控的 `customerMealPlanId`。跨客户范围查询使用 `recordDate + page + size`，`mealType` 可选：传入时仅允许 `BREAKFAST`、`LUNCH`、`DINNER` 并只查该餐次，省略时查询当天全部排餐餐次。范围查询只支持单日，`size` 最大 50，并在 SQL 条件中应用当前客服的数据范围。未绑定数据范围直接拒绝，不会按全量数据执行。
+权限：`agentDiagnosis:list` + `mealPlan:list`。请求字段 `customerId`、`recordDate`、`startDate`、`endDate`、`mealType`、`customerMealPlanId`、`page`、`size` 均为可选：
+
+- 全部业务过滤条件为空时，查询当前客服数据范围内的全部历史排餐；结果按排餐日期、排餐主单 ID、客户排餐 ID 倒序。
+- `recordDate` 表示单日，不能与 `startDate`/`endDate` 同时使用；日期上下界可单独提供，历史跨度不受 31 天限制。
+- `mealType` 仅允许 `BREAKFAST`、`LUNCH`、`DINNER`；为空时查询全部餐次。
+- `customerMealPlanId` 存在时优先执行精确查询，并继续校验可选 `customerId` 与当前客服数据范围。
+- `page` 默认 1；`size` 默认 50、最大 50。无界历史仍执行 SQL 分页，不会一次性加载全部记录。
+- 未绑定客服数据范围时直接返回空结果；受限范围在 SQL 查询前生效，不会先读取全量数据再过滤。
+
+空条件历史分页请求示例：
+
+```json
+{
+  "page": 1,
+  "size": 50
+}
+```
+
+单客户历史存在性查询可使用 `customerId + page=1 + size=1`，响应 `total > 0` 即表示曾经生成过排餐。
 
 响应按“排餐主单 → 客户排餐记录 → 菜品明细”返回，包含 `customerCode`、使用订单/父子套餐 ID、生成时间、脱敏配送地址、人工新增命中标记、手工换菜数量和失败原因摘要；包含 `total`、`page`、`size`、`truncated` 和 `queriedAt`。菜品明细最多 30 条并通过 `dishesTruncated` 表示截断，且返回 `allergyFiltered`、`allergyReasons`、`replaceReason`、`originalDishId` 和 `originalDishName`。
 

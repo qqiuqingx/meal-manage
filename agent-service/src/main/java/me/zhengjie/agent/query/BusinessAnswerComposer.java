@@ -130,16 +130,32 @@ public class BusinessAnswerComposer {
     /** 构造排餐记录摘要话术。 */
     @SuppressWarnings("unchecked")
     public String mealPlan(Map<String, Object> result) {
+        return mealPlan(result, false);
+    }
+
+    /**
+     * 构造排餐记录摘要；历史查询直接回答是否曾经排餐，并展示最近一条记录。
+     *
+     * @param result 排餐分页结果
+     * @param historical 是否未限定日期的历史查询
+     * @return 可直接展示的确定性回答
+     */
+    @SuppressWarnings("unchecked")
+    public String mealPlan(Map<String, Object> result, boolean historical) {
         if (result == null) return "排餐查询异常，请稍后重试。";
         Object items = result.get("items");
-        if (!(items instanceof List) || ((List<?>) items).isEmpty()) return "该客户在指定日期和餐次没有已生成的排餐记录。";
+        if (!(items instanceof List) || ((List<?>) items).isEmpty()) {
+            return historical ? "该客户从未生成过排餐记录。" : "该客户在指定日期和餐次没有已生成的排餐记录。";
+        }
         Map<String, Object> plan = ((List<Map<String, Object>>) items).get(0);
         List<Map<String, Object>> dishes = plan.get("dishes") instanceof List ? (List<Map<String, Object>>) plan.get("dishes") : List.of();
         String dishNames = dishes.stream().map(item -> String.valueOf(item.get("dishName"))).filter(this::notBlank).limit(5)
             .collect(java.util.stream.Collectors.joining("、"));
-        return String.format("%s %s 已生成排餐，状态：%s；菜品：%s。", plan.getOrDefault("recordDate", ""),
+        String detail = String.format("%s %s 已生成排餐，状态：%s；菜品：%s。", plan.getOrDefault("recordDate", ""),
             mealTypeText(String.valueOf(plan.get("mealTypeCode"))), plan.getOrDefault("generationStatus", "-"),
             dishNames.isEmpty() ? "暂无菜品明细" : dishNames);
+        if (!historical) return detail;
+        return String.format("该客户曾经排过餐，共 %s 条记录；最近一条：%s", number(result.get("total")), detail);
     }
 
     /** 根据已过滤的排餐过敏事实生成确定性回答，不把客户主动排除菜品表述为过敏。 */

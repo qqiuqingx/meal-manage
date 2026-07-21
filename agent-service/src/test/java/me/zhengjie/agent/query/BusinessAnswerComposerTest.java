@@ -36,6 +36,19 @@ class BusinessAnswerComposerTest {
         assertTrue(message.contains("退餐记录 1 条"));
     }
 
+    /** 无日期排餐查询必须明确回答历史是否存在，并以倒序结果的首条作为最近记录。 */
+    @Test
+    void shouldComposeHistoricalMealPlanExistenceAnswer() {
+        String existing = composer.mealPlan(Map.of("total", 3, "items", List.of(Map.of(
+            "recordDate", "2026-05-28", "mealTypeCode", "DINNER", "generationStatus", "SUCCESS",
+            "dishes", List.of()))), true);
+        String absent = composer.mealPlan(Map.of("total", 0, "items", List.of()), true);
+
+        assertTrue(existing.contains("曾经排过餐，共 3 条记录"));
+        assertTrue(existing.contains("最近一条：2026-05-28 晚餐"));
+        assertTrue(absent.contains("从未生成过排餐记录"));
+    }
+
     /** 活跃客户统计和集合明细应使用业务语言说明可用餐数，不暴露内部口径代码。 */
     @Test
     void shouldComposeActiveCustomerBalanceMessagesInBusinessLanguage() {

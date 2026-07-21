@@ -81,6 +81,37 @@ class AgentBusinessQueryAuditServiceImplTest {
         assertEquals("VALID", audit.getAnswerValidationResult());
     }
 
+    /** 旧版 Agent 的 35 位规则冲突码必须转换后再落库，避免审计写入中断聊天响应。 */
+    @Test
+    void shouldNormalizeLegacyOversizedSemanticFallbackReason() {
+        AgentChatResponse response = new AgentChatResponse();
+        response.setSessionId("session-legacy"); response.setRequestId("req-legacy"); response.setStatus("ANSWERED");
+        response.setResponseType("BUSINESS_QUERY_MEAL_PLAN");
+        response.setSemanticTraceSummary(Map.of("fallbackReason", "MODEL_CONFLICTS_WITH_RULE_GUARDRAIL"));
+
+        service.record(response, "service01", 10L);
+
+        ArgumentCaptor<AgentBusinessQueryAudit> captor = ArgumentCaptor.forClass(AgentBusinessQueryAudit.class);
+        verify(auditMapper).insert(captor.capture());
+        assertEquals("MODEL_RULE_GUARDRAIL_CONFLICT", captor.getValue().getSemanticFallbackReason());
+        assertTrue(captor.getValue().getSemanticFallbackReason().length() <= 32);
+    }
+
+    /** 非受控长文本不得进入稳定码字段。 */
+    @Test
+    void shouldReplaceInvalidSemanticFallbackReasonWithStableCode() {
+        AgentChatResponse response = new AgentChatResponse();
+        response.setSessionId("session-invalid"); response.setRequestId("req-invalid"); response.setStatus("ANSWERED");
+        response.setResponseType("BUSINESS_QUERY_MEAL_PLAN");
+        response.setSemanticTraceSummary(Map.of("fallbackReason", "模型返回了一段不应写入稳定码字段的超长自由文本"));
+
+        service.record(response, "service01", 10L);
+
+        ArgumentCaptor<AgentBusinessQueryAudit> captor = ArgumentCaptor.forClass(AgentBusinessQueryAudit.class);
+        verify(auditMapper).insert(captor.capture());
+        assertEquals("MODEL_INVALID", captor.getValue().getSemanticFallbackReason());
+    }
+
     @Test
     void shouldRecordStableWarningAsPartialQueryFailureType() {
         AgentChatResponse response = new AgentChatResponse();

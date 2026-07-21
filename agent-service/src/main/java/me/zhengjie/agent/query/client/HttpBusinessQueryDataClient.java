@@ -179,21 +179,30 @@ public class HttpBusinessQueryDataClient implements BusinessQueryDataClient {
     /** {@inheritDoc} */
     @Override
     public MealPlanListResponse listMealPlansTyped(Long customerId, String recordDate, String mealType, Long customerMealPlanId) {
+        return listMealPlansTyped(customerId, recordDate, null, null, mealType, customerMealPlanId, 1, 50);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public MealPlanListResponse listMealPlansTyped(Long customerId, String recordDate, String startDate,
+                                                    String endDate, String mealType, Long customerMealPlanId,
+                                                    int page, int size) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("customerId", customerId);
         body.put("recordDate", recordDate);
+        body.put("startDate", startDate);
+        body.put("endDate", endDate);
         body.put("mealType", mealType);
         body.put("customerMealPlanId", customerMealPlanId);
+        body.put("page", page);
+        body.put("size", size);
         return post("/api/internal/agent/query/meal-plans/list", body, MealPlanListResponse.class);
     }
 
     /** {@inheritDoc} */
     @Override
     public MealPlanListResponse listMealPlansRangeTyped(Long customerId, String recordDate, String mealType, int page, int size) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("customerId", customerId); body.put("recordDate", recordDate); body.put("mealType", mealType);
-        body.put("page", page); body.put("size", size);
-        return post("/api/internal/agent/query/meal-plans/list", body, MealPlanListResponse.class);
+        return listMealPlansTyped(customerId, recordDate, null, null, mealType, null, page, size);
     }
 
     /** {@inheritDoc} */

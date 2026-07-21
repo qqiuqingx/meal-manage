@@ -81,15 +81,16 @@ class RuleBasedBusinessQuestionAnalyzerTest {
     }
 
     @Test
-    void shouldKeepCustomerMealPlanTargetWhenDateNeedsClarification() {
+    void shouldQueryCustomerMealPlanHistoryWithoutDateClarification() {
         DiagnosisSlots slots = new DiagnosisSlots();
         slots.setCustomerCode("B3303");
 
-        BusinessQuestionAnalysis result = analyzer.analyze("查 B3303 的排餐", slots);
+        BusinessQuestionAnalysis result = analyzer.analyze("他排过餐吗", slots);
 
         assertEquals(BusinessQueryTarget.CUSTOMER_MEAL_PLAN, result.getQueryTarget());
         assertEquals(AgentQueryDomain.MEAL_PLAN, result.getDomains().get(0));
-        assertTrue(result.isRequiresClarification());
+        assertTrue(!result.isRequiresClarification());
+        assertEquals(null, result.getFilters().getRecordDate());
     }
 
     @Test
