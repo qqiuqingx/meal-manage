@@ -103,8 +103,15 @@ public class BusinessQueryResponseFactory {
         return actual instanceof Number && expected.equals(((Number) actual).longValue());
     }
 
+    /**
+     * 比较受控文本筛选条件；空白值表示用户未限定该条件，不应与返回的实际业务字段产生冲突。
+     *
+     * @param expected QueryPlan 中的筛选条件
+     * @param actual 工具结果中的实际字段
+     * @return 未限定、结果缺失或两者一致时返回 true
+     */
     private boolean matchesText(String expected, Object actual) {
-        if (expected == null || actual == null) return true;
+        if (isBlank(expected) || actual == null) return true;
         return expected.equalsIgnoreCase(String.valueOf(actual));
     }
 
@@ -113,11 +120,16 @@ public class BusinessQueryResponseFactory {
      * 无法解析的值继续按原始文本严格比较，避免异常日期绕过结果一致性校验。
      */
     private boolean matchesRecordDate(String expected, Object actual) {
-        if (expected == null || actual == null) return true;
+        if (isBlank(expected) || actual == null) return true;
         LocalDate expectedDate = parseRecordDate(expected);
         LocalDate actualDate = parseRecordDate(String.valueOf(actual));
         if (expectedDate != null && actualDate != null) return expectedDate.equals(actualDate);
         return matchesText(expected, actual);
+    }
+
+    /** 判断 QueryPlan 字符串筛选条件是否为空白，空白代表不施加该维度约束。 */
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     /** 将受控日期或日期时间文本解析为业务日期，解析失败时返回 null。 */

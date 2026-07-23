@@ -51,6 +51,20 @@ class BusinessQueryResponseFactoryTest {
     }
 
     @Test
+    void shouldTreatBlankMealPlanFiltersAsUnconstrainedHistoryQuery() {
+        DiagnosisSlots slots = new DiagnosisSlots();
+        slots.setCustomerId(64L); slots.setCustomerCode("A001"); slots.setRecordDate(""); slots.setMealType("");
+        var response = factory.create("session-1", slots, Map.of(), "DIAGNOSED", "BUSINESS_QUERY_MEAL_PLAN",
+            Map.of("total", 1L, "items", List.of(Map.of("customerId", 64L, "customerCode", "A001",
+                "recordDate", "2026-07-23", "mealTypeCode", "LUNCH", "dishes", List.of()))),
+            "该客户曾经排过餐，共 1 条记录；最近一条：2026-07-23 午餐 已生成排餐，状态：SUCCESS；菜品：暂无菜品明细。", List.of());
+
+        assertTrue(response.getWarnings().isEmpty());
+        assertFalse(response.getInsightResult().isEmpty());
+        assertTrue(response.getAssistantMessage().contains("该客户曾经排过餐"));
+    }
+
+    @Test
     void shouldBuildOneFactPerControlledOperationReportMetric() {
         DiagnosisSlots slots = new DiagnosisSlots(); slots.setRecordDate("2026-07-12"); slots.setMealType("LUNCH");
         var response = factory.create("session-1", slots, Map.of(), "DIAGNOSED", "BUSINESS_QUERY_OPERATION_REPORT",
