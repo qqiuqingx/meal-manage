@@ -2,6 +2,7 @@ package me.zhengjie.modules.agent.security;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.slf4j.MDC;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
@@ -25,6 +26,8 @@ public class AgentCustomerDataScopeCleanupFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
         } finally {
             AgentCustomerDataScopeContext.clear();
+            MDC.remove("requestId");
+            MDC.remove("sessionId");
         }
     }
 }

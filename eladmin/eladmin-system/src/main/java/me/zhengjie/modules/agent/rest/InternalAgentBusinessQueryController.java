@@ -1,6 +1,7 @@
 package me.zhengjie.modules.agent.rest;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.annotation.rest.AnonymousPostMapping;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerOverviewDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerResolveRequest;
@@ -47,6 +48,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.slf4j.MDC;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -56,11 +58,14 @@ import java.security.MessageDigest;
  */
 @RestController
 @RequiredArgsConstructor
+@Slf4j
 @RequestMapping("/api/internal/agent/query")
 public class InternalAgentBusinessQueryController {
 
     private static final String INTERNAL_TOKEN_HEADER = "X-Agent-Internal-Token";
     private static final String ACCESS_CONTEXT_HEADER = "X-Agent-Access-Context";
+    private static final String REQUEST_ID_KEY = "requestId";
+    private static final String SESSION_ID_KEY = "sessionId";
 
     private final AgentCustomerQueryService customerQueryService;
     private final AgentOrderQueryService orderQueryService;
@@ -97,7 +102,12 @@ public class InternalAgentBusinessQueryController {
             @RequestHeader(value = ACCESS_CONTEXT_HEADER) String accessToken,
             @Validated @RequestBody AgentCustomerResolveRequest request) {
         requirePermission(agentToken, accessToken, sessionId, requestId, "customerProfile:list", "customerOrder:list");
-        return ResponseEntity.ok(customerQueryService.getOverview(request.getCustomerId(), request.getCustomerCode()));
+        log.info("Agent客户概览查询接收 customerId={} customerCode={} scopeStatus={} scopeSize={}",
+            request.getCustomerId(), request.getCustomerCode(), AgentCustomerDataScopeContext.status(), scopeSize());
+        AgentCustomerOverviewDto overview = customerQueryService.getOverview(request.getCustomerId(), request.getCustomerCode());
+        log.info("Agent客户概览查询完成 customerId={} customerCode={} present={} resolvedCustomerId={}",
+            request.getCustomerId(), request.getCustomerCode(), overview.isPresent(), overview.getCustomerId());
+        return ResponseEntity.ok(overview);
     }
 
     /** 查询客户订单分页摘要。 */
@@ -228,6 +238,19 @@ public class InternalAgentBusinessQueryController {
         AgentAccessContext context = accessContextService.verify(accessToken, sessionId, requestId);
         permissionService.require(context, permissions);
         AgentCustomerDataScopeContext.bind(customerDataScopeResolver.resolve(context));
+        bindRequestContext(requestId, sessionId);
+    }
+
+    /** 返回当前客户数据范围大小；全量范围使用 -1，避免输出具体客户信息。 */
+    private int scopeSize() {
+        java.util.Set<Long> customerIds = AgentCustomerDataScopeContext.customerIds();
+        return customerIds == null ? -1 : customerIds.size();
+    }
+
+    /** 将上游链路标识写入 MDC，供内部业务查询日志关联使用。 */
+    private void bindRequestContext(String requestId, String sessionId) {
+        if (StringUtils.hasText(requestId)) MDC.put(REQUEST_ID_KEY, requestId.trim());
+        if (StringUtils.hasText(sessionId)) MDC.put(SESSION_ID_KEY, sessionId.trim());
     }
 
     private void verifyInternalToken(String agentToken) {

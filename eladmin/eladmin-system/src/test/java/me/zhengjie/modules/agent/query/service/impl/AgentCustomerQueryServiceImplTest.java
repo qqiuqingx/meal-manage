@@ -63,6 +63,22 @@ class AgentCustomerQueryServiceImplTest {
         verify(customerProfileMapper, never()).selectByIdWithJson(any());
     }
 
+    /** 重复客户编号中仅一个客户拥有进行中订单时，应解析该客户以支持排餐查询。 */
+    @Test
+    void shouldResolveDuplicateCodeToCustomerWithSingleActiveOrder() {
+        CustomerProfile completedCustomer = profile(64L, "A001", "已完成客户", "13800138000");
+        CustomerProfile activeCustomer = profile(65L, "A001", "进行中客户", "13900139000");
+        CustomerOrder activeOrder = new CustomerOrder();
+        activeOrder.setCustomerId(65L); activeOrder.setStatus(1);
+        when(customerProfileMapper.selectList(any())).thenReturn(List.of(completedCustomer, activeCustomer));
+        when(customerOrderMapper.selectList(any())).thenReturn(List.of(activeOrder));
+
+        AgentListResultDto<AgentCustomerCandidateDto> result = service.resolve(null, "A001", null);
+
+        assertEquals(1, result.getTotal());
+        assertEquals(65L, result.getItems().get(0).getCustomerId());
+    }
+
     /** 客户概览应返回档案创建时间，并以首单成交时间作为首次购买时间。 */
     @Test
     void shouldReturnCustomerCreationAndFirstPurchaseTime() {

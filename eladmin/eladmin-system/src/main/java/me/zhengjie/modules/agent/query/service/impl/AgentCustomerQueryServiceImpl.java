@@ -2,6 +2,7 @@ package me.zhengjie.modules.agent.query.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerAddressDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerCandidateDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerOverviewDto;
@@ -25,6 +26,7 @@ import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -34,6 +36,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService {
 
     private static final int MAX_CANDIDATES = 10;
@@ -55,14 +58,52 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
         else if (hasText(customerName)) wrapper.like(CustomerProfile::getCustomerName, customerName.trim());
         else return result;
         Set<Long> scopedCustomerIds = AgentCustomerDataScopeContext.customerIds();
-        if (scopedCustomerIds != null && scopedCustomerIds.isEmpty()) return result;
+        if (scopedCustomerIds != null && scopedCustomerIds.isEmpty()) {
+            log.info("Agent客户解析未命中 customerId={} customerCode={} reason=EMPTY_DATA_SCOPE", customerId, customerCode);
+            return result;
+        }
         if (scopedCustomerIds != null) wrapper.in(CustomerProfile::getId, scopedCustomerIds);
         List<CustomerProfile> profiles = customerProfileMapper.selectList(wrapper.orderByDesc(CustomerProfile::getId));
+        profiles = preferSingleActiveOrderCustomer(profiles, customerCode);
         result.setTotal(profiles.size());
         int size = Math.min(profiles.size(), MAX_CANDIDATES);
         result.setTruncated(size < profiles.size());
         result.setItems(profiles.subList(0, size).stream().map(this::candidate).collect(Collectors.toList()));
+        log.info("Agent客户解析完成 customerId={} customerCode={} candidateCount={} scopeStatus={} scopeSize={}",
+            customerId, customerCode, result.getTotal(), AgentCustomerDataScopeContext.status(), scopedCustomerIds == null ? -1 : scopedCustomerIds.size());
         return result;
+    }
+
+    /**
+     * 兼容历史重复客户编号：仅在按编号查询且多个档案命中时，优先保留唯一拥有进行中订单的档案。
+     * 若没有或仍有多个进行中客户，保留原候选集，禁止任意选择客户而导致排餐或档案信息串户。
+     *
+     * @param profiles 按客户编号及数据范围初步命中的客户档案
+     * @param customerCode 当前查询的客户编号；姓名查询不参与该兼容规则
+     * @return 可安全唯一确定时的进行中客户，否则返回原候选集
+     */
+    private List<CustomerProfile> preferSingleActiveOrderCustomer(List<CustomerProfile> profiles, String customerCode) {
+        if (!hasText(customerCode) || profiles == null || profiles.size() <= 1) return profiles;
+        Set<Long> profileIds = profiles.stream().map(CustomerProfile::getId).filter(java.util.Objects::nonNull)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (profileIds.isEmpty()) return profiles;
+        List<CustomerOrder> activeOrders = customerOrderMapper.selectList(new LambdaQueryWrapper<CustomerOrder>()
+            .eq(CustomerOrder::getStatus, 1).in(CustomerOrder::getCustomerId, profileIds));
+        Set<Long> activeCustomerIds = activeOrders == null ? Collections.emptySet() : activeOrders.stream()
+            .map(CustomerOrder::getCustomerId).filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        if (activeCustomerIds.size() != 1) {
+            log.info("Agent重复客户编号无法按进行中订单唯一解析 customerCode={} candidateCount={} activeCandidateCount={}",
+                customerCode, profiles.size(), activeCustomerIds.size());
+            return profiles;
+        }
+        List<CustomerProfile> activeProfiles = profiles.stream().filter(profile -> activeCustomerIds.contains(profile.getId()))
+            .collect(Collectors.toList());
+        if (activeProfiles.size() == 1) {
+            log.info("Agent重复客户编号按进行中订单解析 customerCode={} candidateCount={} resolvedCustomerId={}",
+                customerCode, profiles.size(), activeProfiles.get(0).getId());
+            return activeProfiles;
+        }
+        return profiles;
     }
 
     /** {@inheritDoc} */
@@ -70,10 +111,18 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
     public AgentCustomerOverviewDto getOverview(Long customerId, String customerCode) {
         AgentCustomerOverviewDto overview = new AgentCustomerOverviewDto();
         AgentListResultDto<AgentCustomerCandidateDto> candidates = resolve(customerId, customerCode, null);
-        if (candidates.getTotal() != 1 || candidates.getItems().isEmpty()) return overview;
+        if (candidates.getTotal() != 1 || candidates.getItems().isEmpty()) {
+            log.info("Agent客户概览未命中 customerId={} customerCode={} candidateCount={}",
+                customerId, customerCode, candidates.getTotal());
+            return overview;
+        }
         Long resolvedId = candidates.getItems().get(0).getCustomerId();
         CustomerProfile profile = customerProfileMapper.selectByIdWithJson(resolvedId);
-        if (profile == null) return overview;
+        if (profile == null) {
+            log.warn("Agent客户概览档案二次加载失败 customerId={} customerCode={} resolvedCustomerId={}",
+                customerId, customerCode, resolvedId);
+            return overview;
+        }
         overview.setPresent(true);
         overview.setCustomerId(profile.getId());
         overview.setCustomerCode(profile.getCustomerCode());
