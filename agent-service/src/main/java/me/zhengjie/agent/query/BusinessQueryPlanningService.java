@@ -30,6 +30,7 @@ public class BusinessQueryPlanningService {
         plan.setDimensions(analysis.getDimensions());
         plan.setAnalysisSource(analysis.getSource());
         plan.setAnalysisConfidence(analysis.getConfidence());
+        normalizeOptionalEntities(plan.getEntities());
         normalizeOptionalLimits(plan.getFilters());
         AgentQueryDomain domain = analysis.getDomains().get(0);
         plan.setDomain(domain);
@@ -140,6 +141,26 @@ public class BusinessQueryPlanningService {
         if (Integer.valueOf(0).equals(filters.getPage())) filters.setPage(null);
         if (Integer.valueOf(0).equals(filters.getSize())) filters.setSize(null);
         if (Integer.valueOf(0).equals(filters.getRecentLimit())) filters.setRecentLimit(null);
+    }
+
+    /** 将模型 Schema 生成的零值和空文本占位符还原为未指定，负数仍交由计划校验器拒绝。 */
+    private void normalizeOptionalEntities(AgentEntityReference entities) {
+        if (entities == null) return;
+        if (Long.valueOf(0L).equals(entities.getCustomerId())) entities.setCustomerId(null);
+        if (Long.valueOf(0L).equals(entities.getOrderId())) entities.setOrderId(null);
+        if (Long.valueOf(0L).equals(entities.getMealPlanRecordId())) entities.setMealPlanRecordId(null);
+        if (Long.valueOf(0L).equals(entities.getPackageId())) entities.setPackageId(null);
+        if (Long.valueOf(0L).equals(entities.getDishId())) entities.setDishId(null);
+        entities.setCustomerCode(trimToNull(entities.getCustomerCode()));
+        entities.setCustomerName(trimToNull(entities.getCustomerName()));
+        entities.setOrderCode(trimToNull(entities.getOrderCode()));
+    }
+
+    /** 去除可选实体文本两端空白，空文本按未指定处理。 */
+    private String trimToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private boolean notBlank(String value) { return value != null && !value.trim().isEmpty(); }

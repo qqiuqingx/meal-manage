@@ -6,6 +6,7 @@ import me.zhengjie.agent.analysis.domain.BusinessTemporalIntent;
 import me.zhengjie.agent.config.BusinessTimeProperties;
 import me.zhengjie.agent.query.domain.AgentQueryDomain;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
+import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -14,6 +15,8 @@ import java.time.ZoneId;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** 相对时间必须按固定业务时区解析，测试不得依赖机器当前日期。 */
@@ -62,6 +65,21 @@ class BusinessTemporalResolverTest {
         resolver.resolve(analysis, null, null);
 
         assertTrue(analysis.isRequiresClarification());
+    }
+
+    /** 无日期指标的明细追问只能继承客户集合，不能强制上一轮提供不存在的日期。 */
+    @Test
+    void shouldIgnoreInheritedTimeForDateIndependentMetric() {
+        BusinessQuestionAnalysis analysis = operation(AgentQueryMetric.ACTIVE_CUSTOMER_MEAL_BALANCE_DETAIL);
+        BusinessTemporalIntent temporal = new BusinessTemporalIntent();
+        temporal.setExpression(BusinessTemporalExpression.INHERIT_PREVIOUS);
+        analysis.setTemporal(temporal);
+
+        resolver.resolve(analysis, null, new LastBusinessQueryContext());
+
+        assertFalse(analysis.isRequiresClarification());
+        assertEquals(BusinessTemporalExpression.UNSPECIFIED, analysis.getTemporal().getExpression());
+        assertNull(analysis.getFilters().getRecordDate());
     }
 
     private BusinessQuestionAnalysis resolve(BusinessTemporalExpression expression) {

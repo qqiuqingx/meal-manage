@@ -60,6 +60,11 @@ public class BusinessTemporalResolver {
             temporal.setExpression(BusinessTemporalExpression.UNSPECIFIED);
             return analysis;
         }
+        // 无日期指标的上下文追问可以继承业务对象，但不能因为上一轮本来就没有日期而误报时间无效。
+        if (policy == AgentDefaultTemporalPolicy.NONE && expression == BusinessTemporalExpression.INHERIT_PREVIOUS) {
+            temporal.setExpression(BusinessTemporalExpression.UNSPECIFIED);
+            return analysis;
+        }
         if (expression != BusinessTemporalExpression.UNSPECIFIED) {
             if (!applyExpression(filters, temporal, expression, lastContext)) invalidTime(analysis);
             return analysis;

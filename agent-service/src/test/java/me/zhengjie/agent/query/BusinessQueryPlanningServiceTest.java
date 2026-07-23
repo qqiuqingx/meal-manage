@@ -114,6 +114,33 @@ class BusinessQueryPlanningServiceTest {
         assertNull(plan.getFilters().getRecentLimit());
     }
 
+    /** 模型 Schema 的可选实体占位值不能让客户编号查询变成非法 ID 查询。 */
+    @Test
+    void shouldNormalizeOptionalEntityPlaceholdersBeforeValidation() {
+        BusinessQuestionAnalysis analysis = analysis(AgentQueryDomain.MEAL_PLAN);
+        analysis.setQueryTarget(BusinessQueryTarget.CUSTOMER_MEAL_PLAN);
+        analysis.getEntities().setCustomerId(0L);
+        analysis.getEntities().setCustomerCode(" A001 ");
+        analysis.getEntities().setCustomerName("");
+        analysis.getEntities().setOrderId(0L);
+        analysis.getEntities().setOrderCode("");
+        analysis.getEntities().setMealPlanRecordId(0L);
+        analysis.getEntities().setPackageId(0L);
+        analysis.getEntities().setDishId(0L);
+
+        var plan = service.plan(analysis);
+
+        assertNull(plan.getEntities().getCustomerId());
+        assertEquals("A001", plan.getEntities().getCustomerCode());
+        assertNull(plan.getEntities().getCustomerName());
+        assertNull(plan.getEntities().getOrderId());
+        assertNull(plan.getEntities().getOrderCode());
+        assertNull(plan.getEntities().getMealPlanRecordId());
+        assertNull(plan.getEntities().getPackageId());
+        assertNull(plan.getEntities().getDishId());
+        assertEquals(List.of("listMealPlans"), plan.getToolNames());
+    }
+
     /** 活跃客户余额明细必须固定请求安全上限 50，不能落入执行器默认的 10 条分页。 */
     @Test
     void shouldUseFiftyItemPageForActiveCustomerBalanceDetail() {

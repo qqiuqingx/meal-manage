@@ -45,6 +45,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -871,6 +872,94 @@ class MealPlanChatServiceImplTest {
         assertTrue(second.getAssistantMessage().contains("曾经排过餐，共 3 条记录"));
         assertEquals("FOLLOW_UP", second.getSemanticTraceSummary().getInteractionMode());
         assertNull(second.getPendingBusinessQueryContext());
+    }
+
+    /** 客户编号查询中的模型零值占位符必须先清理，再解析真实客户 ID 后查询历史排餐。 */
+    @Test
+    void shouldResolveCustomerCodeWhenSemanticEntitiesContainDefaultPlaceholders() {
+        AtomicReference<Long> resolvedMealPlanCustomerId = new AtomicReference<>();
+        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+            @Override public Map<String, Object> resolveCustomer(Long id, String code, String name) { return Map.of(); }
+            @Override public Map<String, Object> customerOverview(Long id, String code) {
+                assertNull(id);
+                assertEquals("A001", code);
+                return Map.of("present", true, "customerId", 101L, "customerCode", "A001", "customerName", "测试客户");
+            }
+            @Override public Map<String, Object> listOrders(Long id, Integer status, int page, int size) { return Map.of(); }
+            @Override public Map<String, Object> orderDetail(Long orderId, String orderCode, Long id) { return Map.of(); }
+            @Override public Map<String, Object> listVerifications(Long id, Long orderId, String mealType, int limit) { return Map.of(); }
+            @Override public Map<String, Object> listRefunds(Long id, Long orderId, int limit) { return Map.of(); }
+            @Override public Map<String, Object> listMealPlans(Long id, String date, String mealType) {
+                resolvedMealPlanCustomerId.set(id);
+                return Map.of("total", 0, "items", List.of());
+            }
+            @Override public Map<String, Object> explainRule(String topic) { return Map.of(); }
+            @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
+        };
+        BusinessQuestionAnalyzer analyzer = (question, context) -> {
+            BusinessQuestionAnalysis analysis = new BusinessQuestionAnalysis();
+            analysis.setSource("LLM"); analysis.setConfidence(0.95D);
+            analysis.setQueryTarget(BusinessQueryTarget.CUSTOMER_MEAL_PLAN);
+            analysis.setDomains(List.of(AgentQueryDomain.MEAL_PLAN));
+            analysis.setMealScope(MealScope.ALL_AVAILABLE);
+            analysis.getEntities().setCustomerId(0L); analysis.getEntities().setCustomerCode("A001");
+            analysis.getEntities().setCustomerName(""); analysis.getEntities().setOrderId(0L);
+            analysis.getEntities().setOrderCode(""); analysis.getEntities().setMealPlanRecordId(0L);
+            analysis.getEntities().setPackageId(0L); analysis.getEntities().setDishId(0L);
+            return analysis;
+        };
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store(),
+            new StubExtractor(result(ChatIntent.BUSINESS_QUERY, slots(null, "A001", null, null), List.of())),
+            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client,
+            new AgentQueryPlanValidator(), new BusinessAnswerValidator(), analyzer,
+            new BusinessQueryPlanningService(), new BusinessTemporalResolver(Clock.systemUTC(), new BusinessTimeProperties()), 30);
+
+        AgentChatResponse response = service.chat(request("a001-history-session", "A001 这个客户没有参与过排餐吗"));
+
+        assertEquals(ChatStatus.ANSWERED, response.getStatus());
+        assertEquals("BUSINESS_QUERY_MEAL_PLAN", response.getResponseType(),
+            () -> "warnings=" + response.getWarnings() + ", result=" + response.getInsightResult());
+        assertEquals(101L, resolvedMealPlanCustomerId.get());
+        assertEquals(101L, response.getQueryPlan().getEntities().getCustomerId());
+        assertEquals(1, response.getQueryPlan().getFilters().getSize());
+        assertTrue(response.getWarnings().isEmpty());
+        assertTrue(response.getAssistantMessage().contains("从未生成过排餐记录"), response::getAssistantMessage);
+    }
+
+    /** 无日期活跃客户总数后的名单追问应直接展开余额明细，不要求补日期。 */
+    @Test
+    void shouldListActiveCustomersWithoutDateForFollowUp() {
+        AtomicInteger balanceCalls = new AtomicInteger();
+        BusinessQueryDataClient client = new ActiveBalanceClient(operationClient((date, type) -> Map.of()), balanceCalls);
+        BusinessQuestionAnalyzer analyzer = (question, context) -> {
+            BusinessQuestionAnalysis analysis = new BusinessQuestionAnalysis();
+            analysis.setSource("LLM"); analysis.setConfidence(0.95D);
+            analysis.setQueryTarget(BusinessQueryTarget.CUSTOMER);
+            analysis.setInteractionMode(BusinessInteractionMode.FOLLOW_UP);
+            analysis.setDomains(List.of(AgentQueryDomain.OPERATION_STATISTICS));
+            analysis.setMetrics(List.of(me.zhengjie.agent.query.domain.AgentQueryMetric.ACTIVE_CUSTOMER_MEAL_BALANCE_DETAIL));
+            analysis.setDimensions(List.of(me.zhengjie.agent.query.domain.AgentQueryDimension.CUSTOMER));
+            me.zhengjie.agent.analysis.domain.BusinessTemporalIntent temporal = new me.zhengjie.agent.analysis.domain.BusinessTemporalIntent();
+            temporal.setExpression(me.zhengjie.agent.analysis.domain.BusinessTemporalExpression.INHERIT_PREVIOUS);
+            analysis.setTemporal(temporal);
+            return analysis;
+        };
+        MealPlanChatServiceImpl service = new MealPlanChatServiceImpl(store(),
+            new StubExtractor(result(ChatIntent.BUSINESS_QUERY, new DiagnosisSlots(), List.of())),
+            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client,
+            new AgentQueryPlanValidator(), new BusinessAnswerValidator(), analyzer,
+            new BusinessQueryPlanningService(), new BusinessTemporalResolver(Clock.systemUTC(), new BusinessTimeProperties()), 30);
+        AgentChatRequest request = request("active-list-session", "分别有谁呢");
+        request.setLastBusinessQueryContext(activeCustomerContext("AGENT_ACTIVE_CUSTOMER_V1"));
+
+        AgentChatResponse response = service.chat(request);
+
+        assertEquals(ChatStatus.ANSWERED, response.getStatus());
+        assertEquals("BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES", response.getResponseType());
+        assertEquals(1, balanceCalls.get());
+        assertNull(response.getQueryPlan().getFilters().getRecordDate());
+        assertEquals("UNSPECIFIED", response.getSemanticTraceSummary().getTemporalExpression());
+        assertFalse(response.getAssistantMessage().contains("时间条件无效"));
     }
 
     /** 同源多指标报表只调用一次每日聚合工具，并为每个指标保留独立事实。 */

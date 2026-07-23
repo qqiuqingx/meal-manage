@@ -1029,15 +1029,23 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
     /** 识别历史排餐存在性问法，仅用于将已确定的历史查询收窄为一条，不参与业务意图分类。 */
     private boolean isMealPlanExistenceQuestion(String message) {
         return isNotBlank(message) && (message.contains("排过") || message.contains("曾经")
-            || message.contains("是否") || message.contains("有没有") || message.contains("排了吗"));
+            || message.contains("是否") || message.contains("有没有") || message.contains("排了吗")
+            || message.contains("参与过排餐"));
     }
 
     /** 将模型或 Pending 中的客户实体补到确定性槽位，供统一客户解析工具使用。 */
     private void syncSemanticCustomerToSlots(DiagnosisSlots slots, BusinessQuestionAnalysis analysis) {
         if (slots == null || analysis == null || analysis.getEntities() == null) return;
-        if (slots.getCustomerId() == null) slots.setCustomerId(analysis.getEntities().getCustomerId());
-        if (!isNotBlank(slots.getCustomerCode())) slots.setCustomerCode(analysis.getEntities().getCustomerCode());
-        if (!isNotBlank(slots.getCustomerName())) slots.setCustomerName(analysis.getEntities().getCustomerName());
+        Long analyzedCustomerId = analysis.getEntities().getCustomerId();
+        if (slots.getCustomerId() == null && analyzedCustomerId != null && analyzedCustomerId > 0) {
+            slots.setCustomerId(analyzedCustomerId);
+        }
+        if (!isNotBlank(slots.getCustomerCode()) && isNotBlank(analysis.getEntities().getCustomerCode())) {
+            slots.setCustomerCode(analysis.getEntities().getCustomerCode());
+        }
+        if (!isNotBlank(slots.getCustomerName()) && isNotBlank(analysis.getEntities().getCustomerName())) {
+            slots.setCustomerName(analysis.getEntities().getCustomerName());
+        }
     }
 
     /**
@@ -1237,7 +1245,11 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
     private ResolvedCustomer resolveCustomerForBusinessQuery(BusinessQueryOrchestrator orchestrator,
                                                              MealPlanChatSession session) {
         DiagnosisSlots slots = session.getSlots();
-        if (slots.getCustomerId() != null) return new ResolvedCustomer(slots.getCustomerId(), null);
+        if (slots.getCustomerId() != null && slots.getCustomerId() > 0) {
+            return new ResolvedCustomer(slots.getCustomerId(), null);
+        }
+        // 兼容已持久化会话或模型 Schema 中的 0 占位符，继续按客户编号/姓名解析真实内部 ID。
+        slots.setCustomerId(null);
         ToolExecutionResult overviewExecution = executeBusinessTool(orchestrator, "BUSINESS_QUERY_CUSTOMER",
             slots, "customerOverview", null, List.of());
         Map<String, Object> overview = overviewExecution.result();
@@ -1861,10 +1873,10 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
     private void mergeDeterministicSlots(BusinessQuestionAnalysis analysis, DiagnosisSlots slots) {
         if (slots == null) return;
         if (analysis.getEntities() == null) analysis.setEntities(new me.zhengjie.agent.query.domain.AgentEntityReference());
-        if (slots.getCustomerId() != null) analysis.getEntities().setCustomerId(slots.getCustomerId());
+        if (slots.getCustomerId() != null && slots.getCustomerId() > 0) analysis.getEntities().setCustomerId(slots.getCustomerId());
         if (isNotBlank(slots.getCustomerCode())) analysis.getEntities().setCustomerCode(slots.getCustomerCode());
         if (isNotBlank(slots.getCustomerName())) analysis.getEntities().setCustomerName(slots.getCustomerName());
-        if (slots.getOrderId() != null) analysis.getEntities().setOrderId(slots.getOrderId());
+        if (slots.getOrderId() != null && slots.getOrderId() > 0) analysis.getEntities().setOrderId(slots.getOrderId());
         if (isNotBlank(slots.getOrderCode())) analysis.getEntities().setOrderCode(slots.getOrderCode());
         AgentQueryFilters filters = analysis.getFilters() == null ? new AgentQueryFilters() : analysis.getFilters();
         analysis.setFilters(filters);
