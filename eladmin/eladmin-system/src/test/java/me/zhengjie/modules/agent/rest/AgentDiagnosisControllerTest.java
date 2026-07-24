@@ -1,6 +1,7 @@
 package me.zhengjie.modules.agent.rest;
 
 import me.zhengjie.modules.agent.domain.dto.AgentChatRequest;
+import me.zhengjie.modules.agent.domain.dto.AgentChatMessageRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
@@ -107,7 +108,7 @@ class AgentDiagnosisControllerTest {
         };
         AgentDiagnosisController controller = new AgentDiagnosisController(service, chatSessionService);
 
-        AgentChatRequest request = new AgentChatRequest();
+        AgentChatMessageRequest request = new AgentChatMessageRequest();
         request.setMessage("查客户 C10001 今天");
 
         ResponseEntity<AgentChatResponse> response = controller.chatMealPlan("request-1", request);

@@ -21,6 +21,10 @@ import me.zhengjie.agent.query.domain.BusinessQueryResultBlock;
 public class AgentChatResponse {
 
     private String requestId;
+    /** 响应所遵循的跨服务契约版本；v1 兼容接口可为空。 */
+    private String contractVersion;
+    /** 主系统生成的消息幂等键，Agent 必须原样回传。 */
+    private String clientMessageId;
     private String sessionId;
     private ChatStatus status;
     private String assistantMessage;
@@ -91,6 +95,11 @@ public class AgentChatResponse {
     public void setRequestId(String requestId) {
         this.requestId = requestId;
     }
+
+    public String getContractVersion() { return contractVersion; }
+    public void setContractVersion(String contractVersion) { this.contractVersion = contractVersion; }
+    public String getClientMessageId() { return clientMessageId; }
+    public void setClientMessageId(String clientMessageId) { this.clientMessageId = clientMessageId; }
 
     public String getSessionId() {
         return sessionId;

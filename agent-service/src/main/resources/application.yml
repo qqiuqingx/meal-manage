@@ -22,6 +22,11 @@ spring:
           model: ${AGENT_DEEPSEEK_MODEL:${AGENT_OPENAI_MODEL:deepseek-chat}}
 
 agent:
+  rules:
+    # 外部目录存在时完整覆盖 classpath 同场景资源，避免规则来源混杂。
+    base-path: ${AGENT_RULES_BASE_PATH:rules}
+    scene-directories:
+      MEAL_PLAN_NOT_GENERATED: meal-plan
   business-time:
     zone-id: ${AGENT_BUSINESS_TIME_ZONE_ID:Asia/Shanghai}
     default-daily-expression: ${AGENT_BUSINESS_TIME_DEFAULT_DAILY_EXPRESSION:CURRENT_DAY}

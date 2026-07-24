@@ -157,3 +157,6 @@
 - 每日指标必须解析为单个 `recordDate`；`BusinessTemporalResolver` 使用 `Asia/Shanghai` 和可注入 `Clock` 处理 `CURRENT_DAY`、`PREVIOUS_DAY`、`NEXT_DAY`、`CURRENT_WEEK`。
 - 主系统聊天会话保存 `pending_business_query_json` 与 `last_business_query_context_json`，每轮通过内部聊天请求/响应透传。纯日期、餐次或编号回复优先续接 Pending，避免实例切换后的业务目标漂移。
 - 语义追踪只记录来源、稳定 fallback 原因、目录版本、时间枚举、解析日期和 Pending 复用标记。审计升级脚本为 `eladmin/sql/alter_agent_business_query_audit_semantic_trace.sql`。
+# v2 跨服务契约（2026-07-24）
+
+Agent 服务间聊天契约的唯一权威定义为 `agent-service/src/main/resources/openapi/agent-service-v2.yaml`。新增内部路径 `POST /api/agent/v2/chat` 仅接收主系统组装的可信执行信封：前端消息字段与 `availableTools`、会话上下文、Pending/Last Context、任务栈严格分离；响应固定回传 `contractVersion`、`requestId`、`clientMessageId`。既有接口暂不删除，主系统切换后至少保留一个完整发布周期。

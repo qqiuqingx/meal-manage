@@ -2,6 +2,7 @@ package me.zhengjie.modules.agent.rest;
 
 import lombok.RequiredArgsConstructor;
 import me.zhengjie.modules.agent.domain.dto.AgentChatRequest;
+import me.zhengjie.modules.agent.domain.dto.AgentChatMessageRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
@@ -36,7 +37,11 @@ public class AgentDiagnosisController {
     @PostMapping("/chat")
     @PreAuthorize("@el.check('agentDiagnosis:list')")
     public ResponseEntity<AgentChatResponse> chatMealPlan(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
-                                                          @Validated @RequestBody AgentChatRequest request) {
-        return ResponseEntity.ok(chatSessionService.chat(request, requestId));
+                                                          @Validated @RequestBody AgentChatMessageRequest request) {
+        AgentChatRequest command = new AgentChatRequest();
+        command.setSessionId(request.getSessionId());
+        command.setClientMessageId(request.getClientMessageId());
+        command.setMessage(request.getMessage());
+        return ResponseEntity.ok(chatSessionService.chat(command, requestId));
     }
 }

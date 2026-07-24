@@ -1,7 +1,12 @@
 package me.zhengjie.agent.rule;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
+import me.zhengjie.agent.config.AgentProperties;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -11,112 +16,147 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * 从本地 rules 目录加载 AI 诊断规则。
+ * 加载诊断规则。外部 scene 目录存在时完整覆盖 classpath，避免两种来源混杂。
  */
 @Component
 public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
 
     private static final Set<String> REGISTERED_TOOLS = Set.of(
-        "getCustomerProfile",
-        "listCustomerOrders",
-        "getMealPlan",
-        "getCandidateDishStats",
-        "getCustomerExcludeDates",
-        "getOrderMealBalance",
-        "getPackageSpec",
-        "getDishCandidateDetail",
-        "listVerificationLogs",
-        "listMealRefunds",
-        "getMealPlanGenerationSnapshot"
+        "getCustomerProfile", "listCustomerOrders", "getMealPlan", "getCandidateDishStats",
+        "getCustomerExcludeDates", "getOrderMealBalance", "getPackageSpec", "getDishCandidateDetail",
+        "listVerificationLogs", "listMealRefunds", "getMealPlanGenerationSnapshot"
     );
+    private static final Map<String, String> DEFAULT_SCENE_DIRECTORIES =
+        Map.of("MEAL_PLAN_NOT_GENERATED", "meal-plan");
 
     private final Path ruleBasePath;
+    private final Map<String, String> sceneDirectories;
+    private final YAMLMapper yamlMapper;
 
-    @Autowired
-    public FileSystemRuleRegistryLoader(@Value("${agent.rules.base-path:rules}") String ruleBasePath) {
-        this(Path.of(ruleBasePath));
+    public FileSystemRuleRegistryLoader(AgentProperties properties) {
+        this(Path.of(properties.getRules().getBasePath()), properties.getRules().getSceneDirectories());
     }
 
     public FileSystemRuleRegistryLoader(Path ruleBasePath) {
-        this.ruleBasePath = ruleBasePath;
+        this(ruleBasePath, DEFAULT_SCENE_DIRECTORIES);
     }
 
+    /**
+     * 兼容历史测试和独立工具以字符串传入规则根目录的构造方式。
+     *
+     * @param ruleBasePath 外部规则根目录
+     */
+    public FileSystemRuleRegistryLoader(String ruleBasePath) {
+        this(Path.of(ruleBasePath));
+    }
+
+    public FileSystemRuleRegistryLoader(Path ruleBasePath, Map<String, String> sceneDirectories) {
+        this.ruleBasePath = ruleBasePath;
+        this.sceneDirectories = sceneDirectories == null ? DEFAULT_SCENE_DIRECTORIES : Map.copyOf(sceneDirectories);
+        this.yamlMapper = YAMLMapper.builder()
+            .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .build();
+    }
+
+    /**
+     * 加载指定场景的规则；场景目录由配置映射或规范化场景名确定。
+     *
+     * @param scene 诊断场景标识
+     * @return 已校验且带版本摘要的规则集合
+     */
     @Override
     public RuleRegistry load(String scene) {
-        Path scenePath = ruleBasePath.resolve("meal-plan");
-        if (!Files.isDirectory(scenePath)) {
-            return loadFromClasspath(scene, scenePath);
+        String sceneDirectory = resolveSceneDirectory(scene);
+        Path externalScenePath = ruleBasePath.resolve(sceneDirectory);
+        List<RuleSource> sources = Files.isDirectory(externalScenePath)
+            ? findFileSystemSources(externalScenePath)
+            : findClasspathSources(sceneDirectory);
+        if (sources.isEmpty()) {
+            throw new IllegalStateException("Failed to load rule registry from " + externalScenePath
+                + " or classpath rules/" + sceneDirectory);
         }
-
-        return loadFromFileSystem(scene, scenePath);
+        return buildRegistry(scene, sources);
     }
 
-    private RuleRegistry loadFromFileSystem(String scene, Path scenePath) {
-        List<DiagnosisRule> rules = new ArrayList<>();
-        StringBuilder digestSource = new StringBuilder(scene);
+    private String resolveSceneDirectory(String scene) {
+        if (scene == null || scene.isBlank()) {
+            throw new IllegalArgumentException("scene must not be blank");
+        }
+        return sceneDirectories.getOrDefault(scene, scene.trim().toLowerCase().replace('_', '-'));
+    }
 
-        try (Stream<Path> paths = Files.list(scenePath)) {
-            List<Path> yamlFiles = paths
+    private List<RuleSource> findFileSystemSources(Path scenePath) {
+        try (Stream<Path> paths = Files.walk(scenePath)) {
+            return paths.filter(Files::isRegularFile)
                 .filter(path -> path.getFileName().toString().endsWith(".yaml"))
-                .sorted(Comparator.comparing(Path::toString))
+                .sorted(Comparator.comparing(path -> scenePath.relativize(path).toString()))
+                .map(path -> readFileSystemSource(scenePath, path))
                 .toList();
-
-            for (Path yamlFile : yamlFiles) {
-                String content = Files.readString(yamlFile, StandardCharsets.UTF_8);
-                digestSource.append(content);
-                rules.addAll(parseRules(content, scene));
-            }
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to load rule registry from " + scenePath, ex);
         }
-
-        RuleRegistry registry = new RuleRegistry();
-        registry.setScene(scene);
-        registry.setVersionDigest(sha256(digestSource.toString()));
-        registry.setRules(rules);
-        validateRegistry(registry);
-        return registry;
     }
 
-    private RuleRegistry loadFromClasspath(String scene, Path scenePath) {
+    private RuleSource readFileSystemSource(Path scenePath, Path path) {
+        try {
+            return new RuleSource(scenePath.relativize(path).toString(), Files.readString(path, StandardCharsets.UTF_8));
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to read rule resource " + path, ex);
+        }
+    }
+
+    private List<RuleSource> findClasspathSources(String sceneDirectory) {
+        try {
+            Resource[] resources = new PathMatchingResourcePatternResolver()
+                .getResources("classpath*:rules/" + sceneDirectory + "/**/*.yaml");
+            List<RuleSource> sources = new ArrayList<>();
+            for (Resource resource : resources) {
+                try (var input = resource.getInputStream()) {
+                    sources.add(new RuleSource(classpathRelativeName(resource, sceneDirectory), new String(input.readAllBytes(), StandardCharsets.UTF_8)));
+                }
+            }
+            sources.sort(Comparator.comparing(RuleSource::name));
+            return sources;
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to scan classpath rule resources for " + sceneDirectory, ex);
+        }
+    }
+
+    private String classpathRelativeName(Resource resource, String sceneDirectory) throws IOException {
+        String location = resource.getURL().toExternalForm().replace('\\', '/');
+        String marker = "rules/" + sceneDirectory + "/";
+        int markerIndex = location.indexOf(marker);
+        return markerIndex < 0 ? location : location.substring(markerIndex + marker.length());
+    }
+
+    private RuleRegistry buildRegistry(String scene, List<RuleSource> sources) {
         List<DiagnosisRule> rules = new ArrayList<>();
         StringBuilder digestSource = new StringBuilder(scene);
-        String[] resourceNames = {
-            "customer.yaml",
-            "dish-candidate.yaml",
-            "generated-result.yaml",
-            "order.yaml",
-            "schedule.yaml"
-        };
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-
-        for (String resourceName : resourceNames) {
-            String resourcePath = "rules/meal-plan/" + resourceName;
-            try (var inputStream = classLoader.getResourceAsStream(resourcePath)) {
-                if (inputStream == null) {
-                    continue;
-                }
-                String content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-                digestSource.append(content);
-                rules.addAll(parseRules(content, scene));
-            } catch (IOException ex) {
-                throw new IllegalStateException("Failed to load rule registry resource " + resourcePath, ex);
+        for (RuleSource source : sources) {
+            List<DiagnosisRule> parsedRules = parseRuleDocument(source);
+            if (parsedRules.isEmpty()) {
+                continue;
             }
+            digestSource.append('\n').append(source.name()).append('\n').append(source.content());
+            for (DiagnosisRule rule : parsedRules) {
+                if (rule.getScene() == null || rule.getScene().isBlank()) {
+                    rule.setScene(scene);
+                }
+            }
+            rules.addAll(parsedRules);
         }
-
         if (rules.isEmpty()) {
-            throw new IllegalStateException("Failed to load rule registry from " + scenePath
-                + " or classpath rules/meal-plan");
+            throw new IllegalStateException("No diagnosis rule documents found for scene " + scene);
         }
-
         RuleRegistry registry = new RuleRegistry();
         registry.setScene(scene);
         registry.setVersionDigest(sha256(digestSource.toString()));
@@ -125,126 +165,43 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         return registry;
     }
 
-    private List<DiagnosisRule> parseRules(String content, String defaultScene) {
-        List<DiagnosisRule> rules = new ArrayList<>();
-        DiagnosisRule current = null;
-        String currentList = null;
-
-        for (String line : content.split("\\R")) {
-            String trimmed = line.trim();
-            if (trimmed.isEmpty() || trimmed.startsWith("#")) {
-                continue;
+    private List<DiagnosisRule> parseRuleDocument(RuleSource source) {
+        try {
+            JsonNode root = yamlMapper.readTree(source.content());
+            if (root == null || !root.isArray() || root.isEmpty() || !root.get(0).has("ruleId")) {
+                return List.of();
             }
-            if (trimmed.startsWith("- ruleId:")) {
-                if (current != null) {
-                    rules.add(current);
-                }
-                current = new DiagnosisRule();
-                current.setScene(defaultScene);
-                current.setRuleId(valueAfterColon(trimmed));
-                currentList = null;
-                continue;
-            }
-            if (current == null) {
-                continue;
-            }
-            if (trimmed.endsWith(":")) {
-                currentList = trimmed.substring(0, trimmed.length() - 1);
-                continue;
-            }
-            if (trimmed.startsWith("- ")) {
-                addListValue(current, currentList, trimmed.substring(2).trim());
-                continue;
-            }
-            currentList = null;
-            setScalarValue(current, trimmed);
-        }
-
-        if (current != null) {
-            rules.add(current);
-        }
-        return rules;
-    }
-
-    private void setScalarValue(DiagnosisRule rule, String line) {
-        String key = line.substring(0, line.indexOf(':')).trim();
-        String value = valueAfterColon(line);
-            switch (key) {
-            case "reasonCode" -> rule.setReasonCode(value);
-            case "version" -> rule.setVersion(Integer.valueOf(value));
-            case "scene" -> rule.setScene(value);
-            case "title" -> rule.setTitle(value);
-            case "description" -> rule.setDescription(value);
-            case "severity" -> rule.setSeverity(value);
-            case "owner" -> rule.setOwner(value);
-            default -> {
-            }
-        }
-    }
-
-    private void addListValue(DiagnosisRule rule, String listName, String value) {
-        if ("triggerConditions".equals(listName)) {
-            rule.getTriggerConditions().add(value);
-        } else if ("requiredTools".equals(listName)) {
-            rule.getRequiredTools().add(value);
-        } else if ("requiredData".equals(listName)) {
-            rule.getRequiredData().add(value);
-        } else if ("decisionHints".equals(listName)) {
-            rule.getDecisionHints().add(value);
-        } else if ("evidenceFields".equals(listName)) {
-            rule.getEvidenceFields().add(value);
-        } else if ("nextActions".equals(listName)) {
-            rule.getNextActions().add(value);
+            return yamlMapper.convertValue(root, new TypeReference<List<DiagnosisRule>>() { });
+        } catch (IllegalArgumentException | IOException ex) {
+            throw new IllegalStateException("Invalid diagnosis rule YAML: " + source.name(), ex);
         }
     }
 
     private void validateRegistry(RuleRegistry registry) {
         Set<String> ruleIds = new HashSet<>();
         for (DiagnosisRule rule : registry.getRules()) {
-            if (isBlank(rule.getRuleId())) {
-                throw new IllegalStateException("ruleId must not be blank");
-            }
-            if (!ruleIds.add(rule.getRuleId())) {
-                throw new IllegalStateException("duplicate ruleId: " + rule.getRuleId());
-            }
-            if (isBlank(rule.getReasonCode())) {
-                throw new IllegalStateException("reasonCode must not be blank for ruleId: " + rule.getRuleId());
-            }
-            if (rule.getRequiredTools() == null || rule.getRequiredTools().isEmpty()) {
-                throw new IllegalStateException("requiredTools must not be empty for ruleId: " + rule.getRuleId());
-            }
-            for (String toolName : rule.getRequiredTools()) {
-                if (!REGISTERED_TOOLS.contains(toolName)) {
-                    throw new IllegalStateException("requiredTools contains unregistered tool " + toolName
-                        + " for ruleId: " + rule.getRuleId());
-                }
-            }
-            if (rule.getEvidenceFields() == null || rule.getEvidenceFields().isEmpty()) {
-                throw new IllegalStateException("evidenceFields must not be empty for ruleId: " + rule.getRuleId());
-            }
-            if (rule.getNextActions() == null || rule.getNextActions().isEmpty()) {
-                throw new IllegalStateException("nextActions must not be empty for ruleId: " + rule.getRuleId());
-            }
-            if (isBlank(rule.getOwner())) {
-                throw new IllegalStateException("owner must not be blank for ruleId: " + rule.getRuleId());
-            }
+            if (rule.getSchemaVersion() == null || rule.getSchemaVersion() < 1) throw new IllegalStateException("schemaVersion must be positive for ruleId: " + rule.getRuleId());
+            if (isBlank(rule.getRuleId())) throw new IllegalStateException("ruleId must not be blank");
+            if (!ruleIds.add(rule.getRuleId())) throw new IllegalStateException("duplicate ruleId: " + rule.getRuleId());
+            if (isBlank(rule.getReasonCode())) throw new IllegalStateException("reasonCode must not be blank for ruleId: " + rule.getRuleId());
+            if (rule.getVersion() == null || rule.getVersion() < 1) throw new IllegalStateException("version must be positive for ruleId: " + rule.getRuleId());
+            if (rule.getRequiredTools() == null || rule.getRequiredTools().isEmpty()) throw new IllegalStateException("requiredTools must not be empty for ruleId: " + rule.getRuleId());
+            for (String toolName : rule.getRequiredTools()) if (!REGISTERED_TOOLS.contains(toolName)) throw new IllegalStateException("requiredTools contains unregistered tool " + toolName + " for ruleId: " + rule.getRuleId());
+            if (rule.getEvidenceFields() == null || rule.getEvidenceFields().isEmpty()) throw new IllegalStateException("evidenceFields must not be empty for ruleId: " + rule.getRuleId());
+            if (rule.getNextActions() == null || rule.getNextActions().isEmpty()) throw new IllegalStateException("nextActions must not be empty for ruleId: " + rule.getRuleId());
+            if (isBlank(rule.getOwner())) throw new IllegalStateException("owner must not be blank for ruleId: " + rule.getRuleId());
         }
     }
 
-    private boolean isBlank(String value) {
-        return value == null || value.trim().isEmpty();
-    }
-
-    private String valueAfterColon(String line) {
-        return line.substring(line.indexOf(':') + 1).trim();
-    }
+    private boolean isBlank(String value) { return value == null || value.trim().isEmpty(); }
 
     private String sha256(String value) {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 not available", ex);
         }
     }
+
+    private record RuleSource(String name, String content) { }
 }

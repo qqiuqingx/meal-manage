@@ -1,0 +1,97 @@
+openapi: 3.0.3
+info:
+  title: agent-service Internal Chat API
+  version: v2
+  description: 仅供 eladmin-system 调用的可信 Agent 执行契约；前端不得直连。
+paths:
+  /api/agent/v2/chat:
+    post:
+      summary: 执行可信聊天请求
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/AccessContext'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentExecutionEnvelope'
+      responses:
+        '200':
+          description: 兼容历史字段的聊天结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentChatResult'
+        '400':
+          $ref: '#/components/responses/AgentError'
+        '500':
+          $ref: '#/components/responses/AgentError'
+components:
+  parameters:
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      schema: { type: string, maxLength: 128 }
+    AccessContext:
+      name: X-Agent-Access-Context
+      in: header
+      required: true
+      schema: { type: string, writeOnly: true }
+  responses:
+    AgentError:
+      description: 不包含内部异常信息的稳定错误
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AgentApiError' }
+  schemas:
+    AgentExecutionEnvelope:
+      type: object
+      additionalProperties: false
+      required: [contractVersion, messageRequest]
+      properties:
+        contractVersion: { type: string, enum: [v2] }
+        messageRequest: { $ref: '#/components/schemas/ChatMessageRequest' }
+        contextSnapshot: { type: object, additionalProperties: false, description: 主系统持久化的脱敏槽位快照 }
+        availableTools:
+          type: array
+          items: { type: string, maxLength: 80 }
+        pendingBusinessQueryContext: { type: object, additionalProperties: false }
+        lastBusinessQueryContext: { type: object, additionalProperties: false }
+        activeTaskStack: { type: object, additionalProperties: false }
+    ChatMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        sessionId: { type: string, maxLength: 128 }
+        clientMessageId: { type: string, maxLength: 128 }
+        message: { type: string, minLength: 1, maxLength: 4000 }
+    AgentChatResult:
+      type: object
+      additionalProperties: true
+      required: [contractVersion, requestId, clientMessageId, sessionId, status]
+      properties:
+        contractVersion: { type: string, enum: [v2] }
+        requestId: { type: string }
+        clientMessageId: { type: string }
+        sessionId: { type: string }
+        status: { type: string }
+        responseType: { type: string }
+        assistantMessage: { type: string }
+        facts: { type: array, items: { type: object } }
+        warnings: { type: array, items: { type: string } }
+        resultBlocks: { type: array, items: { type: object } }
+    AgentApiError:
+      type: object
+      additionalProperties: false
+      required: [code, message, requestId, retryable, details]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        requestId: { type: string }
+        retryable: { type: boolean }
+        details:
+          type: object
+          additionalProperties: { type: string }

@@ -3,6 +3,8 @@ package me.zhengjie.agent.rule;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.io.IOException;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -66,5 +68,42 @@ class RuleRegistryLoaderTest {
         assertTrue(registry.getRules().stream()
             .map(DiagnosisRule::getRuleId)
             .anyMatch("ORDER_MISSING"::equals));
+        assertTrue(registry.getRules().stream().map(DiagnosisRule::getRuleId).anyMatch("PACKAGE_SPEC_MISSING"::equals));
+        assertTrue(registry.getRules().stream().map(DiagnosisRule::getRuleId).anyMatch("REFUND_OR_STOP_MEAL_HIT"::equals));
+        assertTrue(registry.getRules().stream().map(DiagnosisRule::getRuleId).anyMatch("VERIFICATION_CONSUMED_COUNT"::equals));
+    }
+
+    @Test
+    void shouldKeepFilesystemAndClasspathRuleSetsAndDigestsConsistent() {
+        RuleRegistry fileSystem = new FileSystemRuleRegistryLoader(Path.of("rules")).load("MEAL_PLAN_NOT_GENERATED");
+        RuleRegistry classpath = new FileSystemRuleRegistryLoader(Path.of("missing-rules")).load("MEAL_PLAN_NOT_GENERATED");
+
+        assertEquals(fileSystem.getVersionDigest(), classpath.getVersionDigest());
+        assertEquals(fileSystem.getRules().stream().map(DiagnosisRule::getRuleId).collect(Collectors.toSet()),
+            classpath.getRules().stream().map(DiagnosisRule::getRuleId).collect(Collectors.toSet()));
+    }
+
+    @Test
+    void shouldLoadNewExternalSceneWithoutChangingLoaderCode() throws IOException {
+        Path root = Files.createTempDirectory("agent-rules-");
+        Path scene = Files.createDirectories(root.resolve("inventory-check"));
+        Files.writeString(scene.resolve("rule.yaml"), """
+            - ruleId: INVENTORY_EMPTY
+              reasonCode: INVENTORY_EMPTY
+              version: 1
+              title: 库存为空
+              requiredTools:
+                - getMealPlan
+              evidenceFields:
+                - inventory.availableCount
+              nextActions:
+                - 补充库存
+              owner: inventory
+            """);
+
+        RuleRegistry registry = new FileSystemRuleRegistryLoader(root).load("INVENTORY_CHECK");
+
+        assertEquals("INVENTORY_CHECK", registry.getScene());
+        assertEquals("INVENTORY_EMPTY", registry.getRules().get(0).getRuleId());
     }
 }

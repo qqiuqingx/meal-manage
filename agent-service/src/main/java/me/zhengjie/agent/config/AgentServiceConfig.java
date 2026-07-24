@@ -30,7 +30,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import java.time.Clock;
 
 @Configuration
-@EnableConfigurationProperties(BusinessTimeProperties.class)
+@EnableConfigurationProperties({BusinessTimeProperties.class, AgentProperties.class})
 public class AgentServiceConfig {
 
     /**

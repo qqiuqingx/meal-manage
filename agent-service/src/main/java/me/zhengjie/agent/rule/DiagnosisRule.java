@@ -8,6 +8,8 @@ import java.util.List;
  */
 public class DiagnosisRule {
 
+    /** 规则文件结构版本，便于后续兼容式演进。 */
+    private Integer schemaVersion = 1;
     private String ruleId;
     private String reasonCode;
     private Integer version;
@@ -22,6 +24,14 @@ public class DiagnosisRule {
     private List<String> nextActions = new ArrayList<>();
     private String severity;
     private String owner;
+
+    public Integer getSchemaVersion() {
+        return schemaVersion;
+    }
+
+    public void setSchemaVersion(Integer schemaVersion) {
+        this.schemaVersion = schemaVersion;
+    }
 
     public String getRuleId() {
         return ruleId;

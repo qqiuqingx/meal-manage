@@ -15,6 +15,9 @@ public class AgentChatResponse {
 
     private String requestId;
 
+    /** 服务间聊天契约版本；旧 Agent 响应未提供时保持为空以兼容历史发布。 */
+    private String contractVersion;
+
     private String sessionId;
 
     private String clientMessageId;
@@ -73,6 +76,14 @@ public class AgentChatResponse {
 
     public void setRequestId(String requestId) {
         this.requestId = requestId;
+    }
+
+    public String getContractVersion() {
+        return contractVersion;
+    }
+
+    public void setContractVersion(String contractVersion) {
+        this.contractVersion = contractVersion;
     }
 
     public String getSessionId() {
