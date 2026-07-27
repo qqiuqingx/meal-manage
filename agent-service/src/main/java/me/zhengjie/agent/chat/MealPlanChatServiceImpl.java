@@ -72,7 +72,7 @@ import java.security.MessageDigest;
  * 聊天编排服务。
  */
 @Service
-public class MealPlanChatServiceImpl implements MealPlanChatService {
+public class MealPlanChatServiceImpl {
 
     private static final Logger log = LoggerFactory.getLogger(MealPlanChatServiceImpl.class);
     private static final String REQUEST_ID_KEY = "requestId";
@@ -234,7 +234,6 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
         this.multiIntentPlanningService = planner; this.conversationUnderstandingMode = mode == null ? "shadow" : mode;
     }
 
-    @Override
     public AgentChatResponse chat(AgentChatRequest request) {
         MealPlanChatSession session = sessionStore.getOrCreate(request.getSessionId());
         hydrateBusinessContexts(session, request);

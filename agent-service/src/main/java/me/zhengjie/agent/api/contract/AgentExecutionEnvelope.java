@@ -1,6 +1,7 @@
 package me.zhengjie.agent.api.contract;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotBlank;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import me.zhengjie.agent.query.domain.ConversationTaskStack;
@@ -19,6 +20,7 @@ public class AgentExecutionEnvelope {
 
     @NotBlank
     private String contractVersion = "v2";
+    @NotNull
     @Valid
     private ChatMessageRequest messageRequest;
     private DiagnosisSlots contextSnapshot;
@@ -26,6 +28,8 @@ public class AgentExecutionEnvelope {
     private PendingBusinessQueryContext pendingBusinessQueryContext;
     private LastBusinessQueryContext lastBusinessQueryContext;
     private ConversationTaskStack activeTaskStack;
+    /** 主系统读取会话快照时的乐观锁版本；Agent 仅回传，不自行提交会话。 */
+    private Long sessionVersion;
 
     public String getContractVersion() { return contractVersion; }
     public void setContractVersion(String contractVersion) { this.contractVersion = contractVersion; }
@@ -41,4 +45,6 @@ public class AgentExecutionEnvelope {
     public void setLastBusinessQueryContext(LastBusinessQueryContext lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
     public ConversationTaskStack getActiveTaskStack() { return activeTaskStack; }
     public void setActiveTaskStack(ConversationTaskStack activeTaskStack) { this.activeTaskStack = activeTaskStack; }
+    public Long getSessionVersion() { return sessionVersion; }
+    public void setSessionVersion(Long sessionVersion) { this.sessionVersion = sessionVersion; }
 }

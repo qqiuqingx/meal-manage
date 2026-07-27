@@ -3,6 +3,7 @@ package me.zhengjie.modules.agent.session.domain;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.Version;
 import lombok.Data;
 import me.zhengjie.base.BaseEntity;
 
@@ -79,6 +80,7 @@ public class AgentChatSession extends BaseEntity {
     private Boolean archived;
 
     /** 乐观锁版本。 */
+    @Version
     private Integer version;
 
     public Long getId() {

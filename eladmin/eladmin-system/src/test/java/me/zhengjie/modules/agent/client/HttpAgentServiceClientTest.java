@@ -1,5 +1,6 @@
 package me.zhengjie.modules.agent.client;
 
+import com.alibaba.fastjson2.JSON;
 import me.zhengjie.modules.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisRequest;
@@ -7,12 +8,14 @@ import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.SocketTimeoutException;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -23,6 +26,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
 
 class HttpAgentServiceClientTest {
 
@@ -45,6 +49,39 @@ class HttpAgentServiceClientTest {
         assertEquals("已完成诊断", response.getAssistantMessage());
         assertEquals("C10001", response.getSlots().getCustomerCode());
         assertEquals("request-1", response.getRequestId());
+    }
+
+    @Test
+    void shouldSendTrustedV2EnvelopeAndParseContractFields() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        String responseBody = "{\"contractVersion\":\"v2\",\"clientMessageId\":\"message-v2\",\"sessionId\":\"session-v2\",\"status\":\"ANSWERED\",\"facts\":[{\"label\":\"订单数\",\"value\":\"1\"}],\"resultBlocks\":[{\"blockType\":\"ORDER_LIST\"}],\"pendingBusinessQueryContext\":{\"queryPlan\":{\"action\":\"LIST\"}},\"lastBusinessQueryContext\":{\"responseType\":\"ORDER_LIST\"},\"activeTaskStack\":{\"tasks\":[]}}";
+        when(restTemplate.postForEntity(anyString(), any(), any())).thenReturn(ResponseEntity.ok(responseBody));
+        HttpAgentServiceClient client = clientWithRestTemplate(restTemplate);
+        ReflectionTestUtils.setField(client, "baseUrl", "http://localhost:18081");
+        ReflectionTestUtils.setField(client, "v2ChatPath", "/api/agent/v2/chat");
+        ReflectionTestUtils.setField(client, "chatContractVersion", "v2");
+
+        AgentChatRequest request = new AgentChatRequest();
+        request.setSessionId("session-v2");
+        request.setClientMessageId("message-v2");
+        request.setMessage("查询客户订单");
+        request.setAvailableTools(java.util.List.of("listCustomerOrders"));
+        AgentChatResponse response = client.chatMealPlan(request, "request-v2");
+
+        ArgumentCaptor<String> url = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<HttpEntity> entity = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForEntity(url.capture(), entity.capture(), any());
+        String body = String.valueOf(entity.getValue().getBody());
+        assertEquals("http://localhost:18081/api/agent/v2/chat", url.getValue());
+        assertEquals("v2", JSON.parseObject(body).getString("contractVersion"));
+        assertEquals("查询客户订单", JSON.parseObject(body).getJSONObject("messageRequest").getString("message"));
+        assertEquals("message-v2", response.getClientMessageId());
+        assertEquals("v2", response.getContractVersion());
+        assertEquals("订单数", response.getFacts().get(0).get("label"));
+        assertEquals("ORDER_LIST", response.getResultBlocks().get(0).get("blockType"));
+        assertEquals("LIST", ((Map) response.getPendingBusinessQueryContext().get("queryPlan")).get("action"));
+        assertEquals("ORDER_LIST", response.getLastBusinessQueryContext().get("responseType"));
+        assertNotNull(response.getActiveTaskStack());
     }
 
     @Test

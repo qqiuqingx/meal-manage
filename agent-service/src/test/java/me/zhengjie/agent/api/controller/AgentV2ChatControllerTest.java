@@ -27,6 +27,7 @@ class AgentV2ChatControllerTest {
             response.setSessionId(request.getSessionId());
             response.setStatus(ChatStatus.ANSWERED);
             response.setAssistantMessage("已完成查询");
+            response.setConversationStage("ANSWERED");
             return response;
         };
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(service))
@@ -35,7 +36,8 @@ class AgentV2ChatControllerTest {
         Map<String, Object> envelope = Map.of(
             "contractVersion", "v2",
             "messageRequest", Map.of("sessionId", "session-v2", "clientMessageId", "message-v2", "message", "查询客户订单"),
-            "availableTools", java.util.List.of("listCustomerOrders")
+            "availableTools", java.util.List.of("listCustomerOrders"),
+            "sessionVersion", 7
         );
 
         mockMvc.perform(post("/api/agent/v2/chat").header("X-Request-Id", "request-v2")
@@ -44,7 +46,9 @@ class AgentV2ChatControllerTest {
             .andExpect(jsonPath("$.contractVersion").value("v2"))
             .andExpect(jsonPath("$.requestId").value("request-v2"))
             .andExpect(jsonPath("$.clientMessageId").value("message-v2"))
-            .andExpect(jsonPath("$.sessionId").value("session-v2"));
+            .andExpect(jsonPath("$.sessionId").value("session-v2"))
+            .andExpect(jsonPath("$.expectedSessionVersion").value(7))
+            .andExpect(jsonPath("$.conversationPatch.conversationStage").value("ANSWERED"));
     }
 
     @Test
@@ -73,5 +77,17 @@ class AgentV2ChatControllerTest {
             .andExpect(jsonPath("$.code").value("CONTRACT_VERSION_MISMATCH"))
             .andExpect(jsonPath("$.requestId").value("unsupported-v3"))
             .andExpect(jsonPath("$.retryable").value(false));
+    }
+
+    @Test
+    void shouldRejectMissingTrustedMessageEnvelopeAsValidationError() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(request -> new AgentChatResponse()))
+            .setControllerAdvice(new AgentApiExceptionHandler()).build();
+
+        mockMvc.perform(post("/api/agent/v2/chat").header("X-Request-Id", "missing-message")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"contractVersion\":\"v2\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            .andExpect(jsonPath("$.details.messageRequest").exists());
     }
 }

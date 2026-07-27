@@ -1,14 +1,35 @@
 # agent-service 架构基线
 
-采集日期：2026-07-24。该基线用于验证绞杀式架构迁移没有扩大中心编排器或破坏已有行为。
+> 记录日期：2026-07-27。用于后续绞杀式迁移的对比，不代表业务口径变更。
 
-| 指标 | 基线 |
-| --- | ---: |
-| `MealPlanChatServiceImpl` 行数 | 2211 |
-| 该类条件/分支文本命中数 | 240 |
-| 主代码 Java 文件数 | 180 |
-| 测试 Java 文件数 | 62 |
-| 打包规则 YAML 数 | 9 |
-| 现有自动化测试 | 283 通过、0 失败、1 跳过（实施方案记录） |
+## 当前规模
 
-阶段 1 约束：规则 YAML 从文件系统或 classpath 加载必须得到相同的 ruleId 集合和 version digest；新增 scene 不得修改加载器代码。阶段 3 起持续记录中心协调器行数、能力/工具/指标数量及全量测试耗时。
+| 项目 | 基线值 | 说明 |
+|---|---:|---|
+| `MealPlanChatServiceImpl` | 2210 行 | 仍是历史兼容实现，后续按能力迁出。 |
+| Agent 生产 Java 文件 | 209 | `src/main/java/me/zhengjie/agent`。 |
+| Agent 测试类 | 72 | `src/test/java` 下的 `*Test.java`。 |
+| 历史业务工具 | 18 | `ToolCatalog` 登记数量。 |
+| 语义能力 | 5 | `semantics/capability-catalog.yaml`。 |
+| 规则 YAML | 9 | `rules/` 下全部 YAML。 |
+
+## 已建立的边界
+
+- HTTP v2 信封携带可信快照和 `sessionVersion`；Agent 返回 `expectedSessionVersion` 与 `ConversationPatch`。
+- 主系统 `agent_chat_session.version` 使用 MyBatis-Plus `@Version` 条件更新；冲突会回滚本轮会话写入。
+- 业务工具历史路径由 `ToolCatalog` 兼容，新工具由 `TypedAgentToolCatalog` 收集。
+- 模型任务经 `AgentModelGateway` 选择 profile；规则、模型和主系统深度连通性不作为普通健康探针。
+
+## 验证基线
+
+```bash
+cd agent-service
+source ~/.zshrc && jenv shell 17 && mvn399
+mvn -q test
+
+cd ../eladmin/eladmin-system
+source ~/.zshrc && jenv shell 17 && mvn399
+mvn -q -Dtest='*Agent*Test' test
+```
+
+测试 profile 使用 `logback-test.xml` 将 `me.zhengjie.agent` 降为 WARN；真实模型评测仍必须显式启用 `real-model-eval` profile。

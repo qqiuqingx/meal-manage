@@ -22,6 +22,14 @@ spring:
           model: ${AGENT_DEEPSEEK_MODEL:${AGENT_OPENAI_MODEL:deepseek-chat}}
 
 agent:
+  models:
+    profiles:
+      default:
+        model: ${AGENT_MODEL_DEFAULT:${AGENT_DEEPSEEK_MODEL:${AGENT_OPENAI_MODEL:deepseek-chat}}}
+        timeout-ms: ${AGENT_MODEL_DEFAULT_TIMEOUT_MS:3000}
+        structured-output: ${AGENT_MODEL_DEFAULT_STRUCTURED_OUTPUT:true}
+        tool-calling: ${AGENT_MODEL_DEFAULT_TOOL_CALLING:true}
+        max-retries: ${AGENT_MODEL_DEFAULT_MAX_RETRIES:1}
   rules:
     # 外部目录存在时完整覆盖 classpath 同场景资源，避免规则来源混杂。
     base-path: ${AGENT_RULES_BASE_PATH:rules}
@@ -43,6 +51,8 @@ agent:
   ai:
     enabled: ${AGENT_AI_ENABLED:true}
   chat:
+    # 主系统会话快照是唯一真相源；仅排障期间可显式开启旧 JVM 缓存。
+    stateful-session-cache-enabled: ${AGENT_CHAT_STATEFUL_SESSION_CACHE_ENABLED:false}
     max-turns: ${AGENT_CHAT_MAX_TURNS:10}
     max-diagnosis-history: ${AGENT_CHAT_MAX_DIAGNOSIS_HISTORY:3}
     intent-classifier:

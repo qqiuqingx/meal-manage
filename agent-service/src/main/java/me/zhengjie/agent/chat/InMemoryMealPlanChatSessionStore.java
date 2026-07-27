@@ -2,6 +2,7 @@ package me.zhengjie.agent.chat;
 
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -14,6 +15,7 @@ import java.util.concurrent.ConcurrentMap;
  * 基于内存的会话存储，默认 30 分钟过期。
  */
 @Component
+@ConditionalOnProperty(name = "agent.chat.stateful-session-cache-enabled", havingValue = "true")
 public class InMemoryMealPlanChatSessionStore implements MealPlanChatSessionStore {
 
     private final ConcurrentMap<String, MealPlanChatSession> sessions = new ConcurrentHashMap<>();

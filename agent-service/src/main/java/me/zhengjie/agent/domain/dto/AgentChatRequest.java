@@ -23,6 +23,8 @@ public class AgentChatRequest {
 
     /** 主系统依据当前客服权限下发的本轮固定工具白名单。 */
     private List<String> availableTools;
+    /** 主系统快照版本，供 v2 信封回传 optimistic-lock 预期值。 */
+    private Long sessionVersion;
     /** 主系统持久化的待补条件查询，只允许由可信内部会话服务下发。 */
     private PendingBusinessQueryContext pendingBusinessQueryContext;
     /** 主系统持久化的最近已执行查询脱敏摘要。 */
@@ -58,6 +60,8 @@ public class AgentChatRequest {
     public void setContextSlots(DiagnosisSlots contextSlots) { this.contextSlots = contextSlots; }
     public List<String> getAvailableTools() { return availableTools; }
     public void setAvailableTools(List<String> availableTools) { this.availableTools = availableTools; }
+    public Long getSessionVersion() { return sessionVersion; }
+    public void setSessionVersion(Long sessionVersion) { this.sessionVersion = sessionVersion; }
     public PendingBusinessQueryContext getPendingBusinessQueryContext() { return pendingBusinessQueryContext; }
     public void setPendingBusinessQueryContext(PendingBusinessQueryContext pendingBusinessQueryContext) { this.pendingBusinessQueryContext = pendingBusinessQueryContext; }
     public LastBusinessQueryContext getLastBusinessQueryContext() { return lastBusinessQueryContext; }

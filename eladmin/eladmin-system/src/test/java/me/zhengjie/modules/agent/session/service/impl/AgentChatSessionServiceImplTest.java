@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -110,6 +111,27 @@ class AgentChatSessionServiceImplTest {
         verify(sessionMapper).updateById(any(AgentChatSession.class));
         verify(messageMapper, times(2)).insert(any(AgentChatMessage.class));
         verify(diagnosisFacadeService).chatMealPlan(any(AgentChatRequest.class), any(), any());
+    }
+
+    /** 数据库版本条件更新失败时，本轮不能用过期 Agent 结论覆盖较新的会话快照。 */
+    @Test
+    void shouldRejectSessionVersionConflict() {
+        AgentChatSession session = new AgentChatSession();
+        session.setId(1L); session.setSessionId("session-conflict"); session.setOperator("system"); session.setArchived(false); session.setVersion(3);
+        when(sessionMapper.selectOne(any())).thenReturn(session);
+        when(messageMapper.selectOne(any())).thenReturn(null);
+        when(messageMapper.insert(any(AgentChatMessage.class))).thenReturn(1);
+        when(accessContextService.issue(any(), any())).thenReturn("signed-context");
+        AgentChatResponse response = new AgentChatResponse();
+        response.setSessionId("session-conflict"); response.setStatus("ANSWERED"); response.setAssistantMessage("完成");
+        response.setConversationStage("DIAGNOSED"); response.setSlots(new DiagnosisSlots()); response.setExpectedSessionVersion(3L);
+        when(diagnosisFacadeService.chatMealPlan(any(AgentChatRequest.class), any(), any())).thenReturn(response);
+        when(sessionMapper.updateById(any(AgentChatSession.class))).thenReturn(0);
+
+        AgentChatRequest request = new AgentChatRequest(); request.setSessionId("session-conflict"); request.setMessage("查询订单");
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> service.chat(request, "req-conflict"));
+        assertTrue(exception.getMessage().contains("SESSION_VERSION_CONFLICT"));
+        verify(messageMapper, never()).insert(org.mockito.ArgumentMatchers.argThat(message -> "ASSISTANT".equals(message.getRole())));
     }
 
     @Test

@@ -8,6 +8,7 @@ import me.zhengjie.agent.query.domain.AgentEntityReference;
 import me.zhengjie.agent.query.domain.AgentQueryFilters;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
 import me.zhengjie.agent.security.AgentAccessContextHolder;
+import me.zhengjie.agent.tool.ToolCatalog;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -65,7 +66,7 @@ public class AgentBusinessToolExecutor {
             return ToolExecutionResult.failure("TOOL_DATA_BUDGET_EXCEEDED");
         }
         try {
-            Map<String, Object> result = invoke(plan, toolName, ruleTopic, dishIds);
+            Map<String, Object> result = ToolCatalog.execute(client, plan, toolName, ruleTopic, dishIds);
             Map<String, Object> safe = result == null ? Map.of() : result;
             roundCache.put(key, safe);
             callCount++;
@@ -104,34 +105,6 @@ public class AgentBusinessToolExecutor {
         return Math.min(Math.max(requested, 0), descriptor.maxResults());
     }
 
-    private Map<String, Object> invoke(AgentQueryPlan plan, String toolName, String ruleTopic, List<Integer> dishIds) {
-        AgentEntityReference entities = plan.getEntities();
-        AgentQueryFilters filters = plan.getFilters();
-        if ("resolveCustomer".equals(toolName)) return client.resolveCustomerTyped(entities.getCustomerId(), entities.getCustomerCode(), entities.getCustomerName()).toPresentationMap();
-        if ("customerOverview".equals(toolName)) return client.customerOverviewTyped(entities.getCustomerId(), entities.getCustomerCode()).toPresentationMap();
-        if ("listOrders".equals(toolName)) return client.listOrdersTyped(entities.getCustomerId(), orderStatus(filters), page(filters), size(filters)).toPresentationMap();
-        if ("orderDetail".equals(toolName)) return client.orderDetailTyped(entities.getOrderId(), entities.getOrderCode(), entities.getCustomerId()).toPresentationMap();
-        if ("listMealPlans".equals(toolName)) {
-            return client.listMealPlansTyped(entities.getCustomerId(), filters.getRecordDate(), filters.getStartDate(),
-                filters.getEndDate(), filters.getMealType(), entities.getMealPlanRecordId(), page(filters), size(filters)).toPresentationMap();
-        }
-        if ("listVerifications".equals(toolName)) return client.listVerificationsTyped(entities.getCustomerId(), entities.getOrderId(), filters.getMealType(), recentLimit(filters), filters.getStartDate(), filters.getEndDate()).toPresentationMap();
-        if ("listRefunds".equals(toolName)) return client.listRefundsTyped(entities.getCustomerId(), entities.getOrderId(), recentLimit(filters), filters.getStartDate(), filters.getEndDate()).toPresentationMap();
-        if ("packageDetail".equals(toolName)) return client.packageDetailTyped(entities.getPackageId()).toPresentationMap();
-        if ("explainRule".equals(toolName)) return client.explainRuleTyped(ruleTopic).toPresentationMap();
-        if ("listDishes".equals(toolName)) return client.listDishesTyped(dishIds == null ? List.of() : dishIds.stream().distinct().limit(20).toList()).toPresentationMap();
-        if ("listScheduledDishes".equals(toolName)) return client.listScheduledDishes(filters.getRecordDate(), scheduledMenuMealTypes(plan));
-        if ("previewDishCandidates".equals(toolName)) return client.previewDishCandidates(entities.getCustomerId(), filters.getRecordDate(), filters.getMealType()).toPresentationMap();
-        if ("getDailyCustomerWorkload".equals(toolName) || "getMealPlanFailureSummary".equals(toolName)) {
-            List<String> dimensions = plan.getDimensions() == null ? List.of() : plan.getDimensions().stream().map(Enum::name).collect(java.util.stream.Collectors.toList());
-            return client.dailyCustomerWorkload(filters.getRecordDate(), filters.getMealType(), dimensions);
-        }
-        if ("getCustomerProfileCount".equals(toolName)) return client.customerProfileCount();
-        if ("getActiveCustomerSummary".equals(toolName)) return client.activeCustomerSummary();
-        if ("listActiveCustomerMealBalances".equals(toolName)) return client.activeCustomerBalances(page(filters), size(filters)).toPresentationMap();
-        if ("getExpiringOrderSummary".equals(toolName)) return client.expiringOrderSummary(filters.getStartDate(), filters.getEndDate());
-        throw new IllegalArgumentException("unsupported tool");
-    }
 
     private int page(AgentQueryFilters filters) { return filters.getPage() == null ? 1 : filters.getPage(); }
     private int size(AgentQueryFilters filters) { return filters == null || filters.getSize() == null ? 10 : filters.getSize(); }

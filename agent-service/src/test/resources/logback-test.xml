@@ -1,14 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <!-- 保持单元测试输出聚焦于断言失败，业务诊断日志仅在排障时按需开启。 -->
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
-        </encoder>
-    </appender>
-    <logger name="me.zhengjie.agent" level="WARN"/>
-    <logger name="org.springframework" level="WARN"/>
-    <root level="WARN">
-        <appender-ref ref="CONSOLE"/>
-    </root>
+    <!-- 单测只保留告警，避免业务 INFO 日志淹没断言与 CI 输出。 -->
+    <root level="WARN" />
+    <logger name="me.zhengjie.agent" level="WARN" />
 </configuration>

@@ -19,9 +19,8 @@ import me.zhengjie.agent.analysis.ConversationUnderstandingService;
 import me.zhengjie.agent.analysis.LlmConversationUnderstandingService;
 import me.zhengjie.agent.analysis.SemanticCapabilityCatalog;
 import me.zhengjie.agent.analysis.SemanticCapabilityCatalogLoader;
+import me.zhengjie.agent.infrastructure.llm.AgentModelGateway;
 import me.zhengjie.agent.validator.DiagnosisResultValidator;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -60,16 +59,15 @@ public class AgentServiceConfig {
      * @return 不会产生自由 SQL 或工具名的业务问题分析器
      */
     @Bean
-    public BusinessQuestionAnalyzer businessQuestionAnalyzer(ObjectProvider<ChatClient.Builder> builderProvider,
+    public BusinessQuestionAnalyzer businessQuestionAnalyzer(AgentModelGateway modelGateway,
                                                              ObjectMapper objectMapper,
                                                              BusinessSemanticPromptRenderer semanticPromptRenderer,
                                                              @Value("${agent.chat.semantic-analysis.enabled:true}") boolean semanticAnalysisEnabled,
                                                              @Value("${agent.chat.business-semantic.mode:llm_first}") String semanticMode,
                                                              @Value("${agent.chat.business-semantic.confidence-threshold:${agent.chat.semantic-analysis.confidence-threshold:0.80}}") double confidenceThreshold) {
         RuleBasedBusinessQuestionAnalyzer ruleAnalyzer = new RuleBasedBusinessQuestionAnalyzer();
-        ChatClient.Builder builder = builderProvider.getIfAvailable();
-        if (!semanticAnalysisEnabled || builder == null || "rule_only".equalsIgnoreCase(semanticMode)) return ruleAnalyzer;
-        LlmBusinessQuestionAnalyzer llmAnalyzer = new LlmBusinessQuestionAnalyzer(builder, objectMapper, semanticPromptRenderer);
+        if (!semanticAnalysisEnabled || !modelGateway.isConfigured("default") || "rule_only".equalsIgnoreCase(semanticMode)) return ruleAnalyzer;
+        LlmBusinessQuestionAnalyzer llmAnalyzer = new LlmBusinessQuestionAnalyzer(modelGateway.chatClient("default"), objectMapper, semanticPromptRenderer);
         if ("shadow".equalsIgnoreCase(semanticMode)) return new ShadowBusinessQuestionAnalyzer(ruleAnalyzer, llmAnalyzer);
         return new HybridBusinessQuestionAnalyzer(ruleAnalyzer, llmAnalyzer, confidenceThreshold);
     }
@@ -112,12 +110,11 @@ public class AgentServiceConfig {
 
     /** 在可用模型客户端存在时创建受控多帧理解服务。 */
     @Bean
-    public ConversationUnderstandingService conversationUnderstandingService(ObjectProvider<ChatClient.Builder> builderProvider,
+    public ConversationUnderstandingService conversationUnderstandingService(AgentModelGateway modelGateway,
                                                                              ObjectMapper objectMapper,
                                                                              ConversationUnderstandingValidator validator) {
-        ChatClient.Builder builder = builderProvider.getIfAvailable();
-        return builder == null ? (message, slots, handles) -> { me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult result = new me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult(); result.setRequiresClarification(true); result.setClarificationCode("MODEL_UNAVAILABLE"); return result; }
-            : new LlmConversationUnderstandingService(builder, objectMapper, validator);
+        return !modelGateway.isConfigured("default") ? (message, slots, handles) -> { me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult result = new me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult(); result.setRequiresClarification(true); result.setClarificationCode("MODEL_UNAVAILABLE"); return result; }
+            : new LlmConversationUnderstandingService(modelGateway.chatClient("default"), objectMapper, validator);
     }
 
     /** 加载并校验受控语义能力目录；启动失败优于静默开放未知能力。 */

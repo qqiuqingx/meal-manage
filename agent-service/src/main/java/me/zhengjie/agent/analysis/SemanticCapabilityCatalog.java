@@ -1,80 +1,67 @@
 package me.zhengjie.agent.analysis;
 
+import me.zhengjie.agent.analysis.domain.SemanticEntityType;
+import me.zhengjie.agent.analysis.domain.SemanticGoal;
+import me.zhengjie.agent.analysis.domain.SemanticOperation;
+import me.zhengjie.agent.analysis.domain.SemanticOutputShape;
 import me.zhengjie.agent.analysis.domain.SemanticRequestFrame;
 import me.zhengjie.agent.analysis.domain.SemanticScope;
+import me.zhengjie.agent.query.domain.AgentQueryDimension;
+import me.zhengjie.agent.query.domain.AgentQueryMetric;
+
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
-/** 版本化的受控语义能力目录，仅保存业务组合与 planner profile。 */
+/** 版本化的受控语义能力目录；业务层不再读取 YAML 的任意 Map。 */
 public class SemanticCapabilityCatalog {
     private String catalogVersion;
-    private List<Map<String, Object>> capabilities = new ArrayList<>();
+    private List<CapabilityDefinition> capabilities = new ArrayList<>();
+
     public String getCatalogVersion() { return catalogVersion; }
     public void setCatalogVersion(String catalogVersion) { this.catalogVersion = catalogVersion; }
-    public List<Map<String, Object>> getCapabilities() { return capabilities; }
-    public void setCapabilities(List<Map<String, Object>> capabilities) { this.capabilities = capabilities == null ? new ArrayList<>() : capabilities; }
+    public List<CapabilityDefinition> getCapabilities() { return List.copyOf(capabilities); }
+    public void setCapabilities(List<CapabilityDefinition> capabilities) { this.capabilities = capabilities == null ? new ArrayList<>() : new ArrayList<>(capabilities); }
 
-    /**
-     * 从服务端登记的能力中查找与语义帧完全兼容的一项。
-     *
-     * @param frame 已完成上下文解析的语义帧
-     * @return 匹配能力；不存在时调用方必须拒绝执行
-     */
-    @SuppressWarnings("unchecked")
-    public Optional<Map<String, Object>> findMatching(SemanticRequestFrame frame) {
-        if (frame == null) {
-            return Optional.empty();
+    /** 从服务端登记的能力中查找与语义帧完全兼容的一项。 */
+    public Optional<CapabilityDefinition> findMatching(SemanticRequestFrame frame) {
+        return frame == null ? Optional.empty() : capabilities.stream().filter(item -> item.supports(frame)).findFirst();
+    }
+
+    /** 目录中的单项能力定义。 */
+    public record CapabilityDefinition(String capabilityId, String displayName, SemanticFrameConstraint frame,
+                                       Set<String> allowedSetDefinitions, Set<String> requiredPermissions,
+                                       String plannerProfile, RiskLevel riskLevel) {
+        public boolean supports(SemanticRequestFrame request) {
+            if (request == null || frame == null || !frame.matches(request)) return false;
+            return allowedSetDefinitions == null || allowedSetDefinitions.isEmpty()
+                || request.getScope() != null && allowedSetDefinitions.contains(request.getScope().getResolvedDefinitionId());
         }
-        return capabilities.stream().filter(capability -> {
-            Object rawFrame = capability.get("frame");
-            if (!(rawFrame instanceof Map<?, ?>)) {
-                return false;
-            }
-            Map<String, Object> rule = (Map<String, Object>) rawFrame;
-            String scopeKind = frame.getScope() != null && frame.getScope().getType() == SemanticScope.Type.CONTEXT_REFERENCE
-                ? String.valueOf(frame.getScope().getRequiredKind())
-                : frame.getScope() == null ? SemanticScope.Type.EXPLICIT.name() : String.valueOf(frame.getScope().getType());
-            return equalsValue(rule.get("goal"), frame.getGoal())
-                && equalsValue(rule.get("targetEntity"), frame.getTargetEntity())
-                && containsAll(rule.get("allowedScopeKinds"), List.of(scopeKind))
-                && allowsSetDefinition(capability.get("allowedSetDefinitions"), frame.getScope())
-                && containsAll(rule.get("requiredMeasures"), frame.getMeasures())
-                && containsAll(rule.get("allowedDimensions"), frame.getDimensions())
-                && containsAll(rule.get("allowedOperations"), frame.getOperations())
-                && containsValue(rule.get("allowedOutputShapes"), frame.getOutputShape());
-        }).findFirst();
     }
 
-    /** 判断登记值与枚举名称是否一致。 */
-    private boolean equalsValue(Object expected, Object actual) {
-        return expected != null && actual != null && String.valueOf(expected).equals(String.valueOf(actual));
-    }
-
-    /** 判断规则列表包含请求中的所有受控枚举。 */
-    private boolean containsAll(Object allowed, List<?> requested) {
-        if (requested == null || requested.isEmpty()) {
-            return true;
+    /** 目录允许的受控语义帧组合。 */
+    public record SemanticFrameConstraint(SemanticGoal goal, SemanticEntityType targetEntity,
+                                          Set<String> allowedScopeKinds, Set<AgentQueryMetric> requiredMeasures,
+                                          Set<AgentQueryDimension> allowedDimensions,
+                                          Set<SemanticOperation> allowedOperations,
+                                          Set<SemanticOutputShape> allowedOutputShapes) {
+        boolean matches(SemanticRequestFrame request) {
+            String scopeKind = request.getScope() != null && request.getScope().getType() == SemanticScope.Type.CONTEXT_REFERENCE
+                ? String.valueOf(request.getScope().getRequiredKind())
+                : request.getScope() == null ? SemanticScope.Type.EXPLICIT.name() : String.valueOf(request.getScope().getType());
+            return goal == request.getGoal() && targetEntity == request.getTargetEntity()
+                && (allowedScopeKinds == null || allowedScopeKinds.contains(scopeKind))
+                && containsAll(requiredMeasures, request.getMeasures())
+                && containsAll(allowedDimensions, request.getDimensions())
+                && containsAll(allowedOperations, request.getOperations())
+                && (allowedOutputShapes == null || allowedOutputShapes.contains(request.getOutputShape()));
         }
-        if (!(allowed instanceof List<?>)) {
-            return false;
+        private static boolean containsAll(Set<?> allowed, List<?> requested) {
+            return requested == null || requested.isEmpty() || allowed != null && allowed.containsAll(requested);
         }
-        return requested.stream().allMatch(value -> containsValue(allowed, value));
     }
 
-    /** 判断规则列表包含指定受控枚举。 */
-    private boolean containsValue(Object allowed, Object requested) {
-        return allowed instanceof List<?> && requested != null
-            && ((List<?>) allowed).stream().anyMatch(value -> String.valueOf(value).equals(String.valueOf(requested)));
-    }
-
-    /** 限制集合型能力只能在目录明确列出的可重算定义上执行。 */
-    private boolean allowsSetDefinition(Object allowedDefinitions, SemanticScope scope) {
-        if (!(allowedDefinitions instanceof List<?>)) {
-            return true;
-        }
-        return scope != null && scope.getResolvedDefinitionId() != null
-            && containsValue(allowedDefinitions, scope.getResolvedDefinitionId());
-    }
+    /** 能力的敏感度，用于目录校验和审计，不作为模型自由输入。 */
+    public enum RiskLevel { INTERNAL, INTERNAL_SENSITIVE_LIST }
 }

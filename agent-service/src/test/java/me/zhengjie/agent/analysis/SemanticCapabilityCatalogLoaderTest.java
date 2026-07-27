@@ -33,7 +33,7 @@ class SemanticCapabilityCatalogLoaderTest {
         frame.setOperations(List.of(SemanticOperation.PROJECT, SemanticOperation.GROUP));
         frame.setOutputShape(SemanticOutputShape.DETAIL_LIST);
         SemanticCapabilityCatalog catalog = new SemanticCapabilityCatalogLoader().load();
-        assertEquals("CUSTOMER_MEAL_BALANCE_BREAKDOWN_V1", catalog.findMatching(frame).orElseThrow().get("capabilityId"));
+        assertEquals("CUSTOMER_MEAL_BALANCE_BREAKDOWN_V1", catalog.findMatching(frame).orElseThrow().capabilityId());
         scope.setResolvedDefinitionId("UNREGISTERED_CUSTOMER_SET");
         assertTrue(catalog.findMatching(frame).isEmpty());
         scope.setResolvedDefinitionId("AGENT_ACTIVE_CUSTOMER_V1");

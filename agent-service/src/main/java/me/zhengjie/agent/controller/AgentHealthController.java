@@ -1,13 +1,14 @@
 package me.zhengjie.agent.controller;
 
 import me.zhengjie.agent.client.HttpDiagnosisToolDataClient;
-import me.zhengjie.agent.client.SpringAiDiagnosisAiClient;
+import me.zhengjie.agent.config.AgentProperties;
 import me.zhengjie.agent.domain.dto.AgentHealthResponse;
+import me.zhengjie.agent.infrastructure.llm.AgentModelGateway;
 import me.zhengjie.agent.rule.RuleRegistry;
 import me.zhengjie.agent.rule.RuleRegistryLoader;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.lang.Nullable;
 import org.springframework.util.StringUtils;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,21 +21,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class AgentHealthController {
 
     private final RuleRegistryLoader ruleRegistryLoader;
-    private final SpringAiDiagnosisAiClient springAiDiagnosisAiClient;
     private final HttpDiagnosisToolDataClient toolDataClient;
-    private final String contextBaseUrl;
-    private final String internalToken;
+    private final AgentModelGateway modelGateway;
+    private final AgentProperties properties;
 
     public AgentHealthController(RuleRegistryLoader ruleRegistryLoader,
-                                 @Nullable SpringAiDiagnosisAiClient springAiDiagnosisAiClient,
-                                 @Nullable HttpDiagnosisToolDataClient toolDataClient,
-                                 @Value("${agent.context-base-url:}") String contextBaseUrl,
-                                 @Value("${agent.internal-token:}") String internalToken) {
+                                 HttpDiagnosisToolDataClient toolDataClient,
+                                 AgentModelGateway modelGateway, AgentProperties properties) {
         this.ruleRegistryLoader = ruleRegistryLoader;
-        this.springAiDiagnosisAiClient = springAiDiagnosisAiClient;
         this.toolDataClient = toolDataClient;
-        this.contextBaseUrl = contextBaseUrl;
-        this.internalToken = internalToken;
+        this.modelGateway = modelGateway;
+        this.properties = properties;
     }
 
     /**
@@ -52,11 +49,31 @@ public class AgentHealthController {
             response.setRuleRegistryLoaded(false);
             response.setRuleVersionDigest(null);
         }
-        response.setModelConfigured(springAiDiagnosisAiClient != null);
+        response.setModelConfigured(modelGateway.isConfigured("default"));
         response.setToolClientConfigured(toolDataClient != null
-            && StringUtils.hasText(contextBaseUrl)
-            && StringUtils.hasText(internalToken));
+            && StringUtils.hasText(properties.getContextBaseUrl())
+            && StringUtils.hasText(properties.getInternalToken()));
         response.setStatus(response.isRuleRegistryLoaded() ? "UP" : "DOWN");
         return response;
+    }
+
+    /** 进程存活探针：不读取规则、模型或任何远程依赖。 */
+    @GetMapping("/health/liveness")
+    public ResponseEntity<java.util.Map<String, String>> liveness() {
+        return ResponseEntity.ok(java.util.Map.of("status", "UP"));
+    }
+
+    /** 就绪探针：规则目录未能加载时拒绝接收聊天流量，但不触发真实模型调用。 */
+    @GetMapping("/health/readiness")
+    public ResponseEntity<AgentHealthResponse> readiness() {
+        AgentHealthResponse response = health();
+        return response.isRuleRegistryLoaded() ? ResponseEntity.ok(response)
+            : ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
+    }
+
+    /** 依赖配置摘要：只返回布尔状态和规则摘要，不暴露 token、URL 或异常原文。 */
+    @GetMapping("/health/dependency")
+    public AgentHealthResponse dependency() {
+        return health();
     }
 }

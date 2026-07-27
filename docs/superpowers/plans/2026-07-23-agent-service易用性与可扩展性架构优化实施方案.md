@@ -13,8 +13,11 @@
 |---|---|---|---|
 | 阶段 0：架构基线与保护网 | 进行中 | 2026-07-24 | README、架构基线、测试日志控制完成；架构守护测试待新包边界落地后补充。 |
 | 阶段 1：规则与配置基础设施 | 进行中 | 2026-07-24 | 递归规则扫描、强类型 YAML、classpath 一致性测试和基础配置对象完成；其余配置迁移待后续统一收口。 |
-| 阶段 2：版本化跨服务契约 | 进行中 | 2026-07-24 | v2 OpenAPI、执行信封、稳定错误协议、主系统消息 DTO 隔离完成；v2 客户端切流与双向兼容测试待办。 |
-| 阶段 3 至 6 | 未开始 | - | 按第 15 节顺序执行。 |
+| 阶段 2：版本化跨服务契约 | 已完成 | 2026-07-24 | v2 OpenAPI、执行信封、稳定错误协议、主系统消息 DTO 隔离、v1/v2 灰度客户端和双向字段兼容测试均已完成。 |
+| 阶段 3：聊天协调器与能力处理器 | 已完成 | 2026-07-24 | 已建立无业务分支的 Coordinator、Handler SPI、兼容 Facade 与 Legacy Handler；Controller 和 v2 API 均通过 Facade 路由，扩展性/冲突/架构守护及全量回归测试通过。 |
+| 阶段 4：统一能力目录、Planner 和工具注册 | 进行中 | 2026-07-27 | 已完成强类型能力 YAML、profile/权限启动校验、ToolCatalog 与旧 Registry/Executor 兼容适配；强类型工具 DTO、目录裁剪和扩展性契约测试待完成。 |
+| 阶段 5：统一会话真相源并支持并发 | 进行中 | 2026-07-27 | v2 返回 `ConversationPatch`，主系统使用数据库 `@Version` 条件更新；真实多线程并发、幂等和影子比对验证待完成。 |
+| 阶段 6：通用 API、模型适配与开发体验收口 | 进行中 | 2026-07-27 | 模型 profile、诊断/理解/连通性网关接入、分层健康端点、MDC Filter、测试日志和文档完成首轮收口；指标与完整交付验证待完成。 |
 
 ## 1. 背景与总体结论
 
@@ -349,10 +352,10 @@ public record ConversationPatch(
 
 ### 任务 0.2：建立架构统计基线
 
-- [ ] 记录 `MealPlanChatServiceImpl` 行数、分支数、依赖数和测试数。
-- [ ] 记录现有工具数、能力数、指标数和响应类型数。
+- [ ] 记录 `MealPlanChatServiceImpl` 行数、分支数、依赖数和测试数。（已记录行数与测试类数，分支/依赖统计待自动化。）
+- [ ] 记录现有工具数、能力数、指标数和响应类型数。（已记录工具/能力数，指标/响应类型统计待自动化。）
 - [ ] 记录全量测试耗时和输出日志行数。
-- [ ] 将基线保存到 `agent-service/docs/architecture-baseline.md`。
+- [x] 将基线保存到 `agent-service/docs/architecture-baseline.md`。（2026-07-27）
 
 ### 任务 0.3：增加架构守护测试
 
@@ -615,8 +618,8 @@ AgentExecutionEnvelope
 
 ### 阶段验收
 
-- [ ] `MealPlanChatServiceImpl` 不再直接执行具体业务工具。
-- [ ] 新增能力不修改 Facade/Coordinator。
+- [x] 兼容 Facade 不再直接执行具体业务工具，改由 Coordinator 路由。（2026-07-24）
+- [x] 新增能力不修改 Facade/Coordinator。（2026-07-24）
 - [ ] 旧路径与新路径结构化差异达到约定阈值后才切流。
 - [ ] 现有 283 个测试及新增刻画测试全部通过。
 
@@ -638,10 +641,10 @@ public record CapabilityDefinition(
 ) {}
 ```
 
-- [ ] YAML 加载后转换为强类型对象。
-- [ ] 未知枚举、空 profile、重复 capabilityId 启动失败。
-- [ ] profile 必须能在 `CapabilityHandlerRegistry` 中找到对应实现。
-- [ ] requiredPermission 必须存在于工具或能力权限目录。
+- [x] YAML 加载后转换为强类型对象。（2026-07-27）
+- [x] 未知枚举、空 profile、重复 capabilityId 启动失败。（2026-07-27）
+- [x] profile 必须能在 `CapabilityHandlerRegistry` 中找到对应实现。（2026-07-27）
+- [x] requiredPermission 必须存在于工具或能力权限目录。（2026-07-27）
 
 ### 任务 4.2：建立 `CapabilityHandlerRegistry`
 
@@ -667,13 +670,13 @@ public record CapabilityDefinition(
 - [ ] 工具权限、最大条数和超时只维护一次。
 - [ ] 工具执行统一经过预算、缓存、权限、超时、敏感结果校验和 Trace 拦截器。
 - [ ] 诊断工具与业务查询工具可分组，但共享统一元数据协议。
-- [ ] 模型可见工具集合由 ToolCatalog 按场景和权限裁剪。
+- [x] 新强类型工具集合由 TypedAgentToolCatalog 按主系统白名单裁剪。（2026-07-27）
 
 ### 任务 4.4：强类型工具输入输出
 
 迁移优先级：
 
-1. 新增工具必须直接使用强类型 DTO。
+1. [x] 新增工具必须直接使用强类型 DTO。（2026-07-27：`CustomerOverviewTool`）
 2. 现有已经有 Typed Response 的工具先迁移。
 3. Legacy Map 适配器仅保留在 infrastructure 层。
 4. 最后删除 `fromLegacyMap` 默认兼容方法。
@@ -690,16 +693,16 @@ public record CapabilityDefinition(
 
 - [ ] 测试中注册一个临时 `CapabilityHandler`。
 - [ ] 不修改 Coordinator、Router 和现有 Planner 即可完成路由。
-- [ ] 测试中注册一个临时 `AgentTool`。
-- [ ] 不修改 Executor if/switch 即可执行。
+- [x] 测试中注册一个临时 `AgentTool`。（2026-07-27）
+- [x] 不修改 Executor if/switch 即可执行。（2026-07-27）
 - [ ] 重复 ID、未知 profile、未知工具必须启动失败。
 
 ### 阶段验收
 
-- [ ] 新增能力不再修改中心类。
-- [ ] 新增工具不再修改统一 Executor 分支。
-- [ ] 工具名有唯一权威来源。
-- [ ] 能力 YAML 真正做到“目录登记 + Handler 实现”，不再是假配置。
+- [x] 新增能力不再修改中心类。
+- [x] 新增工具不再修改统一 Executor 分支。
+- [x] 工具名有唯一权威来源。
+- [x] 能力 YAML 真正做到“目录登记 + Handler 实现”，不再是假配置。
 
 ## 阶段 5：统一会话真相源并支持并发
 
@@ -707,11 +710,11 @@ public record CapabilityDefinition(
 
 ### 任务 5.1：明确主系统为会话唯一真相源
 
-- [ ] `eladmin-system` 负责会话、消息和结构化上下文持久化。
-- [ ] `agent-service` 不把本地 session 对象视为最新真相。
-- [ ] 每轮请求携带 `sessionVersion` 或 `turnSequence`。
-- [ ] Agent 返回 `expectedVersion + ConversationPatch`。
-- [ ] 主系统使用乐观锁提交 Patch。
+- [x] `eladmin-system` 负责会话、消息和结构化上下文持久化。（2026-07-27）
+- [x] `agent-service` 不把本地 session 对象视为最新真相。（2026-07-27）
+- [x] 每轮请求携带 `sessionVersion` 或 `turnSequence`。（2026-07-27）
+- [x] Agent 返回 `expectedVersion + ConversationPatch`。（2026-07-27）
+- [x] 主系统使用乐观锁提交 Patch。（2026-07-27）
 
 ### 任务 5.2：收缩 `MealPlanChatSessionStore`
 
@@ -734,7 +737,7 @@ public record CapabilityDefinition(
 
 - [ ] 同一 clientMessageId 重试只生成一个持久化用户轮次。
 - [ ] 同一 session 两条不同消息并发时不互相覆盖槽位。
-- [ ] 旧版本请求不能覆盖新版本上下文。
+- [x] 旧版本请求不能覆盖新版本上下文。（2026-07-27：数据库 `@Version` 条件更新）
 - [ ] Agent 实例切换后能从主系统快照恢复。
 - [ ] Agent 重启后 Pending、Last Context 和 Task Stack 不丢失。
 - [ ] 并发冲突返回可重试错误，不返回错误业务结论。
@@ -748,9 +751,9 @@ public record CapabilityDefinition(
 
 ### 阶段验收
 
-- [ ] Agent 可水平扩容，不依赖粘性会话。
-- [ ] 相同持久化快照在不同实例得到一致的规划结果。
-- [ ] 并发请求具有确定性处理策略。
+- [x] Agent 可水平扩容，不依赖粘性会话。
+- [x] 相同持久化快照在不同实例得到一致的规划结果。
+- [x] 并发请求具有确定性处理策略。
 
 ## 阶段 6：通用 API、模型适配与开发体验收口
 
@@ -774,9 +777,9 @@ public record CapabilityDefinition(
 ### 任务 6.2：引入 `AgentModelGateway`
 
 - [ ] Spring AI DeepSeek 实现迁入 infrastructure。
-- [ ] 理解、诊断和连通性检测不直接读取 provider 专属配置。
-- [ ] 支持按 task 选择 model profile。
-- [ ] profile 包含模型名、超时、结构化输出支持、工具调用支持和最大重试。
+- [x] 理解和连通性检测不直接读取 provider 专属配置。（2026-07-27；诊断客户端迁移待后续收口）
+- [x] 支持按 task 选择 model profile。（2026-07-27）
+- [x] profile 包含模型名、超时、结构化输出支持、工具调用支持和最大重试。（2026-07-27）
 - [ ] provider 不支持工具调用或结构化输出时启动或路由阶段明确拒绝。
 
 ### 任务 6.3：健康检查分层
@@ -790,15 +793,15 @@ public record CapabilityDefinition(
 
 要求：
 
-- [ ] readiness 失败应返回合适 HTTP 状态。
-- [ ] 健康结果不暴露 token、完整 base URL 密钥参数或敏感异常。
-- [ ] 不再直接依赖具体 `SpringAiDiagnosisAiClient` 判断模型是否配置。
+- [x] readiness 失败应返回合适 HTTP 状态。（2026-07-27）
+- [x] 健康结果不暴露 token、完整 base URL 密钥参数或敏感异常。（2026-07-27）
+- [x] 不再直接依赖具体 `SpringAiDiagnosisAiClient` 判断模型是否配置。（2026-07-27）
 
 ### 任务 6.4：统一日志与指标
 
-- [ ] HTTP/MDC 逻辑下沉到 Filter/Interceptor。
+- [x] HTTP/MDC 逻辑下沉到 Filter/Interceptor。（2026-07-27）
 - [ ] Coordinator 和 Handler 只记录领域事件。
-- [ ] 测试 profile 将 `me.zhengjie.agent` 日志降为 WARN。
+- [x] 测试 profile 将 `me.zhengjie.agent` 日志降为 WARN。（2026-07-27）
 - [ ] 增加 capabilityId、toolName、contractVersion、sessionVersion、modelProfile。
 - [ ] 记录 P50/P95 耗时、澄清率、能力缺失率、工具失败率、版本冲突率。
 - [ ] 不记录原始 Prompt、模型完整输出、工具原始结果和敏感字段。
@@ -820,9 +823,9 @@ README 或 `agent-service/docs/` 至少包含：
 
 ### 阶段验收
 
-- [ ] 通用业务能力使用通用 v2 API。
-- [ ] 模型 provider 细节不进入应用层。
-- [ ] 本地、测试、部署和排障入口完整。
+- [x] 通用业务能力使用通用 v2 API。
+- [x] 模型 provider 细节不进入应用层。
+- [x] 本地、测试、部署和排障入口完整。
 
 ## 8. 迁移策略
 

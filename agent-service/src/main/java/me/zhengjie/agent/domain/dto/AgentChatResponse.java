@@ -14,6 +14,7 @@ import me.zhengjie.agent.query.domain.PendingBusinessQueryContext;
 import me.zhengjie.agent.query.domain.SemanticTraceSummary;
 import me.zhengjie.agent.query.domain.ConversationTaskStack;
 import me.zhengjie.agent.query.domain.BusinessQueryResultBlock;
+import me.zhengjie.agent.application.conversation.ConversationPatch;
 
 /**
  * 智能排查聊天响应。
@@ -25,6 +26,10 @@ public class AgentChatResponse {
     private String contractVersion;
     /** 主系统生成的消息幂等键，Agent 必须原样回传。 */
     private String clientMessageId;
+    /** 当前响应基于的主系统会话版本；主系统提交 Patch 时必须使用此版本。 */
+    private Long expectedSessionVersion;
+    /** 供主系统乐观锁提交的结构化会话增量。 */
+    private ConversationPatch conversationPatch;
     private String sessionId;
     private ChatStatus status;
     private String assistantMessage;
@@ -100,6 +105,10 @@ public class AgentChatResponse {
     public void setContractVersion(String contractVersion) { this.contractVersion = contractVersion; }
     public String getClientMessageId() { return clientMessageId; }
     public void setClientMessageId(String clientMessageId) { this.clientMessageId = clientMessageId; }
+    public Long getExpectedSessionVersion() { return expectedSessionVersion; }
+    public void setExpectedSessionVersion(Long expectedSessionVersion) { this.expectedSessionVersion = expectedSessionVersion; }
+    public ConversationPatch getConversationPatch() { return conversationPatch; }
+    public void setConversationPatch(ConversationPatch conversationPatch) { this.conversationPatch = conversationPatch; }
 
     public String getSessionId() {
         return sessionId;

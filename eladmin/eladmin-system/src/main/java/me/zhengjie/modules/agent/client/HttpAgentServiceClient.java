@@ -46,6 +46,12 @@ public class HttpAgentServiceClient implements AgentServiceClient {
     @Value("${agent.service.chat-path:/api/agent/meal-plan/chat}")
     private String chatPath;
 
+    @Value("${agent.service.v2-chat-path:/api/agent/v2/chat}")
+    private String v2ChatPath;
+
+    @Value("${agent.service.chat-contract-version:v1}")
+    private String chatContractVersion;
+
     @Value("${agent.service.connect-timeout-ms:${agent.service.connect-timeout:3000}}")
     private int connectTimeout;
 
@@ -100,13 +106,15 @@ public class HttpAgentServiceClient implements AgentServiceClient {
     @Override
     public AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId, String accessContext) {
         String resolvedRequestId = resolveRequestId(requestId);
-        String url = buildUrl(chatPath);
+        boolean useV2 = "v2".equalsIgnoreCase(chatContractVersion);
+        String url = buildUrl(useV2 ? v2ChatPath : chatPath);
         log.info("聊天诊断阶段 stage=调用agent-service开始 requestId={} url={} sessionId={}", resolvedRequestId, url, request.getSessionId());
         int attempts = totalAttempts();
         for (int attempt = 1; attempt <= attempts; attempt++) {
             long attemptStart = System.currentTimeMillis();
             try {
-                ResponseEntity<String> response = restTemplate().postForEntity(url, requestEntity(request, resolvedRequestId, accessContext), String.class);
+                Object payload = useV2 ? buildV2ChatEnvelope(request) : request;
+                ResponseEntity<String> response = restTemplate().postForEntity(url, requestEntity(payload, resolvedRequestId, accessContext), String.class);
                 AgentChatResponse chatResponse = parseChatResponse(response.getBody(), resolvedRequestId, request);
                 log.info("聊天诊断阶段 stage=调用agent-service完成 requestId={} url={} attempt={} status={} chatStatus={} sessionId={} costMs={}",
                     resolvedRequestId, url, attempt, response.getStatusCodeValue(), chatResponse.getStatus(),
@@ -141,6 +149,29 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             headers.set("X-Agent-Access-Context", accessContext);
         }
         return new HttpEntity<>(JSON.toJSONString(request), headers);
+    }
+
+    /**
+     * 将主系统持久化的聊天命令转换为 v2 可信执行信封。
+     *
+     * <p>Map 仅保留在 HTTP 适配层，以兼容 Java 8 主系统与 Java 17 Agent 的独立 DTO 栈。</p>
+     */
+    private Map<String, Object> buildV2ChatEnvelope(AgentChatRequest request) {
+        Map<String, Object> messageRequest = new LinkedHashMap<>();
+        messageRequest.put("sessionId", request.getSessionId());
+        messageRequest.put("clientMessageId", request.getClientMessageId());
+        messageRequest.put("message", request.getMessage());
+
+        Map<String, Object> envelope = new LinkedHashMap<>();
+        envelope.put("contractVersion", "v2");
+        envelope.put("messageRequest", messageRequest);
+        envelope.put("contextSnapshot", request.getContextSlots());
+        envelope.put("availableTools", request.getAvailableTools());
+        envelope.put("pendingBusinessQueryContext", request.getPendingBusinessQueryContext());
+        envelope.put("lastBusinessQueryContext", request.getLastBusinessQueryContext());
+        envelope.put("activeTaskStack", request.getActiveTaskStack());
+        envelope.put("sessionVersion", request.getSessionVersion());
+        return envelope;
     }
 
     protected RestTemplate restTemplate() {

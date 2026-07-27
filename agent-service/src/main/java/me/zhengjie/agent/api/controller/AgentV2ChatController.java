@@ -5,6 +5,7 @@ import me.zhengjie.agent.api.contract.AgentExecutionEnvelope;
 import me.zhengjie.agent.api.contract.ChatMessageRequest;
 import me.zhengjie.agent.api.error.AgentContractException;
 import me.zhengjie.agent.chat.MealPlanChatService;
+import me.zhengjie.agent.application.conversation.ConversationPatch;
 import me.zhengjie.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.agent.security.AgentAccessContextHolder;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import org.slf4j.MDC;
 
 /** v2 通用聊天内部接口；旧 meal-plan 路径继续保留兼容。 */
 @RestController
@@ -49,14 +51,19 @@ public class AgentV2ChatController {
         AgentChatRequest request = toLegacyRequest(envelope, message);
         AgentAccessContextHolder.bind(accessContext, request.getSessionId());
         AgentAccessContextHolder.bindAvailableTools(request.getAvailableTools());
+        if (envelope.getSessionVersion() != null) MDC.put("sessionVersion", String.valueOf(envelope.getSessionVersion()));
         try {
             AgentChatResponse response = chatService.chat(request);
             response.setRequestId(resolveRequestId(requestId));
             response.setClientMessageId(message.getClientMessageId());
             response.setContractVersion(envelope.getContractVersion());
+            response.setExpectedSessionVersion(envelope.getSessionVersion());
+            response.setConversationPatch(new ConversationPatch(response.getSlots(), response.getConversationStage(),
+                response.getPendingBusinessQueryContext(), response.getLastBusinessQueryContext(), response.getActiveTaskStack()));
             return response;
         } finally {
             AgentAccessContextHolder.clear();
+            MDC.remove("sessionVersion");
         }
     }
 
@@ -67,6 +74,7 @@ public class AgentV2ChatController {
         request.setMessage(message.getMessage());
         request.setContextSlots(envelope.getContextSnapshot());
         request.setAvailableTools(envelope.getAvailableTools());
+        request.setSessionVersion(envelope.getSessionVersion());
         request.setPendingBusinessQueryContext(envelope.getPendingBusinessQueryContext());
         request.setLastBusinessQueryContext(envelope.getLastBusinessQueryContext());
         request.setActiveTaskStack(envelope.getActiveTaskStack());

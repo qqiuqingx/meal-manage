@@ -13,8 +13,6 @@ import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
 import me.zhengjie.agent.security.AgentAccessContextHolder;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.ai.deepseek.DeepSeekChatOptions;
-import org.springframework.ai.deepseek.api.ResponseFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +39,6 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
     private final BeanOutputConverter<BusinessQuestionAnalysis> outputConverter;
-    private final DeepSeekChatOptions jsonResponseOptions;
     private final BusinessSemanticPromptRenderer semanticPromptRenderer;
     private final ThreadLocal<String> lastFailureReason = new ThreadLocal<>();
 
@@ -51,14 +48,16 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
 
     public LlmBusinessQuestionAnalyzer(ChatClient.Builder builder, ObjectMapper objectMapper,
                                        BusinessSemanticPromptRenderer semanticPromptRenderer) {
-        this.chatClient = builder.build();
+        this(builder.build(), objectMapper, semanticPromptRenderer);
+    }
+
+    /** 使用统一模型网关提供的通用 ChatClient，避免业务代码依赖 provider 专属 options。 */
+    public LlmBusinessQuestionAnalyzer(ChatClient chatClient, ObjectMapper objectMapper,
+                                       BusinessSemanticPromptRenderer semanticPromptRenderer) {
+        this.chatClient = chatClient;
         this.objectMapper = objectMapper;
         this.outputConverter = new BeanOutputConverter<>(BusinessQuestionAnalysis.class, objectMapper);
         this.semanticPromptRenderer = semanticPromptRenderer;
-        this.jsonResponseOptions = DeepSeekChatOptions.builder()
-            .responseFormat(ResponseFormat.builder().type(ResponseFormat.Type.JSON_OBJECT).build())
-            .temperature(0D)
-            .build();
     }
 
     @Override
@@ -75,7 +74,6 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
             String content = chatClient.prompt()
                 .system(systemPrompt())
                 .user(userPrompt(question, context, lastBusinessQueryContext))
-                .options(jsonResponseOptions)
                 .call()
                 .content();
             JsonNode rawRoot = objectMapper.readTree(normalizeJson(content));

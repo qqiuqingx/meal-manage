@@ -21,6 +21,10 @@ public class AgentChatResponse {
     private String sessionId;
 
     private String clientMessageId;
+    /** Agent 处理请求时使用的会话版本，供主系统校验后再写入 Patch。 */
+    private Long expectedSessionVersion;
+    /** Agent 返回的结构化会话 Patch，由主系统以版本条件提交。 */
+    private Map<String, Object> conversationPatch;
 
     private String status;
 
@@ -101,6 +105,10 @@ public class AgentChatResponse {
     public void setClientMessageId(String clientMessageId) {
         this.clientMessageId = clientMessageId;
     }
+    public Long getExpectedSessionVersion() { return expectedSessionVersion; }
+    public void setExpectedSessionVersion(Long expectedSessionVersion) { this.expectedSessionVersion = expectedSessionVersion; }
+    public Map<String, Object> getConversationPatch() { return conversationPatch; }
+    public void setConversationPatch(Map<String, Object> conversationPatch) { this.conversationPatch = conversationPatch; }
 
     public String getStatus() {
         return status;

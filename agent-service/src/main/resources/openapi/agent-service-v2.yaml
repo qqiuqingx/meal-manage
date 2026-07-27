@@ -60,6 +60,7 @@ components:
         pendingBusinessQueryContext: { type: object, additionalProperties: false }
         lastBusinessQueryContext: { type: object, additionalProperties: false }
         activeTaskStack: { type: object, additionalProperties: false }
+        sessionVersion: { type: integer, format: int64, minimum: 0, description: 主系统会话快照的乐观锁版本 }
     ChatMessageRequest:
       type: object
       additionalProperties: false
@@ -76,6 +77,17 @@ components:
         contractVersion: { type: string, enum: [v2] }
         requestId: { type: string }
         clientMessageId: { type: string }
+        expectedSessionVersion: { type: integer, format: int64, minimum: 0 }
+        conversationPatch: { $ref: '#/components/schemas/ConversationPatch' }
+    ConversationPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        slots: { type: object, additionalProperties: false }
+        conversationStage: { type: string }
+        pendingBusinessQueryContext: { type: object, additionalProperties: false }
+        lastBusinessQueryContext: { type: object, additionalProperties: false }
+        activeTaskStack: { type: object, additionalProperties: false }
         sessionId: { type: string }
         status: { type: string }
         responseType: { type: string }

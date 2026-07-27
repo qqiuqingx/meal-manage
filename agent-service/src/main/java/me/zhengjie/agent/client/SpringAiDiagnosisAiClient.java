@@ -11,6 +11,7 @@ import me.zhengjie.agent.prompt.DiagnosisPromptPolicyLoader;
 import me.zhengjie.agent.rule.RuleRegistry;
 import me.zhengjie.agent.summary.DiagnosisSuggestionTemplateService;
 import me.zhengjie.agent.tool.AgentToolRegistry;
+import me.zhengjie.agent.infrastructure.llm.AgentModelGateway;
 import me.zhengjie.agent.validator.DiagnosisResultValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +23,7 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -80,7 +82,37 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
                                      DiagnosisToolCallLoggingAdvisor toolCallLoggingAdvisor,
                                      @Value("${spring.ai.deepseek.chat.options.model:}") String modelName,
                                      @Value("${agent.diagnosis.tool-mode-enabled:true}") boolean toolModeEnabled) {
-        this.chatClient = chatClientBuilder.build();
+        this(chatClientBuilder.build(), objectMapper, promptBuilder, resultValidator, traceCollector, suggestionTemplateService,
+            agentToolRegistry, toolCallLoggingAdvisor, modelName, toolModeEnabled);
+    }
+
+    /** 生产路径从统一模型网关获取 provider 无关的 profile。 */
+    @Autowired
+    public SpringAiDiagnosisAiClient(AgentModelGateway modelGateway,
+                                     ObjectMapper objectMapper,
+                                     DiagnosisPromptBuilder promptBuilder,
+                                     DiagnosisResultValidator resultValidator,
+                                     DiagnosisTraceCollector traceCollector,
+                                     DiagnosisSuggestionTemplateService suggestionTemplateService,
+                                     AgentToolRegistry agentToolRegistry,
+                                     DiagnosisToolCallLoggingAdvisor toolCallLoggingAdvisor,
+                                     @Value("${agent.diagnosis.tool-mode-enabled:true}") boolean toolModeEnabled) {
+        this(modelGateway.chatClient("diagnosis"), objectMapper, promptBuilder, resultValidator, traceCollector,
+            suggestionTemplateService, agentToolRegistry, toolCallLoggingAdvisor,
+            modelGateway.profile("diagnosis").model(), toolModeEnabled);
+    }
+
+    private SpringAiDiagnosisAiClient(ChatClient chatClient,
+                                      ObjectMapper objectMapper,
+                                      DiagnosisPromptBuilder promptBuilder,
+                                      DiagnosisResultValidator resultValidator,
+                                      DiagnosisTraceCollector traceCollector,
+                                      DiagnosisSuggestionTemplateService suggestionTemplateService,
+                                      AgentToolRegistry agentToolRegistry,
+                                      DiagnosisToolCallLoggingAdvisor toolCallLoggingAdvisor,
+                                      String modelName,
+                                      boolean toolModeEnabled) {
+        this.chatClient = chatClient;
         this.objectMapper = objectMapper;
         this.responseParser = new DiagnosisResponseParser(objectMapper);
         this.promptBuilder = promptBuilder;

@@ -32,6 +32,7 @@ import me.zhengjie.utils.PageUtil;
 import me.zhengjie.utils.SecurityUtils;
 import me.zhengjie.utils.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -149,6 +150,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
      * @return 助手响应
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public AgentChatResponse chat(AgentChatRequest request, String requestId) {
         AgentChatRequest safeRequest = request == null ? new AgentChatRequest() : request;
         AgentChatSession session = resolveWritableSession(safeRequest.getSessionId());
@@ -172,13 +174,18 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         downstreamRequest.setPendingBusinessQueryContext(parseMap(session.getPendingBusinessQueryJson()));
         downstreamRequest.setLastBusinessQueryContext(parseMap(session.getLastBusinessQueryContextJson()));
         downstreamRequest.setActiveTaskStack(parseMap(session.getActiveTaskStackJson()));
+        downstreamRequest.setSessionVersion(session.getVersion() == null ? 0L : session.getVersion().longValue());
         String accessContext = accessContextService.issue(session.getSessionId(), resolvedRequestId);
         long queryStart = System.currentTimeMillis();
         AgentChatResponse response = diagnosisFacadeService.chatMealPlan(downstreamRequest, resolvedRequestId, accessContext);
         AgentChatResponse normalizedResponse = normalizeResponse(response, session.getSessionId(), resolvedRequestId, clientMessageId);
+        if (normalizedResponse.getExpectedSessionVersion() != null
+            && normalizedResponse.getExpectedSessionVersion().longValue() != downstreamRequest.getSessionVersion().longValue()) {
+            throw new BadRequestException("SESSION_VERSION_CONFLICT，请刷新会话后重试");
+        }
         businessQueryAuditService.record(normalizedResponse, currentUsername(), System.currentTimeMillis() - queryStart);
-        persistAssistantMessage(session, normalizedResponse);
         refreshSessionSummary(session, safeRequest, normalizedResponse, resolvedRequestId);
+        persistAssistantMessage(session, normalizedResponse);
         return normalizedResponse;
     }
 
@@ -518,7 +525,9 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
             session.setTitle(resolveSessionTitle(session, request, response));
         }
         bumpSessionVersion(session);
-        sessionMapper.updateById(session);
+        if (sessionMapper.updateById(session) != 1) {
+            throw new BadRequestException("SESSION_VERSION_CONFLICT，请刷新会话后重试");
+        }
     }
 
     /**
@@ -568,7 +577,6 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
      * 统一递增会话版本并刷新更新时间。
      */
     private void bumpSessionVersion(AgentChatSession session) {
-        session.setVersion(session.getVersion() == null ? 1 : session.getVersion() + 1);
         session.setUpdateBy(currentUsername());
         session.setUpdateTime(now());
     }
@@ -642,6 +650,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         snapshot.put("pendingBusinessQueryContext", response.getPendingBusinessQueryContext());
         snapshot.put("lastBusinessQueryContext", response.getLastBusinessQueryContext());
         snapshot.put("activeTaskStack", response.getActiveTaskStack());
+        snapshot.put("conversationPatch", response.getConversationPatch());
         snapshot.put("resultBlocks", response.getResultBlocks());
         snapshot.put("semanticTraceSummary", response.getSemanticTraceSummary());
         return snapshot;
@@ -672,6 +681,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
             ? (Map<String, Object>) snapshot.get("lastBusinessQueryContext") : null);
         response.setActiveTaskStack(snapshot.get("activeTaskStack") instanceof Map
             ? (Map<String, Object>) snapshot.get("activeTaskStack") : null);
+        response.setConversationPatch(snapshot.get("conversationPatch") instanceof Map
+            ? (Map<String, Object>) snapshot.get("conversationPatch") : null);
         response.setResultBlocks(snapshot.get("resultBlocks") instanceof List
             ? (List<Map<String, Object>>) snapshot.get("resultBlocks") : Collections.emptyList());
         response.setSemanticTraceSummary(snapshot.get("semanticTraceSummary") instanceof Map

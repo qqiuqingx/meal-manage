@@ -7,8 +7,6 @@ import me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.ai.deepseek.DeepSeekChatOptions;
-import org.springframework.ai.deepseek.api.ResponseFormat;
 import java.util.List;
 import java.util.Set;
 
@@ -21,9 +19,12 @@ public class LlmConversationUnderstandingService implements ConversationUndersta
     private final ObjectMapper mapper;
     private final BeanOutputConverter<ConversationUnderstandingResult> converter;
     private final ConversationUnderstandingValidator validator;
-    private final DeepSeekChatOptions options = DeepSeekChatOptions.builder().responseFormat(ResponseFormat.builder().type(ResponseFormat.Type.JSON_OBJECT).build()).temperature(0D).build();
     public LlmConversationUnderstandingService(ChatClient.Builder builder, ObjectMapper mapper, ConversationUnderstandingValidator validator) {
-        this.client = builder.build(); this.mapper = mapper; this.converter = new BeanOutputConverter<>(ConversationUnderstandingResult.class, mapper); this.validator = validator;
+        this(builder.build(), mapper, validator);
+    }
+    /** 使用统一模型网关提供的通用 ChatClient。 */
+    public LlmConversationUnderstandingService(ChatClient client, ObjectMapper mapper, ConversationUnderstandingValidator validator) {
+        this.client = client; this.mapper = mapper; this.converter = new BeanOutputConverter<>(ConversationUnderstandingResult.class, mapper); this.validator = validator;
     }
     /** {@inheritDoc} */
     @Override
@@ -31,7 +32,7 @@ public class LlmConversationUnderstandingService implements ConversationUndersta
         try {
             String raw = client.prompt().system("你是内部客服会话理解器，只返回 JSON；不得输出 SQL、URL、工具名、表名或任意结果字段。上下文引用只能声明 requiredKind 和 requiredEntityType，禁止输出 resolvedHandleId。")
                 .user("Schema:" + converter.getFormat() + "。frames 最多三个。当前消息：" + safe(message) + "；确定性槽位：" + mapper.writeValueAsString(slots) + "；可引用句柄摘要：" + mapper.writeValueAsString(handles == null ? List.of() : handles))
-                .options(options).call().content();
+                .call().content();
             JsonNode node = mapper.readTree(stripFence(raw));
             if (!node.isObject() || node.fieldNames().hasNext() && hasUnknown(node) || hasUnsafeFrames(node) || containsForbidden(node)) return clarification("MODEL_INVALID");
             ConversationUnderstandingResult result = mapper.treeToValue(node, ConversationUnderstandingResult.class);

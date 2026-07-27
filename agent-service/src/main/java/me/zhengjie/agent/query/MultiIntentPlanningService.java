@@ -11,7 +11,6 @@ import me.zhengjie.agent.analysis.domain.SemanticOutputShape;
 import me.zhengjie.agent.query.domain.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /** 将多个受控语义帧编译为固定查询计划；不从用户文本或模型输出读取工具名。 */
 public class MultiIntentPlanningService {
@@ -30,9 +29,9 @@ public class MultiIntentPlanningService {
         List<AgentQueryPlan> plans = new ArrayList<>();
         if (understanding == null || understanding.getFrames() == null) return plans;
         for (SemanticRequestFrame frame : understanding.getFrames()) {
-            Map<String, Object> capability = capabilityCatalog == null ? null : capabilityCatalog.findMatching(frame).orElse(null);
+            SemanticCapabilityCatalog.CapabilityDefinition capability = capabilityCatalog == null ? null : capabilityCatalog.findMatching(frame).orElse(null);
             if (capability == null) return List.of();
-            String plannerProfile = String.valueOf(capability.get("plannerProfile"));
+            String plannerProfile = capability.plannerProfile();
             AgentQueryPlan plan = "ACTIVE_CUSTOMER_BALANCE_DETAIL_V1".equals(plannerProfile) ? activeCustomerBalancePlan(frame)
                 : customerHistoryPlan(frame, plannerProfile);
             if (plan == null) return List.of();
