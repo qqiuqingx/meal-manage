@@ -91,6 +91,29 @@ flowchart TB
 
 复杂组合问答、更多统计维度、真实模型旁路评测和灰度上线仍需持续收敛；Pending/Last Context 已由主系统持久化，Agent 重启或实例切换后可继续纯槽位补充。
 
+### Agent 能力路线图
+
+基于 2026-07-29 与市面客服 Agent 的差距分析，结合本系统"内部运营增强型"定位，确认以下 4 项待建设能力：
+
+| 阶段 | 能力 | 当前状态 | 目标 |
+|------|------|---------|------|
+| 阶段 1 | 多模型韧性 | 仅 DeepSeek 单一 provider | DeepSeek（主）+ Claude（备），故障自动切换 + 熔断 + 规则兜底 |
+| 阶段 2 | RAG 知识检索 | 只能回答"查数据"类问题 | 从业务文档构建知识库，支持"怎么做""规则是什么"类问答 |
+| 阶段 3 | 幻觉检测 | LLM 生成直接返回，无验证 | 数据断言 API 反向校验 + 规则断言 YAML 匹配 + AI 建议标注 |
+| 阶段 4 | 客户健康度评分 | 无 | 排餐失败/退款/核销异常/餐数紧张/过敏复杂度 五维度风险评分 |
+
+详细方案：`docs/superpowers/plans/2026-07-29-agent-service-多模型韧性与RAG知识检索实施方案.md`
+
+不纳入本轮的能力及原因：
+
+| 能力 | 排除原因 |
+|------|---------|
+| 人工转接 | 内部运营系统，操作员始终在回路中 |
+| 全渠道 | 仅 Web + 未来移动端 H5 |
+| 多语言 | 仅中文 |
+| 主动服务/推送 | 后续独立规划 |
+| 多 Agent 编排 | 当前单 Agent 够用，后续扩展时再拆分 |
+
 ### 安全与写操作边界
 
 - 业务查询工具全部标记为 `INTERNAL_READ_ONLY`，Agent 不直连数据库、不执行自由 SQL，订单金额及相关金额字段默认不进入 DTO、模型上下文、回答或审计。
@@ -170,8 +193,9 @@ NODE_OPTIONS=--openssl-legacy-provider BROWSER=none ./node_modules/.bin/vue-cli-
 - Agent 安全链路：新增 HMAC 客服访问上下文、工具权限白名单、部门数据范围、调用与数据预算、facts 引用、结果一致性校验和查询审计。
 - Agent 结果校验：QueryPlan 与工具结果按客户、订单、业务日期和餐次核对；业务日期兼容 `yyyy-MM-dd` 与主系统的零点日期时间格式，避免同日结果被误判为不一致。
 - Agent 统一语义：指标知识目录集中维护业务定义、默认时间、展示名、结果字段和工具映射；相对时间由模型输出枚举、服务端按固定时区解析。
-- Agent 跨实例续接：主系统持久化 Pending/Last Business Context，纯槽位回复恢复原 QueryPlan 语义，避免补“今天”后漂移到公共菜单。
+- Agent 跨实例续接：主系统持久化 Pending/Last Business Context，纯槽位回复恢复原 QueryPlan 语义，避免补”今天”后漂移到公共菜单。
 - 业务文档：补充剩余餐数计算、排餐首次标记、排餐日历调整等说明。
+- Agent 能力规划：完成与市面客服 Agent 的差距分析，确认多模型韧性、RAG 知识检索、幻觉检测、客户健康度评分四项待建设能力，制定分阶段实施方案。
 
 ## 技术栈
 
@@ -192,7 +216,7 @@ NODE_OPTIONS=--openssl-legacy-provider BROWSER=none ./node_modules/.bin/vue-cli-
 - Java 17
 - Spring Boot 3.5.14
 - Spring AI 1.1.6
-- DeepSeek / OpenAI 兼容 Chat API
+- DeepSeek / OpenAI 兼容 Chat API（规划中：多 provider 韧性 + Claude 备用）
 - 受控 QueryPlan、Tool Calling、规则注册表、结构化输出与回答校验
 - 独立 Maven 工程，与主系统依赖和发布节奏隔离
 
@@ -386,6 +410,7 @@ npm run test:unit
 - [智能客服 Agent 全业务问答剩余任务实施计划](eladmin/doc/智能客服Agent全业务问答剩余任务实施计划.md)
 - [智能客服 Agent 自然语言理解与查询纠错优化实施方案](eladmin/doc/智能客服Agent自然语言理解与查询纠错优化实施方案.md)
 - [智能客服 Agent 统一语义分析与时间口径实施计划](eladmin/doc/智能客服Agent统一语义分析与时间口径实施计划.md)
+- [Agent 多模型韧性与 RAG 知识检索实施方案](docs/superpowers/plans/2026-07-29-agent-service-多模型韧性与RAG知识检索实施方案.md)
 
 ## 接口文档索引
 
