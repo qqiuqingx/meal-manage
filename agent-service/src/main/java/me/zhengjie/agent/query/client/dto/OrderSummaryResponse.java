@@ -1,13 +1,10 @@
 package me.zhengjie.agent.query.client.dto;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** 主系统 Agent 订单摘要的强类型传输契约，不定义任何金额字段。 */
 public class OrderSummaryResponse {
-    private static final ObjectMapper LEGACY_MAPPER = new ObjectMapper();
     private Long orderId;
     private String orderCode;
     private Long customerId;
@@ -47,11 +44,6 @@ public class OrderSummaryResponse {
     public Integer getRefundRecordCount() { return refundRecordCount; } public void setRefundRecordCount(Integer value) { refundRecordCount = value; }
     public Integer getMealPlanRecordCount() { return mealPlanRecordCount; } public void setMealPlanRecordCount(Integer value) { mealPlanRecordCount = value; }
     public MealBalance getMealBalance() { return mealBalance; } public void setMealBalance(MealBalance value) { mealBalance = value; }
-
-    /** 过渡期将测试替身的 Map 转换为强类型订单摘要。 */
-    public static OrderSummaryResponse fromLegacyMap(Map<String, Object> value) {
-        return value == null || value.isEmpty() ? new OrderSummaryResponse() : LEGACY_MAPPER.convertValue(value, OrderSummaryResponse.class);
-    }
 
     /** 明确生成仅供卡片使用的字段集合。 */
     public Map<String, Object> toPresentationMap() {

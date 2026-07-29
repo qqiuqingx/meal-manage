@@ -85,7 +85,6 @@ public class DefaultConversationHandler implements ConversationHandler {
     private final MealPlanChatExtractor extractor;
     private final MealPlanDiagnosisService diagnosisService;
     private final MealPlanFollowUpService followUpService;
-    private final LegacyCustomerInsightAdapter legacyCustomerInsightAdapter;
     private final BusinessQueryDataClient businessQueryDataClient;
     private final BusinessQueryChatService businessQueryChatService;
     private final BusinessQueryPlanningService businessQueryPlanningService;
@@ -115,13 +114,11 @@ public class DefaultConversationHandler implements ConversationHandler {
                                       BusinessConversationResultPipeline resultPipeline,
                                       AgentProperties properties,
                                       ConversationStateSupport conversationStateSupport,
-                                      BusinessQueryIntentPolicy businessQueryIntentPolicy,
-                                      LegacyCustomerInsightAdapter legacyCustomerInsightAdapter) {
+                                      BusinessQueryIntentPolicy businessQueryIntentPolicy) {
         this.sessionStore = sessionStore;
         this.extractor = extractor;
         this.diagnosisService = diagnosisService;
         this.followUpService = followUpService;
-        this.legacyCustomerInsightAdapter = legacyCustomerInsightAdapter;
         this.businessQueryDataClient = businessQueryDataClient;
         this.businessQueryChatService = businessQueryChatService;
         this.businessQueryPlanningService = businessQueryPlanningService;
@@ -1218,7 +1215,7 @@ public class DefaultConversationHandler implements ConversationHandler {
      * @param intent 已识别的客户查询意图
      * @param session 当前聊天会话
      * @param extraction 本轮抽取结果
-     * @param orchestrator 本轮业务查询编排器；业务客户端不可用时为空
+     * @param orchestrator 本轮业务查询编排器
      * @return 客户信息查询响应
      */
     private AgentChatResponse handleCustomerInsight(ChatIntent intent, MealPlanChatSession session,
@@ -1229,75 +1226,57 @@ public class DefaultConversationHandler implements ConversationHandler {
 
         switch (intent) {
             case CUSTOMER_MEAL_BALANCE_QUERY: {
-                if (businessQueryDataClient != null) {
-                    AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, slots);
-                    ToolExecutionResult execution = executeBusinessTool(orchestrator, queryPlan,
-                        ToolCatalog.CUSTOMER_OVERVIEW, null, List.of());
-                    AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.CUSTOMER, execution.result(),
-                        composer().customerOverview(presentation(execution.result())),
-                        CUSTOMER_INSIGHT_QUICK_REPLIES);
-                    response.setQueryPlan(queryPlan);
-                    applyToolExecution(response, execution);
-                    return response;
-                }
-                LegacyCustomerInsightAdapter.LegacyInsight legacy =
-                    legacyCustomerInsightAdapter.query(intent, slots);
-                return insightResponse(session, legacy.responseType(), legacy.result(),
-                    legacy.message(), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, slots);
+                ToolExecutionResult execution = executeBusinessTool(orchestrator, queryPlan,
+                    ToolCatalog.CUSTOMER_OVERVIEW, null, List.of());
+                AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.CUSTOMER, execution.result(),
+                    composer().customerOverview(presentation(execution.result())),
+                    CUSTOMER_INSIGHT_QUICK_REPLIES);
+                response.setQueryPlan(queryPlan);
+                applyToolExecution(response, execution);
+                return response;
             }
             case CUSTOMER_VERIFICATION_QUERY: {
-                if (businessQueryDataClient != null) {
-                    ResolvedCustomer resolved = resolveCustomerForBusinessQuery(orchestrator, session);
-                    if (resolved.response != null) return resolved.response;
-                    DiagnosisSlots resolvedSlots = conversationStateSupport.copy(slots);
-                    resolvedSlots.setCustomerId(resolved.customerId);
-                    AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, resolvedSlots);
-                    ToolExecutionResult execution = executeBusinessTool(orchestrator, queryPlan,
-                        ToolCatalog.LIST_VERIFICATIONS, null, List.of());
-                    AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.VERIFICATION, execution.result(),
-                        composer().verificationList(presentation(execution.result())),
-                        CUSTOMER_INSIGHT_QUICK_REPLIES);
-                    response.setQueryPlan(queryPlan);
-                    applyToolExecution(response, execution);
-                    return response;
-                }
-                LegacyCustomerInsightAdapter.LegacyInsight legacy =
-                    legacyCustomerInsightAdapter.query(intent, slots);
-                return insightResponse(session, legacy.responseType(), legacy.result(),
-                    legacy.message(), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                ResolvedCustomer resolved = resolveCustomerForBusinessQuery(orchestrator, session);
+                if (resolved.response != null) return resolved.response;
+                DiagnosisSlots resolvedSlots = conversationStateSupport.copy(slots);
+                resolvedSlots.setCustomerId(resolved.customerId);
+                AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, resolvedSlots);
+                ToolExecutionResult execution = executeBusinessTool(orchestrator, queryPlan,
+                    ToolCatalog.LIST_VERIFICATIONS, null, List.of());
+                AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.VERIFICATION, execution.result(),
+                    composer().verificationList(presentation(execution.result())),
+                    CUSTOMER_INSIGHT_QUICK_REPLIES);
+                response.setQueryPlan(queryPlan);
+                applyToolExecution(response, execution);
+                return response;
             }
             case CUSTOMER_ORDER_QUERY: {
-                if (businessQueryDataClient != null) {
-                    if (slots.getOrderId() != null || isNotBlank(slots.getOrderCode())) {
-                        AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, slots);
-                        ToolExecutionResult execution = executeBusinessTool(orchestrator, queryPlan,
-                            ToolCatalog.ORDER_DETAIL, null, List.of());
-                        Map<String, Object> result = singleItemResult(execution.result());
-                        AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.ORDER, result,
-                            composer().orderList(presentation(result)),
-                            CUSTOMER_INSIGHT_QUICK_REPLIES);
-                        response.setQueryPlan(queryPlan);
-                        applyToolExecution(response, execution);
-                        return response;
-                    }
-                    ResolvedCustomer resolved = resolveCustomerForBusinessQuery(orchestrator, session);
-                    if (resolved.response != null) return resolved.response;
-                    DiagnosisSlots resolvedSlots = conversationStateSupport.copy(slots);
-                    resolvedSlots.setCustomerId(resolved.customerId);
-                    AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, resolvedSlots);
+                if (slots.getOrderId() != null || isNotBlank(slots.getOrderCode())) {
+                    AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, slots);
                     ToolExecutionResult execution = executeBusinessTool(orchestrator, queryPlan,
-                        ToolCatalog.LIST_ORDERS, null, List.of());
-                    AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.ORDER, execution.result(),
-                        composer().orderList(presentation(execution.result())),
+                        ToolCatalog.ORDER_DETAIL, null, List.of());
+                    Map<String, Object> result = singleItemResult(execution.result());
+                    AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.ORDER, result,
+                        composer().orderList(presentation(result)),
                         CUSTOMER_INSIGHT_QUICK_REPLIES);
                     response.setQueryPlan(queryPlan);
                     applyToolExecution(response, execution);
                     return response;
                 }
-                LegacyCustomerInsightAdapter.LegacyInsight legacy =
-                    legacyCustomerInsightAdapter.query(intent, slots);
-                return insightResponse(session, legacy.responseType(), legacy.result(),
-                    legacy.message(), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                ResolvedCustomer resolved = resolveCustomerForBusinessQuery(orchestrator, session);
+                if (resolved.response != null) return resolved.response;
+                DiagnosisSlots resolvedSlots = conversationStateSupport.copy(slots);
+                resolvedSlots.setCustomerId(resolved.customerId);
+                AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, resolvedSlots);
+                ToolExecutionResult execution = executeBusinessTool(orchestrator, queryPlan,
+                    ToolCatalog.LIST_ORDERS, null, List.of());
+                AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.ORDER, execution.result(),
+                    composer().orderList(presentation(execution.result())),
+                    CUSTOMER_INSIGHT_QUICK_REPLIES);
+                response.setQueryPlan(queryPlan);
+                applyToolExecution(response, execution);
+                return response;
             }
             case CUSTOMER_REFUND_QUERY: {
                 if (businessQueryDataClient != null) {
@@ -1395,7 +1374,7 @@ public class DefaultConversationHandler implements ConversationHandler {
 
     /** 将兼容展示 Map 隔离在 Handler 边界，Presenter 只消费强类型结果。 */
     private BusinessPresentationResult presentation(Map<String, Object> result) {
-        return BusinessPresentationResult.fromLegacyMap(result);
+        return BusinessPresentationResult.fromPresentationMap(result);
     }
 
     /** 从客户概览的受控套餐摘要提取最多五个父套餐标识，拒绝用户自由传入套餐 ID。 */

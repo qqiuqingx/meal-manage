@@ -24,7 +24,7 @@ class BusinessConversationResultPipelineTest {
     void shouldCaptureStableOrderFocusFromTypedPresentation() {
         MealPlanChatSession session = new MealPlanChatSession();
         session.setSessionId("session-1");
-        BusinessPresentationResult result = BusinessPresentationResult.fromLegacyMap(
+        BusinessPresentationResult result = BusinessPresentationResult.fromPresentationMap(
             Map.of("present", true, "customerId", 64L, "customerCode", "A001",
                 "items", List.of(Map.of("orderId", 81L, "orderCode", "O-81"))));
 

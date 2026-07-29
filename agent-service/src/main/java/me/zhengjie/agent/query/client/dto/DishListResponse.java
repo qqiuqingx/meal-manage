@@ -1,6 +1,5 @@
 package me.zhengjie.agent.query.client.dto;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -8,13 +7,10 @@ import java.util.Map;
 
 /** 主系统菜品与配料摘要列表的强类型 Agent 传输契约。 */
 public class DishListResponse {
-    private static final ObjectMapper LEGACY_MAPPER = new ObjectMapper();
     private long total; private List<DishSummary> items = new ArrayList<>(); private boolean truncated;
     public long getTotal() { return total; } public void setTotal(long value) { total = value; }
     public List<DishSummary> getItems() { return items; } public void setItems(List<DishSummary> value) { items = value == null ? new ArrayList<>() : value; }
     public boolean isTruncated() { return truncated; } public void setTruncated(boolean value) { truncated = value; }
-    /** 过渡期适配未迁移 Map。 */
-    public static DishListResponse fromLegacyMap(Map<String, Object> value) { return value == null || value.isEmpty() ? new DishListResponse() : LEGACY_MAPPER.convertValue(value, DishListResponse.class); }
     /** 显式生成菜品卡片数据。 */
     public Map<String, Object> toPresentationMap() { Map<String, Object> result = new LinkedHashMap<>(); result.put("total", total); result.put("truncated", truncated); result.put("items", items.stream().map(DishSummary::toPresentationMap).toList()); return result; }
     /** 单个菜品及受控配料摘要。 */

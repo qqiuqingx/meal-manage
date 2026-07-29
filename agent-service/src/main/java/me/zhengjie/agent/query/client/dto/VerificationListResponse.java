@@ -1,7 +1,5 @@
 package me.zhengjie.agent.query.client.dto;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashMap;
@@ -10,13 +8,10 @@ import java.util.Map;
 
 /** 主系统核销记录列表的强类型 Agent 传输契约。 */
 public class VerificationListResponse {
-    private static final ObjectMapper LEGACY_MAPPER = new ObjectMapper();
     private long total; private List<VerificationLog> items = new ArrayList<>(); private boolean truncated;
     public long getTotal() { return total; } public void setTotal(long value) { total = value; }
     public List<VerificationLog> getItems() { return items; } public void setItems(List<VerificationLog> value) { items = value == null ? new ArrayList<>() : value; }
     public boolean isTruncated() { return truncated; } public void setTruncated(boolean value) { truncated = value; }
-    /** 过渡期适配旧 Map 返回。 */
-    public static VerificationListResponse fromLegacyMap(Map<String, Object> value) { return value == null || value.isEmpty() ? new VerificationListResponse() : LEGACY_MAPPER.convertValue(value, VerificationListResponse.class); }
     /** 显式转换为展示层卡片数据。 */
     public Map<String, Object> toPresentationMap() { Map<String, Object> result = new LinkedHashMap<>(); result.put("total", total); result.put("truncated", truncated); result.put("items", items.stream().map(VerificationLog::toPresentationMap).toList()); return result; }
 

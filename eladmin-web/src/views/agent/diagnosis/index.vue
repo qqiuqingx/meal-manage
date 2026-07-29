@@ -214,16 +214,6 @@
                     </el-table>
                   </div>
                 </div>
-                <!-- 客户信息查询结果卡片 -->
-                <div v-if="message.responseType === 'CUSTOMER_MEAL_SUMMARY' && message.insightResult" class="insight-section">
-                  <customer-meal-summary-card :result="message.insightResult" :message-text="message.content" />
-                </div>
-                <div v-if="message.responseType === 'CUSTOMER_VERIFICATION_SUMMARY' && message.insightResult" class="insight-section">
-                  <customer-verification-summary-card :result="message.insightResult" :message-text="message.content" />
-                </div>
-                <div v-if="message.responseType === 'CUSTOMER_ORDER_SUMMARY' && message.insightResult" class="insight-section">
-                  <customer-order-summary-card :result="message.insightResult" :message-text="message.content" />
-                </div>
                 <div v-if="message.responseType && message.responseType.indexOf('BUSINESS_QUERY') === 0 && message.insightResult" class="insight-section business-query-card">
                   <div class="block-title">业务查询结果</div>
                   <customer-overview-card v-if="message.responseType === 'BUSINESS_QUERY_CUSTOMER'" :result="message.insightResult" />
@@ -514,9 +504,6 @@ import {
   updateChatSessionTitle,
   updateAgentRuleGapStatus
 } from '@/api/agentDiagnosis'
-import CustomerMealSummaryCard from './components/customerMealSummaryCard'
-import CustomerVerificationSummaryCard from './components/customerVerificationSummaryCard'
-import CustomerOrderSummaryCard from './components/customerOrderSummaryCard'
 import CustomerOverviewCard from './components/customerOverviewCard'
 import CustomerCandidateCard from './components/customerCandidateCard'
 import BusinessOrderListCard from './components/businessOrderListCard'
@@ -545,9 +532,6 @@ function welcomeMessage() {
 export default {
   name: 'AgentDiagnosis',
   components: {
-    CustomerMealSummaryCard,
-    CustomerVerificationSummaryCard,
-    CustomerOrderSummaryCard,
     CustomerOverviewCard,
     CustomerCandidateCard,
     BusinessOrderListCard,

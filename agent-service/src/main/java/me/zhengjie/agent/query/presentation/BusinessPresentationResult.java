@@ -14,7 +14,7 @@ import java.util.Map;
 /**
  * Presenter 使用的受控业务结果 DTO。
  *
- * <p>历史 Map 只在 {@link #fromLegacyMap(Map)} 适配边界读取；回答组装器只能调用显式字段方法，
+ * <p>受控展示 Map 只在 {@link #fromPresentationMap(Map)} 边界读取；回答组装器只能调用显式字段方法，
  * 不能读取任意字符串键。原始受控展示 Map 仅供兼容响应序列化，不参与回答逻辑。</p>
  */
 public final class BusinessPresentationResult {
@@ -139,12 +139,12 @@ public final class BusinessPresentationResult {
     }
 
     /**
-     * 将历史受控展示 Map 转换为 Presenter DTO。
+     * 将基础设施层生成的受控展示 Map 转换为 Presenter DTO。
      *
      * @param source 工具适配器已经裁剪的展示字段
      * @return 不暴露任意 Map key 的 Presenter 输入
      */
-    public static BusinessPresentationResult fromLegacyMap(Map<String, Object> source) {
+    public static BusinessPresentationResult fromPresentationMap(Map<String, Object> source) {
         return new BusinessPresentationResult(source);
     }
 

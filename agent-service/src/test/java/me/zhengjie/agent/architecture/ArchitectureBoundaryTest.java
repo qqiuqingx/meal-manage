@@ -46,7 +46,7 @@ class ArchitectureBoundaryTest {
     }
 
     @Test
-    void defaultHandlerMustDelegateStateIntentAndLegacyMapCompatibility() throws Exception {
+    void defaultHandlerMustDelegateStateIntentAndBusinessPipelines() throws Exception {
         String handler = Files.readString(Path.of(
             "src/main/java/me/zhengjie/agent/chat/DefaultConversationHandler.java"));
 
@@ -56,7 +56,7 @@ class ArchitectureBoundaryTest {
             .count());
         assertTrue(handler.contains("ConversationStateSupport conversationStateSupport"));
         assertTrue(handler.contains("BusinessQueryIntentPolicy businessQueryIntentPolicy"));
-        assertTrue(handler.contains("LegacyCustomerInsightAdapter legacyCustomerInsightAdapter"));
+        assertFalse(handler.contains("LegacyCustomerInsightAdapter"));
         assertTrue(handler.contains("BusinessQueryChatService businessQueryChatService"));
         assertTrue(handler.contains(
             "BusinessConversationUnderstandingPipeline understandingPipeline"));
@@ -100,6 +100,16 @@ class ArchitectureBoundaryTest {
         assertTrue(catalog.contains("BUSINESS_TOOLS.keySet().equals(BUSINESS_TOOL_INVOKERS.keySet())"));
         assertFalse(catalog.contains("if (\"resolveCustomer\".equals(toolName))"));
         assertFalse(catalog.contains("if (\"listOrders\".equals(toolName))"));
+    }
+
+    /**
+     * 生产源码不得重新引入 DTO 的旧 Map 反向适配；历史 Map 测试数据只能在测试夹具中转换。
+     */
+    @Test
+    void productionSourcesMustNotContainLegacyMapToDtoAdapters() throws Exception {
+        assertSourcesDoNotContain(Path.of("src/main/java"), List.of(
+            "fromLegacyMap",
+            "LEGACY_MAPPER"));
     }
 
     @Test

@@ -3,9 +3,6 @@ package me.zhengjie.agent.tool;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.client.DiagnosisToolDataClient;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCandidateDishStatsRequest;
-import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightMealRequest;
-import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightOrderRequest;
-import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightVerificationRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerLookupRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolCustomerOrdersRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolMealRefundsRequest;
@@ -382,20 +379,6 @@ class AgentToolRegistryTest {
             return Map.of();
         }
 
-        @Override
-        public Map<String, Object> getCustomerMealSummary(DiagnosisToolCustomerInsightMealRequest request) {
-            return Map.of();
-        }
-
-        @Override
-        public Map<String, Object> getCustomerVerificationSummary(DiagnosisToolCustomerInsightVerificationRequest request) {
-            return Map.of();
-        }
-
-        @Override
-        public Map<String, Object> getCustomerOrderSummary(DiagnosisToolCustomerInsightOrderRequest request) {
-            return Map.of();
-        }
     }
 
     private static class RecordingLogSink implements AgentToolRegistry.LogSink {

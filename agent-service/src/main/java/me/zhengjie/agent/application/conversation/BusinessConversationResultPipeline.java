@@ -72,7 +72,7 @@ public class BusinessConversationResultPipeline {
             return;
         }
         BusinessPresentationResult result =
-            BusinessPresentationResult.fromLegacyMap(response.getInsightResult());
+            BusinessPresentationResult.fromPresentationMap(response.getInsightResult());
         LastBusinessQueryContext context = new LastBusinessQueryContext();
         context.setResponseType(response.getResponseType());
         context.setQueryTarget(BusinessResponseTypeCatalog.find(response.getResponseType())

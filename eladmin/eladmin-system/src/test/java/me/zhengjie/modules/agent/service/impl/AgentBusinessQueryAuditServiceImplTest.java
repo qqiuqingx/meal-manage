@@ -166,6 +166,7 @@ class AgentBusinessQueryAuditServiceImplTest {
         assertEquals(2L, stats.getFailureCount());
         assertEquals(1L, stats.getPermissionDeniedCount());
         assertEquals(200D, stats.getAverageCostMs());
+        assertEquals(200L, stats.getP50CostMs());
         assertEquals(300L, stats.getP95CostMs());
         assertEquals(1L, stats.getDirectAnswerCount());
         assertEquals(1D / 3D, stats.getDirectAnswerRate());

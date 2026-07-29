@@ -1,6 +1,5 @@
 package me.zhengjie.agent.query.client.dto;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -8,7 +7,6 @@ import java.util.Map;
 
 /** 主系统父子套餐规格的强类型 Agent 传输契约。 */
 public class PackageSpecResponse {
-    private static final ObjectMapper LEGACY_MAPPER = new ObjectMapper();
     private boolean present; private Long parentPackageId; private String parentPackageCode; private String parentPackageName; private Boolean enabled; private List<SubPackageSpec> subPackages = new ArrayList<>();
     public boolean isPresent() { return present; } public void setPresent(boolean value) { present = value; }
     public Long getParentPackageId() { return parentPackageId; } public void setParentPackageId(Long value) { parentPackageId = value; }
@@ -16,8 +14,6 @@ public class PackageSpecResponse {
     public String getParentPackageName() { return parentPackageName; } public void setParentPackageName(String value) { parentPackageName = value; }
     public Boolean getEnabled() { return enabled; } public void setEnabled(Boolean value) { enabled = value; }
     public List<SubPackageSpec> getSubPackages() { return subPackages; } public void setSubPackages(List<SubPackageSpec> value) { subPackages = value == null ? new ArrayList<>() : value; }
-    /** 过渡期适配未迁移 Map。 */
-    public static PackageSpecResponse fromLegacyMap(Map<String, Object> value) { return value == null || value.isEmpty() ? new PackageSpecResponse() : LEGACY_MAPPER.convertValue(value, PackageSpecResponse.class); }
     /** 显式生成套餐卡片数据。 */
     public Map<String, Object> toPresentationMap() { Map<String, Object> result = new LinkedHashMap<>(); result.put("present", present); result.put("parentPackageId", parentPackageId); result.put("parentPackageCode", parentPackageCode); result.put("parentPackageName", parentPackageName); result.put("enabled", enabled); result.put("subPackages", subPackages.stream().map(SubPackageSpec::toPresentationMap).toList()); return result; }
     /** 子套餐餐品规格。 */

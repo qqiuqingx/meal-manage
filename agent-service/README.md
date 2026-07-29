@@ -8,7 +8,7 @@
 - 默认端口：`18081`。主系统地址：`AGENT_CONTEXT_BASE_URL`（默认 `http://localhost:8000`）。
 - 内部调用令牌：`AGENT_INTERNAL_TOKEN`。生产/预发环境必须配置非空令牌。
 - 默认 Spring AI provider 使用 `AGENT_DEEPSEEK_API_KEY`、`AGENT_DEEPSEEK_BASE_URL`、`AGENT_DEEPSEEK_MODEL`。业务层通过 `AgentModelGateway` 选择 `default` profile；可用 `AGENT_MODEL_DEFAULT`、`AGENT_MODEL_DEFAULT_TIMEOUT_MS`、`AGENT_MODEL_DEFAULT_STRUCTURED_OUTPUT`、`AGENT_MODEL_DEFAULT_TOOL_CALLING`、`AGENT_MODEL_DEFAULT_MAX_RETRIES` 覆盖 profile。无模型时受控链路会降级，不得绕过规则和工具白名单。
-- 会话默认无状态：主系统信封携带快照和 `sessionVersion`，Agent 回传 `expectedSessionVersion`。仅排障兼容时设 `AGENT_CHAT_STATEFUL_SESSION_CACHE_ENABLED=true`。
+- 会话始终无状态：主系统信封携带快照和 `sessionVersion`，Agent 回传 `expectedSessionVersion`；Agent 进程不提供可启用的 JVM 会话缓存。
 
 ```bash
 cd agent-service
@@ -36,7 +36,6 @@ export AGENT_INTERNAL_TOKEN=local-agent-token
 | `AGENT_CHAT_INTENT_CLASSIFIER_MODE` | `hybrid` | 仅允许 `rule_only`、`llm_only`、`hybrid` |
 | `AGENT_CHAT_BUSINESS_SEMANTIC_MODE` | `llm_first` | 仅允许 `rule_only`、`shadow`、`llm_first` |
 | `AGENT_CHAT_CONVERSATION_UNDERSTANDING_MODE` | `shadow` | 多帧理解灰度模式，仅允许 `shadow`、`new` |
-| `AGENT_CHAT_STATEFUL_SESSION_CACHE_ENABLED` | `false` | 仅排障时启用的旧 JVM 会话缓存 |
 
 聊天 mode 已使用枚举绑定，未知值会在启动期失败。Spring 激活 `prod`、`production`、`pre`、`preprod` 或 `staging` profile 时，`AGENT_INTERNAL_TOKEN` 为空同样会拒绝启动，并在错误中指出 `agent.internal-token` 配置路径。
 
@@ -55,16 +54,17 @@ mvn -q -Preal-model-eval -Dtest=RealModelIntentEvaluationTest test
 ## 扩展约定
 
 - 新能力：先在 `semantics/capability-catalog.yaml` 定义受控语义、权限和唯一 `plannerProfile`，再新增 `CapabilityHandler` 实现 `compile`，最后补充 Registry、QueryPlan、权限拒绝和结构化回答测试。中心 Coordinator 和 Planner 不应增加该能力的分支。
-- 新工具：实现 `AgentTool<I,O>`，在 `ToolDescriptor` 声明 domain、action、权限、只读属性、数据分类、超时、条数及输入/输出 Schema 版本，并补充白名单裁剪和重复名称测试。历史 Map 只能进入有明确名称和测试保护的兼容适配器，不得在新能力中扩散。
+- 新工具：实现 `AgentTool<I,O>`，在 `ToolDescriptor` 声明 domain、action、权限、只读属性、数据分类、超时、条数及输入/输出 Schema 版本，并补充白名单裁剪和重复名称测试。尚未迁移的历史 Map 只能停留在基础设施转换边界，不得在新能力中扩散。
 - 新规则：提供 `schemaVersion`（当前为 1）、`ruleId`、`reasonCode`、版本、工具、证据、后续动作和 owner；未知字段或无效工具会加载失败。
 - 新模型 profile/provider：业务层只选择 profile；在 `AgentProperties.models.profiles` 声明模型名、超时、结构化输出、工具调用和重试能力。provider 适配代码放在 `infrastructure/llm`，任务入口调用 `requireCapabilities` 明确校验能力。
 - 配置：新公共配置加入 `AgentProperties` 的嵌套对象；生产代码禁止新增散落的 `@Value`。
 
-当前兼容链路的边界：
+当前架构边界：
 
 - `MealPlanChatServiceImpl` 只委托 `ConversationCoordinator`，中心入口不得出现业务意图或工具名。
-- `DefaultConversationHandler` 继续承载尚未迁完的历史行为，但状态复制/恢复、兼容意图判定和旧客户汇总接口已分别交给 `ConversationStateSupport`、`BusinessQueryIntentPolicy`、`LegacyCustomerInsightAdapter`；生产类只保留一个注入构造器，测试依赖统一由 Fixture 组装。
-- `LegacyCustomerInsightAdapter` 是旧 `DiagnosisToolDataClient` 三个客户汇总 Map 接口的唯一读取点；新代码应走强类型 `BusinessQueryDataClient`/`AgentTool<I,O>`。
+- `DefaultConversationHandler` 继续承载尚未迁完的历史行为，但状态复制/恢复和兼容意图判定已分别交给 `ConversationStateSupport`、`BusinessQueryIntentPolicy`；生产类只保留一个注入构造器，测试依赖统一由 Fixture 组装。
+- 客户餐数、核销和订单查询统一走强类型 `BusinessQueryDataClient`；旧 `DiagnosisToolDataClient` 三个客户汇总 Map 接口和 `LegacyCustomerInsightAdapter` 已删除。
+- `BusinessQueryDataClient` 以 Typed Response 为主契约，生产 DTO 不提供 `fromLegacyMap` 反向适配；历史 Map 测试数据只允许在 `src/test` 夹具中转换。
 - `ToolCatalog` 使用描述符表和执行器表统一登记历史只读工具，启动期校验两者名称集合一致；不要在调用方重新增加工具名 `if/switch`。
 
 ## 跨服务契约
@@ -104,6 +104,12 @@ mvn -q clean package
 
 # 主系统 Agent 测试（在 eladmin/eladmin-system）
 mvn -q -DskipTests=false -Dtest='*Agent*Test' test
+
+# 真实 MySQL 同 session 并发测试（在 eladmin/；需先配置 DB_*）
+AGENT_DB_CONCURRENCY_TEST=true \
+mvn -pl eladmin-system -am test -DskipTests=false \
+  -Dtest='me.zhengjie.modules.agent.session.service.impl.AgentChatSessionConcurrencyIntegrationTest' \
+  -Dsurefire.failIfNoSpecifiedTests=false
 
 # 从 JAR 外部目录启动，验证规则只从 classpath 加载
 cd "$(mktemp -d)"

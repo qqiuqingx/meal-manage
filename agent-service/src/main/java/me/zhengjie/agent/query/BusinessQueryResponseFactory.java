@@ -158,11 +158,7 @@ public class BusinessQueryResponseFactory {
                                             BusinessPresentationResult result) {
         if (responseType == null || result == null) return List.of();
         List<AgentQueryFact> facts = new ArrayList<>();
-        if ("CUSTOMER_MEAL_SUMMARY".equals(responseType)) {
-            addLegacyMealSummaryFacts(facts, result);
-        } else if ("CUSTOMER_VERIFICATION_SUMMARY".equals(responseType)) {
-            addLegacyVerificationFacts(facts, result);
-        } else if (!BusinessResponseTypeCatalog.isBusinessResponse(responseType)) {
+        if (!BusinessResponseTypeCatalog.isBusinessResponse(responseType)) {
             return facts;
         } else if (BusinessResponseTypeCatalog.MEAL_PLAN_ALLERGY.equals(responseType)) {
             addMealPlanAllergyFacts(facts, result);
@@ -273,60 +269,6 @@ public class BusinessQueryResponseFactory {
     private String reportMetricLabel(AgentQueryMetric metric) {
         AgentMetricDefinition definition = AgentMetricCatalog.definition(metric);
         return definition == null ? metric.name() : definition.getDisplayName();
-    }
-
-    /** 为过渡期客户餐数摘要补充其模板中每个确定性数字的事实来源。 */
-    private void addLegacyMealSummaryFacts(List<AgentQueryFact> facts,
-                                           BusinessPresentationResult result) {
-        String sourceId = result.getCustomerCode();
-        addFact(facts, "有效订单数", result.getActiveOrderCount(),
-            "笔", "CUSTOMER_MEAL_SUMMARY", sourceId);
-        addFact(facts, "剩余早餐", result.getRemainingBreakfast(),
-            "餐", "CUSTOMER_MEAL_SUMMARY", sourceId);
-        addFact(facts, "剩余午晚餐", result.getRemainingLunchDinner(),
-            "餐", "CUSTOMER_MEAL_SUMMARY", sourceId);
-        addFact(facts, "合计剩余", result.getTotalRemaining(),
-            "餐", "CUSTOMER_MEAL_SUMMARY", sourceId);
-        addFact(facts, "已核销早餐", result.getVerifiedBreakfast(),
-            "餐", "CUSTOMER_MEAL_SUMMARY", sourceId);
-        addFact(facts, "已核销午餐", result.getVerifiedLunch(),
-            "餐", "CUSTOMER_MEAL_SUMMARY", sourceId);
-        addFact(facts, "已核销晚餐", result.getVerifiedDinner(),
-            "餐", "CUSTOMER_MEAL_SUMMARY", sourceId);
-        if (result.getTotalRemaining() != null || result.getVerifiedBreakfast() != null
-            || result.getVerifiedLunch() != null || result.getVerifiedDinner() != null) {
-            long totalMealCount = numericValue(result.getTotalRemaining())
-                + numericValue(result.getVerifiedBreakfast())
-                + numericValue(result.getVerifiedLunch())
-                + numericValue(result.getVerifiedDinner());
-            addFact(facts, "当前有效订单总餐数", totalMealCount, "餐", "CUSTOMER_MEAL_SUMMARY", sourceId);
-        }
-    }
-
-    /** 为过渡期核销摘要补充其模板中每个确定性数字的事实来源。 */
-    private void addLegacyVerificationFacts(List<AgentQueryFact> facts,
-                                            BusinessPresentationResult result) {
-        String sourceId = result.getCustomerCode();
-        addFact(facts, "累计核销", result.getTotalVerified(),
-            "餐", "CUSTOMER_VERIFICATION_SUMMARY", sourceId);
-        addFact(facts, "累计核销早餐", result.getTotalVerifiedBreakfast(),
-            "餐", "CUSTOMER_VERIFICATION_SUMMARY", sourceId);
-        addFact(facts, "累计核销午餐", result.getTotalVerifiedLunch(),
-            "餐", "CUSTOMER_VERIFICATION_SUMMARY", sourceId);
-        addFact(facts, "累计核销晚餐", result.getTotalVerifiedDinner(),
-            "餐", "CUSTOMER_VERIFICATION_SUMMARY", sourceId);
-        addFact(facts, "最近核销记录数", result.getRecentVerificationCount(),
-            "条", "CUSTOMER_VERIFICATION_SUMMARY", sourceId);
-    }
-
-    /** 仅当来源结果提供数值时追加事实，避免为缺失字段伪造零值。 */
-    private void addFact(List<AgentQueryFact> facts, String label, Object value, String unit, String sourceType, String sourceId) {
-        if (value != null) facts.add(new AgentQueryFact("F" + (facts.size() + 1), label, value, unit, sourceType, sourceId));
-    }
-
-    /** 从主系统已返回的确定性计数字段取得数值，兼容 JSON 的 Number 表达。 */
-    private long numericValue(Object value) {
-        return value instanceof Number ? ((Number) value).longValue() : 0L;
     }
 
     private String totalFactLabel(String responseType) {

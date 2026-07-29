@@ -6,7 +6,6 @@ import me.zhengjie.agent.analysis.ContextReferenceResolver;
 import me.zhengjie.agent.analysis.RuleBasedBusinessQuestionAnalyzer;
 import me.zhengjie.agent.application.conversation.BusinessConversationUnderstandingPipeline;
 import me.zhengjie.agent.application.conversation.BusinessConversationResultPipeline;
-import me.zhengjie.agent.client.DiagnosisToolDataClient;
 import me.zhengjie.agent.config.AgentProperties;
 import me.zhengjie.agent.config.BusinessTimeProperties;
 import me.zhengjie.agent.query.AgentQueryPlanValidator;
@@ -24,13 +23,12 @@ final class DefaultConversationHandlerFixture {
 
     private DefaultConversationHandlerFixture() { }
 
-    /** 使用最小旧诊断依赖创建处理器。 */
+    /** 使用最小依赖创建处理器。 */
     static DefaultConversationHandler create(MealPlanChatSessionStore sessionStore,
                                              MealPlanChatExtractor extractor,
                                              MealPlanDiagnosisService diagnosisService,
-                                             MealPlanFollowUpService followUpService,
-                                             DiagnosisToolDataClient dataClient) {
-        return create(sessionStore, extractor, diagnosisService, followUpService, dataClient, null);
+                                             MealPlanFollowUpService followUpService) {
+        return create(sessionStore, extractor, diagnosisService, followUpService, null);
     }
 
     /** 增加受控业务查询客户端创建处理器。 */
@@ -38,9 +36,8 @@ final class DefaultConversationHandlerFixture {
                                              MealPlanChatExtractor extractor,
                                              MealPlanDiagnosisService diagnosisService,
                                              MealPlanFollowUpService followUpService,
-                                             DiagnosisToolDataClient dataClient,
                                              BusinessQueryDataClient businessQueryDataClient) {
-        return create(sessionStore, extractor, diagnosisService, followUpService, dataClient,
+        return create(sessionStore, extractor, diagnosisService, followUpService,
             businessQueryDataClient, new AgentQueryPlanValidator());
     }
 
@@ -49,10 +46,9 @@ final class DefaultConversationHandlerFixture {
                                              MealPlanChatExtractor extractor,
                                              MealPlanDiagnosisService diagnosisService,
                                              MealPlanFollowUpService followUpService,
-                                             DiagnosisToolDataClient dataClient,
                                              BusinessQueryDataClient businessQueryDataClient,
                                              AgentQueryPlanValidator queryPlanValidator) {
-        return create(sessionStore, extractor, diagnosisService, followUpService, dataClient,
+        return create(sessionStore, extractor, diagnosisService, followUpService,
             businessQueryDataClient, queryPlanValidator, new BusinessAnswerValidator());
     }
 
@@ -61,11 +57,10 @@ final class DefaultConversationHandlerFixture {
                                              MealPlanChatExtractor extractor,
                                              MealPlanDiagnosisService diagnosisService,
                                              MealPlanFollowUpService followUpService,
-                                             DiagnosisToolDataClient dataClient,
                                              BusinessQueryDataClient businessQueryDataClient,
                                              AgentQueryPlanValidator queryPlanValidator,
                                              BusinessAnswerValidator businessAnswerValidator) {
-        return create(sessionStore, extractor, diagnosisService, followUpService, dataClient,
+        return create(sessionStore, extractor, diagnosisService, followUpService,
             businessQueryDataClient, queryPlanValidator, businessAnswerValidator,
             new RuleBasedBusinessQuestionAnalyzer(), new BusinessQueryPlanningService());
     }
@@ -75,13 +70,12 @@ final class DefaultConversationHandlerFixture {
                                              MealPlanChatExtractor extractor,
                                              MealPlanDiagnosisService diagnosisService,
                                              MealPlanFollowUpService followUpService,
-                                             DiagnosisToolDataClient dataClient,
                                              BusinessQueryDataClient businessQueryDataClient,
                                              AgentQueryPlanValidator queryPlanValidator,
                                              BusinessAnswerValidator businessAnswerValidator,
                                              BusinessQuestionAnalyzer businessQuestionAnalyzer,
                                              BusinessQueryPlanningService planningService) {
-        return create(sessionStore, extractor, diagnosisService, followUpService, dataClient,
+        return create(sessionStore, extractor, diagnosisService, followUpService,
             businessQueryDataClient, queryPlanValidator, businessAnswerValidator,
             businessQuestionAnalyzer, planningService, defaultTemporalResolver(), 30);
     }
@@ -91,7 +85,6 @@ final class DefaultConversationHandlerFixture {
                                              MealPlanChatExtractor extractor,
                                              MealPlanDiagnosisService diagnosisService,
                                              MealPlanFollowUpService followUpService,
-                                             DiagnosisToolDataClient dataClient,
                                              BusinessQueryDataClient businessQueryDataClient,
                                              AgentQueryPlanValidator queryPlanValidator,
                                              BusinessAnswerValidator businessAnswerValidator,
@@ -117,8 +110,7 @@ final class DefaultConversationHandlerFixture {
             new BusinessConversationResultPipeline(),
             properties,
             new ConversationStateSupport(),
-            new BusinessQueryIntentPolicy(),
-            new LegacyCustomerInsightAdapter(dataClient));
+            new BusinessQueryIntentPolicy());
     }
 
     /** 创建使用上海时区系统时钟的默认时间解析器。 */

@@ -1,7 +1,5 @@
 package me.zhengjie.agent.query.client.dto;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -9,7 +7,6 @@ import java.util.Map;
 
 /** 主系统客户排餐列表的 Agent 侧强类型传输契约。 */
 public class MealPlanListResponse {
-    private static final ObjectMapper LEGACY_MAPPER = new ObjectMapper();
     private long total;
     private List<MealPlanSummary> items = new ArrayList<>();
     private boolean truncated;
@@ -22,10 +19,6 @@ public class MealPlanListResponse {
     public int getPage() { return page; } public void setPage(int page) { this.page = page; }
     public int getSize() { return size; } public void setSize(int size) { this.size = size; }
     public String getQueriedAt() { return queriedAt; } public void setQueriedAt(String queriedAt) { this.queriedAt = queriedAt; }
-    /** 过渡期适配历史 Map 返回。 */
-    public static MealPlanListResponse fromLegacyMap(Map<String, Object> value) {
-        return value == null || value.isEmpty() ? new MealPlanListResponse() : LEGACY_MAPPER.convertValue(value, MealPlanListResponse.class);
-    }
     /** 显式生成前端卡片所需字段。 */
     public Map<String, Object> toPresentationMap() {
         Map<String, Object> result = new LinkedHashMap<>(); result.put("total", total); result.put("truncated", truncated);

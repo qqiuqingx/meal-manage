@@ -1,6 +1,5 @@
 package me.zhengjie.agent.query.client.dto;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -10,7 +9,6 @@ import java.util.Map;
 /** 主系统客户概览的 Agent 侧强类型传输契约。 */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CustomerOverviewResponse {
-    private static final ObjectMapper LEGACY_MAPPER = new ObjectMapper();
     private boolean present;
     private Long customerId;
     private String customerCode;
@@ -63,11 +61,6 @@ public class CustomerOverviewResponse {
     public void setLatestVerification(LatestVerification latestVerification) { this.latestVerification = latestVerification; }
     public LatestRefund getLatestRefund() { return latestRefund; }
     public void setLatestRefund(LatestRefund latestRefund) { this.latestRefund = latestRefund; }
-
-    /** 将历史测试或未迁移实现返回的 Map 转换为 DTO；正式 HTTP 客户端不使用此路径。 */
-    public static CustomerOverviewResponse fromLegacyMap(Map<String, Object> value) {
-        return value == null || value.isEmpty() ? new CustomerOverviewResponse() : LEGACY_MAPPER.convertValue(value, CustomerOverviewResponse.class);
-    }
 
     /** 将强类型客户概览转换为受控展示数据；工具和 HTTP 层不读取字符串键。 */
     public Map<String, Object> toPresentationMap() {

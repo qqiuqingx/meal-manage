@@ -147,8 +147,11 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
         stats.setSemanticFallbackRate(rate(semanticFallbackCount, queryCount));
         stats.setPendingContextReuseCount(pendingContextReuseCount);
         stats.setPendingContextReuseRate(rate(pendingContextReuseCount, queryCount));
-        stats.setAverageCostMs(audits.stream().map(AgentBusinessQueryAudit::getCostMs).filter(Objects::nonNull).mapToLong(Long::longValue).average().orElse(0D));
-        stats.setP95CostMs(percentile(audits.stream().map(AgentBusinessQueryAudit::getCostMs).filter(Objects::nonNull).collect(Collectors.toList()), 0.95D));
+        List<Long> costs = audits.stream().map(AgentBusinessQueryAudit::getCostMs)
+            .filter(Objects::nonNull).collect(Collectors.toList());
+        stats.setAverageCostMs(costs.stream().mapToLong(Long::longValue).average().orElse(0D));
+        stats.setP50CostMs(percentile(costs, 0.50D));
+        stats.setP95CostMs(percentile(costs, 0.95D));
         stats.setDomainDistribution(distribution(audits.stream().map(AgentBusinessQueryAudit::getQueryDomain).collect(Collectors.toList())));
         stats.setToolDistribution(toolDistribution(audits));
         stats.setMetricDistribution(metricDistribution(audits));

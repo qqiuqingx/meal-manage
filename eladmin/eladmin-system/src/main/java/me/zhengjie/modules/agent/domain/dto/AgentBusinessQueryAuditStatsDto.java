@@ -71,6 +71,9 @@ public class AgentBusinessQueryAuditStatsDto {
     /** 平均查询耗时毫秒。 */
     private Double averageCostMs = 0D;
 
+    /** 处理耗时 P50，单位毫秒。 */
+    private Long p50CostMs = 0L;
+
     /** 处理耗时 P95，单位毫秒。 */
     private Long p95CostMs = 0L;
 

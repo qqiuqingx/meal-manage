@@ -5,6 +5,7 @@ import me.zhengjie.agent.query.AgentQueryPlanValidator;
 import me.zhengjie.agent.query.BusinessQueryPlanner;
 import me.zhengjie.agent.query.client.BusinessQueryDataClient;
 import me.zhengjie.agent.query.client.BusinessQueryClientException;
+import me.zhengjie.agent.query.client.LegacyMapBusinessQueryDataClientStub;
 import me.zhengjie.agent.security.AgentAccessContextHolder;
 import org.junit.jupiter.api.Test;
 
@@ -86,7 +87,7 @@ class AgentBusinessToolExecutorTest {
 
     @Test
     void shouldPreserveStableInternalQueryFailureCode() {
-        BusinessQueryDataClient failing = new BusinessQueryDataClient() {
+        BusinessQueryDataClient failing = new LegacyMapBusinessQueryDataClientStub() {
             public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             public Map<String, Object> customerOverview(Long customerId, String customerCode) { throw new BusinessQueryClientException("AGENT_QUERY_ACCESS_DENIED"); }
             public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
@@ -128,7 +129,7 @@ class AgentBusinessToolExecutorTest {
     }
 
     private BusinessQueryDataClient client(AtomicInteger calls) {
-        return new BusinessQueryDataClient() {
+        return new LegacyMapBusinessQueryDataClientStub() {
             public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { calls.incrementAndGet(); return Map.of("total", 2, "items", List.of()); }
             public Map<String, Object> customerOverview(Long customerId, String customerCode) { calls.incrementAndGet(); return Map.of("present", true, "customerCode", customerCode); }
             public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }

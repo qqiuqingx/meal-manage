@@ -21,8 +21,8 @@ import me.zhengjie.agent.domain.dto.DiagnosisRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.domain.dto.DiagnosisReasonDto;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
-import me.zhengjie.agent.client.DiagnosisToolDataClient;
 import me.zhengjie.agent.query.client.BusinessQueryDataClient;
+import me.zhengjie.agent.query.client.LegacyMapBusinessQueryDataClientStub;
 import me.zhengjie.agent.query.client.dto.DishCandidatePreviewResponse;
 import me.zhengjie.agent.query.AgentQueryPlanValidationError;
 import me.zhengjie.agent.query.AgentQueryPlanValidationResult;
@@ -283,31 +283,33 @@ class DefaultConversationHandlerTest {
         InMemoryMealPlanChatSessionStore store = store();
         StubExtractor extractor = new StubExtractor(result(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY,
             slots(null, "B3303", null, null), List.of()));
-        DefaultConversationHandler service = service(store, extractor, request -> new DiagnosisResponse(),
-            new StubDiagnosisToolDataClient() {
-                @Override
-                public Map<String, Object> getCustomerMealSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightMealRequest request) {
-                    return Map.of(
-                        "present", true,
-                        "customerCode", "B3303",
-                        "customerName", "张三",
-                        "activeOrderCount", 2,
+        BusinessQueryDataClient businessClient = new StubBusinessQueryDataClient() {
+            @Override
+            public Map<String, Object> customerOverview(Long customerId, String customerCode) {
+                return Map.of(
+                    "present", true,
+                    "customerId", 3303L,
+                    "customerCode", "B3303",
+                    "customerName", "张三",
+                    "activeOrderCount", 2,
+                    "mealBalance", Map.of(
                         "remainingBreakfast", 3,
                         "remainingLunchDinner", 18,
-                        "totalRemaining", 21,
                         "verifiedBreakfast", 7,
                         "verifiedLunch", 12,
-                        "verifiedDinner", 10
-                    );
-                }
-            });
+                        "verifiedDinner", 10)
+                );
+            }
+        };
+        DefaultConversationHandler service = service(store, extractor, request -> new DiagnosisResponse(),
+            businessClient);
 
         AgentChatResponse response = service.chat(request("session-1", "B3303 这个客户还剩多少餐数"));
 
         assertEquals(ChatStatus.ANSWERED, response.getStatus());
-        assertEquals("CUSTOMER_MEAL_SUMMARY", response.getResponseType());
+        assertEquals("BUSINESS_QUERY_CUSTOMER", response.getResponseType());
         assertEquals(List.of(), response.getMissingSlots());
-        assertTrue(response.getAssistantMessage().contains("合计剩余 21 餐"));
+        assertTrue(response.getAssistantMessage().contains("剩余早餐 3 餐、午晚餐 18 餐"));
     }
 
     @Test
@@ -365,19 +367,26 @@ class DefaultConversationHandlerTest {
         slots.setOrderStatus(1);
         StubExtractor extractor = new StubExtractor(result(ChatIntent.CUSTOMER_ORDER_QUERY, slots, List.of()));
         AtomicReference<Integer> capturedOrderStatus = new AtomicReference<>();
+        BusinessQueryDataClient businessClient = new StubBusinessQueryDataClient() {
+            @Override
+            public Map<String, Object> customerOverview(Long customerId, String customerCode) {
+                return Map.of("present", true, "customerId", 3303L, "customerCode", "B3303");
+            }
+
+            @Override
+            public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) {
+                capturedOrderStatus.set(status);
+                return Map.of("total", 1, "items", List.of(Map.of(
+                    "orderId", 1L, "customerId", customerId, "status", 1)));
+            }
+        };
         DefaultConversationHandler service = service(store, extractor, request -> new DiagnosisResponse(),
-            new StubDiagnosisToolDataClient() {
-                @Override
-                public Map<String, Object> getCustomerOrderSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightOrderRequest request) {
-                    capturedOrderStatus.set(request.getOrderStatus());
-                    return Map.of("present", true, "customerCode", "B3303", "orders", List.of(Map.of("status", 1)));
-                }
-            });
+            businessClient);
 
         AgentChatResponse response = service.chat(request("session-1", "B3303 有哪些进行中订单"));
 
         assertEquals(Integer.valueOf(1), capturedOrderStatus.get());
-        assertEquals("CUSTOMER_ORDER_SUMMARY", response.getResponseType());
+        assertEquals("BUSINESS_QUERY_ORDER", response.getResponseType());
     }
 
     @Test
@@ -387,48 +396,50 @@ class DefaultConversationHandlerTest {
             Clock.fixed(Instant.parse("2026-05-22T00:00:00Z"), ZoneId.of("Asia/Shanghai"))
         );
         AtomicReference<String> capturedCustomerCode = new AtomicReference<>();
-        DefaultConversationHandler service = service(store, extractor, request -> new DiagnosisResponse(),
-            new StubDiagnosisToolDataClient() {
-                @Override
-                public Map<String, Object> getCustomerVerificationSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightVerificationRequest request) {
-                    return Map.of(
-                        "present", true,
-                        "customerCode", "B2201",
-                        "totalVerified", 8,
-                        "totalVerifiedBreakfast", 1,
-                        "totalVerifiedLunch", 4,
-                        "totalVerifiedDinner", 3,
-                        "recentVerifications", List.of()
-                    );
-                }
-
-                @Override
-                public Map<String, Object> getCustomerMealSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightMealRequest request) {
-                    capturedCustomerCode.set(request.getCustomerCode());
-                    return Map.of(
-                        "present", true,
-                        "customerCode", "B2201",
-                        "customerName", "李四",
-                        "activeOrderCount", 1,
+        BusinessQueryDataClient businessClient = new StubBusinessQueryDataClient() {
+            @Override
+            public Map<String, Object> customerOverview(Long customerId, String customerCode) {
+                capturedCustomerCode.set(customerCode);
+                return Map.of(
+                    "present", true,
+                    "customerId", 2201L,
+                    "customerCode", "B2201",
+                    "customerName", "李四",
+                    "activeOrderCount", 1,
+                    "mealBalance", Map.of(
                         "remainingBreakfast", 2,
                         "remainingLunchDinner", 10,
-                        "totalRemaining", 12,
                         "verifiedBreakfast", 1,
                         "verifiedLunch", 4,
-                        "verifiedDinner", 3
-                    );
-                }
-            });
+                        "verifiedDinner", 3)
+                );
+            }
+
+            @Override
+            public Map<String, Object> listVerifications(Long customerId, Long orderId,
+                                                         String mealType, int limit) {
+                return Map.of(
+                    "total", 8,
+                    "totalVerified", 8,
+                    "totalVerifiedBreakfast", 1,
+                    "totalVerifiedLunch", 4,
+                    "totalVerifiedDinner", 3,
+                    "items", List.of()
+                );
+            }
+        };
+        DefaultConversationHandler service = service(store, extractor, request -> new DiagnosisResponse(),
+            businessClient);
 
         AgentChatResponse first = service.chat(request("session-1", "B2201 看下这个客户核销了多少餐"));
         AgentChatResponse second = service.chat(request("session-1", "他一共多少餐？"));
 
-        assertEquals("CUSTOMER_VERIFICATION_SUMMARY", first.getResponseType());
+        assertEquals("BUSINESS_QUERY_VERIFICATION", first.getResponseType());
         assertEquals(ChatStatus.ANSWERED, second.getStatus());
-        assertEquals("CUSTOMER_MEAL_SUMMARY", second.getResponseType());
+        assertEquals("BUSINESS_QUERY_CUSTOMER", second.getResponseType());
         assertEquals("B2201", capturedCustomerCode.get());
         assertEquals(List.of(), second.getMissingSlots());
-        assertTrue(second.getAssistantMessage().contains("当前有效订单总餐数 20 餐"));
+        assertTrue(second.getAssistantMessage().contains("当前有 1 笔进行中订单，剩余早餐 2 餐、午晚餐 10 餐"));
     }
 
     @Test
@@ -436,7 +447,7 @@ class DefaultConversationHandlerTest {
         InMemoryMealPlanChatSessionStore store = store();
         StubExtractor extractor = new StubExtractor(result(ChatIntent.CUSTOMER_ORDER_QUERY,
             slots(3303L, "B3303", null, null), List.of()));
-        BusinessQueryDataClient businessClient = new BusinessQueryDataClient() {
+        BusinessQueryDataClient businessClient = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) {
@@ -450,7 +461,7 @@ class DefaultConversationHandlerTest {
             @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), businessClient);
+            new MealPlanFollowUpServiceImpl(), businessClient);
 
         AgentChatResponse response = service.chat(request("session-1", "B3303 有哪些订单"));
 
@@ -471,7 +482,7 @@ class DefaultConversationHandlerTest {
             slots(null, null, "2026-05-22", null), List.of()));
         AtomicReference<String> capturedDate = new AtomicReference<>();
         AtomicReference<List<String>> capturedMealTypes = new AtomicReference<>();
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
@@ -491,7 +502,7 @@ class DefaultConversationHandlerTest {
             }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatResponse response = service.chat(request("session-scheduled-menu", "今天的菜单是什么"));
 
@@ -513,7 +524,7 @@ class DefaultConversationHandlerTest {
             result(ChatIntent.BUSINESS_QUERY, slots(null, null, "2026-07-13", null), List.of())
         );
         AtomicInteger calls = new AtomicInteger();
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
@@ -532,7 +543,7 @@ class DefaultConversationHandlerTest {
             }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatResponse first = service.chat(request("session-menu-correction", "今天菜单"));
         AgentChatResponse correction = service.chat(request("session-menu-correction", "怎么全是米饭"));
@@ -554,7 +565,7 @@ class DefaultConversationHandlerTest {
         AtomicInteger calls = new AtomicInteger();
         BusinessQueryDataClient client = scheduledMenuClient(calls);
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         service.chat(request("session-menu-replan", "今天菜单"));
         AgentChatResponse correction = service.chat(request("session-menu-replan", "菜单查得不对，怎么全是米饭"));
@@ -566,7 +577,7 @@ class DefaultConversationHandlerTest {
 
     /** 构造返回午餐、晚餐分组的公共菜单客户端，避免测试依赖主系统网络服务。 */
     private BusinessQueryDataClient scheduledMenuClient(AtomicInteger calls) {
-        return new BusinessQueryDataClient() {
+        return new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
@@ -592,7 +603,7 @@ class DefaultConversationHandlerTest {
         StubExtractor extractor = new StubExtractor(result(ChatIntent.DISH_CANDIDATE_QUERY,
             slots(3303L, "B3303", "2026-05-22", "LUNCH"), List.of()));
         java.util.concurrent.atomic.AtomicInteger candidateCalls = new java.util.concurrent.atomic.AtomicInteger();
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
@@ -612,7 +623,7 @@ class DefaultConversationHandlerTest {
             }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatResponse response = service.chat(request("session-1", "B3303 今天午餐有哪些菜可以吃"));
 
@@ -628,7 +639,7 @@ class DefaultConversationHandlerTest {
         InMemoryMealPlanChatSessionStore store = store();
         StubExtractor extractor = new StubExtractor(result(ChatIntent.MEAL_PLAN_QUERY,
             slots(3303L, "B3303", "2026-05-22", "LUNCH"), List.of()));
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
@@ -643,7 +654,7 @@ class DefaultConversationHandlerTest {
             @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatResponse response = service.chat(request("session-focus", "B3303 今天午餐排了吗"));
 
@@ -660,7 +671,7 @@ class DefaultConversationHandlerTest {
         StubExtractor extractor = new StubExtractor(result(ChatIntent.MEAL_PLAN_QUERY, input, List.of()));
         AtomicInteger overviewCalls = new AtomicInteger();
         AtomicReference<Long> recordId = new AtomicReference<>();
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { overviewCalls.incrementAndGet(); return Map.of(); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
@@ -676,7 +687,7 @@ class DefaultConversationHandlerTest {
             @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatResponse response = service.chat(request("session-direct-plan", "排餐记录ID 9001 吃什么"));
 
@@ -695,7 +706,7 @@ class DefaultConversationHandlerTest {
         StubExtractor extractor = new StubExtractor(result(ChatIntent.CUSTOMER_REFUND_QUERY, input, List.of()));
         AtomicReference<String> startDate = new AtomicReference<>();
         AtomicReference<String> endDate = new AtomicReference<>();
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of("customerId", customerId); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
@@ -710,7 +721,7 @@ class DefaultConversationHandlerTest {
             @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatResponse response = service.chat(request("session-range", "B3303 本月退过餐吗"));
 
@@ -727,7 +738,7 @@ class DefaultConversationHandlerTest {
             slots(null, null, "2026-05-22", "LUNCH"), List.of()));
         AtomicReference<String> recordDate = new AtomicReference<>();
         AtomicReference<String> mealType = new AtomicReference<>();
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
@@ -744,7 +755,7 @@ class DefaultConversationHandlerTest {
             }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatResponse response = service.chat(request("session-operation", "今天午餐待核销客户有多少"));
 
@@ -764,7 +775,7 @@ class DefaultConversationHandlerTest {
             slots(null, null, null, null), List.of()));
         BusinessQueryDataClient client = operationClient((date, mealType) -> Map.of());
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatResponse response = service.chat(request("session-customer-total", "现在系统中还有多少客户"));
 
@@ -794,7 +805,7 @@ class DefaultConversationHandlerTest {
         BusinessTemporalResolver resolver = new BusinessTemporalResolver(
             Clock.fixed(Instant.parse("2026-07-14T04:00:00Z"), ZoneId.of("UTC")), properties);
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client,
+            new MealPlanFollowUpServiceImpl(), client,
             new AgentQueryPlanValidator(), new BusinessAnswerValidator(), new RuleBasedBusinessQuestionAnalyzer(),
             new BusinessQueryPlanningService(), resolver, 30);
 
@@ -817,7 +828,7 @@ class DefaultConversationHandlerTest {
             Clock.fixed(Instant.parse("2026-07-14T04:00:00Z"), ZoneId.of("UTC")), properties);
         AtomicReference<Long> customerId = new AtomicReference<>();
         AtomicReference<String> recordDate = new AtomicReference<>();
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long id, String code, String name) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long id, String code) {
                 return Map.of("present", true, "customerId", 68L, "customerCode", "B2200", "customerName", "新");
@@ -854,7 +865,7 @@ class DefaultConversationHandlerTest {
             new StubExtractor(
                 result(ChatIntent.BUSINESS_QUERY, slots(null, "B2200", null, null), List.of()),
                 result(ChatIntent.BUSINESS_QUERY, slots(null, null, null, null), List.of())),
-            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client,
+            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), client,
             new AgentQueryPlanValidator(), new BusinessAnswerValidator(),
             new HybridBusinessQuestionAnalyzer(new RuleBasedBusinessQuestionAnalyzer(), model),
             new BusinessQueryPlanningService(), resolver, 30);
@@ -878,7 +889,7 @@ class DefaultConversationHandlerTest {
     @Test
     void shouldResolveCustomerCodeWhenSemanticEntitiesContainDefaultPlaceholders() {
         AtomicReference<Long> resolvedMealPlanCustomerId = new AtomicReference<>();
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long id, String code, String name) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long id, String code) {
                 assertNull(id);
@@ -910,7 +921,7 @@ class DefaultConversationHandlerTest {
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store(),
             new StubExtractor(result(ChatIntent.BUSINESS_QUERY, slots(null, "A001", null, null), List.of())),
-            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client,
+            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), client,
             new AgentQueryPlanValidator(), new BusinessAnswerValidator(), analyzer,
             new BusinessQueryPlanningService(), new BusinessTemporalResolver(Clock.systemUTC(), new BusinessTimeProperties()), 30);
 
@@ -946,7 +957,7 @@ class DefaultConversationHandlerTest {
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store(),
             new StubExtractor(result(ChatIntent.BUSINESS_QUERY, new DiagnosisSlots(), List.of())),
-            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client,
+            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), client,
             new AgentQueryPlanValidator(), new BusinessAnswerValidator(), analyzer,
             new BusinessQueryPlanningService(), new BusinessTemporalResolver(Clock.systemUTC(), new BusinessTimeProperties()), 30);
         AgentChatRequest request = request("active-list-session", "分别有谁呢");
@@ -969,7 +980,7 @@ class DefaultConversationHandlerTest {
         StubExtractor extractor = new StubExtractor(result(ChatIntent.OPERATION_STATISTICS_QUERY,
             slots(null, null, "2026-05-22", "LUNCH"), List.of()));
         AtomicInteger calls = new AtomicInteger();
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
@@ -986,7 +997,7 @@ class DefaultConversationHandlerTest {
             }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatResponse response = service.chat(request("session-operation-report", "今天午餐已排餐和待核销客户分别多少"));
 
@@ -1025,7 +1036,7 @@ class DefaultConversationHandlerTest {
         analysis.setClarificationQuestion("请确认你要查看全天排餐，还是指定某个餐次。");
         BusinessQuestionAnalyzer analyzer = (question, context) -> analysis;
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), null, new AgentQueryPlanValidator(),
+            new MealPlanFollowUpServiceImpl(), null, new AgentQueryPlanValidator(),
             new BusinessAnswerValidator(), analyzer, new BusinessQueryPlanningService());
 
         AgentChatResponse response = service.chat(request("session-1", "今天排餐的客户 对哪些菜过敏"));
@@ -1041,7 +1052,7 @@ class DefaultConversationHandlerTest {
             slots(null, null, "2026-07-13", null), List.of()));
         BusinessQuestionAnalyzer analyzer = (question, context) -> allergyAnalysis(MealScope.ALL_AVAILABLE);
         AtomicReference<String> capturedMealType = new AtomicReference<>("NOT_CALLED");
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
@@ -1059,7 +1070,7 @@ class DefaultConversationHandlerTest {
             @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client, new AgentQueryPlanValidator(),
+            new MealPlanFollowUpServiceImpl(), client, new AgentQueryPlanValidator(),
             new BusinessAnswerValidator(), analyzer, new BusinessQueryPlanningService());
 
         AgentChatResponse response = service.chat(request("session-1", "今天排餐的客户 对哪些菜过敏"));
@@ -1092,7 +1103,7 @@ class DefaultConversationHandlerTest {
             return result;
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, diagnosisService,
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), null, new AgentQueryPlanValidator(),
+            new MealPlanFollowUpServiceImpl(), null, new AgentQueryPlanValidator(),
             new BusinessAnswerValidator(), analyzer, new BusinessQueryPlanningService());
 
         AgentChatResponse response = service.chat(request("session-1", "B3303 今天午餐为什么没排上"));
@@ -1111,7 +1122,7 @@ class DefaultConversationHandlerTest {
         StubExtractor extractor = new StubExtractor(result(ChatIntent.CUSTOMER_ORDER_QUERY,
             slots(3303L, "B3303", null, null), List.of()));
         AtomicInteger businessCalls = new AtomicInteger();
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { businessCalls.incrementAndGet(); return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { businessCalls.incrementAndGet(); return Map.of(); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { businessCalls.incrementAndGet(); return Map.of(); }
@@ -1128,7 +1139,7 @@ class DefaultConversationHandlerTest {
             }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client, rejectingValidator);
+            new MealPlanFollowUpServiceImpl(), client, rejectingValidator);
 
         AgentChatResponse response = service.chat(request("session-1", "B3303 有哪些订单"));
 
@@ -1146,7 +1157,7 @@ class DefaultConversationHandlerTest {
         StubExtractor extractor = new StubExtractor(result(ChatIntent.MEAL_BALANCE_CHANGE_QUERY,
             slots(3303L, "B3303", null, null), List.of()));
         AtomicInteger overviewCalls = new AtomicInteger();
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) {
                 overviewCalls.incrementAndGet();
@@ -1172,7 +1183,7 @@ class DefaultConversationHandlerTest {
             @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatResponse response = service.chat(request("session-1", "B3303 餐数为什么变化"));
 
@@ -1190,7 +1201,7 @@ class DefaultConversationHandlerTest {
         nameSlots.setCustomerName("张三");
         StubExtractor extractor = new StubExtractor(result(ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY, nameSlots, List.of()));
         AtomicInteger resolveCalls = new AtomicInteger();
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) {
                 resolveCalls.incrementAndGet();
                 return Map.of("total", 2, "items", List.of(
@@ -1208,7 +1219,7 @@ class DefaultConversationHandlerTest {
             @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
         };
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatResponse response = service.chat(request("session-1", "客户姓名 张三 还剩多少餐"));
 
@@ -1228,7 +1239,7 @@ class DefaultConversationHandlerTest {
         BusinessQueryDataClient client = operationClient((date, type) -> Map.of());
         client = new ActiveBalanceClient(client, balanceCalls);
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
         service.configureConversationUnderstanding((message, slots, handles) -> activeCustomerBalanceUnderstanding(),
             new me.zhengjie.agent.analysis.ConversationUnderstandingValidator(), new me.zhengjie.agent.query.MultiIntentPlanningService(), "new");
 
@@ -1256,7 +1267,7 @@ class DefaultConversationHandlerTest {
         AtomicInteger balanceCalls = new AtomicInteger();
         BusinessQueryDataClient client = new ActiveBalanceClient(operationClient((date, type) -> Map.of()), balanceCalls);
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, new StubExtractor(extraction),
-            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            request -> new DiagnosisResponse(), new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatRequest request = request("active-customer-shadow-session", "他们分别还剩多少餐呢");
         request.setLastBusinessQueryContext(activeCustomerContext("AGENT_ACTIVE_CUSTOMER_V1"));
@@ -1273,7 +1284,7 @@ class DefaultConversationHandlerTest {
     void shouldAnswerCustomerCreationAndPurchaseTime() {
         InMemoryMealPlanChatSessionStore store = store();
         BusinessQueryDataClient base = operationClient((date, type) -> Map.of());
-        BusinessQueryDataClient client = new BusinessQueryDataClient() {
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long id, String code, String name) { return base.resolveCustomer(id, code, name); }
             @Override public Map<String, Object> customerOverview(Long id, String code) {
                 Map<String, Object> result = new LinkedHashMap<>();
@@ -1295,7 +1306,7 @@ class DefaultConversationHandlerTest {
             result(ChatIntent.BUSINESS_QUERY, slots(null, "B2200", null, null), List.of()),
             result(ChatIntent.BUSINESS_QUERY, new DiagnosisSlots(), List.of()));
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
 
         AgentChatResponse created = service.chat(request("customer-time-session", "B2200 这个客户是什么时候添加的"));
         AgentChatResponse purchased = service.chat(request("customer-time-session", "什么时候购买的呢"));
@@ -1314,7 +1325,7 @@ class DefaultConversationHandlerTest {
         AtomicInteger balanceCalls = new AtomicInteger();
         BusinessQueryDataClient client = new ActiveBalanceClient(operationClient((date, type) -> Map.of()), balanceCalls);
         DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store, extractor, request -> new DiagnosisResponse(),
-            new MealPlanFollowUpServiceImpl(), new StubDiagnosisToolDataClient(), client);
+            new MealPlanFollowUpServiceImpl(), client);
         service.configureConversationUnderstanding((message, slots, handles) -> activeCustomerBalanceUnderstanding(me.zhengjie.agent.query.domain.AgentQueryMetric.REFUND_COUNT),
             new me.zhengjie.agent.analysis.ConversationUnderstandingValidator(), new me.zhengjie.agent.query.MultiIntentPlanningService(), "new");
 
@@ -1328,16 +1339,27 @@ class DefaultConversationHandlerTest {
     }
 
     private DefaultConversationHandler service(InMemoryMealPlanChatSessionStore store,
-                                            MealPlanChatExtractor extractor,
-                                            MealPlanDiagnosisService diagnosisService) {
-        return service(store, extractor, diagnosisService, new StubDiagnosisToolDataClient());
+                                               MealPlanChatExtractor extractor,
+                                               MealPlanDiagnosisService diagnosisService) {
+        return DefaultConversationHandlerFixture.create(
+            store, extractor, diagnosisService, new MealPlanFollowUpServiceImpl());
     }
 
+    /**
+     * 使用显式业务查询客户端创建处理器，确保客户洞察测试走正式查询工具链。
+     *
+     * @param store 测试会话存储
+     * @param extractor 会话抽取器
+     * @param diagnosisService 排餐诊断服务
+     * @param businessQueryDataClient 业务查询客户端
+     * @return 完整测试处理器
+     */
     private DefaultConversationHandler service(InMemoryMealPlanChatSessionStore store,
-                                            MealPlanChatExtractor extractor,
-                                            MealPlanDiagnosisService diagnosisService,
-                                            DiagnosisToolDataClient dataClient) {
-        return DefaultConversationHandlerFixture.create(store, extractor, diagnosisService, new MealPlanFollowUpServiceImpl(), dataClient);
+                                               MealPlanChatExtractor extractor,
+                                               MealPlanDiagnosisService diagnosisService,
+                                               BusinessQueryDataClient businessQueryDataClient) {
+        return DefaultConversationHandlerFixture.create(store, extractor, diagnosisService,
+            new MealPlanFollowUpServiceImpl(), businessQueryDataClient);
     }
 
     private InMemoryMealPlanChatSessionStore store() {
@@ -1388,7 +1410,7 @@ class DefaultConversationHandlerTest {
     }
 
     /** 仅实现本场景会调用的明细接口，其余能力委托基础客户端。 */
-    private static class ActiveBalanceClient implements BusinessQueryDataClient {
+    private static class ActiveBalanceClient extends LegacyMapBusinessQueryDataClientStub {
         private final BusinessQueryDataClient delegate;
         private final AtomicInteger calls;
         private ActiveBalanceClient(BusinessQueryDataClient delegate, AtomicInteger calls) { this.delegate = delegate; this.calls = calls; }
@@ -1413,7 +1435,7 @@ class DefaultConversationHandlerTest {
 
     /** 创建仅覆盖运营统计的只读客户端，避免测试绕过真实 QueryPlan 和工具执行器。 */
     private BusinessQueryDataClient operationClient(java.util.function.BiFunction<String, String, Map<String, Object>> workload) {
-        return new BusinessQueryDataClient() {
+        return new LegacyMapBusinessQueryDataClientStub() {
             @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
             @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
             @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
@@ -1429,6 +1451,19 @@ class DefaultConversationHandlerTest {
                     "metricDefinitionId", "AGENT_CUSTOMER_PROFILE_COUNT_V1", "truncated", false);
             }
         };
+    }
+
+    /** 提供空结果默认值的业务查询测试客户端，具体测试只覆盖会被调用的方法。 */
+    private static class StubBusinessQueryDataClient extends LegacyMapBusinessQueryDataClientStub {
+        @Override public Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName) { return Map.of(); }
+        @Override public Map<String, Object> customerOverview(Long customerId, String customerCode) { return Map.of(); }
+        @Override public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) { return Map.of(); }
+        @Override public Map<String, Object> orderDetail(Long orderId, String orderCode, Long customerId) { return Map.of(); }
+        @Override public Map<String, Object> listVerifications(Long customerId, Long orderId, String mealType, int limit) { return Map.of(); }
+        @Override public Map<String, Object> listRefunds(Long customerId, Long orderId, int limit) { return Map.of(); }
+        @Override public Map<String, Object> listMealPlans(Long customerId, String recordDate, String mealType) { return Map.of(); }
+        @Override public Map<String, Object> explainRule(String topic) { return Map.of(); }
+        @Override public Map<String, Object> listDishes(List<Integer> dishIds) { return Map.of(); }
     }
 
     private ChatExtractionResult result(ChatIntent intent, DiagnosisSlots slots, List<MissingSlot> missingSlots) {
@@ -1475,75 +1510,4 @@ class DefaultConversationHandlerTest {
         }
     }
 
-    private static class StubDiagnosisToolDataClient implements DiagnosisToolDataClient {
-        @Override
-        public Map<String, Object> getCustomerProfile(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerLookupRequest request) {
-            return Map.of();
-        }
-
-        @Override
-        public List<Map<String, Object>> listCustomerOrders(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerOrdersRequest request) {
-            return List.of();
-        }
-
-        @Override
-        public Map<String, Object> getMealPlan(me.zhengjie.agent.domain.dto.DiagnosisToolMealPlanLookupRequest request) {
-            return Map.of();
-        }
-
-        @Override
-        public List<Map<String, Object>> getCandidateDishStats(me.zhengjie.agent.domain.dto.DiagnosisToolCandidateDishStatsRequest request) {
-            return List.of();
-        }
-
-        @Override
-        public Map<String, Object> getCustomerExcludeDates(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerLookupRequest request) {
-            return Map.of();
-        }
-
-        @Override
-        public Map<String, Object> getOrderMealBalance(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerOrdersRequest request) {
-            return Map.of();
-        }
-
-        @Override
-        public Map<String, Object> getPackageSpec(me.zhengjie.agent.domain.dto.DiagnosisToolPackageSpecRequest request) {
-            return Map.of();
-        }
-
-        @Override
-        public List<Map<String, Object>> getDishCandidateDetail(me.zhengjie.agent.domain.dto.DiagnosisToolCandidateDishStatsRequest request) {
-            return List.of();
-        }
-
-        @Override
-        public List<Map<String, Object>> listVerificationLogs(me.zhengjie.agent.domain.dto.DiagnosisToolVerificationLogsRequest request) {
-            return List.of();
-        }
-
-        @Override
-        public List<Map<String, Object>> listMealRefunds(me.zhengjie.agent.domain.dto.DiagnosisToolMealRefundsRequest request) {
-            return List.of();
-        }
-
-        @Override
-        public Map<String, Object> getMealPlanGenerationSnapshot(me.zhengjie.agent.domain.dto.DiagnosisToolMealPlanLookupRequest request) {
-            return Map.of();
-        }
-
-        @Override
-        public Map<String, Object> getCustomerMealSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightMealRequest request) {
-            return Map.of();
-        }
-
-        @Override
-        public Map<String, Object> getCustomerVerificationSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightVerificationRequest request) {
-            return Map.of();
-        }
-
-        @Override
-        public Map<String, Object> getCustomerOrderSummary(me.zhengjie.agent.domain.dto.DiagnosisToolCustomerInsightOrderRequest request) {
-            return Map.of();
-        }
-    }
 }

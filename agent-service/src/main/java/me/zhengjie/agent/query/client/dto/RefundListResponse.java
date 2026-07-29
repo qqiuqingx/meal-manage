@@ -1,7 +1,5 @@
 package me.zhengjie.agent.query.client.dto;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashMap;
@@ -10,13 +8,10 @@ import java.util.Map;
 
 /** 主系统退餐记录列表的强类型 Agent 传输契约，不包含退款金额。 */
 public class RefundListResponse {
-    private static final ObjectMapper LEGACY_MAPPER = new ObjectMapper();
     private long total; private List<RefundLog> items = new ArrayList<>(); private boolean truncated;
     public long getTotal() { return total; } public void setTotal(long value) { total = value; }
     public List<RefundLog> getItems() { return items; } public void setItems(List<RefundLog> value) { items = value == null ? new ArrayList<>() : value; }
     public boolean isTruncated() { return truncated; } public void setTruncated(boolean value) { truncated = value; }
-    /** 过渡期适配旧 Map 返回。 */
-    public static RefundListResponse fromLegacyMap(Map<String, Object> value) { return value == null || value.isEmpty() ? new RefundListResponse() : LEGACY_MAPPER.convertValue(value, RefundListResponse.class); }
     /** 显式转换为展示层卡片数据。 */
     public Map<String, Object> toPresentationMap() { Map<String, Object> result = new LinkedHashMap<>(); result.put("total", total); result.put("truncated", truncated); result.put("items", items.stream().map(RefundLog::toPresentationMap).toList()); return result; }
 

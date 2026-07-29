@@ -127,6 +127,6 @@ class BusinessQueryResponseFactoryTest {
 
     /** 将历史展示 Map 收口为 Presenter 强类型输入。 */
     private BusinessPresentationResult result(Map<String, Object> value) {
-        return BusinessPresentationResult.fromLegacyMap(value);
+        return BusinessPresentationResult.fromPresentationMap(value);
     }
 }

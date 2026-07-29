@@ -60,8 +60,7 @@ agent:
   ai:
     enabled: ${AGENT_AI_ENABLED:true}
   chat:
-    # 主系统会话快照是唯一真相源；仅排障期间可显式开启旧 JVM 缓存。
-    stateful-session-cache-enabled: ${AGENT_CHAT_STATEFUL_SESSION_CACHE_ENABLED:false}
+    # 主系统会话快照是唯一真相源，Agent 进程不保存可变会话状态。
     max-turns: ${AGENT_CHAT_MAX_TURNS:10}
     max-diagnosis-history: ${AGENT_CHAT_MAX_DIAGNOSIS_HISTORY:3}
     intent-classifier:

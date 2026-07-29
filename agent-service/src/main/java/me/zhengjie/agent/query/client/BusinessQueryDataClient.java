@@ -20,69 +20,78 @@ import me.zhengjie.agent.query.client.dto.ActiveCustomerBalanceResponse;
  */
 public interface BusinessQueryDataClient {
 
-    /** 按客户 ID、编号或姓名解析有限候选。 */
-    Map<String, Object> resolveCustomer(Long customerId, String customerCode, String customerName);
+    /** 按客户 ID、编号或姓名解析有限候选的强类型契约。 */
+    CustomerCandidateListResponse resolveCustomerTyped(Long customerId, String customerCode,
+                                                       String customerName);
 
-    /** 查询客户候选的强类型契约，默认适配未迁移的 Map 实现。 */
-    default CustomerCandidateListResponse resolveCustomerTyped(Long customerId, String customerCode, String customerName) {
-        return CustomerCandidateListResponse.fromLegacyMap(resolveCustomer(customerId, customerCode, customerName));
+    /** 将客户候选 DTO 转换为受控展示字段。 */
+    default Map<String, Object> resolveCustomer(Long customerId, String customerCode,
+                                                String customerName) {
+        return resolveCustomerTyped(customerId, customerCode, customerName).toPresentationMap();
     }
 
-    /** 查询客户综合概览。 */
-    Map<String, Object> customerOverview(Long customerId, String customerCode);
+    /** 查询客户综合概览的强类型契约。 */
+    CustomerOverviewResponse customerOverviewTyped(Long customerId, String customerCode);
 
-    /**
-     * 查询客户概览的强类型契约。默认适配旧 Map 实现，仅用于渐进迁移；生产 HTTP 客户端直接返回 DTO。
-     */
-    default CustomerOverviewResponse customerOverviewTyped(Long customerId, String customerCode) {
-        return CustomerOverviewResponse.fromLegacyMap(customerOverview(customerId, customerCode));
+    /** 将客户概览 DTO 转换为受控展示字段。 */
+    default Map<String, Object> customerOverview(Long customerId, String customerCode) {
+        return customerOverviewTyped(customerId, customerCode).toPresentationMap();
     }
 
-    /** 查询客户订单列表。 */
-    Map<String, Object> listOrders(Long customerId, Integer status, int page, int size);
+    /** 查询客户订单列表的强类型契约。 */
+    OrderListResponse listOrdersTyped(Long customerId, Integer status, int page, int size);
 
-    /** 查询订单分页摘要的强类型契约，默认适配未迁移的 Map 实现。 */
-    default OrderListResponse listOrdersTyped(Long customerId, Integer status, int page, int size) {
-        return OrderListResponse.fromLegacyMap(listOrders(customerId, status, page, size));
+    /** 将订单列表 DTO 转换为受控展示字段。 */
+    default Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) {
+        return listOrdersTyped(customerId, status, page, size).toPresentationMap();
     }
 
-    /** 按订单 ID 或订单编号查询单笔非金额详情。 */
-    Map<String, Object> orderDetail(Long orderId, String orderCode, Long customerId);
+    /** 按订单 ID 或订单编号查询单笔非金额详情的强类型契约。 */
+    OrderSummaryResponse orderDetailTyped(Long orderId, String orderCode, Long customerId);
 
-    /** 查询单笔订单的强类型契约，默认适配未迁移的 Map 实现。 */
-    default OrderSummaryResponse orderDetailTyped(Long orderId, String orderCode, Long customerId) {
-        return OrderSummaryResponse.fromLegacyMap(orderDetail(orderId, orderCode, customerId));
+    /** 将订单详情 DTO 转换为受控展示字段。 */
+    default Map<String, Object> orderDetail(Long orderId, String orderCode, Long customerId) {
+        return orderDetailTyped(orderId, orderCode, customerId).toPresentationMap();
     }
 
     /** 查询客户或订单最近核销记录。 */
-    Map<String, Object> listVerifications(Long customerId, Long orderId, String mealType, int limit);
+    default Map<String, Object> listVerifications(Long customerId, Long orderId,
+                                                  String mealType, int limit) {
+        return listVerifications(customerId, orderId, mealType, limit, null, null);
+    }
 
     /** 按受控日期范围查询核销记录。 */
     default Map<String, Object> listVerifications(Long customerId, Long orderId, String mealType, int limit,
                                                   String startDate, String endDate) {
-        return listVerifications(customerId, orderId, mealType, limit);
+        return listVerificationsTyped(customerId, orderId, mealType, limit, startDate, endDate)
+            .toPresentationMap();
     }
 
-    /** 查询核销记录的强类型契约，默认适配未迁移的 Map 实现。 */
-    default VerificationListResponse listVerificationsTyped(Long customerId, Long orderId, String mealType, int limit, String startDate, String endDate) {
-        return VerificationListResponse.fromLegacyMap(listVerifications(customerId, orderId, mealType, limit, startDate, endDate));
-    }
+    /** 查询核销记录的强类型契约。 */
+    VerificationListResponse listVerificationsTyped(Long customerId, Long orderId,
+                                                     String mealType, int limit,
+                                                     String startDate, String endDate);
 
     /** 查询客户或订单退餐记录。 */
-    Map<String, Object> listRefunds(Long customerId, Long orderId, int limit);
+    default Map<String, Object> listRefunds(Long customerId, Long orderId, int limit) {
+        return listRefunds(customerId, orderId, limit, null, null);
+    }
 
     /** 按受控日期范围查询退餐记录。 */
     default Map<String, Object> listRefunds(Long customerId, Long orderId, int limit, String startDate, String endDate) {
-        return listRefunds(customerId, orderId, limit);
+        return listRefundsTyped(customerId, orderId, limit, startDate, endDate)
+            .toPresentationMap();
     }
 
-    /** 查询退餐记录的强类型契约，默认适配未迁移的 Map 实现。 */
-    default RefundListResponse listRefundsTyped(Long customerId, Long orderId, int limit, String startDate, String endDate) {
-        return RefundListResponse.fromLegacyMap(listRefunds(customerId, orderId, limit, startDate, endDate));
-    }
+    /** 查询退餐记录的强类型契约。 */
+    RefundListResponse listRefundsTyped(Long customerId, Long orderId, int limit,
+                                        String startDate, String endDate);
 
     /** 查询排餐及菜品摘要；客户、日期和餐次均可为空。 */
-    Map<String, Object> listMealPlans(Long customerId, String recordDate, String mealType);
+    default Map<String, Object> listMealPlans(Long customerId, String recordDate,
+                                              String mealType) {
+        return listMealPlans(customerId, recordDate, mealType, null);
+    }
 
     /**
      * 查询客户指定日期餐次或受控客户排餐记录 ID 的排餐摘要。
@@ -94,12 +103,14 @@ public interface BusinessQueryDataClient {
      * @return 受控的排餐与菜品摘要
      */
     default Map<String, Object> listMealPlans(Long customerId, String recordDate, String mealType, Long customerMealPlanId) {
-        return listMealPlans(customerId, recordDate, mealType);
+        return listMealPlansTyped(customerId, recordDate, mealType, customerMealPlanId)
+            .toPresentationMap();
     }
 
-    /** 查询排餐列表的强类型契约，默认适配未迁移的 Map 实现。 */
+    /** 查询单日排餐列表的强类型契约。 */
     default MealPlanListResponse listMealPlansTyped(Long customerId, String recordDate, String mealType, Long customerMealPlanId) {
-        return MealPlanListResponse.fromLegacyMap(listMealPlans(customerId, recordDate, mealType, customerMealPlanId));
+        return listMealPlansTyped(customerId, recordDate, null, null, mealType,
+            customerMealPlanId, 1, 50);
     }
 
     /**
@@ -115,11 +126,9 @@ public interface BusinessQueryDataClient {
      * @param size 每页条数，最大 50
      * @return 脱敏排餐分页
      */
-    default MealPlanListResponse listMealPlansTyped(Long customerId, String recordDate, String startDate,
-                                                     String endDate, String mealType, Long customerMealPlanId,
-                                                     int page, int size) {
-        return listMealPlansTyped(customerId, recordDate, mealType, customerMealPlanId);
-    }
+    MealPlanListResponse listMealPlansTyped(Long customerId, String recordDate, String startDate,
+                                            String endDate, String mealType,
+                                            Long customerMealPlanId, int page, int size);
 
     /**
      * 按单日、餐次和受控分页查询客户排餐范围；customerId 为 null 时由主系统 SQL 数据范围限制结果。
@@ -135,25 +144,29 @@ public interface BusinessQueryDataClient {
         return listMealPlansTyped(customerId, recordDate, null, null, mealType, null, page, size);
     }
 
-    /** 按主套餐稳定 ID 查询父子套餐和餐品规格。 */
+    /** 按主套餐稳定 ID 查询父子套餐和餐品规格的强类型契约。 */
+    PackageSpecResponse packageDetailTyped(Long parentPackageId);
+
+    /** 将套餐规格 DTO 转换为受控展示字段。 */
     default Map<String, Object> packageDetail(Long parentPackageId) {
-        throw new UnsupportedOperationException("package detail client is not configured");
+        return packageDetailTyped(parentPackageId).toPresentationMap();
     }
 
-    /** 查询套餐规格的强类型契约，默认适配未迁移的 Map 实现。 */
-    default PackageSpecResponse packageDetailTyped(Long parentPackageId) { return PackageSpecResponse.fromLegacyMap(packageDetail(parentPackageId)); }
+    /** 查询主系统版本化业务规则的强类型契约。 */
+    BusinessRuleResponse explainRuleTyped(String topic);
 
-    /** 查询主系统版本化业务规则。 */
-    Map<String, Object> explainRule(String topic);
+    /** 将业务规则 DTO 转换为受控展示字段。 */
+    default Map<String, Object> explainRule(String topic) {
+        return explainRuleTyped(topic).toPresentationMap();
+    }
 
-    /** 查询业务规则的强类型契约，默认适配未迁移的 Map 实现。 */
-    default BusinessRuleResponse explainRuleTyped(String topic) { return BusinessRuleResponse.fromLegacyMap(explainRule(topic)); }
+    /** 查询受控菜品 ID 的限量配料摘要的强类型契约。 */
+    DishListResponse listDishesTyped(List<Integer> dishIds);
 
-    /** 查询受控菜品 ID 的限量配料摘要。 */
-    Map<String, Object> listDishes(List<Integer> dishIds);
-
-    /** 查询菜品与配料摘要的强类型契约，默认适配未迁移的 Map 实现。 */
-    default DishListResponse listDishesTyped(List<Integer> dishIds) { return DishListResponse.fromLegacyMap(listDishes(dishIds)); }
+    /** 将菜品摘要 DTO 转换为受控展示字段。 */
+    default Map<String, Object> listDishes(List<Integer> dishIds) {
+        return listDishesTyped(dishIds).toPresentationMap();
+    }
 
     /** 查询指定日期餐次的公共排期菜单，不返回客户相关数据。 */
     default Map<String, Object> listScheduledDishes(String recordDate, String mealType) {

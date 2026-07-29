@@ -23,7 +23,7 @@ class BusinessResultValidatorTest {
             Map.of("mealTypeCode", "DINNER", "items", List.of())));
 
         assertTrue(validator.validate(BusinessResponseTypeCatalog.SCHEDULED_MENU,
-            plan, BusinessPresentationResult.fromLegacyMap(result))
+            plan, BusinessPresentationResult.fromPresentationMap(result))
             .contains("MENU_RESULT_IMPLAUSIBLE"));
     }
 
@@ -34,7 +34,7 @@ class BusinessResultValidatorTest {
             Map.of("mealTypeCode", "DINNER", "items", List.of())));
 
         assertTrue(validator.validate(BusinessResponseTypeCatalog.SCHEDULED_MENU,
-            plan, BusinessPresentationResult.fromLegacyMap(result))
+            plan, BusinessPresentationResult.fromPresentationMap(result))
             .contains("PLAN_RESULT_MISMATCH"));
     }
 }

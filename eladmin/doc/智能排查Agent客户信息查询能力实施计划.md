@@ -1,5 +1,7 @@
 # 智能排查 Agent 客户信息查询能力实施计划
 
+> 状态说明（2026-07-29）：本文是早期能力设计记录。业务目标和口径仍有效，但原 `customer-insight` DTO、聚合服务、三条内部接口及 Agent Map 客户端方案均未上线并已删除；当前接口与实现以《智能客服Agent内部业务查询接口文档》和《智能排查助手业务说明》为准。
+
 ## 1. 背景与目标
 
 当前智能排查 Agent 的能力按“排查排餐计划为什么没生成”设计，主流程强依赖三个槽位：客户、排餐日期、餐次。因此当客服输入 `B3303 这个客户还剩多少餐数`、`B3303 核销了多少餐` 这类问题时，系统仍会按排餐诊断处理，并继续追问日期和餐次。
@@ -131,9 +133,12 @@ status = 1 且 remaining_count > 0
 
 如果用户指定餐次，只返回该餐次统计。
 
-## 6. 后端改造计划
+## 6. 初版后端改造计划（已被强类型查询接口替代）
 
-### 6.1 新增 DTO
+本节记录最初设计，相关 DTO、聚合服务和三条 `customer-insight` 接口均未上线并已删除，不能再作为当前实现依据。当前实现以
+`eladmin/doc/apidoc/智能客服Agent内部业务查询接口文档.md` 为准。
+
+### 6.1 原 DTO 设计（已删除）
 
 建议新增包：
 
@@ -162,7 +167,7 @@ private Integer orderStatus;
 private Integer recentLimit;
 ```
 
-### 6.2 新增聚合服务
+### 6.2 原聚合服务设计（已删除）
 
 新增接口：
 
@@ -195,9 +200,9 @@ AgentCustomerOrderSummaryResponse getOrderSummary(AgentCustomerInsightRequest re
 5. 返回每笔订单明细，方便前端展示和客服核对。
 6. 日志只记录客户编号、客户 ID、结果条数、耗时，不记录手机号等敏感信息。
 
-### 6.3 新增内部接口
+### 6.3 内部接口收口说明
 
-在 `InternalAgentDiagnosisContextController` 新增：
+本节最初规划的以下接口未上线，现已删除：
 
 ```text
 POST /api/internal/agent/customer-insight/meal-summary
@@ -205,12 +210,14 @@ POST /api/internal/agent/customer-insight/verification-summary
 POST /api/internal/agent/customer-insight/order-summary
 ```
 
-接口要求：
+客户信息查询统一迁移到强类型业务查询接口：
 
-1. 继续使用 `X-Agent-Internal-Token` 鉴权。
-2. 继续透传 `X-Request-Id`。
-3. 只允许内部 Agent 调用，不对普通前端开放。
-4. 返回结构稳定，避免直接返回数据库实体。
+1. `/api/internal/agent/query/customer/overview`
+2. `/api/internal/agent/query/verifications/list`
+3. `/api/internal/agent/query/orders/list`
+4. `/api/internal/agent/query/orders/detail`
+
+完整契约见 `eladmin/doc/apidoc/智能客服Agent内部业务查询接口文档.md`。
 
 ## 7. agent-service 改造计划
 

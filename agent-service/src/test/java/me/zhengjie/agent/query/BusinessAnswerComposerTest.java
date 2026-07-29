@@ -66,6 +66,6 @@ class BusinessAnswerComposerTest {
     }
 
     private BusinessPresentationResult result(Map<String, Object> value) {
-        return BusinessPresentationResult.fromLegacyMap(value);
+        return BusinessPresentationResult.fromPresentationMap(value);
     }
 }
