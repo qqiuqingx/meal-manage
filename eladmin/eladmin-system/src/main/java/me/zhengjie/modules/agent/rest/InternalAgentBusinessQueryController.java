@@ -102,11 +102,10 @@ public class InternalAgentBusinessQueryController {
             @RequestHeader(value = ACCESS_CONTEXT_HEADER) String accessToken,
             @Validated @RequestBody AgentCustomerResolveRequest request) {
         requirePermission(agentToken, accessToken, sessionId, requestId, "customerProfile:list", "customerOrder:list");
-        log.info("Agent客户概览查询接收 customerId={} customerCode={} scopeStatus={} scopeSize={}",
-            request.getCustomerId(), request.getCustomerCode(), AgentCustomerDataScopeContext.status(), scopeSize());
+        log.info("Agent客户概览查询接收 requestId={} scopeStatus={} scopeSize={}",
+            requestId, AgentCustomerDataScopeContext.status(), scopeSize());
         AgentCustomerOverviewDto overview = customerQueryService.getOverview(request.getCustomerId(), request.getCustomerCode());
-        log.info("Agent客户概览查询完成 customerId={} customerCode={} present={} resolvedCustomerId={}",
-            request.getCustomerId(), request.getCustomerCode(), overview.isPresent(), overview.getCustomerId());
+        log.info("Agent客户概览查询完成 requestId={} present={}", requestId, overview.isPresent());
         return ResponseEntity.ok(overview);
     }
 

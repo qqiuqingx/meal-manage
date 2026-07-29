@@ -49,14 +49,14 @@ public class DiagnosisTraceCollector {
         CachedToolResult cachedToolResult = state.cache.get(cacheKey);
         if (cachedToolResult != null) {
             state.events.add(buildToolEvent("TOOL_CACHE_HIT", toolName, inputDigest, true, true,
-                cachedToolResult.resultCount, 0L, null, null));
+                cachedToolResult.resultCount, 0L, null));
             return ToolDecision.cached(cachedToolResult.result);
         }
         if (state.actualToolCalls >= state.maxToolCalls) {
             state.budgetExceeded = true;
             state.fallbackReason = "工具调用超出预算，诊断数据不完整，需人工核对。";
             state.events.add(buildToolEvent("TOOL_BUDGET_EXCEEDED", toolName, inputDigest, false, false,
-                0, 0L, "IllegalStateException", "tool call budget exceeded"));
+                0, 0L, "IllegalStateException"));
             return ToolDecision.rejected(new IllegalStateException("tool call budget exceeded"));
         }
         state.actualToolCalls++;
@@ -78,7 +78,7 @@ public class DiagnosisTraceCollector {
         }
         int resultCount = resultCount(result);
         state.cache.put(cacheKey(toolName, inputDigest), new CachedToolResult(result, resultCount));
-        state.events.add(buildToolEvent("TOOL_CALL", toolName, inputDigest, true, false, resultCount, costMs, null, null));
+        state.events.add(buildToolEvent("TOOL_CALL", toolName, inputDigest, true, false, resultCount, costMs, null));
     }
 
     /**
@@ -99,7 +99,7 @@ public class DiagnosisTraceCollector {
             state.fallbackReason = "关键工具调用失败，诊断数据不完整，需人工核对。";
         }
         state.events.add(buildToolEvent("TOOL_CALL", toolName, inputDigest, false, false,
-            0, costMs, ex.getClass().getSimpleName(), ex.getMessage()));
+            0, costMs, ex.getClass().getSimpleName()));
     }
 
     /**
@@ -160,7 +160,6 @@ public class DiagnosisTraceCollector {
         event.setSuccess(false);
         event.setCostMs(costMs);
         event.setErrorType(ex.getClass().getSimpleName());
-        event.setErrorMessage(ex.getMessage());
         state.events.add(event);
     }
 
@@ -249,8 +248,7 @@ public class DiagnosisTraceCollector {
                                                boolean cached,
                                                int resultCount,
                                                long costMs,
-                                               String errorType,
-                                               String errorMessage) {
+                                               String errorType) {
         DiagnosisTraceEvent event = new DiagnosisTraceEvent();
         event.setEventType(eventType);
         event.setToolName(toolName);
@@ -260,7 +258,6 @@ public class DiagnosisTraceCollector {
         event.setResultCount(resultCount);
         event.setCostMs(costMs);
         event.setErrorType(errorType);
-        event.setErrorMessage(errorMessage);
         return event;
     }
 

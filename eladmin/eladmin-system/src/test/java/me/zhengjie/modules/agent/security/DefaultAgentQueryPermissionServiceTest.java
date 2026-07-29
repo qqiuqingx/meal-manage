@@ -47,7 +47,8 @@ class DefaultAgentQueryPermissionServiceTest {
         assertDoesNotThrow(() -> service.require(context, "customerProfile:list", "customerOrder:list"));
         assertEquals(Arrays.asList("resolveCustomer", "customerOverview", "listOrders", "orderDetail", "listMealPlans",
                 "listVerifications", "listRefunds", "packageDetail", "listDishes", "listScheduledDishes", "previewDishCandidates", "explainRule",
-                "getDailyCustomerWorkload", "getCustomerProfileCount", "getActiveCustomerSummary", "getExpiringOrderSummary", "getMealPlanFailureSummary"),
+                "getDailyCustomerWorkload", "getCustomerProfileCount", "getActiveCustomerSummary", "listActiveCustomerMealBalances",
+                "getExpiringOrderSummary", "getMealPlanFailureSummary"),
             service.availableToolNames(context));
     }
 

@@ -7,6 +7,9 @@ logging:
 spring:
   application:
     name: agent-service
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
   ai:
     model:
       audio:
@@ -30,6 +33,12 @@ agent:
         structured-output: ${AGENT_MODEL_DEFAULT_STRUCTURED_OUTPUT:true}
         tool-calling: ${AGENT_MODEL_DEFAULT_TOOL_CALLING:true}
         max-retries: ${AGENT_MODEL_DEFAULT_MAX_RETRIES:1}
+      diagnosis:
+        model: ${AGENT_MODEL_DIAGNOSIS:${AGENT_MODEL_DEFAULT:${AGENT_DEEPSEEK_MODEL:${AGENT_OPENAI_MODEL:deepseek-chat}}}}
+        timeout-ms: ${AGENT_MODEL_DIAGNOSIS_TIMEOUT_MS:8000}
+        structured-output: ${AGENT_MODEL_DIAGNOSIS_STRUCTURED_OUTPUT:true}
+        tool-calling: ${AGENT_MODEL_DIAGNOSIS_TOOL_CALLING:true}
+        max-retries: ${AGENT_MODEL_DIAGNOSIS_MAX_RETRIES:1}
   rules:
     # 外部目录存在时完整覆盖 classpath 同场景资源，避免规则来源混杂。
     base-path: ${AGENT_RULES_BASE_PATH:rules}

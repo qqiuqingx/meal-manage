@@ -7,8 +7,10 @@ import org.springframework.stereotype.Component;
 /** 客户概览的首个强类型只读工具；新能力可直接消费 DTO，不读取任意 Map key。 */
 @Component
 public class CustomerOverviewTool implements AgentTool<CustomerOverviewTool.Input, CustomerOverviewResponse> {
-    private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor("customerOverview", "customerProfile:list", 1, 3000,
-        "INTERNAL_READ_ONLY", "CustomerOverviewTool.Input", "CustomerOverviewResponse");
+    private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
+        "customerOverview", "CUSTOMER", "OVERVIEW", "customerProfile:list", 1, 3000,
+        "INTERNAL", true, "v1", "v1", "CustomerOverviewTool.Input", "CustomerOverviewResponse"
+    );
     private final BusinessQueryDataClient client;
 
     public CustomerOverviewTool(BusinessQueryDataClient client) { this.client = client; }

@@ -32,23 +32,21 @@ public class RemoteDiagnosisContextBuilder implements DiagnosisContextBuilder {
     public DiagnosisContextDto build(DiagnosisRequest request) {
         long start = System.currentTimeMillis();
         try {
-            log.info("诊断阶段 stage=远程上下文编排开始 requestId={} customerId={} customerCode={} recordDate={} mealType={}",
-                MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
+            log.info("诊断阶段 stage=远程上下文编排开始 requestId={} recordDate={} mealType={}",
+                MDC.get(REQUEST_ID_KEY), request.getRecordDate(), request.getMealType());
             DiagnosisContextDto context = diagnosisContextClient.fetch(request);
             if (context != null) {
-                log.info("诊断阶段 stage=远程上下文编排完成 requestId={} customerId={} customerCode={} recordDate={} mealType={} customerName={} orders={} customerPlans={} candidateDishStats={} costMs={}",
-                    MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getCustomerCode(), context.getRecordDate(),
-                    context.getMealType(), context.getCustomerName(), sizeOf(context.getOrders()), sizeOf(context.getCustomerPlans()),
+                log.info("诊断阶段 stage=远程上下文编排完成 requestId={} recordDate={} mealType={} orders={} customerPlans={} candidateDishStats={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType(), sizeOf(context.getOrders()), sizeOf(context.getCustomerPlans()),
                     sizeOf(context.getCandidateDishStats()), System.currentTimeMillis() - start);
                 return context;
             }
-            log.warn("诊断阶段 stage=远程上下文返回空 requestId={} customerId={} customerCode={} recordDate={} mealType={} costMs={}",
-                MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(),
-                request.getMealType(), System.currentTimeMillis() - start);
+            log.warn("诊断阶段 stage=远程上下文返回空 requestId={} recordDate={} mealType={} costMs={}",
+                MDC.get(REQUEST_ID_KEY), request.getRecordDate(), request.getMealType(), System.currentTimeMillis() - start);
         } catch (RuntimeException ex) {
-            log.warn("诊断阶段 stage=远程上下文编排失败并回退本地上下文 requestId={} customerId={} customerCode={} recordDate={} mealType={} costMs={} errorType={} errorMessage={}",
-                MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(),
-                request.getMealType(), System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            log.warn("诊断阶段 stage=远程上下文编排失败并回退本地上下文 requestId={} recordDate={} mealType={} costMs={} errorType={}",
+                MDC.get(REQUEST_ID_KEY), request.getRecordDate(), request.getMealType(),
+                System.currentTimeMillis() - start, ex.getClass().getSimpleName());
         }
         return fallbackBuilder.build(request);
     }

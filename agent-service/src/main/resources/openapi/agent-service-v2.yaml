@@ -25,6 +25,16 @@ paths:
                 $ref: '#/components/schemas/AgentChatResult'
         '400':
           $ref: '#/components/responses/AgentError'
+        '403':
+          $ref: '#/components/responses/AgentError'
+        '409':
+          $ref: '#/components/responses/AgentError'
+        '422':
+          $ref: '#/components/responses/AgentError'
+        '502':
+          $ref: '#/components/responses/AgentError'
+        '503':
+          $ref: '#/components/responses/AgentError'
         '500':
           $ref: '#/components/responses/AgentError'
 components:
@@ -49,60 +59,190 @@ components:
     AgentExecutionEnvelope:
       type: object
       additionalProperties: false
-      required: [contractVersion, messageRequest]
+      required: [contractVersion, messageRequest, availableTools, sessionVersion]
       properties:
         contractVersion: { type: string, enum: [v2] }
         messageRequest: { $ref: '#/components/schemas/ChatMessageRequest' }
-        contextSnapshot: { type: object, additionalProperties: false, description: 主系统持久化的脱敏槽位快照 }
+        contextSnapshot: { $ref: '#/components/schemas/DiagnosisSlots' }
         availableTools:
           type: array
+          maxItems: 100
+          uniqueItems: true
           items: { type: string, maxLength: 80 }
-        pendingBusinessQueryContext: { type: object, additionalProperties: false }
-        lastBusinessQueryContext: { type: object, additionalProperties: false }
-        activeTaskStack: { type: object, additionalProperties: false }
+        pendingBusinessQueryContext: { $ref: '#/components/schemas/PendingBusinessQueryContext' }
+        lastBusinessQueryContext: { $ref: '#/components/schemas/LastBusinessQueryContext' }
+        activeTaskStack: { $ref: '#/components/schemas/ConversationTaskStack' }
         sessionVersion: { type: integer, format: int64, minimum: 0, description: 主系统会话快照的乐观锁版本 }
     ChatMessageRequest:
       type: object
       additionalProperties: false
-      required: [message]
+      required: [sessionId, clientMessageId, message]
       properties:
-        sessionId: { type: string, maxLength: 128 }
-        clientMessageId: { type: string, maxLength: 128 }
+        sessionId: { type: string, minLength: 1, maxLength: 128 }
+        clientMessageId: { type: string, minLength: 1, maxLength: 128 }
         message: { type: string, minLength: 1, maxLength: 4000 }
     AgentChatResult:
       type: object
-      additionalProperties: true
+      additionalProperties: false
       required: [contractVersion, requestId, clientMessageId, sessionId, status]
       properties:
         contractVersion: { type: string, enum: [v2] }
-        requestId: { type: string }
-        clientMessageId: { type: string }
+        requestId: { type: string, minLength: 1, maxLength: 128 }
+        clientMessageId: { type: string, minLength: 1, maxLength: 128 }
         expectedSessionVersion: { type: integer, format: int64, minimum: 0 }
         conversationPatch: { $ref: '#/components/schemas/ConversationPatch' }
+        sessionId: { type: string, minLength: 1, maxLength: 128 }
+        status: { type: string, enum: [NEED_MORE_INFO, DIAGNOSING, ANSWERED, RESET, ERROR] }
+        responseType: { type: string, maxLength: 100 }
+        assistantMessage: { type: string, maxLength: 12000 }
+        slots: { $ref: '#/components/schemas/DiagnosisSlots' }
+        slotConfidence:
+          type: object
+          additionalProperties: { type: string }
+        missingSlots:
+          type: array
+          items: { type: object, additionalProperties: true }
+        diagnosisResult: { type: object, additionalProperties: true, description: 旧排餐诊断兼容对象 }
+        quickReplies:
+          type: array
+          maxItems: 20
+          items: { type: string, maxLength: 200 }
+        conversationStage: { type: string, maxLength: 80 }
+        insightResult: { type: object, additionalProperties: true, description: 旧卡片兼容对象；新能力优先使用 facts/resultBlocks }
+        facts:
+          type: array
+          items: { $ref: '#/components/schemas/AgentQueryFact' }
+        warnings:
+          type: array
+          items: { type: string, maxLength: 500 }
+        cached: { type: boolean }
+        partial: { type: boolean }
+        queriedAt: { type: string, format: date-time }
+        queryPlan: { type: object, additionalProperties: true, description: 服务端生成的只读计划摘要 }
+        pendingBusinessQueryContext: { $ref: '#/components/schemas/PendingBusinessQueryContext' }
+        lastBusinessQueryContext: { $ref: '#/components/schemas/LastBusinessQueryContext' }
+        semanticTraceSummary: { type: object, additionalProperties: true }
+        activeTaskStack: { $ref: '#/components/schemas/ConversationTaskStack' }
+        resultBlocks:
+          type: array
+          items: { $ref: '#/components/schemas/BusinessQueryResultBlock' }
     ConversationPatch:
       type: object
       additionalProperties: false
       properties:
-        slots: { type: object, additionalProperties: false }
-        conversationStage: { type: string }
-        pendingBusinessQueryContext: { type: object, additionalProperties: false }
-        lastBusinessQueryContext: { type: object, additionalProperties: false }
-        activeTaskStack: { type: object, additionalProperties: false }
-        sessionId: { type: string }
-        status: { type: string }
-        responseType: { type: string }
-        assistantMessage: { type: string }
-        facts: { type: array, items: { type: object } }
-        warnings: { type: array, items: { type: string } }
-        resultBlocks: { type: array, items: { type: object } }
+        slots: { $ref: '#/components/schemas/DiagnosisSlots' }
+        conversationStage: { type: string, maxLength: 80 }
+        pendingBusinessQueryContext: { $ref: '#/components/schemas/PendingBusinessQueryContext' }
+        lastBusinessQueryContext: { $ref: '#/components/schemas/LastBusinessQueryContext' }
+        activeTaskStack: { $ref: '#/components/schemas/ConversationTaskStack' }
+    DiagnosisSlots:
+      type: object
+      additionalProperties: false
+      properties:
+        customerId: { type: integer, format: int64 }
+        customerCode: { type: string, maxLength: 64 }
+        customerName: { type: string, maxLength: 100 }
+        orderId: { type: integer, format: int64 }
+        orderCode: { type: string, maxLength: 64 }
+        mealPlanRecordId: { type: integer, format: int64 }
+        recordDate: { type: string, format: date }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        mealType: { type: string, enum: [BREAKFAST, LUNCH, DINNER] }
+        orderStatus: { type: integer, format: int32 }
+        slotConfidence:
+          type: object
+          additionalProperties: { type: string }
+        slotSource:
+          type: object
+          additionalProperties: { type: string }
+    PendingBusinessQueryContext:
+      type: object
+      additionalProperties: false
+      properties:
+        analysis: { type: object, additionalProperties: true, description: 受控语义分析快照 }
+        missingFields:
+          type: array
+          maxItems: 20
+          items: { type: string, maxLength: 80 }
+        originalQuestionSummary: { type: string, maxLength: 500 }
+        sourceRequestId: { type: string, maxLength: 128 }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+    LastBusinessQueryContext:
+      type: object
+      additionalProperties: false
+      properties:
+        responseType: { type: string, maxLength: 100 }
+        queryTarget: { type: string }
+        queryPlanFingerprint: { type: string, maxLength: 128 }
+        domain: { type: string }
+        recordDate: { type: string, format: date }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        metric: { type: string }
+        mealScope: { type: string, enum: [BREAKFAST, LUNCH, DINNER, ALL_AVAILABLE] }
+        resultShape: { type: object, additionalProperties: true }
+        assistantSummary: { type: string, maxLength: 1000 }
+        queriedAt: { type: string, format: date-time }
+        contextHandles:
+          type: array
+          maxItems: 20
+          items: { type: object, additionalProperties: true }
+    ConversationTaskStack:
+      type: object
+      additionalProperties: false
+      properties:
+        tasks:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              taskId: { type: string, maxLength: 128 }
+              status: { type: string, enum: [ACTIVE, SUSPENDED, COMPLETED, CANCELLED, FAILED] }
+              understanding: { type: object, additionalProperties: true }
+              pendingBusinessQueryContext: { $ref: '#/components/schemas/PendingBusinessQueryContext' }
+              failureCode: { type: string, maxLength: 100 }
+              updatedAt: { type: string, format: date-time }
+    AgentQueryFact:
+      type: object
+      additionalProperties: false
+      properties:
+        factId: { type: string, maxLength: 128 }
+        label: { type: string, maxLength: 200 }
+        value: {}
+        unit: { type: string, maxLength: 40 }
+        sourceType: { type: string, maxLength: 80 }
+        sourceId: { type: string, maxLength: 128 }
+        customerCode: { type: string, maxLength: 64 }
+        recordDate: { type: string, format: date }
+        mealType: { type: string }
+        sourceRecordId: { type: string, maxLength: 128 }
+    BusinessQueryResultBlock:
+      type: object
+      additionalProperties: false
+      properties:
+        frameId: { type: string, maxLength: 128 }
+        responseType: { type: string, maxLength: 100 }
+        status: { type: string, maxLength: 80 }
+        result: { type: object, additionalProperties: true }
+        warnings:
+          type: array
+          items: { type: string, maxLength: 500 }
     AgentApiError:
       type: object
       additionalProperties: false
       required: [code, message, requestId, retryable, details]
       properties:
-        code: { type: string }
-        message: { type: string }
-        requestId: { type: string }
+        code:
+          type: string
+          enum: [INVALID_REQUEST, CONTRACT_VERSION_MISMATCH, PERMISSION_DENIED, CAPABILITY_NOT_AVAILABLE,
+                 TOOL_NOT_AVAILABLE, SESSION_VERSION_CONFLICT, MODEL_UNAVAILABLE,
+                 MODEL_CAPABILITY_UNSUPPORTED, DEPENDENCY_UNAVAILABLE, AGENT_PROCESSING_FAILED]
+        message: { type: string, maxLength: 500 }
+        requestId: { type: string, maxLength: 128 }
         retryable: { type: boolean }
         details:
           type: object

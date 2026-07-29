@@ -46,8 +46,7 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
             AgentCustomerMealSummaryResponse resp = new AgentCustomerMealSummaryResponse();
             resp.setPresent(false);
             resp.setCustomerCode(request.getCustomerCode());
-            log.info("getMealSummary: customer not found, code={}, cost={}ms",
-                    request.getCustomerCode(), System.currentTimeMillis() - startTime);
+            log.info("getMealSummary: customer not found, cost={}ms", System.currentTimeMillis() - startTime);
             return resp;
         }
 
@@ -101,8 +100,8 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
         response.setVerifiedDinner(totalVerifiedDinner);
         response.setTotalVerified(totalVerifiedBreakfast + totalVerifiedLunch + totalVerifiedDinner);
 
-        log.info("getMealSummary: customerId={}, code={}, orders={}, activeOrders={}, cost={}ms",
-                customer.getId(), customer.getCustomerCode(), allOrders.size(), activeOrders.size(),
+        log.info("getMealSummary: orders={}, activeOrders={}, cost={}ms",
+                allOrders.size(), activeOrders.size(),
                 System.currentTimeMillis() - startTime);
 
         return response;
@@ -117,8 +116,7 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
             AgentCustomerVerificationSummaryResponse resp = new AgentCustomerVerificationSummaryResponse();
             resp.setPresent(false);
             resp.setCustomerCode(request.getCustomerCode());
-            log.info("getVerificationSummary: customer not found, code={}, cost={}ms",
-                    request.getCustomerCode(), System.currentTimeMillis() - startTime);
+            log.info("getVerificationSummary: customer not found, cost={}ms", System.currentTimeMillis() - startTime);
             return resp;
         }
 
@@ -134,8 +132,7 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
         response.setCustomerName(customer.getCustomerName());
         if (orderIds.isEmpty()) {
             response.setRecentVerifications(Collections.emptyList());
-            log.info("getVerificationSummary: customerId={} code={} totalVerified=0 cost={}ms",
-                    customer.getId(), customer.getCustomerCode(), System.currentTimeMillis() - startTime);
+            log.info("getVerificationSummary: totalVerified=0 cost={}ms", System.currentTimeMillis() - startTime);
             return response;
         }
 
@@ -194,8 +191,8 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
                 .collect(Collectors.toList());
         response.setRecentVerifications(items);
 
-        log.info("getVerificationSummary: customerId={}, code={}, totalVerified={}, cost={}ms",
-                customer.getId(), customer.getCustomerCode(), response.getTotalVerified(),
+        log.info("getVerificationSummary: totalVerified={}, cost={}ms",
+                response.getTotalVerified(),
                 System.currentTimeMillis() - startTime);
 
         return response;
@@ -210,8 +207,7 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
             AgentCustomerOrderSummaryResponse resp = new AgentCustomerOrderSummaryResponse();
             resp.setPresent(false);
             resp.setCustomerCode(request.getCustomerCode());
-            log.info("getOrderSummary: customer not found, code={}, cost={}ms",
-                    request.getCustomerCode(), System.currentTimeMillis() - startTime);
+            log.info("getOrderSummary: customer not found, cost={}ms", System.currentTimeMillis() - startTime);
             return resp;
         }
 
@@ -229,8 +225,8 @@ public class AgentCustomerInsightServiceImpl implements AgentCustomerInsightServ
         response.setCustomerName(customer.getCustomerName());
         response.setOrders(orderItems);
 
-        log.info("getOrderSummary: customerId={}, code={}, orders={}, cost={}ms",
-                customer.getId(), customer.getCustomerCode(), orders.size(),
+        log.info("getOrderSummary: orders={}, cost={}ms",
+                orders.size(),
                 System.currentTimeMillis() - startTime);
 
         return response;

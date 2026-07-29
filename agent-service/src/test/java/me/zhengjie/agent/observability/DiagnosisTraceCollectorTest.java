@@ -6,6 +6,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DiagnosisTraceCollectorTest {
@@ -55,6 +56,7 @@ class DiagnosisTraceCollectorTest {
         assertTrue(collector.shouldFallback());
         assertEquals("关键工具调用失败，诊断数据不完整，需人工核对。", collector.fallbackReason());
         assertEquals("IllegalStateException", collector.snapshotToolSummary().get(0).getErrorType());
+        assertNull(collector.snapshotToolSummary().get(0).getErrorMessage());
         collector.closeSession();
     }
 
@@ -70,6 +72,18 @@ class DiagnosisTraceCollectorTest {
         assertEquals("MODEL_ROUND_START", collector.snapshotTrace().get(0).getEventType());
         assertEquals("MODEL_ROUND_COMPLETED", collector.snapshotTrace().get(1).getEventType());
         assertEquals("getMealPlan,listCustomerOrders", collector.snapshotTrace().get(1).getToolNames());
+        collector.closeSession();
+    }
+
+    @Test
+    void shouldNotExposeModelExceptionMessageInTrace() {
+        DiagnosisTraceCollector collector = new DiagnosisTraceCollector();
+        collector.openSession(8);
+
+        collector.recordModelRoundFailed(1, new IllegalStateException("sensitive provider response"), 18L);
+
+        assertEquals("IllegalStateException", collector.snapshotTrace().get(0).getErrorType());
+        assertNull(collector.snapshotTrace().get(0).getErrorMessage());
         collector.closeSession();
     }
 }

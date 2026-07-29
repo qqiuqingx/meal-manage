@@ -70,8 +70,8 @@ public class HttpAgentServiceClient implements AgentServiceClient {
     public AgentDiagnosisResponse diagnoseMealPlan(AgentDiagnosisRequest request) {
         String requestId = resolveRequestId(null);
         String url = buildUrl(diagnosePath);
-        log.info("诊断阶段 stage=调用agent-service开始 requestId={} url={} customerId={} customerCode={} recordDate={} mealType={}",
-            requestId, url, request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
+        log.info("诊断阶段 stage=调用agent-service开始 requestId={} url={} recordDate={} mealType={}",
+            requestId, url, request.getRecordDate(), request.getMealType());
         int attempts = totalAttempts();
         for (int attempt = 1; attempt <= attempts; attempt++) {
             long attemptStart = System.currentTimeMillis();
@@ -86,7 +86,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             } catch (Exception ex) {
                 AgentServiceFailureType failureType = classifyFailure(ex);
                 boolean willRetry = shouldRetry(failureType, attempt, attempts);
-                logFailure("诊断阶段", requestId, null, url, failureType, attempt, attempts, attemptStart, ex);
+                logFailure("诊断阶段", requestId, url, failureType, attempt, attempts, attemptStart, ex);
                 if (willRetry) {
                     sleepBackoff();
                     continue;
@@ -108,7 +108,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         String resolvedRequestId = resolveRequestId(requestId);
         boolean useV2 = "v2".equalsIgnoreCase(chatContractVersion);
         String url = buildUrl(useV2 ? v2ChatPath : chatPath);
-        log.info("聊天诊断阶段 stage=调用agent-service开始 requestId={} url={} sessionId={}", resolvedRequestId, url, request.getSessionId());
+        log.info("聊天诊断阶段 stage=调用agent-service开始 requestId={} url={}", resolvedRequestId, url);
         int attempts = totalAttempts();
         for (int attempt = 1; attempt <= attempts; attempt++) {
             long attemptStart = System.currentTimeMillis();
@@ -116,14 +116,14 @@ public class HttpAgentServiceClient implements AgentServiceClient {
                 Object payload = useV2 ? buildV2ChatEnvelope(request) : request;
                 ResponseEntity<String> response = restTemplate().postForEntity(url, requestEntity(payload, resolvedRequestId, accessContext), String.class);
                 AgentChatResponse chatResponse = parseChatResponse(response.getBody(), resolvedRequestId, request);
-                log.info("聊天诊断阶段 stage=调用agent-service完成 requestId={} url={} attempt={} status={} chatStatus={} sessionId={} costMs={}",
+                log.info("聊天诊断阶段 stage=调用agent-service完成 requestId={} url={} attempt={} status={} chatStatus={} costMs={}",
                     resolvedRequestId, url, attempt, response.getStatusCodeValue(), chatResponse.getStatus(),
-                    chatResponse.getSessionId(), System.currentTimeMillis() - attemptStart);
+                    System.currentTimeMillis() - attemptStart);
                 return chatResponse;
             } catch (Exception ex) {
                 AgentServiceFailureType failureType = classifyFailure(ex);
                 boolean willRetry = shouldRetry(failureType, attempt, attempts);
-                logFailure("聊天诊断阶段", resolvedRequestId, request.getSessionId(), url, failureType, attempt, attempts, attemptStart, ex);
+                logFailure("聊天诊断阶段", resolvedRequestId, url, failureType, attempt, attempts, attemptStart, ex);
                 if (willRetry) {
                     sleepBackoff();
                     continue;
@@ -367,18 +367,20 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         }
     }
 
+    /**
+     * 记录下游调用失败的稳定分类和异常类型，不输出会话标识、响应体或异常消息。
+     */
     private void logFailure(String phase,
                             String requestId,
-                            String sessionId,
                             String url,
                             AgentServiceFailureType failureType,
                             int attempt,
                             int totalAttempts,
                             long attemptStart,
                             Exception ex) {
-        log.warn("{} stage=调用agent-service失败 requestId={} sessionId={} url={} failureType={} attempt={}/{} costMs={} errorType={} errorMessage={}",
-            phase, requestId, sessionId, url, failureType.name(), attempt, totalAttempts,
-            System.currentTimeMillis() - attemptStart, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+        log.warn("{} stage=调用agent-service失败 requestId={} url={} failureType={} attempt={}/{} costMs={} errorType={}",
+            phase, requestId, url, failureType.name(), attempt, totalAttempts,
+            System.currentTimeMillis() - attemptStart, ex.getClass().getSimpleName());
     }
 
     private Throwable rootCause(Throwable throwable) {

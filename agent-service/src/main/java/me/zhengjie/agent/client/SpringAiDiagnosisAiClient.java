@@ -1,6 +1,5 @@
 package me.zhengjie.agent.client;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.domain.dto.DiagnosisContextDto;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
@@ -12,6 +11,7 @@ import me.zhengjie.agent.rule.RuleRegistry;
 import me.zhengjie.agent.summary.DiagnosisSuggestionTemplateService;
 import me.zhengjie.agent.tool.AgentToolRegistry;
 import me.zhengjie.agent.infrastructure.llm.AgentModelGateway;
+import me.zhengjie.agent.config.AgentProperties;
 import me.zhengjie.agent.validator.DiagnosisResultValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +22,6 @@ import org.springframework.ai.chat.client.advisor.ToolCallAdvisor;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -39,8 +38,6 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
 
     private static final Logger log = LoggerFactory.getLogger(SpringAiDiagnosisAiClient.class);
     private static final String REQUEST_ID_KEY = "requestId";
-    private static final String CUSTOMER_ID_KEY = "customerId";
-    private static final String CUSTOMER_CODE_KEY = "customerCode";
     private static final String RECORD_DATE_KEY = "recordDate";
     private static final String MEAL_TYPE_KEY = "mealType";
     private static final String STAGE_KEY = "stage";
@@ -60,28 +57,24 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
     private final boolean toolModeEnabled;
     private final String modelName;
 
-    @Value("${agent.diagnosis.phase2-enabled:true}")
     private boolean phase2Enabled = true;
 
-    @Value("${agent.diagnosis.max-tool-calls:8}")
     private int maxToolCalls = 8;
 
-    @Value("${agent.diagnosis.trace-enabled:true}")
     private boolean traceEnabled = true;
 
-    @Value("${agent.diagnosis.suggestion-template-enabled:true}")
     private boolean suggestionTemplateEnabled = true;
 
-    public SpringAiDiagnosisAiClient(ChatClient.Builder chatClientBuilder,
-                                     ObjectMapper objectMapper,
-                                     DiagnosisPromptBuilder promptBuilder,
-                                     DiagnosisResultValidator resultValidator,
-                                     DiagnosisTraceCollector traceCollector,
-                                     DiagnosisSuggestionTemplateService suggestionTemplateService,
-                                     AgentToolRegistry agentToolRegistry,
-                                     DiagnosisToolCallLoggingAdvisor toolCallLoggingAdvisor,
-                                     @Value("${spring.ai.deepseek.chat.options.model:}") String modelName,
-                                     @Value("${agent.diagnosis.tool-mode-enabled:true}") boolean toolModeEnabled) {
+    SpringAiDiagnosisAiClient(ChatClient.Builder chatClientBuilder,
+                              ObjectMapper objectMapper,
+                              DiagnosisPromptBuilder promptBuilder,
+                              DiagnosisResultValidator resultValidator,
+                              DiagnosisTraceCollector traceCollector,
+                              DiagnosisSuggestionTemplateService suggestionTemplateService,
+                              AgentToolRegistry agentToolRegistry,
+                              DiagnosisToolCallLoggingAdvisor toolCallLoggingAdvisor,
+                              String modelName,
+                              boolean toolModeEnabled) {
         this(chatClientBuilder.build(), objectMapper, promptBuilder, resultValidator, traceCollector, suggestionTemplateService,
             agentToolRegistry, toolCallLoggingAdvisor, modelName, toolModeEnabled);
     }
@@ -96,10 +89,21 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
                                      DiagnosisSuggestionTemplateService suggestionTemplateService,
                                      AgentToolRegistry agentToolRegistry,
                                      DiagnosisToolCallLoggingAdvisor toolCallLoggingAdvisor,
-                                     @Value("${agent.diagnosis.tool-mode-enabled:true}") boolean toolModeEnabled) {
-        this(modelGateway.chatClient("diagnosis"), objectMapper, promptBuilder, resultValidator, traceCollector,
+                                     AgentProperties properties) {
+        this(requiredChatClient(modelGateway, properties.getDiagnosis().isToolModeEnabled()),
+            objectMapper, promptBuilder, resultValidator, traceCollector,
             suggestionTemplateService, agentToolRegistry, toolCallLoggingAdvisor,
-            modelGateway.profile("diagnosis").model(), toolModeEnabled);
+            modelGateway.profile("diagnosis").model(), properties.getDiagnosis().isToolModeEnabled());
+        this.phase2Enabled = properties.getDiagnosis().isPhase2Enabled();
+        this.maxToolCalls = properties.getDiagnosis().getMaxToolCalls();
+        this.traceEnabled = properties.getDiagnosis().isTraceEnabled();
+        this.suggestionTemplateEnabled = properties.getDiagnosis().isSuggestionTemplateEnabled();
+    }
+
+    /** 校验诊断任务的结构化输出和可选工具调用能力后再创建客户端。 */
+    private static ChatClient requiredChatClient(AgentModelGateway modelGateway, boolean toolModeEnabled) {
+        modelGateway.requireCapabilities("diagnosis", true, toolModeEnabled);
+        return modelGateway.chatClient("diagnosis");
     }
 
     private SpringAiDiagnosisAiClient(ChatClient chatClient,
@@ -136,8 +140,8 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
         traceCollector.openSession(effectiveMaxToolCalls);
         putDiagnosisMdc(context, "AI_CLIENT_STARTED");
         try {
-            log.info("诊断阶段 stage=开始构建提示词 requestId={} customerId={} recordDate={} mealType={} toolModeEnabled={} ruleCount={}",
-                MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType(),
+            log.info("诊断阶段 stage=开始构建提示词 requestId={} recordDate={} mealType={} toolModeEnabled={} ruleCount={}",
+                MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType(),
                 toolModeEnabled, ruleRegistry.getRules() == null ? 0 : ruleRegistry.getRules().size());
             String prompt = toolModeEnabled
                 ? promptBuilder.buildToolPrompt(context, ruleRegistry)
@@ -148,8 +152,8 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
                 + "customerId 为 null 只表示请求尚未解析出内部ID；只要 customerCode 有值，就不得据此判断客户不存在。"
                 + "CUSTOMER_NOT_FOUND 只能在客户档案工具已成功调用且明确返回空结果后使用。";
             MDC.put(STAGE_KEY, "PROMPT_READY");
-            log.info("诊断阶段 stage=提示词已构建 requestId={} customerId={} recordDate={} mealType={} toolModeEnabled={} promptChars={} ruleCount={}",
-                MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType(),
+            log.info("诊断阶段 stage=提示词已构建 requestId={} recordDate={} mealType={} toolModeEnabled={} promptChars={} ruleCount={}",
+                MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType(),
                 toolModeEnabled, prompt.length(), ruleRegistry.getRules() == null ? 0 : ruleRegistry.getRules().size());
             ChatClient.ChatClientRequestSpec requestSpec = chatClient.prompt();
             if (toolModeEnabled) {
@@ -162,8 +166,8 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
                 requestSpec = requestSpec.advisors(toolCallLoggingAdvisor);
             }
             MDC.put(STAGE_KEY, "MODEL_CALLING");
-            log.info("诊断阶段 stage=开始模型调用 requestId={} customerId={} recordDate={} mealType={} toolModeEnabled={} promptChars={} ruleCount={}",
-                MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType(),
+            log.info("诊断阶段 stage=开始模型调用 requestId={} recordDate={} mealType={} toolModeEnabled={} promptChars={} ruleCount={}",
+                MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType(),
                 toolModeEnabled, prompt.length(), ruleRegistry.getRules() == null ? 0 : ruleRegistry.getRules().size());
             ChatClient.CallResponseSpec callResponseSpec = requestSpec.user(prompt).call();
             ChatClientResponse rawClientResponse = callResponseSpec.chatClientResponse();
@@ -175,14 +179,10 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
             if (phase2Enabled && suggestionTemplateEnabled) {
                 response = suggestionTemplateService.applyTemplates(response);
             }
-            log.info("诊断阶段 stage=模型原始返回 requestId={} rawClientResponse={} rawChatResponse={} rawContext={} rawResults={} rawMetadata={} parsedResponse={}",
-                MDC.get(REQUEST_ID_KEY),
-                rawClientResponse,
-                rawChatResponse,
-                rawClientResponse == null ? null : rawClientResponse.context(),
-                rawChatResponse == null ? null : rawChatResponse.getResults(),
-                rawChatResponse == null ? null : rawChatResponse.getMetadata(),
-                serializeDiagnosisResponse(response));
+            log.info("诊断阶段 stage=模型返回已解析 requestId={} responsePresent={} reasonCount={} toolModeEnabled={}",
+                MDC.get(REQUEST_ID_KEY), response != null,
+                response == null || response.getReasons() == null ? 0 : response.getReasons().size(),
+                toolModeEnabled);
             DiagnosisResponse validated = resultValidator.validateOrFallback(response, context, ruleRegistry);
             if (traceCollector.hasCriticalToolFailure()
                 || traceCollector.isBudgetExceeded() && validated.isFallback()) {
@@ -203,17 +203,17 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
             MDC.put(FALLBACK_KEY, String.valueOf(validated.isFallback()));
             MDC.put(FALLBACK_REASON_KEY, safe(validated.getFallbackReason()));
             MDC.put(STAGE_KEY, "MODEL_COMPLETED");
-            log.info("诊断阶段 stage=模型调用完成 requestId={} customerId={} recordDate={} mealType={} fallback={} reasonCount={} costMs={}",
-                MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType(),
+            log.info("诊断阶段 stage=模型调用完成 requestId={} recordDate={} mealType={} fallback={} reasonCount={} costMs={}",
+                MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType(),
                 validated.isFallback(), validated.getReasons() == null ? 0 : validated.getReasons().size(),
                 System.currentTimeMillis() - start);
             return validated;
         } catch (RuntimeException ex) {
             MDC.put(STAGE_KEY, "MODEL_FAILED");
             MDC.put(FALLBACK_REASON_KEY, safe(traceCollector.fallbackReason()));
-            log.warn("诊断阶段 stage=模型调用失败并回退 requestId={} customerId={} recordDate={} mealType={} costMs={} errorType={} errorMessage={}",
-                MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType(),
-                System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            log.warn("诊断阶段 stage=模型调用失败并回退 requestId={} recordDate={} mealType={} costMs={} errorType={}",
+                MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType(),
+                System.currentTimeMillis() - start, ex.getClass().getSimpleName());
             DiagnosisResponse fallback = resultValidator.validateOrFallback(null, context, ruleRegistry);
             attachTrace(fallback);
             fallback.setFallbackReason(traceCollector.fallbackReason());
@@ -230,22 +230,6 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
         }
         response.setDiagnosisTrace(traceCollector.snapshotTrace());
         response.setToolCallSummary(traceCollector.snapshotToolSummary());
-    }
-
-    private String serializeDiagnosisResponse(DiagnosisResponse response) {
-        try {
-            return objectMapper.writeValueAsString(response);
-        } catch (JsonProcessingException ex) {
-            return "{" + "\"serializationError\":\"" + ex.getClass().getSimpleName() + "\","
-                + "\"message\":\"" + escapeJson(ex.getMessage()) + "\"}";
-        }
-    }
-
-    private String escapeJson(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private String extractContent(ChatResponse chatResponse) {
@@ -295,16 +279,12 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
     }
 
     private void putDiagnosisMdc(DiagnosisContextDto context, String stage) {
-        MDC.put(CUSTOMER_ID_KEY, context.getCustomerId() == null ? "" : String.valueOf(context.getCustomerId()));
-        MDC.put(CUSTOMER_CODE_KEY, safe(context.getCustomerCode()));
         MDC.put(RECORD_DATE_KEY, safe(context.getRecordDate()));
         MDC.put(MEAL_TYPE_KEY, safe(context.getMealType()));
         MDC.put(STAGE_KEY, safe(stage));
     }
 
     private void clearDiagnosisMdc() {
-        MDC.remove(CUSTOMER_ID_KEY);
-        MDC.remove(CUSTOMER_CODE_KEY);
         MDC.remove(RECORD_DATE_KEY);
         MDC.remove(MEAL_TYPE_KEY);
         MDC.remove(STAGE_KEY);

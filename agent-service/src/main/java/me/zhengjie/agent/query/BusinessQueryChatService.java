@@ -5,11 +5,13 @@ import me.zhengjie.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.agent.query.client.BusinessQueryDataClient;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
 import me.zhengjie.agent.query.tool.AgentBusinessToolExecutor.ToolExecutionResult;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.ArrayList;
 
 /** 通用只读业务查询聊天服务，负责单轮编排器、QueryPlan 与工具执行边界。 */
+@Component
 public class BusinessQueryChatService {
     private final BusinessQueryDataClient client;
     private final AgentQueryPlanValidator validator;

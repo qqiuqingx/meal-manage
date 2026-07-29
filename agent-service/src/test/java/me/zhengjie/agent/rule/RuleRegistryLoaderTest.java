@@ -1,6 +1,7 @@
 package me.zhengjie.agent.rule;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.nio.file.Files;
@@ -11,6 +12,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RuleRegistryLoaderTest {
@@ -84,8 +86,7 @@ class RuleRegistryLoaderTest {
     }
 
     @Test
-    void shouldLoadNewExternalSceneWithoutChangingLoaderCode() throws IOException {
-        Path root = Files.createTempDirectory("agent-rules-");
+    void shouldLoadNewExternalSceneWithoutChangingLoaderCode(@TempDir Path root) throws IOException {
         Path scene = Files.createDirectories(root.resolve("inventory-check"));
         Files.writeString(scene.resolve("rule.yaml"), """
             - ruleId: INVENTORY_EMPTY
@@ -105,5 +106,29 @@ class RuleRegistryLoaderTest {
 
         assertEquals("INVENTORY_CHECK", registry.getScene());
         assertEquals("INVENTORY_EMPTY", registry.getRules().get(0).getRuleId());
+    }
+
+    @Test
+    void shouldRejectUnknownRuleToolDuringRegistryLoading(@TempDir Path root) throws IOException {
+        Path scene = Files.createDirectories(root.resolve("unsafe-scene"));
+        Files.writeString(scene.resolve("rule.yaml"), """
+            - schemaVersion: 1
+              ruleId: UNKNOWN_TOOL_RULE
+              reasonCode: UNKNOWN_TOOL_RULE
+              version: 1
+              title: 非法工具
+              requiredTools:
+                - executeArbitraryQuery
+              evidenceFields:
+                - result
+              nextActions:
+                - 检查规则
+              owner: agent
+            """);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+            () -> new FileSystemRuleRegistryLoader(root).load("UNSAFE_SCENE"));
+
+        assertTrue(error.getMessage().contains("unregistered tool"));
     }
 }

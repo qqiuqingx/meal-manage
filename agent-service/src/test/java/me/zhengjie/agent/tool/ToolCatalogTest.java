@@ -13,4 +13,10 @@ class ToolCatalogTest {
         assertEquals(ToolCatalog.descriptor("listOrders"),
             me.zhengjie.agent.query.tool.AgentBusinessToolRegistry.descriptor("listOrders"));
     }
+
+    @Test
+    void everyRegisteredBusinessToolHasExactlyOneCatalogInvoker() {
+        assertTrue(ToolCatalog.descriptors().stream()
+            .allMatch(descriptor -> ToolCatalog.isExecutable(descriptor.name())));
+    }
 }

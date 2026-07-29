@@ -31,6 +31,10 @@ public class AgentProperties {
     private Rules rules = new Rules();
     @Valid
     private Models models = new Models();
+    @Valid
+    private Diagnosis diagnosis = new Diagnosis();
+    @Valid
+    private Chat chat = new Chat();
 
     public String getContextBaseUrl() { return contextBaseUrl; }
     public void setContextBaseUrl(String contextBaseUrl) { this.contextBaseUrl = contextBaseUrl; }
@@ -44,6 +48,10 @@ public class AgentProperties {
     public void setRules(Rules rules) { this.rules = rules; }
     public Models getModels() { return models; }
     public void setModels(Models models) { this.models = models; }
+    public Diagnosis getDiagnosis() { return diagnosis; }
+    public void setDiagnosis(Diagnosis diagnosis) { this.diagnosis = diagnosis == null ? new Diagnosis() : diagnosis; }
+    public Chat getChat() { return chat; }
+    public void setChat(Chat chat) { this.chat = chat == null ? new Chat() : chat; }
 
     /** 规则资源加载配置；外部 scene 目录采用完整覆盖策略。 */
     public static class Rules {
@@ -87,5 +95,127 @@ public class AgentProperties {
         public void setToolCalling(boolean toolCalling) { this.toolCalling = toolCalling; }
         public int getMaxRetries() { return maxRetries; }
         public void setMaxRetries(int maxRetries) { this.maxRetries = maxRetries; }
+    }
+
+    /** 排餐诊断执行配置。 */
+    public static class Diagnosis {
+        private boolean phase2Enabled = true;
+        private boolean toolModeEnabled = true;
+        @Min(1)
+        @Max(50)
+        private int maxToolCalls = 8;
+        private boolean traceEnabled = true;
+        private boolean suggestionTemplateEnabled = true;
+        public boolean isPhase2Enabled() { return phase2Enabled; }
+        public void setPhase2Enabled(boolean phase2Enabled) { this.phase2Enabled = phase2Enabled; }
+        public boolean isToolModeEnabled() { return toolModeEnabled; }
+        public void setToolModeEnabled(boolean toolModeEnabled) { this.toolModeEnabled = toolModeEnabled; }
+        public int getMaxToolCalls() { return maxToolCalls; }
+        public void setMaxToolCalls(int maxToolCalls) { this.maxToolCalls = maxToolCalls; }
+        public boolean isTraceEnabled() { return traceEnabled; }
+        public void setTraceEnabled(boolean traceEnabled) { this.traceEnabled = traceEnabled; }
+        public boolean isSuggestionTemplateEnabled() { return suggestionTemplateEnabled; }
+        public void setSuggestionTemplateEnabled(boolean suggestionTemplateEnabled) { this.suggestionTemplateEnabled = suggestionTemplateEnabled; }
+    }
+
+    /** 聊天理解、语义分析和跨轮上下文配置。 */
+    public static class Chat {
+        @Valid
+        private IntentClassifier intentClassifier = new IntentClassifier();
+        @Valid
+        private SemanticAnalysis semanticAnalysis = new SemanticAnalysis();
+        @Valid
+        private BusinessSemantic businessSemantic = new BusinessSemantic();
+        @Valid
+        private ConversationUnderstanding conversationUnderstanding = new ConversationUnderstanding();
+        public IntentClassifier getIntentClassifier() { return intentClassifier; }
+        public void setIntentClassifier(IntentClassifier value) { intentClassifier = value == null ? new IntentClassifier() : value; }
+        public SemanticAnalysis getSemanticAnalysis() { return semanticAnalysis; }
+        public void setSemanticAnalysis(SemanticAnalysis value) { semanticAnalysis = value == null ? new SemanticAnalysis() : value; }
+        public BusinessSemantic getBusinessSemantic() { return businessSemantic; }
+        public void setBusinessSemantic(BusinessSemantic value) { businessSemantic = value == null ? new BusinessSemantic() : value; }
+        public ConversationUnderstanding getConversationUnderstanding() { return conversationUnderstanding; }
+        public void setConversationUnderstanding(ConversationUnderstanding value) {
+            conversationUnderstanding = value == null ? new ConversationUnderstanding() : value;
+        }
+    }
+
+    public static class IntentClassifier {
+        private IntentClassifierMode mode = IntentClassifierMode.HYBRID;
+
+        /** 返回受控的意图分类模式。 */
+        public IntentClassifierMode getMode() { return mode; }
+
+        /** 设置受控意图分类模式，未知配置值由 Spring 在绑定期拒绝。 */
+        public void setMode(IntentClassifierMode mode) {
+            this.mode = mode == null ? IntentClassifierMode.HYBRID : mode;
+        }
+    }
+
+    public static class SemanticAnalysis {
+        private boolean enabled = true;
+        @jakarta.validation.constraints.DecimalMin("0.0")
+        @jakarta.validation.constraints.DecimalMax("1.0")
+        private double confidenceThreshold = 0.80D;
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public double getConfidenceThreshold() { return confidenceThreshold; }
+        public void setConfidenceThreshold(double value) { confidenceThreshold = value; }
+    }
+
+    public static class BusinessSemantic {
+        private BusinessSemanticMode mode = BusinessSemanticMode.LLM_FIRST;
+        @jakarta.validation.constraints.DecimalMin("0.0")
+        @jakarta.validation.constraints.DecimalMax("1.0")
+        private double confidenceThreshold = 0.80D;
+        private boolean pendingContextEnabled = true;
+        @Min(1)
+        @Max(1440)
+        private int pendingContextTtlMinutes = 30;
+        /** 返回受控的业务语义执行模式。 */
+        public BusinessSemanticMode getMode() { return mode; }
+
+        /** 设置受控业务语义模式，未知配置值由 Spring 在绑定期拒绝。 */
+        public void setMode(BusinessSemanticMode mode) {
+            this.mode = mode == null ? BusinessSemanticMode.LLM_FIRST : mode;
+        }
+        public double getConfidenceThreshold() { return confidenceThreshold; }
+        public void setConfidenceThreshold(double value) { confidenceThreshold = value; }
+        public boolean isPendingContextEnabled() { return pendingContextEnabled; }
+        public void setPendingContextEnabled(boolean value) { pendingContextEnabled = value; }
+        public int getPendingContextTtlMinutes() { return pendingContextTtlMinutes; }
+        public void setPendingContextTtlMinutes(int value) { pendingContextTtlMinutes = value; }
+    }
+
+    public static class ConversationUnderstanding {
+        private ConversationUnderstandingMode mode = ConversationUnderstandingMode.SHADOW;
+
+        /** 返回受控的多帧会话理解灰度模式。 */
+        public ConversationUnderstandingMode getMode() { return mode; }
+
+        /** 设置受控会话理解模式，未知配置值由 Spring 在绑定期拒绝。 */
+        public void setMode(ConversationUnderstandingMode mode) {
+            this.mode = mode == null ? ConversationUnderstandingMode.SHADOW : mode;
+        }
+    }
+
+    /** 意图分类器允许的生产模式。 */
+    public enum IntentClassifierMode {
+        RULE_ONLY,
+        LLM_ONLY,
+        HYBRID
+    }
+
+    /** 业务问题语义分析允许的生产模式。 */
+    public enum BusinessSemanticMode {
+        RULE_ONLY,
+        SHADOW,
+        LLM_FIRST
+    }
+
+    /** 多帧会话理解允许的灰度模式。 */
+    public enum ConversationUnderstandingMode {
+        SHADOW,
+        NEW
     }
 }

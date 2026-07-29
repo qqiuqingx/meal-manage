@@ -33,3 +33,20 @@ mvn -q -Dtest='*Agent*Test' test
 ```
 
 测试 profile 使用 `logback-test.xml` 将 `me.zhengjie.agent` 降为 WARN；真实模型评测仍必须显式启用 `real-model-eval` profile。
+
+## 2026-07-29 收口快照
+
+| 项目 | 当前值 | 相对基线 |
+|---|---:|---|
+| `MealPlanChatServiceImpl` | 42 行、1 个依赖字段、0 个业务分支 | 已成为兼容 Facade |
+| `ConversationCoordinator` | 31 行 | 只选择唯一 `ConversationHandler`，无具体工具名 |
+| `DefaultConversationHandler` | 1913 行 | 历史行为仍在渐进迁移；状态、兼容意图、旧客户汇总适配和测试依赖组装已拆出 |
+| Agent 生产 Java 文件 | 212 | 包含新应用边界、模型网关、配置校验及兼容适配组件 |
+| Agent 测试类 | 78 | 全量 329 个测试，0 failure、0 error、1 skipped |
+| 历史业务工具 | 18 | 描述符与执行器名称集合启动期强制一致 |
+| 诊断工具 | 11 | 与业务工具共享 `ToolDescriptor` 元数据协议 |
+| 语义能力 | 5 | 由强类型能力目录加载并映射唯一 `plannerProfile` |
+| QueryPlan 指标 | 15 | 使用 `AgentQueryMetric` 受控枚举 |
+| 默认 Handler 业务查询响应/控制码 | 21 | 仍是后续响应类型目录化的迁移基线 |
+
+本机 Java 17 + Maven 3.9.9 的 `mvn -q clean package` 用时约 6 秒且无普通 INFO 测试日志；该耗时只用于本地回归对比，不替代 CI 或灰度环境基线。架构测试已固定以下边界：领域包不依赖 Controller/Spring Web/HTTP Client，能力包不依赖 Controller 契约，Coordinator 不依赖具体 `Http*Client`，Facade/Coordinator 不包含业务意图和工具字符串。

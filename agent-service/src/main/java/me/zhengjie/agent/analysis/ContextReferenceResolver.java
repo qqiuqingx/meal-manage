@@ -4,12 +4,15 @@ import me.zhengjie.agent.analysis.domain.ContextHandleKind;
 import me.zhengjie.agent.analysis.domain.ConversationContextHandle;
 import me.zhengjie.agent.analysis.domain.SemanticRequestFrame;
 import me.zhengjie.agent.analysis.domain.SemanticScope;
+import org.springframework.stereotype.Component;
+
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
 /** 根据类型、时效和显著度解析语义帧所需的上下文，不读取用户表面词决定引用对象。 */
+@Component
 public class ContextReferenceResolver {
     private static final double AMBIGUOUS_DELTA = 0.10D;
 

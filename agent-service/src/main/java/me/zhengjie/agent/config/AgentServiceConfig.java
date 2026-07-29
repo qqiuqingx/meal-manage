@@ -20,8 +20,8 @@ import me.zhengjie.agent.analysis.LlmConversationUnderstandingService;
 import me.zhengjie.agent.analysis.SemanticCapabilityCatalog;
 import me.zhengjie.agent.analysis.SemanticCapabilityCatalogLoader;
 import me.zhengjie.agent.infrastructure.llm.AgentModelGateway;
+import me.zhengjie.agent.capability.CapabilityHandlerRegistry;
 import me.zhengjie.agent.validator.DiagnosisResultValidator;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -62,13 +62,21 @@ public class AgentServiceConfig {
     public BusinessQuestionAnalyzer businessQuestionAnalyzer(AgentModelGateway modelGateway,
                                                              ObjectMapper objectMapper,
                                                              BusinessSemanticPromptRenderer semanticPromptRenderer,
-                                                             @Value("${agent.chat.semantic-analysis.enabled:true}") boolean semanticAnalysisEnabled,
-                                                             @Value("${agent.chat.business-semantic.mode:llm_first}") String semanticMode,
-                                                             @Value("${agent.chat.business-semantic.confidence-threshold:${agent.chat.semantic-analysis.confidence-threshold:0.80}}") double confidenceThreshold) {
+                                                             AgentProperties properties) {
+        boolean semanticAnalysisEnabled = properties.getChat().getSemanticAnalysis().isEnabled();
+        AgentProperties.BusinessSemanticMode semanticMode =
+            properties.getChat().getBusinessSemantic().getMode();
+        double confidenceThreshold = properties.getChat().getBusinessSemantic().getConfidenceThreshold();
         RuleBasedBusinessQuestionAnalyzer ruleAnalyzer = new RuleBasedBusinessQuestionAnalyzer();
-        if (!semanticAnalysisEnabled || !modelGateway.isConfigured("default") || "rule_only".equalsIgnoreCase(semanticMode)) return ruleAnalyzer;
+        if (!semanticAnalysisEnabled || !modelGateway.isConfigured("default")
+            || semanticMode == AgentProperties.BusinessSemanticMode.RULE_ONLY) {
+            return ruleAnalyzer;
+        }
+        modelGateway.requireCapabilities("default", true, false);
         LlmBusinessQuestionAnalyzer llmAnalyzer = new LlmBusinessQuestionAnalyzer(modelGateway.chatClient("default"), objectMapper, semanticPromptRenderer);
-        if ("shadow".equalsIgnoreCase(semanticMode)) return new ShadowBusinessQuestionAnalyzer(ruleAnalyzer, llmAnalyzer);
+        if (semanticMode == AgentProperties.BusinessSemanticMode.SHADOW) {
+            return new ShadowBusinessQuestionAnalyzer(ruleAnalyzer, llmAnalyzer);
+        }
         return new HybridBusinessQuestionAnalyzer(ruleAnalyzer, llmAnalyzer, confidenceThreshold);
     }
 
@@ -96,8 +104,9 @@ public class AgentServiceConfig {
 
     /** 创建多语义帧的固定计划编译器。 */
     @Bean
-    public MultiIntentPlanningService multiIntentPlanningService(SemanticCapabilityCatalog semanticCapabilityCatalog) {
-        return new MultiIntentPlanningService(semanticCapabilityCatalog);
+    public MultiIntentPlanningService multiIntentPlanningService(SemanticCapabilityCatalog semanticCapabilityCatalog,
+                                                                 CapabilityHandlerRegistry handlerRegistry) {
+        return new MultiIntentPlanningService(semanticCapabilityCatalog, handlerRegistry);
     }
 
     /** 创建会话理解协议校验器，非法帧不能进入查询编排。 */
@@ -113,8 +122,17 @@ public class AgentServiceConfig {
     public ConversationUnderstandingService conversationUnderstandingService(AgentModelGateway modelGateway,
                                                                              ObjectMapper objectMapper,
                                                                              ConversationUnderstandingValidator validator) {
-        return !modelGateway.isConfigured("default") ? (message, slots, handles) -> { me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult result = new me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult(); result.setRequiresClarification(true); result.setClarificationCode("MODEL_UNAVAILABLE"); return result; }
-            : new LlmConversationUnderstandingService(modelGateway.chatClient("default"), objectMapper, validator);
+        if (!modelGateway.isConfigured("default")) {
+            return (message, slots, handles) -> {
+                me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult result =
+                    new me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult();
+                result.setRequiresClarification(true);
+                result.setClarificationCode("MODEL_UNAVAILABLE");
+                return result;
+            };
+        }
+        modelGateway.requireCapabilities("default", true, false);
+        return new LlmConversationUnderstandingService(modelGateway.chatClient("default"), objectMapper, validator);
     }
 
     /** 加载并校验受控语义能力目录；启动失败优于静默开放未知能力。 */

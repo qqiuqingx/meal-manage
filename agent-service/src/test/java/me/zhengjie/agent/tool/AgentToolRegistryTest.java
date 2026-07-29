@@ -219,7 +219,7 @@ class AgentToolRegistryTest {
     }
 
     @Test
-    void shouldLogFullInputAndOutputForToolCalls() throws Exception {
+    void shouldLogOnlyInputDigestAndResultCountForToolCalls() throws Exception {
         RecordingLogSink logSink = new RecordingLogSink();
         DiagnosisTraceCollector traceCollector = new DiagnosisTraceCollector();
         AgentToolRegistry registry = new AgentToolRegistry(new StubDiagnosisToolDataClient() {
@@ -249,7 +249,7 @@ class AgentToolRegistryTest {
     }
 
     @Test
-    void shouldLogFailureWithFullInput() {
+    void shouldLogFailureWithInputDigestOnly() {
         RecordingLogSink logSink = new RecordingLogSink();
         DiagnosisTraceCollector traceCollector = new DiagnosisTraceCollector();
         AgentToolRegistry registry = new AgentToolRegistry(new StubDiagnosisToolDataClient() {

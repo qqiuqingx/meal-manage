@@ -61,8 +61,8 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
     @Override
     public MealPlanDiagnosisContextDto buildContext(MealPlanDiagnosisContextRequest request) {
         long start = System.currentTimeMillis();
-        log.info("诊断阶段 stage=内部上下文聚合开始 customerId={} customerCode={} recordDate={} mealType={}",
-                request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
+        log.info("诊断阶段 stage=内部上下文聚合开始 recordDate={} mealType={}",
+                request.getRecordDate(), request.getMealType());
         MealPlanDiagnosisContextDto context = new MealPlanDiagnosisContextDto();
         context.setCustomerId(request.getCustomerId());
         context.setCustomerCode(request.getCustomerCode());
@@ -79,9 +79,8 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
         context.setOrders(resolveOrders(context.getCustomerId(), context.getCustomerCode(), null, null));
         context.setMealPlan(resolveMealPlan(request.getRecordDate(), request.getMealType()));
         context.setCandidateDishStats(resolveCandidateDishStats(request.getRecordDate()));
-        log.info("诊断阶段 stage=内部上下文聚合完成 customerId={} customerCode={} customerName={} recordDate={} mealType={} orders={} mealPlanPresent={} candidateDishStats={} costMs={}",
-                context.getCustomerId(), context.getCustomerCode(), context.getCustomerName(), context.getRecordDate(),
-                context.getMealType(), context.getOrders() == null ? 0 : context.getOrders().size(), context.getMealPlan() != null,
+        log.info("诊断阶段 stage=内部上下文聚合完成 recordDate={} mealType={} orders={} mealPlanPresent={} candidateDishStats={} costMs={}",
+                context.getRecordDate(), context.getMealType(), context.getOrders() == null ? 0 : context.getOrders().size(), context.getMealPlan() != null,
                 context.getCandidateDishStats() == null ? 0 : context.getCandidateDishStats().size(), System.currentTimeMillis() - start);
         return context;
     }
@@ -114,8 +113,7 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             CustomerProfile profile = (CustomerProfile) item;
             return customerProfileService.getDetail(profile.getId());
         } catch (RuntimeException ex) {
-            log.warn("诊断阶段 stage=内部客户档案解析失败 customerId={} customerCode={} errorType={} errorMessage={}",
-                    customerId, customerCode, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            log.warn("诊断阶段 stage=内部客户档案解析失败 errorType={}", ex.getClass().getSimpleName());
             return null;
         }
     }
@@ -147,9 +145,8 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             }
             return orders;
         } catch (RuntimeException ex) {
-            log.warn("诊断阶段 stage=内部客户订单解析失败 customerId={} resolvedCustomerId={} customerCode={} page={} size={} errorType={} errorMessage={}",
-                    customerId, resolvedCustomerId, customerCode, normalizedPage, normalizedSize,
-                    ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            log.warn("诊断阶段 stage=内部客户订单解析失败 page={} size={} errorType={}",
+                    normalizedPage, normalizedSize, ex.getClass().getSimpleName());
             return Collections.emptyList();
         }
     }
@@ -269,8 +266,8 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             }
             return mealPlanService.queryMealPlanDetail(mealPlan.getId());
         } catch (RuntimeException ex) {
-            log.warn("诊断阶段 stage=内部排餐解析失败 recordDate={} mealType={} errorType={} errorMessage={}",
-                    recordDate, mealType, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            log.warn("诊断阶段 stage=内部排餐解析失败 recordDate={} mealType={} errorType={}",
+                    recordDate, mealType, ex.getClass().getSimpleName());
             return null;
         }
     }
@@ -281,8 +278,8 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             List<MealPackageStatDto> stats = mealPlanService.statByDate(recordDate);
             return stats == null ? Collections.emptyList() : stats;
         } catch (RuntimeException ex) {
-            log.warn("诊断阶段 stage=内部候选菜品统计解析失败 recordDate={} errorType={} errorMessage={}",
-                    recordDate, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            log.warn("诊断阶段 stage=内部候选菜品统计解析失败 recordDate={} errorType={}",
+                    recordDate, ex.getClass().getSimpleName());
             return Collections.emptyList();
         }
     }
@@ -386,16 +383,16 @@ public class AgentDiagnosisContextServiceImpl implements AgentDiagnosisContextSe
             try {
                 parentPackage = parentPackageService.findById(resolvedParentPackageId);
             } catch (RuntimeException ex) {
-                log.warn("诊断阶段 stage=内部父套餐规格解析失败 parentPackageId={} errorType={} errorMessage={}",
-                        resolvedParentPackageId, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+                log.warn("诊断阶段 stage=内部父套餐规格解析失败 errorType={}",
+                        ex.getClass().getSimpleName());
             }
         }
         if (resolvedChildPackageId != null) {
             try {
                 childPackage = subPackageService.findById(resolvedChildPackageId);
             } catch (RuntimeException ex) {
-                log.warn("诊断阶段 stage=内部子套餐规格解析失败 childPackageId={} errorType={} errorMessage={}",
-                        resolvedChildPackageId, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+                log.warn("诊断阶段 stage=内部子套餐规格解析失败 errorType={}",
+                        ex.getClass().getSimpleName());
             }
         }
 

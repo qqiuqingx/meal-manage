@@ -1,10 +1,17 @@
 package me.zhengjie.agent.query;
 
+import me.zhengjie.agent.analysis.SemanticCapabilityCatalog;
 import me.zhengjie.agent.analysis.domain.*;
+import me.zhengjie.agent.application.conversation.ConversationExecutionContext;
+import me.zhengjie.agent.capability.CapabilityHandler;
+import me.zhengjie.agent.capability.CapabilityHandlerRegistry;
 import me.zhengjie.agent.query.domain.AgentQueryAction;
+import me.zhengjie.agent.query.domain.AgentQueryDomain;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
+import me.zhengjie.agent.query.domain.AgentQueryPlan;
 import org.junit.jupiter.api.Test;
 import java.util.List;
+import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** 验证已登记集合余额帧只能编译为固定的受控计划。 */
@@ -38,5 +45,47 @@ class MultiIntentPlanningServiceTest {
         frame.setOperations(List.of(SemanticOperation.LIST));
         ConversationUnderstandingResult result = new ConversationUnderstandingResult(); result.setFrames(List.of(frame));
         assertEquals("listOrders", new MultiIntentPlanningService().plan(result).get(0).getToolNames().get(0));
+    }
+
+    @Test
+    void compilesTemporaryCapabilityThroughHandlerWithoutCentralPlannerBranch() {
+        SemanticRequestFrame frame = new SemanticRequestFrame();
+        frame.setGoal(SemanticGoal.QUERY);
+        frame.setTargetEntity(SemanticEntityType.ORDER);
+        frame.setOutputShape(SemanticOutputShape.SUMMARY);
+        frame.setOperations(List.of(SemanticOperation.COUNT));
+
+        SemanticCapabilityCatalog catalog = new SemanticCapabilityCatalog();
+        catalog.setCatalogVersion("test");
+        SemanticCapabilityCatalog.SemanticFrameConstraint constraint =
+            new SemanticCapabilityCatalog.SemanticFrameConstraint(
+                SemanticGoal.QUERY, SemanticEntityType.ORDER, Set.of("EXPLICIT"),
+                Set.of(), Set.of(), Set.of(SemanticOperation.COUNT),
+                Set.of(SemanticOutputShape.SUMMARY));
+        catalog.setCapabilities(List.of(new SemanticCapabilityCatalog.CapabilityDefinition(
+            "TEST_ORDER_COUNT_V1", "测试订单计数", constraint, Set.of(),
+            Set.of("customerOrder:list"), "TEST_ORDER_COUNT_PROFILE_V1",
+            SemanticCapabilityCatalog.RiskLevel.INTERNAL)));
+
+        CapabilityHandler handler = new CapabilityHandler() {
+            public String handlerId() { return "test-order-count"; }
+            public Set<String> plannerProfiles() { return Set.of("TEST_ORDER_COUNT_PROFILE_V1"); }
+            public AgentQueryPlan compile(String profile, SemanticRequestFrame request,
+                                          ConversationExecutionContext context) {
+                AgentQueryPlan plan = new AgentQueryPlan();
+                plan.setDomain(AgentQueryDomain.ORDER);
+                plan.setAction(AgentQueryAction.SUMMARY);
+                plan.setToolNames(List.of("testOrderCount"));
+                return plan;
+            }
+        };
+        CapabilityHandlerRegistry registry = new CapabilityHandlerRegistry(List.of(handler), catalog);
+        ConversationUnderstandingResult understanding = new ConversationUnderstandingResult();
+        understanding.setFrames(List.of(frame));
+
+        List<AgentQueryPlan> plans = new MultiIntentPlanningService(catalog, registry).plan(understanding);
+
+        assertEquals(1, plans.size());
+        assertEquals("testOrderCount", plans.get(0).getToolNames().get(0));
     }
 }

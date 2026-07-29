@@ -7,10 +7,11 @@ import me.zhengjie.agent.domain.dto.DiagnosisRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.orchestrator.MealPlanDiagnosisOrchestrator;
 import me.zhengjie.agent.service.MealPlanDiagnosisService;
+import me.zhengjie.agent.config.AgentProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -27,10 +28,19 @@ public class MealPlanDiagnosisServiceImpl implements MealPlanDiagnosisService {
     /**
      * 组装上下文构建器和诊断编排器，串起完整诊断链路。
      */
+    @Autowired
     public MealPlanDiagnosisServiceImpl(DiagnosisContextBuilder contextBuilder,
                                         MealPlanDiagnosisOrchestrator orchestrator,
                                         DiagnosisActionDraftService actionDraftService,
-                                        @Value("${agent.diagnosis.tool-mode-enabled:true}") boolean toolModeEnabled) {
+                                        AgentProperties properties) {
+        this(contextBuilder, orchestrator, actionDraftService, properties.getDiagnosis().isToolModeEnabled());
+    }
+
+    /** 测试用显式开关构造器，生产配置统一由 {@link AgentProperties} 注入。 */
+    MealPlanDiagnosisServiceImpl(DiagnosisContextBuilder contextBuilder,
+                                 MealPlanDiagnosisOrchestrator orchestrator,
+                                 DiagnosisActionDraftService actionDraftService,
+                                 boolean toolModeEnabled) {
         this.contextBuilder = contextBuilder;
         this.orchestrator = orchestrator;
         this.actionDraftService = actionDraftService;
@@ -43,22 +53,21 @@ public class MealPlanDiagnosisServiceImpl implements MealPlanDiagnosisService {
     @Override
     public DiagnosisResponse diagnose(DiagnosisRequest request) {
         long start = System.currentTimeMillis();
-        log.info("诊断阶段 stage=上下文构建开始 requestId={} customerId={} customerCode={} recordDate={} mealType={}",
-            MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
+        log.info("诊断阶段 stage=上下文构建开始 requestId={} recordDate={} mealType={}",
+            MDC.get(REQUEST_ID_KEY), request.getRecordDate(), request.getMealType());
         DiagnosisContextDto context = toolModeEnabled ? lightweightContext(request) : contextBuilder.build(request);
-        log.info("诊断阶段 stage=上下文构建完成 requestId={} customerId={} customerCode={} customerName={} recordDate={} mealType={} orders={} customerPlans={} candidateDishStats={} mealPlanPresent={} costMs={}",
-            MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getCustomerCode(), context.getCustomerName(),
-            context.getRecordDate(), context.getMealType(), sizeOf(context.getOrders()), sizeOf(context.getCustomerPlans()),
+        log.info("诊断阶段 stage=上下文构建完成 requestId={} recordDate={} mealType={} orders={} customerPlans={} candidateDishStats={} mealPlanPresent={} costMs={}",
+            MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType(), sizeOf(context.getOrders()), sizeOf(context.getCustomerPlans()),
             sizeOf(context.getCandidateDishStats()), context.getMealPlan() != null && !context.getMealPlan().isEmpty(),
             System.currentTimeMillis() - start);
-        log.info("诊断阶段 stage=进入规则编排 requestId={} customerId={} recordDate={} mealType={}",
-            MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType());
+        log.info("诊断阶段 stage=进入规则编排 requestId={} recordDate={} mealType={}",
+            MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType());
         DiagnosisResponse response = orchestrator.orchestrate(context);
         // 智能客服本期严格只读：诊断仅提供证据与人工核对建议，不生成可确认或可执行的动作草稿。
         response.setActionDrafts(java.util.List.of());
         response.setRequestId(MDC.get(REQUEST_ID_KEY));
-        log.info("诊断阶段 stage=结果就绪 requestId={} customerId={} recordDate={} mealType={} fallback={} modelName={} reasonCount={}",
-            response.getRequestId(), response.getCustomerId(), response.getRecordDate(), response.getMealType(),
+        log.info("诊断阶段 stage=结果就绪 requestId={} recordDate={} mealType={} fallback={} modelName={} reasonCount={}",
+            response.getRequestId(), response.getRecordDate(), response.getMealType(),
             response.isFallback(), response.getModelName(), sizeOf(response.getReasons()));
         return response;
     }

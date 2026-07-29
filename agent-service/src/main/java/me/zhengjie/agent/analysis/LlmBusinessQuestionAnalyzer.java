@@ -106,7 +106,7 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
             return analysis;
         } catch (Exception exception) {
             lastFailureReason.set(isTimeout(exception) ? "MODEL_TIMEOUT" : "MODEL_UNAVAILABLE");
-            log.warn("业务语义模型分析失败 errorType={} errorMessage={}", exception.getClass().getSimpleName(), exception.getMessage());
+            log.warn("业务语义模型分析失败 errorType={}", exception.getClass().getSimpleName());
             return null;
         }
     }

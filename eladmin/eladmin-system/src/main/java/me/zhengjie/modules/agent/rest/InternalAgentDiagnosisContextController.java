@@ -76,11 +76,11 @@ public class InternalAgentDiagnosisContextController {
         bindRequestId(requestId);
         long start = System.currentTimeMillis();
         try {
-            log.info("诊断阶段 stage=内部上下文请求接收 requestId={} customerId={} customerCode={} recordDate={} mealType={}",
-                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
+            log.info("诊断阶段 stage=内部上下文请求接收 requestId={} recordDate={} mealType={}",
+                    MDC.get(REQUEST_ID_KEY), request.getRecordDate(), request.getMealType());
             MealPlanDiagnosisContextDto context = contextService.buildContext(request);
-            log.info("诊断阶段 stage=内部上下文请求完成 requestId={} customerId={} recordDate={} mealType={} costMs={}",
-                    MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType(),
+            log.info("诊断阶段 stage=内部上下文请求完成 requestId={} recordDate={} mealType={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType(),
                     System.currentTimeMillis() - start);
             return ResponseEntity.ok(context);
         } finally {
@@ -97,8 +97,8 @@ public class InternalAgentDiagnosisContextController {
         long start = System.currentTimeMillis();
         try {
             CustomerProfileDetailDto profile = contextService.resolveCustomerProfile(request.getCustomerId(), request.getCustomerCode());
-            log.info("诊断阶段 stage=内部客户档案查询完成 requestId={} customerId={} customerCode={} present={} costMs={}",
-                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), profile != null,
+            log.info("诊断阶段 stage=内部客户档案查询完成 requestId={} present={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY), profile != null,
                     System.currentTimeMillis() - start);
             return ResponseEntity.ok(profile);
         } finally {
@@ -115,8 +115,8 @@ public class InternalAgentDiagnosisContextController {
         long start = System.currentTimeMillis();
         try {
             List<CustomerOrderDetailDto> orders = contextService.resolveOrders(request.getCustomerId(), request.getCustomerCode(), request.getPage(), request.getSize());
-            log.info("诊断阶段 stage=内部客户订单查询完成 requestId={} customerId={} customerCode={} orders={} costMs={}",
-                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), orders == null ? 0 : orders.size(),
+            log.info("诊断阶段 stage=内部客户订单查询完成 requestId={} orders={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY), orders == null ? 0 : orders.size(),
                     System.currentTimeMillis() - start);
             return ResponseEntity.ok(orders);
         } finally {
@@ -169,8 +169,8 @@ public class InternalAgentDiagnosisContextController {
         long start = System.currentTimeMillis();
         try {
             Map<String, Object> result = contextService.resolveCustomerExcludeDates(request.getCustomerId(), request.getCustomerCode());
-            log.info("诊断阶段 stage=内部客户排除日期查询完成 requestId={} customerId={} customerCode={} present={} costMs={}",
-                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(),
+            log.info("诊断阶段 stage=内部客户排除日期查询完成 requestId={} present={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY),
                     result != null && Boolean.TRUE.equals(result.get("present")), System.currentTimeMillis() - start);
             return ResponseEntity.ok(result);
         } finally {
@@ -188,8 +188,8 @@ public class InternalAgentDiagnosisContextController {
         try {
             Map<String, Object> result = contextService.resolveOrderMealBalance(
                     request.getCustomerId(), request.getCustomerCode(), request.getPage(), request.getSize());
-            log.info("诊断阶段 stage=内部订单餐数余额查询完成 requestId={} customerId={} customerCode={} orderCount={} costMs={}",
-                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(),
+            log.info("诊断阶段 stage=内部订单餐数余额查询完成 requestId={} orderCount={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY),
                     result == null ? 0 : result.get("orderCount"), System.currentTimeMillis() - start);
             return ResponseEntity.ok(result);
         } finally {
@@ -225,9 +225,8 @@ public class InternalAgentDiagnosisContextController {
         try {
             Map<String, Object> result = contextService.resolvePackageSpec(
                     request.getCustomerId(), request.getCustomerCode(), request.getParentPackageId(), request.getChildPackageId());
-            log.info("诊断阶段 stage=内部套餐规格查询完成 requestId={} customerId={} customerCode={} parentPackageId={} childPackageId={} present={} costMs={}",
-                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), request.getParentPackageId(),
-                    request.getChildPackageId(), result != null && Boolean.TRUE.equals(result.get("present")),
+            log.info("诊断阶段 stage=内部套餐规格查询完成 requestId={} present={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY), result != null && Boolean.TRUE.equals(result.get("present")),
                     System.currentTimeMillis() - start);
             return ResponseEntity.ok(result);
         } finally {
@@ -246,8 +245,8 @@ public class InternalAgentDiagnosisContextController {
             List<Map<String, Object>> result = contextService.resolveVerificationLogs(
                     request.getCustomerId(), request.getCustomerCode(), request.getOrderId(),
                     request.getRecordDateStart(), request.getRecordDateEnd(), request.getMealType());
-            log.info("诊断阶段 stage=内部核销日志查询完成 requestId={} customerId={} customerCode={} orderId={} count={} costMs={}",
-                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), request.getOrderId(),
+            log.info("诊断阶段 stage=内部核销日志查询完成 requestId={} count={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY),
                     result == null ? 0 : result.size(), System.currentTimeMillis() - start);
             return ResponseEntity.ok(result);
         } finally {
@@ -264,8 +263,8 @@ public class InternalAgentDiagnosisContextController {
         long start = System.currentTimeMillis();
         try {
             List<Map<String, Object>> result = contextService.resolveMealRefunds(request.getCustomerId(), request.getCustomerCode(), request.getOrderId());
-            log.info("诊断阶段 stage=内部退餐日志查询完成 requestId={} customerId={} customerCode={} orderId={} count={} costMs={}",
-                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(), request.getOrderId(),
+            log.info("诊断阶段 stage=内部退餐日志查询完成 requestId={} count={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY),
                     result == null ? 0 : result.size(), System.currentTimeMillis() - start);
             return ResponseEntity.ok(result);
         } finally {
@@ -302,8 +301,8 @@ public class InternalAgentDiagnosisContextController {
         long start = System.currentTimeMillis();
         try {
             AgentCustomerMealSummaryResponse result = customerInsightService.getMealSummary(request);
-            log.info("诊断阶段 stage=内部客户餐数汇总查询完成 requestId={} customerId={} customerCode={} present={} costMs={}",
-                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(),
+            log.info("诊断阶段 stage=内部客户餐数汇总查询完成 requestId={} present={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY),
                     result != null && result.isPresent(), System.currentTimeMillis() - start);
             return ResponseEntity.ok(result);
         } finally {
@@ -320,8 +319,8 @@ public class InternalAgentDiagnosisContextController {
         long start = System.currentTimeMillis();
         try {
             AgentCustomerVerificationSummaryResponse result = customerInsightService.getVerificationSummary(request);
-            log.info("诊断阶段 stage=内部客户核销统计查询完成 requestId={} customerId={} customerCode={} present={} costMs={}",
-                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(),
+            log.info("诊断阶段 stage=内部客户核销统计查询完成 requestId={} present={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY),
                     result != null && result.isPresent(), System.currentTimeMillis() - start);
             return ResponseEntity.ok(result);
         } finally {
@@ -338,8 +337,8 @@ public class InternalAgentDiagnosisContextController {
         long start = System.currentTimeMillis();
         try {
             AgentCustomerOrderSummaryResponse result = customerInsightService.getOrderSummary(request);
-            log.info("诊断阶段 stage=内部客户订单列表查询完成 requestId={} customerId={} customerCode={} orders={} costMs={}",
-                    MDC.get(REQUEST_ID_KEY), request.getCustomerId(), request.getCustomerCode(),
+            log.info("诊断阶段 stage=内部客户订单列表查询完成 requestId={} orders={} costMs={}",
+                    MDC.get(REQUEST_ID_KEY),
                     result != null && result.getOrders() != null ? result.getOrders().size() : 0,
                     System.currentTimeMillis() - start);
             return ResponseEntity.ok(result);

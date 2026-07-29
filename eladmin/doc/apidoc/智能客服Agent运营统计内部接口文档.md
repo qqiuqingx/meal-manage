@@ -69,3 +69,7 @@
 请求可传 `startDate` 与 `endDate`，两者格式均为 `yyyy-MM-dd`，范围不得超过 31 天；省略时默认当天起 7 天。
 
 响应统一包含 `metricCode`、`total`、`metricDefinitionId`、`metricVersion`、`timezone`、`queriedAt` 和 `truncated`。
+
+## 7. 2026-07-29 架构调整
+
+本次未改变运营指标定义、时间口径、分页上限或权限要求。活跃客户餐数余额明细能力改由目录登记的 `CapabilityHandler` 编译，仍固定调用 `listActiveCustomerMealBalances`，不得由用户文本或模型输出指定工具名。

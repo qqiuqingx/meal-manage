@@ -361,7 +361,12 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
             sessionMapper.insert(session);
             return session;
         }
-        AgentChatSession session = requireOwnedSession(sessionId);
+        AgentChatSession session = sessionMapper.selectBySessionIdForUpdate(sessionId);
+        if (session == null) {
+            session = requireOwnedSession(sessionId);
+        } else {
+            verifyOwnedSession(session);
+        }
         if (Boolean.TRUE.equals(session.getArchived())) {
             throw new BadRequestException("当前会话已归档，请新建会话后继续排查");
         }
@@ -381,11 +386,20 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         if (session == null) {
             throw new EntityNotFoundException(AgentChatSession.class, "sessionId", sessionId);
         }
+        verifyOwnedSession(session);
+        return session;
+    }
+
+    /**
+     * 校验已查询会话属于当前客服；行锁查询与普通详情查询复用同一授权规则。
+     *
+     * @param session 已查询会话
+     */
+    private void verifyOwnedSession(AgentChatSession session) {
         String operator = currentUsername();
         if (StringUtils.isNotBlank(operator) && StringUtils.isNotBlank(session.getOperator()) && !StringUtils.equals(operator, session.getOperator())) {
             throw new BadRequestException("无权访问该会话");
         }
-        return session;
     }
 
     /**

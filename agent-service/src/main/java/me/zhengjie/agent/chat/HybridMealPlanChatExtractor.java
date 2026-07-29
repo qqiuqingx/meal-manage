@@ -5,8 +5,9 @@ import me.zhengjie.agent.domain.dto.ChatExtractionResult;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import me.zhengjie.agent.domain.dto.IntentClassificationRequest;
 import me.zhengjie.agent.domain.dto.IntentClassificationResult;
+import me.zhengjie.agent.config.AgentProperties;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
@@ -22,10 +23,20 @@ public class HybridMealPlanChatExtractor implements MealPlanChatExtractor {
     private final ObjectProvider<LlmIntentClassifier> llmClassifier;
     private final String mode;
 
+    @Autowired
     public HybridMealPlanChatExtractor(RuleBasedSlotExtractor slotExtractor,
                                        RuleBasedIntentClassifier ruleClassifier,
                                        ObjectProvider<LlmIntentClassifier> llmClassifier,
-                                       @Value("${agent.chat.intent-classifier.mode:hybrid}") String mode) {
+                                       AgentProperties properties) {
+        this(slotExtractor, ruleClassifier, llmClassifier,
+            properties.getChat().getIntentClassifier().getMode().name());
+    }
+
+    /** 测试用显式模式构造器，生产配置统一由 {@link AgentProperties} 注入。 */
+    HybridMealPlanChatExtractor(RuleBasedSlotExtractor slotExtractor,
+                                RuleBasedIntentClassifier ruleClassifier,
+                                ObjectProvider<LlmIntentClassifier> llmClassifier,
+                                String mode) {
         this.slotExtractor = slotExtractor;
         this.ruleClassifier = ruleClassifier;
         this.llmClassifier = llmClassifier;

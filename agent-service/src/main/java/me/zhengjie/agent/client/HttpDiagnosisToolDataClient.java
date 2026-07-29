@@ -10,14 +10,15 @@ import me.zhengjie.agent.domain.dto.DiagnosisToolMealRefundsRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolMealPlanLookupRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolPackageSpecRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolVerificationLogsRequest;
+import me.zhengjie.agent.config.AgentProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.client.RestClient;
 import me.zhengjie.agent.security.AgentAccessContextHolder;
 
@@ -53,9 +54,14 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
     /**
      * 初始化工具数据客户端，并要求内部 token 必填，所有工具查询都走同一套受保护链路。
      */
+    @Autowired
     public HttpDiagnosisToolDataClient(RestClient.Builder builder,
-                                       @Value("${agent.context-base-url:http://localhost:8080}") String contextBaseUrl,
-                                       @Value("${agent.internal-token}") String internalToken) {
+                                       AgentProperties properties) {
+        this(builder, properties.getContextBaseUrl(), properties.getInternalToken());
+    }
+
+    /** 测试用显式端点构造器，生产配置统一由 {@link AgentProperties} 注入。 */
+    HttpDiagnosisToolDataClient(RestClient.Builder builder, String contextBaseUrl, String internalToken) {
         Assert.hasText(internalToken, "agent.internal-token must be configured");
         this.restClient = builder.baseUrl(contextBaseUrl).build();
         this.internalToken = internalToken;
@@ -152,8 +158,8 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
                 requestId, toolName, path, body != null && !body.isEmpty(), System.currentTimeMillis() - start);
             return body == null ? Collections.emptyMap() : body;
         } catch (RuntimeException ex) {
-            log.warn("诊断阶段 stage=工具数据查询失败 requestId={} tool={} path={} costMs={} errorType={} errorMessage={}",
-                requestId, toolName, path, System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            log.warn("诊断阶段 stage=工具数据查询失败 requestId={} tool={} path={} costMs={} errorType={}",
+                requestId, toolName, path, System.currentTimeMillis() - start, ex.getClass().getSimpleName());
             throw ex;
         }
     }
@@ -179,8 +185,8 @@ public class HttpDiagnosisToolDataClient implements DiagnosisToolDataClient {
                 requestId, toolName, path, body == null ? 0 : body.size(), System.currentTimeMillis() - start);
             return body == null ? Collections.emptyList() : body;
         } catch (RuntimeException ex) {
-            log.warn("诊断阶段 stage=工具数据查询失败 requestId={} tool={} path={} costMs={} errorType={} errorMessage={}",
-                requestId, toolName, path, System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            log.warn("诊断阶段 stage=工具数据查询失败 requestId={} tool={} path={} costMs={} errorType={}",
+                requestId, toolName, path, System.currentTimeMillis() - start, ex.getClass().getSimpleName());
             throw ex;
         }
     }

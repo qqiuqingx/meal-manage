@@ -1,6 +1,7 @@
 package me.zhengjie.agent.query.client;
 
 import me.zhengjie.agent.security.AgentAccessContextHolder;
+import me.zhengjie.agent.config.AgentProperties;
 import me.zhengjie.agent.query.client.dto.DishCandidatePreviewResponse;
 import me.zhengjie.agent.query.client.dto.CustomerOverviewResponse;
 import me.zhengjie.agent.query.client.dto.OrderListResponse;
@@ -16,7 +17,6 @@ import me.zhengjie.agent.query.client.dto.ActiveCustomerBalanceResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.MDC;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
@@ -47,9 +47,10 @@ public class HttpBusinessQueryDataClient implements BusinessQueryDataClient {
     private final String internalToken;
 
     public HttpBusinessQueryDataClient(RestClient.Builder builder,
-                                       @Value("${agent.context-base-url:http://localhost:8080}") String baseUrl,
-                                       @Value("${agent.internal-token}") String internalToken,
-                                       @Value("${agent.business-query-timeout-ms:3000}") long timeoutMs) {
+                                       AgentProperties properties) {
+        String baseUrl = properties.getContextBaseUrl();
+        String internalToken = properties.getInternalToken();
+        long timeoutMs = properties.getBusinessQueryTimeoutMs();
         Assert.hasText(internalToken, "agent.internal-token must be configured");
         int safeTimeout = (int) Math.max(100, Math.min(timeoutMs, 10000));
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();

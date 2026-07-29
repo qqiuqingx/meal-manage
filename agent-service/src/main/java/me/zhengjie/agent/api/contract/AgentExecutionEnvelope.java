@@ -3,6 +3,8 @@ package me.zhengjie.agent.api.contract;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import me.zhengjie.agent.query.domain.ConversationTaskStack;
 import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
@@ -24,11 +26,15 @@ public class AgentExecutionEnvelope {
     @Valid
     private ChatMessageRequest messageRequest;
     private DiagnosisSlots contextSnapshot;
-    private List<String> availableTools = new ArrayList<>();
+    @NotNull
+    @Size(max = 100)
+    private List<@NotBlank @Size(max = 80) String> availableTools = new ArrayList<>();
     private PendingBusinessQueryContext pendingBusinessQueryContext;
     private LastBusinessQueryContext lastBusinessQueryContext;
     private ConversationTaskStack activeTaskStack;
     /** 主系统读取会话快照时的乐观锁版本；Agent 仅回传，不自行提交会话。 */
+    @NotNull
+    @PositiveOrZero
     private Long sessionVersion;
 
     public String getContractVersion() { return contractVersion; }

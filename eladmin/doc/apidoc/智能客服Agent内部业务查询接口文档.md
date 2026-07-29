@@ -160,3 +160,7 @@
 # v2 跨服务契约（2026-07-24）
 
 Agent 服务间聊天契约的唯一权威定义为 `agent-service/src/main/resources/openapi/agent-service-v2.yaml`。新增内部路径 `POST /api/agent/v2/chat` 仅接收主系统组装的可信执行信封：前端消息字段与 `availableTools`、会话上下文、Pending/Last Context、任务栈严格分离；响应固定回传 `contractVersion`、`requestId`、`clientMessageId`。既有接口暂不删除，主系统切换后至少保留一个完整发布周期。
+
+## 6. 2026-07-29 架构调整
+
+本次未新增或修改本文件中的业务查询路径、请求字段和响应口径。工具元数据统一由 `ToolCatalog/ToolDescriptor` 管理；能力通过强类型目录与 `CapabilityHandlerRegistry` 编译。主系统仍执行数据范围和业务权限二次校验，Agent 的工具白名单不能替代主系统鉴权。

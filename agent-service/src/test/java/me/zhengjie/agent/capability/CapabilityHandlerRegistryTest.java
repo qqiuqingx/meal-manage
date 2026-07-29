@@ -41,4 +41,31 @@ class CapabilityHandlerRegistryTest {
         assertThrows(IllegalStateException.class, () -> new CapabilityHandlerRegistry(
             List.of(new LegacyBusinessQueryCapabilityHandler()), invalid));
     }
+
+    @Test
+    void rejectsUnknownPlannerProfileAtStartup() {
+        SemanticCapabilityCatalog source = new SemanticCapabilityCatalogLoader().load();
+        SemanticCapabilityCatalog.CapabilityDefinition original = source.getCapabilities().get(0);
+        SemanticCapabilityCatalog invalid = new SemanticCapabilityCatalog();
+        invalid.setCatalogVersion("test");
+        invalid.setCapabilities(List.of(new SemanticCapabilityCatalog.CapabilityDefinition(
+            original.capabilityId(), original.displayName(), original.frame(),
+            original.allowedSetDefinitions(), original.requiredPermissions(),
+            "UNKNOWN_PROFILE", original.riskLevel())));
+
+        assertThrows(IllegalStateException.class, () -> new CapabilityHandlerRegistry(
+            List.of(new LegacyBusinessQueryCapabilityHandler()), invalid));
+    }
+
+    @Test
+    void rejectsDuplicateCapabilityIdsAtStartup() {
+        SemanticCapabilityCatalog source = new SemanticCapabilityCatalogLoader().load();
+        SemanticCapabilityCatalog.CapabilityDefinition original = source.getCapabilities().get(0);
+        SemanticCapabilityCatalog invalid = new SemanticCapabilityCatalog();
+        invalid.setCatalogVersion("test");
+        invalid.setCapabilities(List.of(original, original));
+
+        assertThrows(IllegalStateException.class, () -> new CapabilityHandlerRegistry(
+            List.of(new LegacyBusinessQueryCapabilityHandler()), invalid));
+    }
 }

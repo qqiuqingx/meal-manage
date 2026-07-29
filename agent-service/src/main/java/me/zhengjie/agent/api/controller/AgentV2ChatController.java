@@ -39,7 +39,7 @@ public class AgentV2ChatController {
      */
     @PostMapping("/chat")
     public AgentChatResponse chat(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
-                                  @RequestHeader(value = "X-Agent-Access-Context", required = false) String accessContext,
+                                  @RequestHeader("X-Agent-Access-Context") String accessContext,
                                   @Valid @RequestBody AgentExecutionEnvelope envelope) {
         if (!"v2".equals(envelope.getContractVersion())) {
             throw new AgentContractException("Unsupported contract version");

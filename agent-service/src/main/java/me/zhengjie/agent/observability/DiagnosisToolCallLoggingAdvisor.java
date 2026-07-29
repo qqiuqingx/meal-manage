@@ -136,8 +136,8 @@ public class DiagnosisToolCallLoggingAdvisor implements CallAdvisor {
 
         @Override
         public void modelCallFailed(int round, RuntimeException ex, long costMs) {
-            log.warn("诊断阶段 stage=模型轮次失败 requestId={} round={} costMs={} errorType={} errorMessage={}",
-                MDC.get("requestId"), round, costMs, ex.getClass().getSimpleName(), ex.getMessage());
+            log.warn("诊断阶段 stage=模型轮次失败 requestId={} round={} costMs={} errorType={}",
+                MDC.get("requestId"), round, costMs, ex.getClass().getSimpleName());
         }
     }
 }

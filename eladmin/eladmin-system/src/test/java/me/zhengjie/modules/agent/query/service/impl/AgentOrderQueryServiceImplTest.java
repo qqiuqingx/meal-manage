@@ -11,6 +11,9 @@ import me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.meal.mapper.MealRefundLogMapper;
 import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
+import me.zhengjie.modules.agent.security.AgentCustomerDataScopeContext;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -36,6 +39,18 @@ class AgentOrderQueryServiceImplTest {
     @Mock private MealRefundLogMapper mealRefundLogMapper;
     @Mock private MealPlanCustomerMapper mealPlanCustomerMapper;
     @InjectMocks private AgentOrderQueryServiceImpl service;
+
+    /** 每个测试显式绑定已验签的全量范围，避免把未绑定上下文误当成授权。 */
+    @BeforeEach
+    void bindAuthorizedCustomerScope() {
+        AgentCustomerDataScopeContext.bind(null);
+    }
+
+    /** 清理线程范围，防止复用测试线程时污染其他权限用例。 */
+    @AfterEach
+    void clearAuthorizedCustomerScope() {
+        AgentCustomerDataScopeContext.clear();
+    }
 
     @Test
     void shouldNotReturnOrderThatBelongsToAnotherCustomer() {

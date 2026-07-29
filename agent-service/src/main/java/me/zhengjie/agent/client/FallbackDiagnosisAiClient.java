@@ -28,8 +28,8 @@ public class FallbackDiagnosisAiClient implements DiagnosisAiClient {
 
     @Override
     public DiagnosisResponse diagnose(DiagnosisContextDto context, RuleRegistry ruleRegistry) {
-        log.info("fallback ai client used requestId={} customerId={} recordDate={} mealType={} aiEnabled=false",
-            MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType());
+        log.info("fallback ai client used requestId={} recordDate={} mealType={} aiEnabled=false",
+            MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType());
         return resultValidator.validateOrFallback(null, context, ruleRegistry);
     }
 }

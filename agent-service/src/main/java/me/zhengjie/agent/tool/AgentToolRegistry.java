@@ -60,59 +60,59 @@ public class AgentToolRegistry {
         this.logSink = logSink;
     }
 
-    @Tool(name = "getCustomerProfile", description = "查询客户基础档案。仅在需要判断客户排除日期、配送要求、客户状态等客户信息时调用。")
+    @Tool(name = ToolCatalog.GET_CUSTOMER_PROFILE, description = "查询客户基础档案。仅在需要判断客户排除日期、配送要求、客户状态等客户信息时调用。")
     public Map<String, Object> getCustomerProfile(DiagnosisToolCustomerLookupRequest request) {
-        return invokeTool("getCustomerProfile", request, () -> toolDataClient.getCustomerProfile(request));
+        return invokeTool(ToolCatalog.GET_CUSTOMER_PROFILE, request, () -> toolDataClient.getCustomerProfile(request));
     }
 
-    @Tool(name = "listCustomerOrders", description = "查询客户订单列表。仅在需要判断订单是否有效、剩余餐数、套餐信息时调用。")
+    @Tool(name = ToolCatalog.LIST_CUSTOMER_ORDERS, description = "查询客户订单列表。仅在需要判断订单是否有效、剩余餐数、套餐信息时调用。")
     public List<Map<String, Object>> listCustomerOrders(DiagnosisToolCustomerOrdersRequest request) {
-        return invokeTool("listCustomerOrders", request, () -> toolDataClient.listCustomerOrders(request));
+        return invokeTool(ToolCatalog.LIST_CUSTOMER_ORDERS, request, () -> toolDataClient.listCustomerOrders(request));
     }
 
-    @Tool(name = "getMealPlan", description = "查询指定日期和餐次的排餐详情。仅在需要判断排餐是否生成、生成状态、失败原因时调用。")
+    @Tool(name = ToolCatalog.GET_MEAL_PLAN, description = "查询指定日期和餐次的排餐详情。仅在需要判断排餐是否生成、生成状态、失败原因时调用。")
     public Map<String, Object> getMealPlan(DiagnosisToolMealPlanLookupRequest request) {
-        return invokeTool("getMealPlan", request, () -> toolDataClient.getMealPlan(request));
+        return invokeTool(ToolCatalog.GET_MEAL_PLAN, request, () -> toolDataClient.getMealPlan(request));
     }
 
-    @Tool(name = "getCandidateDishStats", description = "查询指定日期候选菜统计。仅在需要判断候选菜或套餐过滤后数量时调用。")
+    @Tool(name = ToolCatalog.GET_CANDIDATE_DISH_STATS, description = "查询指定日期候选菜统计。仅在需要判断候选菜或套餐过滤后数量时调用。")
     public List<Map<String, Object>> getCandidateDishStats(DiagnosisToolCandidateDishStatsRequest request) {
-        return invokeTool("getCandidateDishStats", request, () -> toolDataClient.getCandidateDishStats(request));
+        return invokeTool(ToolCatalog.GET_CANDIDATE_DISH_STATS, request, () -> toolDataClient.getCandidateDishStats(request));
     }
 
-    @Tool(name = "getCustomerExcludeDates", description = "查询客户停送、排除日期和排除餐次。仅在需要判断客户是否因停送或请假未排餐时调用。")
+    @Tool(name = ToolCatalog.GET_CUSTOMER_EXCLUDE_DATES, description = "查询客户停送、排除日期和排除餐次。仅在需要判断客户是否因停送或请假未排餐时调用。")
     public Map<String, Object> getCustomerExcludeDates(DiagnosisToolCustomerLookupRequest request) {
-        return invokeTool("getCustomerExcludeDates", request, () -> toolDataClient.getCustomerExcludeDates(request));
+        return invokeTool(ToolCatalog.GET_CUSTOMER_EXCLUDE_DATES, request, () -> toolDataClient.getCustomerExcludeDates(request));
     }
 
-    @Tool(name = "getOrderMealBalance", description = "查询订单有效期、餐次类型和早餐/午晚餐剩余餐数。仅在需要判断订单是否可继续排餐或是否餐数不足时调用。")
+    @Tool(name = ToolCatalog.GET_ORDER_MEAL_BALANCE, description = "查询订单有效期、餐次类型和早餐/午晚餐剩余餐数。仅在需要判断订单是否可继续排餐或是否餐数不足时调用。")
     public Map<String, Object> getOrderMealBalance(DiagnosisToolCustomerOrdersRequest request) {
-        return invokeTool("getOrderMealBalance", request, () -> toolDataClient.getOrderMealBalance(request));
+        return invokeTool(ToolCatalog.GET_ORDER_MEAL_BALANCE, request, () -> toolDataClient.getOrderMealBalance(request));
     }
 
-    @Tool(name = "getPackageSpec", description = "查询父套餐、子套餐和餐品规格。仅在需要判断套餐规格缺失或套餐禁用时调用。")
+    @Tool(name = ToolCatalog.GET_PACKAGE_SPEC, description = "查询父套餐、子套餐和餐品规格。仅在需要判断套餐规格缺失或套餐禁用时调用。")
     public Map<String, Object> getPackageSpec(DiagnosisToolPackageSpecRequest request) {
-        return invokeTool("getPackageSpec", request, () -> toolDataClient.getPackageSpec(request));
+        return invokeTool(ToolCatalog.GET_PACKAGE_SPEC, request, () -> toolDataClient.getPackageSpec(request));
     }
 
-    @Tool(name = "getDishCandidateDetail", description = "查询候选菜池诊断明细。仅在需要判断候选菜、套餐过滤或过敏忌口过滤结果时调用。")
+    @Tool(name = ToolCatalog.GET_DISH_CANDIDATE_DETAIL, description = "查询候选菜池诊断明细。仅在需要判断候选菜、套餐过滤或过敏忌口过滤结果时调用。")
     public List<Map<String, Object>> getDishCandidateDetail(DiagnosisToolCandidateDishStatsRequest request) {
-        return invokeTool("getDishCandidateDetail", request, () -> toolDataClient.getDishCandidateDetail(request));
+        return invokeTool(ToolCatalog.GET_DISH_CANDIDATE_DETAIL, request, () -> toolDataClient.getDishCandidateDetail(request));
     }
 
-    @Tool(name = "listVerificationLogs", description = "查询客户或订单在指定日期范围内的核销记录。仅在需要判断核销是否消耗餐数时调用。")
+    @Tool(name = ToolCatalog.LIST_VERIFICATION_LOGS, description = "查询客户或订单在指定日期范围内的核销记录。仅在需要判断核销是否消耗餐数时调用。")
     public List<Map<String, Object>> listVerificationLogs(DiagnosisToolVerificationLogsRequest request) {
-        return invokeTool("listVerificationLogs", request, () -> toolDataClient.listVerificationLogs(request));
+        return invokeTool(ToolCatalog.LIST_VERIFICATION_LOGS, request, () -> toolDataClient.listVerificationLogs(request));
     }
 
-    @Tool(name = "listMealRefunds", description = "查询客户或订单退餐、停餐、退款记录。仅在需要判断退餐或停餐是否影响排餐时调用。")
+    @Tool(name = ToolCatalog.LIST_MEAL_REFUNDS, description = "查询客户或订单退餐、停餐、退款记录。仅在需要判断退餐或停餐是否影响排餐时调用。")
     public List<Map<String, Object>> listMealRefunds(DiagnosisToolMealRefundsRequest request) {
-        return invokeTool("listMealRefunds", request, () -> toolDataClient.listMealRefunds(request));
+        return invokeTool(ToolCatalog.LIST_MEAL_REFUNDS, request, () -> toolDataClient.listMealRefunds(request));
     }
 
-    @Tool(name = "getMealPlanGenerationSnapshot", description = "查询排餐生成快照、失败原因和失败客户摘要。仅在需要判断排餐生成任务是否失败时调用。")
+    @Tool(name = ToolCatalog.GET_MEAL_PLAN_GENERATION_SNAPSHOT, description = "查询排餐生成快照、失败原因和失败客户摘要。仅在需要判断排餐生成任务是否失败时调用。")
     public Map<String, Object> getMealPlanGenerationSnapshot(DiagnosisToolMealPlanLookupRequest request) {
-        return invokeTool("getMealPlanGenerationSnapshot", request, () -> toolDataClient.getMealPlanGenerationSnapshot(request));
+        return invokeTool(ToolCatalog.GET_MEAL_PLAN_GENERATION_SNAPSHOT, request, () -> toolDataClient.getMealPlanGenerationSnapshot(request));
     }
 
     private <T> T invokeTool(String toolName, Object request, Supplier<T> supplier) {
@@ -208,8 +208,8 @@ public class AgentToolRegistry {
 
         @Override
         public void toolCallFailed(String toolName, String requestId, String inputDigest, long costMs, RuntimeException ex) {
-            log.warn("诊断阶段 stage=工具调用失败 requestId={} tool={} inputDigest={} costMs={} errorType={} errorMessage={}",
-                requestId, toolName, inputDigest, costMs, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            log.warn("诊断阶段 stage=工具调用失败 requestId={} tool={} inputDigest={} costMs={} errorType={}",
+                requestId, toolName, inputDigest, costMs, ex.getClass().getSimpleName());
         }
 
         @Override
@@ -219,8 +219,8 @@ public class AgentToolRegistry {
 
         @Override
         public void toolCallRejected(String toolName, String requestId, String inputDigest, RuntimeException ex) {
-            log.warn("诊断阶段 stage=工具调用拒绝 requestId={} tool={} inputDigest={} errorType={} errorMessage={}",
-                requestId, toolName, inputDigest, ex.getClass().getSimpleName(), ex.getMessage());
+            log.warn("诊断阶段 stage=工具调用拒绝 requestId={} tool={} inputDigest={} errorType={}",
+                requestId, toolName, inputDigest, ex.getClass().getSimpleName());
         }
     }
 }

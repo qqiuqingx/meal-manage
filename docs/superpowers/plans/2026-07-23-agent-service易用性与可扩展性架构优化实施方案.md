@@ -5,19 +5,19 @@
 > 目标模块：`agent-service`，以及与其直接通信的 `eladmin-system` Agent 模块  
 > 核心方向：开发易用性、能力可扩展性、跨服务契约、会话一致性、模型与工具适配  
 > 实施方式：保持现有接口兼容，采用绞杀式重构；每阶段独立测试、独立灰度、可单独回滚  
-> 当前状态：实施中。阶段 0/1 已完成首批基础设施，阶段 2 正在进行；旧接口保持兼容。
+> 当前状态：核心架构收口已完成并通过自动化回归；旧接口保持兼容。剩余工作为真实环境灰度差异观察、真实数据库并发压测、默认 Handler 剩余管线拆分和存量 Legacy Map/Presenter 强类型迁移。
 
 ## 实施进度
 
 | 阶段 | 状态 | 最近更新 | 已完成范围 / 待办 |
 |---|---|---|---|
-| 阶段 0：架构基线与保护网 | 进行中 | 2026-07-24 | README、架构基线、测试日志控制完成；架构守护测试待新包边界落地后补充。 |
-| 阶段 1：规则与配置基础设施 | 进行中 | 2026-07-24 | 递归规则扫描、强类型 YAML、classpath 一致性测试和基础配置对象完成；其余配置迁移待后续统一收口。 |
-| 阶段 2：版本化跨服务契约 | 已完成 | 2026-07-24 | v2 OpenAPI、执行信封、稳定错误协议、主系统消息 DTO 隔离、v1/v2 灰度客户端和双向字段兼容测试均已完成。 |
-| 阶段 3：聊天协调器与能力处理器 | 已完成 | 2026-07-24 | 已建立无业务分支的 Coordinator、Handler SPI、兼容 Facade 与 Legacy Handler；Controller 和 v2 API 均通过 Facade 路由，扩展性/冲突/架构守护及全量回归测试通过。 |
-| 阶段 4：统一能力目录、Planner 和工具注册 | 进行中 | 2026-07-27 | 已完成强类型能力 YAML、profile/权限启动校验、ToolCatalog 与旧 Registry/Executor 兼容适配；强类型工具 DTO、目录裁剪和扩展性契约测试待完成。 |
-| 阶段 5：统一会话真相源并支持并发 | 进行中 | 2026-07-27 | v2 返回 `ConversationPatch`，主系统使用数据库 `@Version` 条件更新；真实多线程并发、幂等和影子比对验证待完成。 |
-| 阶段 6：通用 API、模型适配与开发体验收口 | 进行中 | 2026-07-27 | 模型 profile、诊断/理解/连通性网关接入、分层健康端点、MDC Filter、测试日志和文档完成首轮收口；指标与完整交付验证待完成。 |
+| 阶段 0：架构基线与保护网 | 已完成 | 2026-07-29 | README、架构基线、行为回归和 Facade/Coordinator 架构守护测试完成。 |
+| 阶段 1：规则与配置基础设施 | 已完成 | 2026-07-29 | 递归规则扫描、强类型 YAML、classpath 一致性测试完成；生产代码散落 `@Value` 已迁移到 `AgentProperties`。 |
+| 阶段 2：版本化跨服务契约 | 已完成 | 2026-07-29 | v2 OpenAPI、可信执行信封、必需访问上下文、稳定错误协议和 Java/OpenAPI 字段漂移测试完成。 |
+| 阶段 3：聊天协调器与能力处理器 | 核心完成 | 2026-07-29 | `MealPlanChatServiceImpl` 已收缩为 42 行 Facade；默认 Handler 的会话状态、兼容意图和旧客户汇总适配已拆为独立组件，生产类仅保留一个注入构造器，Handler 从 2269 行降至 1913 行。其余业务分支和线上 shadow 差异观察继续渐进执行。 |
+| 阶段 4：统一能力目录、Planner 和工具注册 | 核心完成 | 2026-07-29 | 中心 Planner 改为 Registry 路由；诊断规则移除独立工具白名单；ToolDescriptor 补齐只读、分类和 Schema 版本；历史工具执行改为目录执行器表并校验登记一致性。存量 Legacy Map 继续逐项迁移。 |
+| 阶段 5：统一会话真相源并支持并发 | 核心完成 | 2026-07-29 | 主系统持久化快照、`clientMessageId` 幂等、数据库行锁串行化和 `@Version` 冲突策略完成；真实数据库并发压测待发布前执行。 |
+| 阶段 6：通用 API、模型适配与开发体验收口 | 核心完成 | 2026-07-29 | v2 默认灰度、严格 model profile/能力检查、原始模型日志清理、可执行 JAR 和开发手册完成；线上指标基线待灰度期采集。 |
 
 ## 1. 背景与总体结论
 
@@ -70,33 +70,33 @@
 
 ### 3.1 易用性目标
 
-- [ ] 新开发者只阅读一份 README 即可完成本地启动、运行测试、配置模型和定位日志。
-- [ ] 所有 Agent 配置集中在强类型 `@ConfigurationProperties` 中，启动时给出明确校验错误。
-- [ ] 对外接口有唯一、版本化、可自动校验的 OpenAPI/JSON Schema 契约。
-- [ ] 错误响应具有稳定 `code/message/requestId/retryable/details` 结构。
-- [ ] 单元测试默认不输出大量 INFO 业务日志。
-- [ ] 新增规则场景、查询能力、模型提供商均有明确的开发步骤和验收模板。
+- [x] 新开发者只阅读一份 README 即可完成本地启动、运行测试、配置模型和定位日志。（2026-07-29）
+- [x] 所有 Agent 配置集中在强类型 `@ConfigurationProperties` 中，启动时给出明确校验错误。（2026-07-29；聊天 mode 已改为枚举，生产/预发缺少 internal token 启动失败。）
+- [x] 对外接口有唯一、版本化、可自动校验的 OpenAPI/JSON Schema 契约。（2026-07-29；v2 OpenAPI 与契约漂移测试。）
+- [x] 错误响应具有稳定 `code/message/requestId/retryable/details` 结构。（2026-07-29）
+- [x] 单元测试默认不输出大量 INFO 业务日志。（2026-07-29；agent-service 与主系统 Agent 测试均降至 WARN。）
+- [x] 新增规则场景、查询能力、模型提供商均有明确的开发步骤和验收模板。（2026-07-29；见 `agent-service/README.md` 扩展约定和验证清单。）
 
 ### 3.2 可扩展性目标
 
-- [ ] `ConversationCoordinator` 不包含客户、订单、菜单、核销、统计等具体业务分支。
-- [ ] 新增只读能力不需要修改 Coordinator，也不需要增加新的顶层 `ChatIntent`。
-- [ ] 工具元数据、权限、输入输出类型和执行逻辑有唯一注册源。
-- [ ] 能力目录使用强类型结构，未知 profile、未知工具、未知指标在启动期失败。
-- [ ] 新增诊断场景只需新增场景目录和处理器，不修改规则加载器的文件名列表。
-- [ ] 模型调用通过统一 `AgentModelGateway`，业务代码不直接读取 DeepSeek 专属配置。
-- [ ] 会话持久化只有一个真相源，多实例和并发请求不会因内存状态覆盖而丢失上下文。
+- [x] `ConversationCoordinator` 不包含客户、订单、菜单、核销、统计等具体业务分支。（2026-07-29；架构守护测试固定。）
+- [x] 新增只读能力不需要修改 Coordinator，也不需要增加新的顶层 `ChatIntent`。（2026-07-29；临时 Handler 扩展测试固定。）
+- [x] 工具元数据、权限、输入输出类型和执行逻辑有唯一注册源。（2026-07-29；新工具由 `AgentTool` Bean 收集，历史工具由 `ToolCatalog` 描述符/执行器表统一登记。）
+- [x] 能力目录使用强类型结构，未知 profile、未知工具、未知指标在启动期失败。（2026-07-29）
+- [x] 新增诊断场景只需新增场景目录和处理器，不修改规则加载器的文件名列表。（2026-07-29）
+- [x] 模型调用通过统一 `AgentModelGateway`，业务代码不直接读取 DeepSeek 专属配置。（2026-07-29）
+- [x] 会话持久化只有一个真相源，多实例和并发请求不会因内存状态覆盖而丢失上下文。（2026-07-29；主系统快照为真相源、Agent 默认无状态；真实库压测仍列为发布期事项。）
 
 ### 3.3 量化验收目标
 
-- [ ] `MealPlanChatServiceImpl` 最终收缩为兼容 Facade，建议不超过 150 行。
-- [ ] `ConversationCoordinator` 建议不超过 300 行，且无具体工具名字符串。
-- [ ] 新增一个普通只读能力最多新增或修改 3 个主要生产文件：能力处理器、可选工具、目录定义。
-- [ ] 核心应用层不再新增 `Map<String,Object>` 形式的内部业务契约。
-- [ ] 工具名、响应类型、planner profile 不在多个类中重复硬编码。
-- [ ] 文件系统规则与 classpath 规则的 ruleId 集合、数量和 digest 完全一致。
-- [ ] 同一 session 并发请求具有确定性的版本冲突或顺序处理结果。
-- [ ] 现有 API、现有评测用例和前端展示保持兼容。
+- [x] `MealPlanChatServiceImpl` 最终收缩为兼容 Facade，建议不超过 150 行。（2026-07-29；当前 42 行。）
+- [x] `ConversationCoordinator` 建议不超过 300 行，且无具体工具名字符串。（2026-07-29；当前 31 行。）
+- [x] 新增一个普通只读能力最多新增或修改 3 个主要生产文件：能力处理器、可选工具、目录定义。（2026-07-29；临时能力扩展测试不修改中心类。）
+- [ ] 核心应用层不再新增 `Map<String,Object>` 形式的内部业务契约。（新能力已强类型化；历史 Presenter/兼容响应仍待迁移。）
+- [ ] 工具名、响应类型、planner profile 不在多个类中重复硬编码。（工具名和 profile 已收口；历史 responseType 仍待目录化。）
+- [x] 文件系统规则与 classpath 规则的 ruleId 集合、数量和 digest 完全一致。（2026-07-29）
+- [x] 同一 session 并发请求具有确定性的版本冲突或顺序处理结果。（2026-07-29；行锁串行化与版本冲突协议完成，真实库压力数据待发布前采集。）
+- [x] 现有 API、现有评测用例和前端展示保持兼容。（2026-07-29；v1 保留，Agent/主系统回归通过。）
 
 ## 4. 非目标
 
@@ -343,27 +343,27 @@ public record ConversationPatch(
 
 ### 任务 0.1：补充模块 README
 
-- [ ] Create: `agent-service/README.md`
-- [ ] 记录 Java 17 + Maven 3.9.9 要求。
-- [ ] 记录本地启动、环境变量、主系统依赖和端口。
-- [ ] 记录规则目录、评测集和真实模型评测的执行方式。
-- [ ] 记录“新增能力”“新增工具”“新增规则场景”的标准流程。
-- [ ] 明确正常前端调用应经过 `eladmin-system`，不建议直接调用内部 Agent 接口。
+- [x] Create: `agent-service/README.md`（2026-07-29）
+- [x] 记录 Java 17 + Maven 3.9.9 要求。（2026-07-29）
+- [x] 记录本地启动、环境变量、主系统依赖和端口。（2026-07-29）
+- [x] 记录规则目录、评测集和真实模型评测的执行方式。（2026-07-29）
+- [x] 记录“新增能力”“新增工具”“新增规则场景”的标准流程。（2026-07-29）
+- [x] 明确正常前端调用应经过 `eladmin-system`，不建议直接调用内部 Agent 接口。（2026-07-29）
 
 ### 任务 0.2：建立架构统计基线
 
-- [ ] 记录 `MealPlanChatServiceImpl` 行数、分支数、依赖数和测试数。（已记录行数与测试类数，分支/依赖统计待自动化。）
-- [ ] 记录现有工具数、能力数、指标数和响应类型数。（已记录工具/能力数，指标/响应类型统计待自动化。）
-- [ ] 记录全量测试耗时和输出日志行数。
+- [x] 记录 `MealPlanChatServiceImpl` 行数、分支数、依赖数和测试数。（2026-07-29；见架构基线收口快照。）
+- [x] 记录现有工具数、能力数、指标数和响应类型数。（2026-07-29；见架构基线收口快照。）
+- [x] 记录全量测试耗时和输出日志行数。（2026-07-29；本机约 6 秒，quiet 模式无普通 INFO 输出。）
 - [x] 将基线保存到 `agent-service/docs/architecture-baseline.md`。（2026-07-27）
 
 ### 任务 0.3：增加架构守护测试
 
-- [ ] 建议引入 ArchUnit，或使用轻量依赖扫描测试。
-- [ ] `domain` 不得依赖 `controller`、Spring Web、HTTP Client。
-- [ ] `capability` 不得依赖具体 Controller DTO。
-- [ ] `ConversationCoordinator` 不得依赖 `Http*Client` 实现类。
-- [ ] 新增 `ChatIntent` 必须通过显式架构评审，防止再次出现意图枚举爆炸。
+- [x] 建议引入 ArchUnit，或使用轻量依赖扫描测试。（2026-07-29；采用零新增依赖的源码边界测试。）
+- [x] `domain` 不得依赖 `controller`、Spring Web、HTTP Client。（2026-07-29）
+- [x] `capability` 不得依赖具体 Controller DTO。（2026-07-29）
+- [x] `ConversationCoordinator` 不得依赖 `Http*Client` 实现类。（2026-07-29）
+- [x] 新增 `ChatIntent` 必须通过显式架构评审，防止再次出现意图枚举爆炸。（2026-07-29；README 明确新能力不得新增顶层意图，扩展测试固定 Handler 路径。）
 
 ### 验证命令
 
@@ -377,9 +377,9 @@ mvn -q test
 
 ### 阶段验收
 
-- [ ] 不改变任何运行行为。
-- [ ] 全量测试保持通过。
-- [ ] 开发者能按 README 在空终端完成测试和启动。
+- [x] 不改变任何运行行为。（2026-07-29）
+- [x] 全量测试保持通过。（2026-07-29）
+- [x] 开发者能按 README 在空终端完成测试和启动。（2026-07-29；可执行 JAR 已从项目外目录验证。）
 
 ## 阶段 1：修正规则与配置加载基础设施
 
@@ -394,32 +394,32 @@ mvn -q test
 
 实施要求：
 
-- [ ] `load(scene)` 必须根据规范化 scene 解析目录，禁止固定使用 `meal-plan`。
-- [ ] classpath 使用资源模式扫描 `rules/{scene}/**/*.yaml`。
-- [ ] 文件系统和 classpath 使用同一解析、排序、校验和 digest 逻辑。
-- [ ] 明确区分规则文件、提示词策略文件和建议模板文件，不再把所有 YAML 交给同一手写解析循环。
-- [ ] 外部规则目录存在时使用“完整覆盖”还是“按文件覆盖”，必须选择一种并写入 README。
-- [ ] 建议首期采用完整覆盖：外部 scene 目录存在时只加载外部目录，避免规则来源混杂。
+- [x] `load(scene)` 必须根据规范化 scene 解析目录，禁止固定使用 `meal-plan`。（2026-07-29）
+- [x] classpath 使用资源模式扫描 `rules/{scene}/**/*.yaml`。（2026-07-29）
+- [x] 文件系统和 classpath 使用同一解析、排序、校验和 digest 逻辑。（2026-07-29）
+- [x] 明确区分规则文件、提示词策略文件和建议模板文件，不再把所有 YAML 交给同一手写解析循环。（2026-07-29）
+- [x] 外部规则目录存在时使用“完整覆盖”还是“按文件覆盖”，必须选择一种并写入 README。（2026-07-29）
+- [x] 建议首期采用完整覆盖：外部 scene 目录存在时只加载外部目录，避免规则来源混杂。（2026-07-29）
 
 ### 任务 1.2：改用强类型 YAML 解析
 
-- [ ] 使用 SnakeYAML 或 Jackson 将规则转换为强类型对象。
-- [ ] 禁止继续手工按行识别 `ruleId`、列表和标量。
-- [ ] 未知字段可根据场景选择启动失败或告警；安全关键规则建议启动失败。
-- [ ] 增加 schemaVersion。
-- [ ] 校验 ruleId、reasonCode、requiredTools、evidenceFields、owner 和 version。
+- [x] 使用 SnakeYAML 或 Jackson 将规则转换为强类型对象。（2026-07-29；使用 Jackson `YAMLMapper`。）
+- [x] 禁止继续手工按行识别 `ruleId`、列表和标量。（2026-07-29）
+- [x] 未知字段可根据场景选择启动失败或告警；安全关键规则建议启动失败。（2026-07-29；诊断规则未知字段失败。）
+- [x] 增加 schemaVersion。（2026-07-29）
+- [x] 校验 ruleId、reasonCode、requiredTools、evidenceFields、owner 和 version。（2026-07-29）
 
 ### 任务 1.3：修复 classpath 覆盖测试
 
 新增测试：
 
-- [ ] classpath 必须包含 `PACKAGE_SPEC_MISSING`。
-- [ ] classpath 必须包含 `REFUND_OR_STOP_MEAL_HIT`。
-- [ ] classpath 必须包含 `VERIFICATION_CONSUMED_COUNT`。
-- [ ] 文件系统与 classpath 的 ruleId 集合一致。
-- [ ] 文件系统与 classpath 的 version digest 一致。
-- [ ] 从打包 JAR 外部工作目录启动时规则数不变。
-- [ ] 新增临时 scene 目录后无需修改 Loader Java 代码即可加载。
+- [x] classpath 必须包含 `PACKAGE_SPEC_MISSING`。（2026-07-29）
+- [x] classpath 必须包含 `REFUND_OR_STOP_MEAL_HIT`。（2026-07-29）
+- [x] classpath 必须包含 `VERIFICATION_CONSUMED_COUNT`。（2026-07-29）
+- [x] 文件系统与 classpath 的 ruleId 集合一致。（2026-07-29）
+- [x] 文件系统与 classpath 的 version digest 一致。（2026-07-29）
+- [x] 从打包 JAR 外部工作目录启动时规则数不变。（2026-07-29）
+- [x] 新增临时 scene 目录后无需修改 Loader Java 代码即可加载。（2026-07-29）
 
 ### 任务 1.4：集中配置
 
@@ -430,30 +430,30 @@ mvn -q test
 
 迁移范围：
 
-- [ ] `agent.context-base-url`
-- [ ] `agent.internal-token`
-- [ ] `agent.business-query-timeout-ms`
-- [ ] `agent.rules.*`
-- [ ] `agent.diagnosis.*`
-- [ ] `agent.chat.*`
-- [ ] `agent.business-time.*`
-- [ ] 模型 profile
+- [x] `agent.context-base-url`（2026-07-29）
+- [x] `agent.internal-token`（2026-07-29）
+- [x] `agent.business-query-timeout-ms`（2026-07-29）
+- [x] `agent.rules.*`（2026-07-29）
+- [x] `agent.diagnosis.*`（2026-07-29）
+- [x] `agent.chat.*`（2026-07-29）
+- [x] `agent.business-time.*`（2026-07-29；由独立强类型 `BusinessTimeProperties` 承载。）
+- [x] 模型 profile（2026-07-29）
 
 要求：
 
-- [ ] 使用嵌套 `@ConfigurationProperties`。
-- [ ] mode 使用枚举，不使用任意字符串。
-- [ ] 超时、TTL、阈值和条数使用 Bean Validation。
-- [ ] 统一代码默认值与 `application.yml` 默认值。
-- [ ] 非开发环境缺少 internal token 时启动失败。
-- [ ] 启动错误必须指出具体配置路径。
+- [x] 使用嵌套 `@ConfigurationProperties`。（2026-07-29）
+- [x] mode 使用枚举，不使用任意字符串。（2026-07-29）
+- [x] 超时、TTL、阈值和条数使用 Bean Validation。（2026-07-29）
+- [x] 统一代码默认值与 `application.yml` 默认值。（2026-07-29）
+- [x] 非开发环境缺少 internal token 时启动失败。（2026-07-29）
+- [x] 启动错误必须指出具体配置路径。（2026-07-29；错误包含 `agent.internal-token`。）
 
 ### 阶段验收
 
-- [ ] 不同工作目录、IDE、JAR 三种启动方式加载同一规则集合。
-- [ ] 新增 scene 不修改加载器。
-- [ ] 配置错误在启动阶段失败，不进入运行时。
-- [ ] 现有规则评测全部通过。
+- [x] 不同工作目录、IDE、JAR 三种启动方式加载同一规则集合。（2026-07-29）
+- [x] 新增 scene 不修改加载器。（2026-07-29）
+- [x] 配置错误在启动阶段失败，不进入运行时。（2026-07-29）
+- [x] 现有规则评测全部通过。（2026-07-29）
 
 ## 阶段 2：建立版本化跨服务契约
 
@@ -493,11 +493,11 @@ AgentExecutionEnvelope
 
 要求：
 
-- [ ] 前端可提交字段与主系统可信字段分离。
-- [ ] `availableTools`、Pending、Last Context、Task Stack 不再表现为普通用户请求字段。
-- [ ] `clientMessageId` 由 Agent 原样回传，不再依赖主系统客户端补齐。
-- [ ] 请求和响应均携带 `contractVersion`。
-- [ ] 新字段遵循兼容式新增，旧字段至少保留一个完整发布周期。
+- [x] 前端可提交字段与主系统可信字段分离。（2026-07-29）
+- [x] `availableTools`、Pending、Last Context、Task Stack 不再表现为普通用户请求字段。（2026-07-29）
+- [x] `clientMessageId` 由 Agent 原样回传，不再依赖主系统客户端补齐。（2026-07-29）
+- [x] 请求和响应均携带 `contractVersion`。（2026-07-29）
+- [x] 新字段遵循兼容式新增，旧字段至少保留一个完整发布周期。（2026-07-29；v1 当前保留，删除时点仍受发布周期约束。）
 
 ### 任务 2.3：建立统一错误契约
 
@@ -513,24 +513,24 @@ AgentExecutionEnvelope
 }
 ```
 
-- [ ] 增加全局异常处理器。
-- [ ] 参数错误返回稳定字段级错误。
-- [ ] 模型超时、工具超时、权限拒绝、契约不匹配使用不同错误码。
-- [ ] 禁止返回异常堆栈、内部 URL、token 或敏感业务数据。
+- [x] 增加全局异常处理器。（2026-07-29）
+- [x] 参数错误返回稳定字段级错误。（2026-07-29）
+- [x] 模型超时、工具超时、权限拒绝、契约不匹配使用不同错误码。（2026-07-29）
+- [x] 禁止返回异常堆栈、内部 URL、token 或敏感业务数据。（2026-07-29）
 
 ### 任务 2.4：契约兼容测试
 
-- [ ] Agent v2 响应能被主系统 DTO 完整解析。
-- [ ] 主系统请求能被 Agent v2 DTO 完整解析。
-- [ ] `clientMessageId`、任务栈、Pending、Last Context、facts 和 resultBlocks 不丢失。
-- [ ] 未识别的兼容新增字段不会导致旧客户端失败。
-- [ ] 金额、手机号、完整地址字段不能进入契约 schema。
+- [x] Agent v2 响应能被主系统 DTO 完整解析。（2026-07-29）
+- [x] 主系统请求能被 Agent v2 DTO 完整解析。（2026-07-29）
+- [x] `clientMessageId`、任务栈、Pending、Last Context、facts 和 resultBlocks 不丢失。（2026-07-29）
+- [x] 未识别的兼容新增字段不会导致旧客户端失败。（2026-07-29）
+- [x] 金额、手机号、完整地址字段不能进入契约 schema。（2026-07-29）
 
 ### 阶段验收
 
-- [ ] OpenAPI 是跨服务字段的唯一权威说明。
-- [ ] 两端不再靠手工比对 DTO。
-- [ ] 契约测试可在 CI 中独立失败。
+- [x] OpenAPI 是跨服务字段的唯一权威说明。（2026-07-29）
+- [x] 两端不再靠手工比对 DTO。（2026-07-29；契约测试自动比对 Java 字段与 OpenAPI。）
+- [x] 契约测试可在 CI 中独立失败。（2026-07-29）
 
 ## 阶段 3：拆分聊天协调器与能力处理器
 
@@ -540,27 +540,27 @@ AgentExecutionEnvelope
 
 在迁移前固定以下场景：
 
-- [ ] RESET
-- [ ] RETRY
-- [ ] OUT_OF_SCOPE
-- [ ] FOLLOW_UP
-- [ ] 排餐诊断槽位补全
-- [ ] 客户概览
-- [ ] 订单、核销、退餐查询
-- [ ] 公共菜单
-- [ ] 候选菜
-- [ ] 运营统计
-- [ ] 多帧查询
-- [ ] Pending 恢复
-- [ ] 上下文集合追问
-- [ ] 权限拒绝
-- [ ] 工具部分成功
+- [x] RESET（2026-07-29）
+- [x] RETRY（2026-07-29）
+- [x] OUT_OF_SCOPE（2026-07-29）
+- [x] FOLLOW_UP（2026-07-29）
+- [x] 排餐诊断槽位补全（2026-07-29）
+- [x] 客户概览（2026-07-29）
+- [x] 订单、核销、退餐查询（2026-07-29）
+- [x] 公共菜单（2026-07-29）
+- [x] 候选菜（2026-07-29）
+- [x] 运营统计（2026-07-29）
+- [x] 多帧查询（2026-07-29）
+- [x] Pending 恢复（2026-07-29）
+- [x] 上下文集合追问（2026-07-29）
+- [x] 权限拒绝（2026-07-29）
+- [x] 工具部分成功（2026-07-29）
 
 测试要求：
 
-- [ ] 断言状态、responseType、facts、warnings、QueryPlan 和会话 Patch。
-- [ ] 不仅断言助手自然语言。
-- [ ] 使用统一 Test Fixture Builder，停止依赖生产类的 6 个构造函数。
+- [x] 断言状态、responseType、facts、warnings、QueryPlan 和会话 Patch。（2026-07-29）
+- [x] 不仅断言助手自然语言。（2026-07-29）
+- [x] 使用统一 Test Fixture Builder，停止依赖生产类的 6 个构造函数。（2026-07-29）
 
 ### 任务 3.2：新增 `ConversationCoordinator`
 
@@ -573,14 +573,14 @@ AgentExecutionEnvelope
 
 第一批只迁移公共流程：
 
-- [ ] 会话快照装载；
-- [ ] 槽位合并；
-- [ ] 用户轮次记录；
-- [ ] 理解管线调用；
-- [ ] 能力路由；
-- [ ] 通用结果保存；
-- [ ] 审计摘要；
-- [ ] 异常转稳定结果。
+- [x] 会话快照装载；（2026-07-29；由 `ConversationStateSupport` 承载。）
+- [x] 槽位合并；（2026-07-29；由 `ConversationStateSupport` 承载。）
+- [x] 用户轮次记录；（2026-07-29；由 `ConversationStateSupport` 承载。）
+- [ ] 理解管线调用；（仍在默认 Handler，待抽为独立 Pipeline。）
+- [x] 能力路由；（2026-07-29；Coordinator 与 `CapabilityHandlerRegistry` 分层路由。）
+- [ ] 通用结果保存；（仍在默认 Handler 的响应工厂/状态逻辑中。）
+- [ ] 审计摘要；（已有受控摘要，待从默认 Handler 下沉为公共管线阶段。）
+- [x] 异常转稳定结果。（2026-07-29；统一异常协议和稳定错误码。）
 
 ### 任务 3.3：将历史顶层行为抽为 Handler
 
@@ -594,34 +594,34 @@ AgentExecutionEnvelope
 
 要求：
 
-- [ ] `MealPlanChatServiceImpl` 暂时保留为 Facade，内部委托 Coordinator。
-- [ ] 每迁移一个分支，先对比旧实现和新实现的结构化响应。
-- [ ] 灰度开关支持按能力切回旧路径。
-- [ ] 不在本阶段删除旧代码。
+- [x] `MealPlanChatServiceImpl` 暂时保留为 Facade，内部委托 Coordinator。（2026-07-29）
+- [x] 每迁移一个分支，先对比旧实现和新实现的结构化响应。（2026-07-29；本轮拆分由既有 40 个 Handler 刻画测试和新增组件测试保护。）
+- [ ] 灰度开关支持按能力切回旧路径。（当前只有 v1/v2 和会话理解级开关，能力级切换待灰度建设。）
+- [x] 不在本阶段删除旧代码。（2026-07-29；旧业务行为整体保留在默认 Handler，仅移动职责和删除重复构造链。）
 
 ### 任务 3.4：取消生产构造函数兼容链
 
-- [ ] 使用单一构造器注入。
-- [ ] 测试通过 Builder/Fixture 组装依赖。
-- [ ] 禁止生产构造器内部 `new BusinessAnswerValidator()`、`new ContextReferenceResolver()` 等隐藏依赖。
-- [ ] 时间、阈值和开关全部从显式依赖或配置对象注入。
+- [x] 使用单一构造器注入。（2026-07-29；生产类仅保留一个构造器，历史简化构造链已删除。）
+- [x] 测试通过 Builder/Fixture 组装依赖。（2026-07-29；统一使用 `DefaultConversationHandlerFixture`。）
+- [x] 禁止生产构造器内部 `new BusinessAnswerValidator()`、`new ContextReferenceResolver()` 等隐藏依赖。（2026-07-29；`BusinessQueryChatService` 改为 Spring 依赖注入。）
+- [x] 时间、阈值和开关全部从显式依赖或配置对象注入。（2026-07-29；生产构造链已统一从强类型配置注入。）
 
 ### 任务 3.5：完成双轨比对
 
 灰度期可使用 shadow：
 
-- [ ] 旧路径生成正式响应。
-- [ ] 新 Coordinator 生成影子响应，不返回前端。
-- [ ] 比对 status、responseType、QueryPlan、toolNames、facts、warnings 和上下文 Patch。
-- [ ] 不记录用户原文和工具原始响应。
-- [ ] 差异超过阈值时阻止切流。
+- [ ] 旧路径生成正式响应。（需在灰度环境执行。）
+- [ ] 新 Coordinator 生成影子响应，不返回前端。（需在灰度环境执行。）
+- [ ] 比对 status、responseType、QueryPlan、toolNames、facts、warnings 和上下文 Patch。（需在灰度环境采集。）
+- [x] 不记录用户原文和工具原始响应。（2026-07-29）
+- [ ] 差异超过阈值时阻止切流。（待灰度阈值和发布门禁落地。）
 
 ### 阶段验收
 
 - [x] 兼容 Facade 不再直接执行具体业务工具，改由 Coordinator 路由。（2026-07-24）
 - [x] 新增能力不修改 Facade/Coordinator。（2026-07-24）
-- [ ] 旧路径与新路径结构化差异达到约定阈值后才切流。
-- [ ] 现有 283 个测试及新增刻画测试全部通过。
+- [ ] 旧路径与新路径结构化差异达到约定阈值后才切流。（发布期门禁。）
+- [x] 现有 283 个测试及新增刻画测试全部通过。（2026-07-29；当前 Agent 全量 329 个测试。）
 
 ## 阶段 4：统一能力目录、Planner 和工具注册
 
@@ -648,11 +648,11 @@ public record CapabilityDefinition(
 
 ### 任务 4.2：建立 `CapabilityHandlerRegistry`
 
-- [ ] Spring 收集所有 `CapabilityHandler` Bean。
-- [ ] capabilityId 唯一。
-- [ ] plannerProfile 唯一或明确允许多版本。
-- [ ] 同一 Semantic Frame 出现多个同优先级 Handler 时启动失败。
-- [ ] 未登记能力返回 `CAPABILITY_NOT_AVAILABLE`，不能回退为错误旧意图。
+- [x] Spring 收集所有 `CapabilityHandler` Bean。（2026-07-29）
+- [x] capabilityId 唯一。（2026-07-29）
+- [x] plannerProfile 唯一或明确允许多版本。（2026-07-29）
+- [x] 同一 Semantic Frame 出现多个同优先级 Handler 时启动失败。（2026-07-29）
+- [x] 未登记能力返回 `CAPABILITY_NOT_AVAILABLE`，不能回退为错误旧意图。（2026-07-29）
 
 ### 任务 4.3：建立统一 `ToolCatalog`
 
@@ -666,10 +666,10 @@ public record CapabilityDefinition(
 
 要求：
 
-- [ ] 工具描述和工具实现一一绑定。
-- [ ] 工具权限、最大条数和超时只维护一次。
-- [ ] 工具执行统一经过预算、缓存、权限、超时、敏感结果校验和 Trace 拦截器。
-- [ ] 诊断工具与业务查询工具可分组，但共享统一元数据协议。
+- [x] 工具描述和工具实现一一绑定。（2026-07-29；Typed 工具由 Bean 绑定，历史工具描述符/执行器表集合强制一致。）
+- [x] 工具权限、最大条数和超时只维护一次。（2026-07-29）
+- [x] 工具执行统一经过预算、缓存、权限、超时、敏感结果校验和 Trace 拦截器。（2026-07-29）
+- [x] 诊断工具与业务查询工具可分组，但共享统一元数据协议。（2026-07-29）
 - [x] 新强类型工具集合由 TypedAgentToolCatalog 按主系统白名单裁剪。（2026-07-27）
 
 ### 任务 4.4：强类型工具输入输出
@@ -683,19 +683,19 @@ public record CapabilityDefinition(
 
 要求：
 
-- [ ] 核心能力层不能读取任意 Map key。
-- [ ] Presenter 只消费受控 DTO。
-- [ ] 敏感字段校验既检查 DTO schema，也检查序列化结果。
+- [x] 核心能力层不能读取任意 Map key。（2026-07-29；兼容 Map 读取隔离在旧适配/展示边界。）
+- [ ] Presenter 只消费受控 DTO。（强类型 Transport 已建立；历史 `BusinessAnswerComposer/ResponseFactory` 仍消费兼容 Map。）
+- [x] 敏感字段校验既检查 DTO schema，也检查序列化结果。（2026-07-29）
 
 ### 任务 4.5：新增扩展性契约测试
 
 增加测试型能力：
 
-- [ ] 测试中注册一个临时 `CapabilityHandler`。
-- [ ] 不修改 Coordinator、Router 和现有 Planner 即可完成路由。
+- [x] 测试中注册一个临时 `CapabilityHandler`。（2026-07-29）
+- [x] 不修改 Coordinator、Router 和现有 Planner 即可完成路由。（2026-07-29）
 - [x] 测试中注册一个临时 `AgentTool`。（2026-07-27）
 - [x] 不修改 Executor if/switch 即可执行。（2026-07-27）
-- [ ] 重复 ID、未知 profile、未知工具必须启动失败。
+- [x] 重复 ID、未知 profile、未知工具必须启动失败。（2026-07-29）
 
 ### 阶段验收
 
@@ -735,19 +735,19 @@ public record CapabilityDefinition(
 
 ### 任务 5.3：并发与幂等测试
 
-- [ ] 同一 clientMessageId 重试只生成一个持久化用户轮次。
-- [ ] 同一 session 两条不同消息并发时不互相覆盖槽位。
+- [x] 同一 clientMessageId 重试只生成一个持久化用户轮次。（2026-07-29）
+- [ ] 同一 session 两条不同消息并发时不互相覆盖槽位。（行锁策略和调用验证已完成，真实数据库多线程压测待执行。）
 - [x] 旧版本请求不能覆盖新版本上下文。（2026-07-27：数据库 `@Version` 条件更新）
-- [ ] Agent 实例切换后能从主系统快照恢复。
-- [ ] Agent 重启后 Pending、Last Context 和 Task Stack 不丢失。
-- [ ] 并发冲突返回可重试错误，不返回错误业务结论。
+- [x] Agent 实例切换后能从主系统快照恢复。（2026-07-29）
+- [x] Agent 重启后 Pending、Last Context 和 Task Stack 不丢失。（2026-07-29）
+- [x] 并发冲突返回可重试错误，不返回错误业务结论。（2026-07-29）
 
 ### 任务 5.4：会话状态迁移灰度
 
-- [ ] 首先双写或影子比对内存状态与持久化快照。
-- [ ] 监控版本冲突、快照解析失败和上下文差异。
-- [ ] 稳定后关闭内存会话写入。
-- [ ] 最后删除可变内存 session 实现或仅保留测试实现。
+- [x] 首先双写或影子比对内存状态与持久化快照。（2026-07-29；采用推荐的无状态路径，直接以请求快照装载并用回归测试对比历史行为，无需生产双写。）
+- [ ] 监控版本冲突、快照解析失败和上下文差异。（待灰度指标采集。）
+- [x] 稳定后关闭内存会话写入。（2026-07-29；默认 `stateful-session-cache-enabled=false`。）
+- [ ] 最后删除可变内存 session 实现或仅保留测试实现。（当前默认关闭，仅作为显式排障兼容开关保留。）
 
 ### 阶段验收
 
@@ -768,19 +768,19 @@ public record CapabilityDefinition(
 
 迁移策略：
 
-- [ ] 旧接口内部委托 v2 Coordinator。
-- [ ] 旧接口响应保持字段兼容。
-- [ ] 主系统先切换 v2，再观察一个完整发布周期。
-- [ ] API 文档标记旧接口 deprecated，但不立即删除。
-- [ ] 排餐一次性诊断 `/diagnose` 继续作为独立能力保留。
+- [x] 旧接口内部委托 v2 Coordinator。（2026-07-29）
+- [x] 旧接口响应保持字段兼容。（2026-07-29）
+- [ ] 主系统先切换 v2，再观察一个完整发布周期。（开发配置已默认 v2，完整发布周期尚未结束。）
+- [x] API 文档标记旧接口 deprecated，但不立即删除。（2026-07-29）
+- [x] 排餐一次性诊断 `/diagnose` 继续作为独立能力保留。（2026-07-29）
 
 ### 任务 6.2：引入 `AgentModelGateway`
 
-- [ ] Spring AI DeepSeek 实现迁入 infrastructure。
+- [x] Spring AI DeepSeek 实现迁入 infrastructure。（2026-07-29）
 - [x] 理解和连通性检测不直接读取 provider 专属配置。（2026-07-27；诊断客户端迁移待后续收口）
 - [x] 支持按 task 选择 model profile。（2026-07-27）
 - [x] profile 包含模型名、超时、结构化输出支持、工具调用支持和最大重试。（2026-07-27）
-- [ ] provider 不支持工具调用或结构化输出时启动或路由阶段明确拒绝。
+- [x] provider 不支持工具调用或结构化输出时启动或路由阶段明确拒绝。（2026-07-29）
 
 ### 任务 6.3：健康检查分层
 
@@ -800,26 +800,26 @@ public record CapabilityDefinition(
 ### 任务 6.4：统一日志与指标
 
 - [x] HTTP/MDC 逻辑下沉到 Filter/Interceptor。（2026-07-27）
-- [ ] Coordinator 和 Handler 只记录领域事件。
+- [x] Coordinator 和 Handler 只记录领域事件。（2026-07-29）
 - [x] 测试 profile 将 `me.zhengjie.agent` 日志降为 WARN。（2026-07-27）
-- [ ] 增加 capabilityId、toolName、contractVersion、sessionVersion、modelProfile。
-- [ ] 记录 P50/P95 耗时、澄清率、能力缺失率、工具失败率、版本冲突率。
-- [ ] 不记录原始 Prompt、模型完整输出、工具原始结果和敏感字段。
+- [ ] 增加 capabilityId、toolName、contractVersion、sessionVersion、modelProfile。（日志格式/MDC 基础已建立，部分调用点的 capabilityId/toolName/modelProfile 动态赋值仍待补齐。）
+- [ ] 记录 P50/P95 耗时、澄清率、能力缺失率、工具失败率、版本冲突率。（待灰度环境建立基线。）
+- [x] 不记录原始 Prompt、模型完整输出、工具原始结果和敏感字段。（2026-07-29；异常消息、sessionId、客户标识也从日志和诊断 trace 中移除。）
 
 ### 任务 6.5：补充开发手册
 
 README 或 `agent-service/docs/` 至少包含：
 
-- [ ] 本地启动；
-- [ ] 环境变量表；
-- [ ] 新增能力步骤；
-- [ ] 新增工具步骤；
-- [ ] 新增规则 scene 步骤；
-- [ ] 新增模型 provider/profile 步骤；
-- [ ] 常见错误码；
-- [ ] 灰度与回滚；
-- [ ] 测试和评测命令；
-- [ ] 安全边界。
+- [x] 本地启动；（2026-07-29）
+- [x] 环境变量表；（2026-07-29）
+- [x] 新增能力步骤；（2026-07-29）
+- [x] 新增工具步骤；（2026-07-29）
+- [x] 新增规则 scene 步骤；（2026-07-29）
+- [x] 新增模型 provider/profile 步骤；（2026-07-29）
+- [x] 常见错误码；（2026-07-29）
+- [x] 灰度与回滚；（2026-07-29）
+- [x] 测试和评测命令；（2026-07-29）
+- [x] 安全边界。（2026-07-29）
 
 ### 阶段验收
 
@@ -952,8 +952,8 @@ mvn -q clean package
 ```bash
 cd eladmin/eladmin-system
 source ~/.zshrc
-jenv shell 1.8
-mvn352
+jenv shell 17
+mvn399
 mvn -q -DskipTests=false -Dtest='*Agent*Test' test
 ```
 
@@ -1010,20 +1010,20 @@ mvn -q -Preal-model-eval -Dtest=RealModelIntentEvaluationTest test
 
 最终应交付：
 
-- [ ] `agent-service/README.md`
-- [ ] 架构基线文档
-- [ ] 规则和能力目录统一加载器
-- [ ] 强类型 Agent 配置
-- [ ] Agent v2 OpenAPI 契约
-- [ ] 统一错误协议
-- [ ] `ConversationCoordinator`
-- [ ] `CapabilityHandler` SPI 与 Registry
-- [ ] `AgentTool<I,O>` SPI 与 ToolCatalog
-- [ ] `AgentModelGateway`
-- [ ] `ConversationSnapshot/Patch` 与会话版本控制
-- [ ] `/api/agent/v2/chat`
-- [ ] 架构测试、契约测试、打包测试和并发测试
-- [ ] 更新后的业务和 API 文档
+- [x] `agent-service/README.md`（2026-07-29）
+- [x] 架构基线文档（2026-07-29）
+- [x] 规则和能力目录统一加载器（2026-07-29）
+- [x] 强类型 Agent 配置（2026-07-29）
+- [x] Agent v2 OpenAPI 契约（2026-07-29）
+- [x] 统一错误协议（2026-07-29）
+- [x] `ConversationCoordinator`（2026-07-29）
+- [x] `CapabilityHandler` SPI 与 Registry（2026-07-29）
+- [x] `AgentTool<I,O>` SPI 与 ToolCatalog（2026-07-29）
+- [x] `AgentModelGateway`（2026-07-29）
+- [x] `ConversationSnapshot/Patch` 与会话版本控制（2026-07-29）
+- [x] `/api/agent/v2/chat`（2026-07-29）
+- [ ] 架构测试、契约测试、打包测试和并发测试（前三项和并发策略单测已完成；真实数据库并发压测待发布前执行。）
+- [x] 更新后的业务和 API 文档（2026-07-29）
 - [ ] 灰度记录、差异报告和回滚验证记录
 
 ## 14. 完成定义
@@ -1053,3 +1053,26 @@ mvn -q -Preal-model-eval -Dtest=RealModelIntentEvaluationTest test
 6. **最后执行阶段 6**：通用 v2 API、Model Gateway 和开发体验收口。
 
 阶段 1 和阶段 2 完成前，不建议继续大规模增加新的细粒度意图、工具字符串分支或 `Map<String,Object>` 业务响应。
+
+## 16. 2026-07-29 实施验收记录
+
+本轮已完成方案的核心架构闭环，但仍按“核心完成”而非“全部完成”管理。自动化和运行验收结果如下：
+
+- `agent-service` 全量单元测试：329 个测试，0 failure，0 error，1 skipped。
+- 主系统 Agent 相关测试：118 个测试，0 failure，0 error，0 skipped。
+- `agent-service` 已生成 Spring Boot 可执行 JAR；从项目外临时目录启动成功，并能加载 classpath 中的规则、语义目录和 OpenAPI。
+- `MealPlanChatServiceImpl` 已收缩为只依赖 `ConversationCoordinator` 的兼容 Facade；能力编译由 `CapabilityHandlerRegistry` 路由。
+- `DefaultConversationHandler` 已抽出 `ConversationStateSupport`、`BusinessQueryIntentPolicy` 和 `LegacyCustomerInsightAdapter`；旧客户餐数、核销、订单汇总 Map 的字段读取不再留在默认 Handler。
+- `DefaultConversationHandler` 生产代码只保留一个构造器，`BusinessQueryChatService` 与 `ContextReferenceResolver` 均由 Spring 注入；测试依赖统一由 Fixture 组装。
+- `ToolCatalog` 的历史只读工具改为表驱动执行，描述符和执行器名称集合在类初始化时强制一致；架构测试禁止中心执行方法回退为工具名分支链。
+- v2 契约默认开启，v1 保留一个发布周期，可通过 `AGENT_CHAT_CONTRACT_VERSION=v1` 回滚。
+- 同 session 写入增加数据库行锁，保留 `clientMessageId` 幂等和 `sessionVersion` 冲突检测。
+- 日志与诊断 trace 不记录 Prompt、模型完整输出、工具原始结果、异常消息、sessionId 或客户标识。
+
+尚未关闭的发布期事项：
+
+1. 在真实数据库环境执行同 session 多线程压测，并保存冲突率、幂等命中率和最终快照校验记录。
+2. 在灰度环境执行 v1/v2 shadow 差异观察，补齐 P50/P95、澄清率、能力缺失率、工具失败率和版本冲突率基线。
+3. 继续将 `DefaultConversationHandler` 中尚未迁移的理解、结果保存、审计摘要及套餐、退餐、排餐、菜品、运营统计分支拆为独立 Pipeline/Handler。
+4. 将历史 `BusinessAnswerComposer/BusinessQueryResponseFactory` 的兼容 Map 输入迁为强类型 Presenter DTO，并目录化剩余 responseType。
+5. 灰度稳定后补齐 capabilityId/toolName/modelProfile 动态日志字段，并删除或限制可变内存 session 为测试专用实现。

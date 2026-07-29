@@ -28,9 +28,6 @@ public class MealPlanDiagnosisController {
 
     private static final Logger log = LoggerFactory.getLogger(MealPlanDiagnosisController.class);
     private static final String REQUEST_ID_KEY = "requestId";
-    private static final String SESSION_ID_KEY = "sessionId";
-    private static final String CUSTOMER_ID_KEY = "customerId";
-    private static final String CUSTOMER_CODE_KEY = "customerCode";
     private static final String RECORD_DATE_KEY = "recordDate";
     private static final String MEAL_TYPE_KEY = "mealType";
     private static final String STAGE_KEY = "stage";
@@ -60,24 +57,24 @@ public class MealPlanDiagnosisController {
                                       @Valid @RequestBody DiagnosisRequest request) {
         String traceId = resolveRequestId(requestId);
         MDC.put(REQUEST_ID_KEY, traceId);
-        putDiagnosisMdc(request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType(), null, "CONTROLLER_RECEIVED");
+        putDiagnosisMdc(request.getRecordDate(), request.getMealType(), "CONTROLLER_RECEIVED");
         long start = System.currentTimeMillis();
         try {
-            log.info("诊断阶段 stage=接收请求 requestId={} customerId={} customerCode={} recordDate={} mealType={}",
-                traceId, request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType());
+            log.info("诊断阶段 stage=接收请求 requestId={} recordDate={} mealType={}",
+                traceId, request.getRecordDate(), request.getMealType());
             DiagnosisResponse response = diagnosisService.diagnose(request);
             MDC.put(FALLBACK_KEY, String.valueOf(response.isFallback()));
             MDC.put(FALLBACK_REASON_KEY, safe(response.getFallbackReason()));
             MDC.put(STAGE_KEY, "CONTROLLER_COMPLETED");
-            log.info("诊断阶段 stage=请求完成 requestId={} customerId={} recordDate={} mealType={} fallback={} reasonCount={} costMs={}",
-                traceId, request.getCustomerId(), request.getRecordDate(), request.getMealType(), response.isFallback(),
+            log.info("诊断阶段 stage=请求完成 requestId={} recordDate={} mealType={} fallback={} reasonCount={} costMs={}",
+                traceId, request.getRecordDate(), request.getMealType(), response.isFallback(),
                 response.getReasons() == null ? 0 : response.getReasons().size(), System.currentTimeMillis() - start);
             return response;
         } catch (RuntimeException ex) {
             MDC.put(STAGE_KEY, "CONTROLLER_FAILED");
-            log.error("诊断阶段 stage=请求失败 requestId={} customerId={} customerCode={} recordDate={} mealType={} costMs={} errorType={} errorMessage={}",
-                traceId, request.getCustomerId(), request.getCustomerCode(), request.getRecordDate(), request.getMealType(),
-                System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            log.error("诊断阶段 stage=请求失败 requestId={} recordDate={} mealType={} costMs={} errorType={}",
+                traceId, request.getRecordDate(), request.getMealType(),
+                System.currentTimeMillis() - start, ex.getClass().getSimpleName());
             throw ex;
         } finally {
             clearDiagnosticMdc();
@@ -93,26 +90,24 @@ public class MealPlanDiagnosisController {
                                   @Valid @RequestBody AgentChatRequest request) {
         String traceId = resolveRequestId(requestId);
         MDC.put(REQUEST_ID_KEY, traceId);
-        MDC.put(SESSION_ID_KEY, safe(request.getSessionId()));
         MDC.put(STAGE_KEY, "CHAT_CONTROLLER_RECEIVED");
         long start = System.currentTimeMillis();
         try {
             AgentAccessContextHolder.bind(accessContext, request.getSessionId());
             AgentAccessContextHolder.bindAvailableTools(request.getAvailableTools());
-            log.info("聊天诊断阶段 stage=接收请求 requestId={} sessionId={}", traceId, request.getSessionId());
+            log.info("聊天诊断阶段 stage=接收请求 requestId={}", traceId);
             AgentChatResponse response = chatService.chat(request);
             response.setRequestId(traceId);
-            MDC.put(SESSION_ID_KEY, safe(response.getSessionId()));
             MDC.put(STAGE_KEY, safe(response.getConversationStage()));
             MDC.put(FALLBACK_KEY, String.valueOf(response.getDiagnosisResult() != null && response.getDiagnosisResult().isFallback()));
             MDC.put(FALLBACK_REASON_KEY, response.getDiagnosisResult() == null ? "" : safe(response.getDiagnosisResult().getFallbackReason()));
-            log.info("聊天诊断阶段 stage=请求完成 requestId={} sessionId={} status={} costMs={}",
-                traceId, response.getSessionId(), response.getStatus(), System.currentTimeMillis() - start);
+            log.info("聊天诊断阶段 stage=请求完成 requestId={} status={} costMs={}",
+                traceId, response.getStatus(), System.currentTimeMillis() - start);
             return response;
         } catch (RuntimeException ex) {
             MDC.put(STAGE_KEY, "CHAT_CONTROLLER_FAILED");
-            log.error("聊天诊断阶段 stage=请求失败 requestId={} sessionId={} costMs={} errorType={} errorMessage={}",
-                traceId, request.getSessionId(), System.currentTimeMillis() - start, ex.getClass().getSimpleName(), ex.getMessage(), ex);
+            log.error("聊天诊断阶段 stage=请求失败 requestId={} costMs={} errorType={}",
+                traceId, System.currentTimeMillis() - start, ex.getClass().getSimpleName());
             throw ex;
         } finally {
             AgentAccessContextHolder.clear();
@@ -135,25 +130,17 @@ public class MealPlanDiagnosisController {
         return requestId.trim();
     }
 
-    private void putDiagnosisMdc(Long customerId,
-                                 String customerCode,
-                                 String recordDate,
-                                 String mealType,
-                                 String sessionId,
-                                 String stage) {
-        MDC.put(CUSTOMER_ID_KEY, customerId == null ? "" : String.valueOf(customerId));
-        MDC.put(CUSTOMER_CODE_KEY, safe(customerCode));
+    /**
+     * 仅写入非客户标识类诊断字段，避免通过 MDC 日志泄露客户或会话信息。
+     */
+    private void putDiagnosisMdc(String recordDate, String mealType, String stage) {
         MDC.put(RECORD_DATE_KEY, safe(recordDate));
         MDC.put(MEAL_TYPE_KEY, safe(mealType));
-        MDC.put(SESSION_ID_KEY, safe(sessionId));
         MDC.put(STAGE_KEY, safe(stage));
     }
 
     private void clearDiagnosticMdc() {
         MDC.remove(REQUEST_ID_KEY);
-        MDC.remove(SESSION_ID_KEY);
-        MDC.remove(CUSTOMER_ID_KEY);
-        MDC.remove(CUSTOMER_CODE_KEY);
         MDC.remove(RECORD_DATE_KEY);
         MDC.remove(MEAL_TYPE_KEY);
         MDC.remove(STAGE_KEY);

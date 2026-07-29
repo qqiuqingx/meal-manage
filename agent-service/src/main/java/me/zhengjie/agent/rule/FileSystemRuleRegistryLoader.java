@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import me.zhengjie.agent.config.AgentProperties;
+import me.zhengjie.agent.tool.ToolCatalog;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -30,11 +32,6 @@ import java.util.stream.Stream;
 @Component
 public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
 
-    private static final Set<String> REGISTERED_TOOLS = Set.of(
-        "getCustomerProfile", "listCustomerOrders", "getMealPlan", "getCandidateDishStats",
-        "getCustomerExcludeDates", "getOrderMealBalance", "getPackageSpec", "getDishCandidateDetail",
-        "listVerificationLogs", "listMealRefunds", "getMealPlanGenerationSnapshot"
-    );
     private static final Map<String, String> DEFAULT_SCENE_DIRECTORIES =
         Map.of("MEAL_PLAN_NOT_GENERATED", "meal-plan");
 
@@ -42,6 +39,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
     private final Map<String, String> sceneDirectories;
     private final YAMLMapper yamlMapper;
 
+    @Autowired
     public FileSystemRuleRegistryLoader(AgentProperties properties) {
         this(Path.of(properties.getRules().getBasePath()), properties.getRules().getSceneDirectories());
     }
@@ -186,7 +184,12 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
             if (isBlank(rule.getReasonCode())) throw new IllegalStateException("reasonCode must not be blank for ruleId: " + rule.getRuleId());
             if (rule.getVersion() == null || rule.getVersion() < 1) throw new IllegalStateException("version must be positive for ruleId: " + rule.getRuleId());
             if (rule.getRequiredTools() == null || rule.getRequiredTools().isEmpty()) throw new IllegalStateException("requiredTools must not be empty for ruleId: " + rule.getRuleId());
-            for (String toolName : rule.getRequiredTools()) if (!REGISTERED_TOOLS.contains(toolName)) throw new IllegalStateException("requiredTools contains unregistered tool " + toolName + " for ruleId: " + rule.getRuleId());
+            for (String toolName : rule.getRequiredTools()) {
+                if (!ToolCatalog.isDiagnosisToolRegistered(toolName)) {
+                    throw new IllegalStateException("requiredTools contains unregistered tool " + toolName
+                        + " for ruleId: " + rule.getRuleId());
+                }
+            }
             if (rule.getEvidenceFields() == null || rule.getEvidenceFields().isEmpty()) throw new IllegalStateException("evidenceFields must not be empty for ruleId: " + rule.getRuleId());
             if (rule.getNextActions() == null || rule.getNextActions().isEmpty()) throw new IllegalStateException("nextActions must not be empty for ruleId: " + rule.getRuleId());
             if (isBlank(rule.getOwner())) throw new IllegalStateException("owner must not be blank for ruleId: " + rule.getRuleId());

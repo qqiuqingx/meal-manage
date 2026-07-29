@@ -50,7 +50,7 @@ public class LlmIntentClassifier implements ChatIntentClassifier {
             result.setFallbackSuggested(result.getConfidence() < 0.8);
             return result;
         } catch (Exception ex) {
-            log.warn("聊天意图模型分类失败 errorType={} errorMessage={}", ex.getClass().getSimpleName(), ex.getMessage());
+            log.warn("聊天意图模型分类失败 errorType={}", ex.getClass().getSimpleName());
             return failed("模型分类失败: " + ex.getClass().getSimpleName());
         }
     }

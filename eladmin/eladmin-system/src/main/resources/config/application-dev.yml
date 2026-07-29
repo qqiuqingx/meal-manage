@@ -162,6 +162,9 @@ agent:
     base-url: http://localhost:18081
     diagnose-path: /api/agent/meal-plan/diagnose
     chat-path: /api/agent/meal-plan/chat
+    v2-chat-path: /api/agent/v2/chat
+    # 灰度切换：v1 保持旧路径；v2 使用可信执行信封。
+    chat-contract-version: ${AGENT_CHAT_CONTRACT_VERSION:v2}
     connect-timeout-ms: 3000
     read-timeout-ms: 120000
     retry-times: 1

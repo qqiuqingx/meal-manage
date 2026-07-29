@@ -66,7 +66,8 @@ class HttpAgentServiceClientTest {
         request.setClientMessageId("message-v2");
         request.setMessage("查询客户订单");
         request.setAvailableTools(java.util.List.of("listCustomerOrders"));
-        AgentChatResponse response = client.chatMealPlan(request, "request-v2");
+        request.setSessionVersion(0L);
+        AgentChatResponse response = client.chatMealPlan(request, "request-v2", "signed-context");
 
         ArgumentCaptor<String> url = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<HttpEntity> entity = ArgumentCaptor.forClass(HttpEntity.class);
@@ -75,6 +76,7 @@ class HttpAgentServiceClientTest {
         assertEquals("http://localhost:18081/api/agent/v2/chat", url.getValue());
         assertEquals("v2", JSON.parseObject(body).getString("contractVersion"));
         assertEquals("查询客户订单", JSON.parseObject(body).getJSONObject("messageRequest").getString("message"));
+        assertEquals("signed-context", entity.getValue().getHeaders().getFirst("X-Agent-Access-Context"));
         assertEquals("message-v2", response.getClientMessageId());
         assertEquals("v2", response.getContractVersion());
         assertEquals("订单数", response.getFacts().get(0).get("label"));

@@ -41,6 +41,7 @@ class AgentV2ChatControllerTest {
         );
 
         mockMvc.perform(post("/api/agent/v2/chat").header("X-Request-Id", "request-v2")
+                .header("X-Agent-Access-Context", "signed-context")
                 .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(envelope)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.contractVersion").value("v2"))
@@ -57,6 +58,7 @@ class AgentV2ChatControllerTest {
             .setControllerAdvice(new AgentApiExceptionHandler()).build();
 
         mockMvc.perform(post("/api/agent/v2/chat").header("X-Request-Id", "invalid-v2")
+                .header("X-Agent-Access-Context", "signed-context")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"contractVersion\":\"v2\",\"messageRequest\":{\"message\":\"\"}}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
@@ -71,8 +73,9 @@ class AgentV2ChatControllerTest {
             .setControllerAdvice(new AgentApiExceptionHandler()).build();
 
         mockMvc.perform(post("/api/agent/v2/chat").header("X-Request-Id", "unsupported-v3")
+                .header("X-Agent-Access-Context", "signed-context")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"contractVersion\":\"v3\",\"messageRequest\":{\"message\":\"查询订单\"}}"))
+                .content("{\"contractVersion\":\"v3\",\"messageRequest\":{\"sessionId\":\"session-v3\",\"clientMessageId\":\"message-v3\",\"message\":\"查询订单\"},\"availableTools\":[],\"sessionVersion\":0}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("CONTRACT_VERSION_MISMATCH"))
             .andExpect(jsonPath("$.requestId").value("unsupported-v3"))
@@ -85,9 +88,51 @@ class AgentV2ChatControllerTest {
             .setControllerAdvice(new AgentApiExceptionHandler()).build();
 
         mockMvc.perform(post("/api/agent/v2/chat").header("X-Request-Id", "missing-message")
-                .contentType(MediaType.APPLICATION_JSON).content("{\"contractVersion\":\"v2\"}"))
+                .header("X-Agent-Access-Context", "signed-context")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"contractVersion\":\"v2\",\"availableTools\":[],\"sessionVersion\":0}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
             .andExpect(jsonPath("$.details.messageRequest").exists());
+    }
+
+    @Test
+    void shouldRejectMissingTrustedAccessContextHeader() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(request -> new AgentChatResponse()))
+            .setControllerAdvice(new AgentApiExceptionHandler()).build();
+
+        mockMvc.perform(post("/api/agent/v2/chat").header("X-Request-Id", "missing-access")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"contractVersion\":\"v2\",\"messageRequest\":{\"sessionId\":\"session-v2\",\"clientMessageId\":\"message-v2\",\"message\":\"查询订单\"},\"availableTools\":[],\"sessionVersion\":0}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            .andExpect(jsonPath("$.retryable").value(false));
+    }
+
+    @Test
+    void shouldMapCapabilityAndSessionFailuresToStableCodes() throws Exception {
+        String body = "{\"contractVersion\":\"v2\",\"messageRequest\":{\"sessionId\":\"session-v2\","
+            + "\"clientMessageId\":\"message-v2\",\"message\":\"查询订单\"},\"availableTools\":[],\"sessionVersion\":0}";
+
+        MockMvc missingCapability = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(request -> {
+            throw new IllegalArgumentException("CAPABILITY_NOT_AVAILABLE: TEST");
+        })).setControllerAdvice(new AgentApiExceptionHandler()).build();
+        missingCapability.perform(post("/api/agent/v2/chat")
+                .header("X-Request-Id", "missing-capability")
+                .header("X-Agent-Access-Context", "signed-context")
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("CAPABILITY_NOT_AVAILABLE"))
+            .andExpect(jsonPath("$.retryable").value(false));
+
+        MockMvc versionConflict = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(request -> {
+            throw new IllegalStateException("SESSION_VERSION_CONFLICT");
+        })).setControllerAdvice(new AgentApiExceptionHandler()).build();
+        versionConflict.perform(post("/api/agent/v2/chat")
+                .header("X-Request-Id", "session-conflict")
+                .header("X-Agent-Access-Context", "signed-context")
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("SESSION_VERSION_CONFLICT"))
+            .andExpect(jsonPath("$.retryable").value(true));
     }
 }

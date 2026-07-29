@@ -41,8 +41,8 @@ public class MealPlanDiagnosisOrchestrator {
             MDC.get(REQUEST_ID_KEY), ruleRegistry.getScene(), ruleRegistry.getRules() == null ? 0 : ruleRegistry.getRules().size(),
             shortDigest(ruleRegistry.getVersionDigest()), System.currentTimeMillis() - start);
         long aiStart = System.currentTimeMillis();
-        log.info("诊断阶段 stage=模型调用开始 requestId={} customerId={} recordDate={} mealType={}",
-            MDC.get(REQUEST_ID_KEY), context.getCustomerId(), context.getRecordDate(), context.getMealType());
+        log.info("诊断阶段 stage=模型调用开始 requestId={} recordDate={} mealType={}",
+            MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType());
         DiagnosisResponse response = diagnosisAiClient.diagnose(context, ruleRegistry);
         log.info("诊断阶段 stage=模型调用完成 requestId={} fallback={} reasonCount={} modelName={} costMs={}",
             MDC.get(REQUEST_ID_KEY), response.isFallback(), response.getReasons() == null ? 0 : response.getReasons().size(),
