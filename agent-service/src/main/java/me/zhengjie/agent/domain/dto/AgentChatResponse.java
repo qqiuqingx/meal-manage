@@ -22,7 +22,7 @@ import me.zhengjie.agent.application.conversation.ConversationPatch;
 public class AgentChatResponse {
 
     private String requestId;
-    /** 响应所遵循的跨服务契约版本；v1 兼容接口可为空。 */
+    /** 响应所遵循的跨服务契约版本，当前固定为 v2。 */
     private String contractVersion;
     /** 主系统生成的消息幂等键，Agent 必须原样回传。 */
     private String clientMessageId;

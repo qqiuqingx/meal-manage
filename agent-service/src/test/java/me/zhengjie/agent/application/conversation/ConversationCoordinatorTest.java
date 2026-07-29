@@ -4,6 +4,7 @@ import me.zhengjie.agent.domain.chat.ChatStatus;
 import me.zhengjie.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.agent.domain.dto.AgentChatResponse;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 import java.util.List;
 import java.lang.reflect.Field;
@@ -43,6 +44,32 @@ class ConversationCoordinatorTest {
     void coordinatorMustNotDependOnHttpClientImplementations() {
         for (Field field : ConversationCoordinator.class.getDeclaredFields()) {
             assertEquals(false, field.getType().getSimpleName().startsWith("Http"));
+        }
+    }
+
+    @Test
+    void shouldExposeHandlerAsCapabilityMdcOnlyDuringExecution() {
+        MDC.put("capabilityId", "outer");
+        ConversationHandler handler = new ConversationHandler() {
+            public String handlerId() { return "test-capability"; }
+            public boolean supports(ChatCommand command, ConversationExecutionContext context) {
+                return true;
+            }
+            public ChatResult handle(ChatCommand command, ConversationExecutionContext context) {
+                assertEquals("test-capability", MDC.get("capabilityId"));
+                return new ChatResult(new AgentChatResponse());
+            }
+        };
+        try {
+            AgentChatRequest request = new AgentChatRequest();
+            request.setMessage("测试");
+            new ConversationCoordinator(List.of(handler)).coordinate(
+                new ChatCommand(request),
+                new ConversationExecutionContext("request-1", "session-1"));
+
+            assertEquals("outer", MDC.get("capabilityId"));
+        } finally {
+            MDC.clear();
         }
     }
 }

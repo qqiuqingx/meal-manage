@@ -2,6 +2,8 @@ package me.zhengjie.agent.query;
 
 import me.zhengjie.agent.analysis.domain.MealScope;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
+import me.zhengjie.agent.query.domain.BusinessResponseTypeCatalog;
+import me.zhengjie.agent.query.presentation.BusinessPresentationResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -20,7 +22,9 @@ class BusinessResultValidatorTest {
             Map.of("mealTypeCode", "LUNCH", "items", List.of(Map.of("dishTypeCode", "RICE"))),
             Map.of("mealTypeCode", "DINNER", "items", List.of())));
 
-        assertTrue(validator.validate("BUSINESS_QUERY_SCHEDULED_MENU", plan, result).contains("MENU_RESULT_IMPLAUSIBLE"));
+        assertTrue(validator.validate(BusinessResponseTypeCatalog.SCHEDULED_MENU,
+            plan, BusinessPresentationResult.fromLegacyMap(result))
+            .contains("MENU_RESULT_IMPLAUSIBLE"));
     }
 
     @Test
@@ -29,6 +33,8 @@ class BusinessResultValidatorTest {
         Map<String, Object> result = Map.of("recordDate", "2026-07-13", "groups", List.of(
             Map.of("mealTypeCode", "DINNER", "items", List.of())));
 
-        assertTrue(validator.validate("BUSINESS_QUERY_SCHEDULED_MENU", plan, result).contains("PLAN_RESULT_MISMATCH"));
+        assertTrue(validator.validate(BusinessResponseTypeCatalog.SCHEDULED_MENU,
+            plan, BusinessPresentationResult.fromLegacyMap(result))
+            .contains("PLAN_RESULT_MISMATCH"));
     }
 }

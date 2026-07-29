@@ -7,6 +7,7 @@ import me.zhengjie.agent.query.domain.AgentMetricDefinition;
 import me.zhengjie.agent.query.domain.AgentQueryDomain;
 import me.zhengjie.agent.query.domain.AgentQueryFilters;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
+import me.zhengjie.agent.tool.ToolCatalog;
 import me.zhengjie.agent.query.domain.AgentQueryAction;
 import me.zhengjie.agent.analysis.domain.BusinessQueryTarget;
 import me.zhengjie.agent.analysis.domain.MealScope;
@@ -41,18 +42,23 @@ public class BusinessQueryPlanningService {
             boolean hasCustomer = analysis.getEntities() != null && (analysis.getEntities().getCustomerId() != null
                 || notBlank(analysis.getEntities().getCustomerCode()) || notBlank(analysis.getEntities().getCustomerName()));
             plan.setAction(hasCustomer ? AgentQueryAction.OVERVIEW : AgentQueryAction.LIST);
-            plan.setToolNames(hasCustomer ? List.of("customerOverview") : List.of("resolveCustomer"));
+            plan.setToolNames(hasCustomer ? List.of(ToolCatalog.CUSTOMER_OVERVIEW)
+                : List.of(ToolCatalog.RESOLVE_CUSTOMER));
             return plan;
         }
         if (domain == AgentQueryDomain.ORDER) {
             boolean hasOrder = analysis.getEntities() != null && (analysis.getEntities().getOrderId() != null || notBlank(analysis.getEntities().getOrderCode()));
             plan.setAction(hasOrder ? AgentQueryAction.DETAIL : AgentQueryAction.LIST);
-            plan.setToolNames(hasOrder ? List.of("orderDetail") : List.of("listOrders"));
+            plan.setToolNames(hasOrder ? List.of(ToolCatalog.ORDER_DETAIL)
+                : List.of(ToolCatalog.LIST_ORDERS));
             return plan;
         }
-        if (domain == AgentQueryDomain.MEAL_PLAN) return singleToolPlan(plan, AgentQueryAction.LIST, "listMealPlans");
-        if (domain == AgentQueryDomain.VERIFICATION) return singleToolPlan(plan, AgentQueryAction.LIST, "listVerifications");
-        if (domain == AgentQueryDomain.REFUND) return singleToolPlan(plan, AgentQueryAction.LIST, "listRefunds");
+        if (domain == AgentQueryDomain.MEAL_PLAN) return singleToolPlan(plan,
+            AgentQueryAction.LIST, ToolCatalog.LIST_MEAL_PLANS);
+        if (domain == AgentQueryDomain.VERIFICATION) return singleToolPlan(plan,
+            AgentQueryAction.LIST, ToolCatalog.LIST_VERIFICATIONS);
+        if (domain == AgentQueryDomain.REFUND) return singleToolPlan(plan,
+            AgentQueryAction.LIST, ToolCatalog.LIST_REFUNDS);
         // 当前分析协议没有套餐 ID、菜品 ID 列表或规则主题，不能伪造可执行计划。
         return null;
     }
@@ -82,7 +88,7 @@ public class BusinessQueryPlanningService {
         plan.setSubjects(analysis.getSubjects()); plan.setRelations(analysis.getRelations());
         plan.setRequestedFacts(analysis.getRequestedFacts()); plan.setOperation(analysis.getOperation()); plan.setGroupBy(analysis.getGroupBy());
         plan.setLimit(50); plan.getFilters().setPage(1); plan.getFilters().setSize(50);
-        plan.setToolNames(List.of("listMealPlans"));
+        plan.setToolNames(List.of(ToolCatalog.LIST_MEAL_PLANS));
         return plan;
     }
 
@@ -94,7 +100,7 @@ public class BusinessQueryPlanningService {
         plan.setMealScope(scope);
         if (scope == MealScope.ALL_AVAILABLE) plan.getFilters().setMealType(null);
         else plan.getFilters().setMealType(scope.name());
-        return singleToolPlan(plan, AgentQueryAction.LIST, "listScheduledDishes");
+        return singleToolPlan(plan, AgentQueryAction.LIST, ToolCatalog.LIST_SCHEDULED_DISHES);
     }
 
     /** 组装版本化聚合计划，指标和工具均由服务端目录决定。 */

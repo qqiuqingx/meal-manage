@@ -35,7 +35,7 @@ public class AgentV2ChatController {
      * @param requestId 请求链路标识
      * @param accessContext 主系统签发的短期访问上下文
      * @param envelope 主系统组装的可信上下文和客户端消息
-     * @return 保持历史字段兼容且携带 contractVersion 的聊天结果
+     * @return 保持前端展示字段并携带 contractVersion 的聊天结果
      */
     @PostMapping("/chat")
     public AgentChatResponse chat(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
@@ -48,7 +48,7 @@ public class AgentV2ChatController {
         if (message == null) {
             throw new IllegalArgumentException("messageRequest must not be null");
         }
-        AgentChatRequest request = toLegacyRequest(envelope, message);
+        AgentChatRequest request = toChatRequest(envelope, message);
         AgentAccessContextHolder.bind(accessContext, request.getSessionId());
         AgentAccessContextHolder.bindAvailableTools(request.getAvailableTools());
         if (envelope.getSessionVersion() != null) MDC.put("sessionVersion", String.valueOf(envelope.getSessionVersion()));
@@ -67,7 +67,9 @@ public class AgentV2ChatController {
         }
     }
 
-    private AgentChatRequest toLegacyRequest(AgentExecutionEnvelope envelope, ChatMessageRequest message) {
+    /** 将 v2 可信执行信封转换为应用层聊天请求。 */
+    private AgentChatRequest toChatRequest(AgentExecutionEnvelope envelope,
+                                           ChatMessageRequest message) {
         AgentChatRequest request = new AgentChatRequest();
         request.setSessionId(message.getSessionId());
         request.setClientMessageId(message.getClientMessageId());

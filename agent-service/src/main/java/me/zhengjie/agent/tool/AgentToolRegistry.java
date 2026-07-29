@@ -11,6 +11,7 @@ import me.zhengjie.agent.domain.dto.DiagnosisToolMealPlanLookupRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolPackageSpecRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisToolVerificationLogsRequest;
 import me.zhengjie.agent.observability.DiagnosisTraceCollector;
+import me.zhengjie.agent.infrastructure.observability.AgentMdcScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -116,29 +117,37 @@ public class AgentToolRegistry {
     }
 
     private <T> T invokeTool(String toolName, Object request, Supplier<T> supplier) {
-        long start = System.currentTimeMillis();
-        String requestId = requestId();
-        String inputDigest = digest(toJson(request));
-        DiagnosisTraceCollector.ToolDecision decision = traceCollector.beforeToolCall(toolName, inputDigest);
-        if (decision.cached()) {
-            logSink.toolCallCacheHit(toolName, requestId, inputDigest);
-            return (T) decision.cachedResult();
-        }
-        if (!decision.shouldProceed()) {
-            logSink.toolCallRejected(toolName, requestId, inputDigest, decision.rejectedException());
-            throw decision.rejectedException();
-        }
-        logSink.toolCallStarted(toolName, requestId, inputDigest);
-        try {
-            T result = supplier.get();
-            int resultCount = resultCount(result);
-            traceCollector.recordToolSuccess(toolName, inputDigest, result, System.currentTimeMillis() - start);
-            logSink.toolCallCompleted(toolName, requestId, inputDigest, resultCount, System.currentTimeMillis() - start);
-            return result;
-        } catch (RuntimeException ex) {
-            traceCollector.recordToolFailure(toolName, inputDigest, System.currentTimeMillis() - start, ex);
-            logSink.toolCallFailed(toolName, requestId, inputDigest, System.currentTimeMillis() - start, ex);
-            throw ex;
+        try (AgentMdcScope ignored = AgentMdcScope.put("toolName", toolName)) {
+            long start = System.currentTimeMillis();
+            String requestId = requestId();
+            String inputDigest = digest(toJson(request));
+            DiagnosisTraceCollector.ToolDecision decision =
+                traceCollector.beforeToolCall(toolName, inputDigest);
+            if (decision.cached()) {
+                logSink.toolCallCacheHit(toolName, requestId, inputDigest);
+                return (T) decision.cachedResult();
+            }
+            if (!decision.shouldProceed()) {
+                logSink.toolCallRejected(toolName, requestId, inputDigest,
+                    decision.rejectedException());
+                throw decision.rejectedException();
+            }
+            logSink.toolCallStarted(toolName, requestId, inputDigest);
+            try {
+                T result = supplier.get();
+                int resultCount = resultCount(result);
+                traceCollector.recordToolSuccess(toolName, inputDigest, result,
+                    System.currentTimeMillis() - start);
+                logSink.toolCallCompleted(toolName, requestId, inputDigest, resultCount,
+                    System.currentTimeMillis() - start);
+                return result;
+            } catch (RuntimeException ex) {
+                traceCollector.recordToolFailure(toolName, inputDigest,
+                    System.currentTimeMillis() - start, ex);
+                logSink.toolCallFailed(toolName, requestId, inputDigest,
+                    System.currentTimeMillis() - start, ex);
+                throw ex;
+            }
         }
     }
 

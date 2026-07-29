@@ -11,6 +11,7 @@ import me.zhengjie.agent.rule.RuleRegistry;
 import me.zhengjie.agent.summary.DiagnosisSuggestionTemplateService;
 import me.zhengjie.agent.tool.AgentToolRegistry;
 import me.zhengjie.agent.infrastructure.llm.AgentModelGateway;
+import me.zhengjie.agent.infrastructure.observability.AgentMdcScope;
 import me.zhengjie.agent.config.AgentProperties;
 import me.zhengjie.agent.validator.DiagnosisResultValidator;
 import org.slf4j.Logger;
@@ -139,6 +140,7 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
         int effectiveMaxToolCalls = maxToolCalls > 0 ? maxToolCalls : new DiagnosisPromptPolicyLoader().load().getToolPolicy().getMaxToolCalls();
         traceCollector.openSession(effectiveMaxToolCalls);
         putDiagnosisMdc(context, "AI_CLIENT_STARTED");
+        AgentMdcScope modelProfileScope = AgentMdcScope.put("modelProfile", "diagnosis");
         try {
             log.info("诊断阶段 stage=开始构建提示词 requestId={} recordDate={} mealType={} toolModeEnabled={} ruleCount={}",
                 MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType(),
@@ -221,6 +223,7 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
         } finally {
             traceCollector.closeSession();
             clearDiagnosisMdc();
+            modelProfileScope.close();
         }
     }
 

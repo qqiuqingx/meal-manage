@@ -21,7 +21,6 @@ mvn -q spring-boot:run
 
 ```bash
 export AGENT_INTERNAL_TOKEN=local-agent-token
-export AGENT_CHAT_CONTRACT_VERSION=v2
 ```
 
 常用环境变量：
@@ -70,7 +69,7 @@ mvn -q -Preal-model-eval -Dtest=RealModelIntentEvaluationTest test
 
 ## 跨服务契约
 
-服务间 v2 契约位于 `src/main/resources/openapi/agent-service-v2.yaml`。`POST /api/agent/v2/chat` 只接受 `AgentExecutionEnvelope`：客户端消息与主系统生成的会话快照、可用工具、`sessionVersion` 分离；响应回传 `contractVersion`、`requestId`、`clientMessageId` 与 `expectedSessionVersion`。旧的 `/api/agent/meal-plan/chat` 已标记为兼容入口，直到主系统完成一个完整发布周期的 v2 切换。
+服务间聊天只支持 v2，契约位于 `src/main/resources/openapi/agent-service-v2.yaml`。`POST /api/agent/v2/chat` 只接受 `AgentExecutionEnvelope`：客户端消息与主系统生成的会话快照、可用工具、`sessionVersion` 分离；响应回传 `contractVersion`、`requestId`、`clientMessageId` 与 `expectedSessionVersion`。未上线的旧服务间路径 `/api/agent/meal-plan/chat` 已删除，不提供 v1 降级入口。
 
 v2 必须携带 `X-Agent-Access-Context`。常见稳定错误码：
 
@@ -91,7 +90,7 @@ v2 必须携带 `X-Agent-Access-Context`。常见稳定错误码：
 
 灰度和回滚：
 
-- 主系统默认走 v2；设置 `AGENT_CHAT_CONTRACT_VERSION=v1` 可切回旧聊天路径。
+- 主系统固定调用 v2；契约问题通过回滚代码版本处理，不得切回已删除的 v1 路径。
 - 多帧理解默认 `shadow`；异常时设置 `AGENT_CHAT_CONVERSATION_UNDERSTANDING_MODE=shadow` 或关闭对应能力开关。
 - 模型 profile 异常时切回已验证 profile；不要通过关闭权限、Schema 校验或工具白名单绕过。
 - 会话冲突只允许刷新快照重试，不允许用 Agent 本地缓存覆盖主系统版本。

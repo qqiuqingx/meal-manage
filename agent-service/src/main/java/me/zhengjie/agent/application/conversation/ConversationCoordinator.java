@@ -1,5 +1,6 @@
 package me.zhengjie.agent.application.conversation;
 
+import me.zhengjie.agent.infrastructure.observability.AgentMdcScope;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -26,6 +27,9 @@ public class ConversationCoordinator {
         if (matched.isEmpty()) throw new IllegalStateException("No conversation handler available");
         if (matched.size() > 1) throw new IllegalStateException("Multiple conversation handlers matched: "
             + matched.stream().map(ConversationHandler::handlerId).sorted().toList());
-        return matched.get(0).handle(command, context);
+        ConversationHandler handler = matched.get(0);
+        try (AgentMdcScope ignored = AgentMdcScope.put("capabilityId", handler.handlerId())) {
+            return handler.handle(command, context);
+        }
     }
 }

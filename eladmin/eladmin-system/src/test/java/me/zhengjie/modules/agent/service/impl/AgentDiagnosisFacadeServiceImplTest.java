@@ -32,7 +32,9 @@ class AgentDiagnosisFacadeServiceImplTest {
             }
 
             @Override
-            public AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId) {
+            public AgentChatResponse chatMealPlan(AgentChatRequest request,
+                                                  String requestId,
+                                                  String accessContext) {
                 return new AgentChatResponse();
             }
         };
@@ -61,7 +63,9 @@ class AgentDiagnosisFacadeServiceImplTest {
             }
 
             @Override
-            public AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId) {
+            public AgentChatResponse chatMealPlan(AgentChatRequest request,
+                                                  String requestId,
+                                                  String accessContext) {
                 AgentChatResponse response = new AgentChatResponse();
                 response.setSessionId("session-1");
                 response.setStatus("NEED_MORE_INFO");
@@ -76,7 +80,8 @@ class AgentDiagnosisFacadeServiceImplTest {
         AgentChatRequest request = new AgentChatRequest();
         request.setMessage("查客户 C10001 今天");
 
-        AgentChatResponse response = service.chatMealPlan(request, "request-1");
+        AgentChatResponse response =
+            service.chatMealPlan(request, "request-1", "signed-context");
 
         assertEquals("session-1", response.getSessionId());
         assertEquals("NEED_MORE_INFO", response.getStatus());

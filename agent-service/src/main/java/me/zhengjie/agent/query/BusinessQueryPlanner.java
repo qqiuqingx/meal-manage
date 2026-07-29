@@ -7,6 +7,8 @@ import me.zhengjie.agent.query.domain.AgentQueryDomain;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
 import me.zhengjie.agent.query.domain.AgentMetricCatalog;
+import me.zhengjie.agent.query.domain.BusinessResponseTypeCatalog;
+import me.zhengjie.agent.tool.ToolCatalog;
 
 import java.util.List;
 
@@ -20,7 +22,9 @@ public class BusinessQueryPlanner {
      * @return 受控查询计划；非业务查询返回 null
      */
     public AgentQueryPlan plan(String responseType, DiagnosisSlots slots) {
-        if (responseType == null || !responseType.startsWith("BUSINESS_QUERY")) return null;
+        BusinessResponseTypeCatalog.Definition definition =
+            BusinessResponseTypeCatalog.find(responseType).orElse(null);
+        if (definition == null) return null;
         AgentQueryPlan plan = new AgentQueryPlan();
         AgentEntityReference entities = new AgentEntityReference();
         entities.setCustomerId(slots.getCustomerId()); entities.setCustomerCode(slots.getCustomerCode());
@@ -33,55 +37,23 @@ public class BusinessQueryPlanner {
         if (slots.getRecordDate() != null) plan.getFilters().setRecordDate(slots.getRecordDate());
         if (slots.getStartDate() != null) plan.getFilters().setStartDate(slots.getStartDate());
         if (slots.getEndDate() != null) plan.getFilters().setEndDate(slots.getEndDate());
-        if ("BUSINESS_QUERY_CUSTOMER_CANDIDATES".equals(responseType)) {
-            plan.setDomain(AgentQueryDomain.CUSTOMER);
-            plan.setAction(AgentQueryAction.LIST);
-            plan.setToolNames(List.of("resolveCustomer"));
-        }
-        else if ("BUSINESS_QUERY_ORDER".equals(responseType)) {
-            plan.setDomain(AgentQueryDomain.ORDER);
+        if (BusinessResponseTypeCatalog.ORDER.equals(responseType)) {
+            plan.setDomain(definition.domain());
             // 已明确订单时必须使用详情工具，保证审计计划与实际调用的内部接口一致。
             if (entities.getOrderId() != null || entities.getOrderCode() != null) {
                 plan.setAction(AgentQueryAction.DETAIL);
-                plan.setToolNames(List.of("orderDetail"));
+                plan.setToolNames(List.of(ToolCatalog.ORDER_DETAIL));
             } else {
-                plan.setAction(AgentQueryAction.LIST);
-                plan.setToolNames(List.of("listOrders"));
+                plan.setAction(definition.action());
+                plan.setToolNames(definition.toolNames());
             }
+        } else if (definition.metric() != null) {
+            operationPlan(plan, definition.metric(), definition.toolNames().get(0));
+        } else {
+            plan.setDomain(definition.domain());
+            plan.setAction(definition.action());
+            plan.setToolNames(definition.toolNames());
         }
-        else if ("BUSINESS_QUERY_VERIFICATION".equals(responseType)) { plan.setDomain(AgentQueryDomain.VERIFICATION); plan.setAction(AgentQueryAction.LIST); plan.setToolNames(List.of("listVerifications")); }
-        else if ("BUSINESS_QUERY_MEAL_PLAN".equals(responseType)) { plan.setDomain(AgentQueryDomain.MEAL_PLAN); plan.setAction(AgentQueryAction.LIST); plan.setToolNames(List.of("listMealPlans")); }
-        else if ("BUSINESS_QUERY_REFUND".equals(responseType)) { plan.setDomain(AgentQueryDomain.REFUND); plan.setAction(AgentQueryAction.LIST); plan.setToolNames(List.of("listRefunds")); }
-        else if ("BUSINESS_QUERY_PACKAGE".equals(responseType)) { plan.setDomain(AgentQueryDomain.PACKAGE); plan.setAction(AgentQueryAction.DETAIL); plan.setToolNames(List.of("packageDetail")); }
-        else if ("BUSINESS_QUERY_RULE".equals(responseType)) { plan.setDomain(AgentQueryDomain.BUSINESS_RULE); plan.setAction(AgentQueryAction.EXPLAIN); plan.setToolNames(List.of("explainRule")); }
-        else if ("BUSINESS_QUERY_DISH".equals(responseType)) { plan.setDomain(AgentQueryDomain.DISH); plan.setAction(AgentQueryAction.LIST); plan.setToolNames(List.of("listMealPlans", "listDishes")); }
-        else if ("BUSINESS_QUERY_SCHEDULED_MENU".equals(responseType)) { plan.setDomain(AgentQueryDomain.DISH); plan.setAction(AgentQueryAction.LIST); plan.setToolNames(List.of("listScheduledDishes")); }
-        else if ("BUSINESS_QUERY_OPERATION_DAILY".equals(responseType)) {
-            operationPlan(plan, AgentQueryMetric.DAILY_UNVERIFIED_CUSTOMER_COUNT, "getDailyCustomerWorkload");
-        }
-        else if ("BUSINESS_QUERY_OPERATION_SCHEDULED".equals(responseType)) {
-            operationPlan(plan, AgentQueryMetric.DAILY_SCHEDULED_CUSTOMER_COUNT, "getDailyCustomerWorkload");
-        }
-        else if ("BUSINESS_QUERY_OPERATION_VERIFIED".equals(responseType)) {
-            operationPlan(plan, AgentQueryMetric.DAILY_VERIFIED_CUSTOMER_COUNT, "getDailyCustomerWorkload");
-        }
-        else if ("BUSINESS_QUERY_OPERATION_FAILURE".equals(responseType)) {
-            operationPlan(plan, AgentQueryMetric.MEAL_PLAN_FAILURE_COUNT, "getMealPlanFailureSummary");
-        }
-        else if ("BUSINESS_QUERY_OPERATION_UNSCHEDULED".equals(responseType)) {
-            operationPlan(plan, AgentQueryMetric.DAILY_UNSCHEDULED_CUSTOMER_COUNT, "getDailyCustomerWorkload");
-        }
-        else if ("BUSINESS_QUERY_OPERATION_ACTIVE".equals(responseType)) {
-            operationPlan(plan, AgentQueryMetric.ACTIVE_CUSTOMER_COUNT, "getActiveCustomerSummary");
-        }
-        else if ("BUSINESS_QUERY_OPERATION_CUSTOMER_TOTAL".equals(responseType)) {
-            operationPlan(plan, AgentQueryMetric.CUSTOMER_PROFILE_COUNT, "getCustomerProfileCount");
-        }
-        else if ("BUSINESS_QUERY_OPERATION_EXPIRING".equals(responseType)) {
-            operationPlan(plan, AgentQueryMetric.EXPIRING_ORDER_COUNT, "getExpiringOrderSummary");
-        }
-        else if ("BUSINESS_QUERY_DISH_CANDIDATES".equals(responseType)) { plan.setDomain(AgentQueryDomain.DISH); plan.setAction(AgentQueryAction.LIST); plan.setToolNames(List.of("previewDishCandidates")); }
-        else { plan.setDomain(AgentQueryDomain.CUSTOMER); plan.setAction(AgentQueryAction.OVERVIEW); plan.setToolNames(List.of("customerOverview")); }
         return plan;
     }
 

@@ -11,6 +11,7 @@ import me.zhengjie.agent.query.domain.AgentMetricDefinition;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
 import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
 import me.zhengjie.agent.security.AgentAccessContextHolder;
+import me.zhengjie.agent.infrastructure.observability.AgentMdcScope;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.slf4j.Logger;
@@ -70,7 +71,7 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
     public BusinessQuestionAnalysis analyze(String question, DiagnosisSlots context,
                                             LastBusinessQueryContext lastBusinessQueryContext) {
         lastFailureReason.remove();
-        try {
+        try (AgentMdcScope ignored = AgentMdcScope.put("modelProfile", "default")) {
             String content = chatClient.prompt()
                 .system(systemPrompt())
                 .user(userPrompt(question, context, lastBusinessQueryContext))

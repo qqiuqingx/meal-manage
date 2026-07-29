@@ -36,7 +36,9 @@ class AgentDiagnosisControllerTest {
             }
 
             @Override
-            public AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId) {
+            public AgentChatResponse chatMealPlan(AgentChatRequest request,
+                                                  String requestId,
+                                                  String accessContext) {
                 return new AgentChatResponse();
             }
         };
@@ -65,7 +67,9 @@ class AgentDiagnosisControllerTest {
             }
 
             @Override
-            public AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId) {
+            public AgentChatResponse chatMealPlan(AgentChatRequest request,
+                                                  String requestId,
+                                                  String accessContext) {
                 return new AgentChatResponse();
             }
         };

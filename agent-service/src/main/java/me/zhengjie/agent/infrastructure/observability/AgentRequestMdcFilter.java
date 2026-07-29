@@ -26,7 +26,9 @@ public class AgentRequestMdcFilter extends OncePerRequestFilter {
         requestId = requestId == null || requestId.isBlank() ? UUID.randomUUID().toString() : requestId.trim();
         try {
             MDC.put("requestId", requestId);
-            MDC.put("contractVersion", request.getRequestURI().contains("/v2/") ? "v2" : "v1");
+            if (request.getRequestURI().contains("/v2/")) {
+                MDC.put("contractVersion", "v2");
+            }
             response.setHeader("X-Request-Id", requestId);
             filterChain.doFilter(request, response);
         } finally {

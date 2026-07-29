@@ -33,11 +33,6 @@ public class AgentDiagnosisFacadeServiceImpl implements AgentDiagnosisFacadeServ
         return response;
     }
 
-    @Override
-    public AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId) {
-        return chatMealPlan(request, requestId, null);
-    }
-
     /** {@inheritDoc} */
     @Override
     public AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId, String accessContext) {

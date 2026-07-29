@@ -5,7 +5,7 @@
 > 目标模块：`agent-service`，以及与其直接通信的 `eladmin-system` Agent 模块  
 > 核心方向：开发易用性、能力可扩展性、跨服务契约、会话一致性、模型与工具适配  
 > 实施方式：保持现有接口兼容，采用绞杀式重构；每阶段独立测试、独立灰度、可单独回滚  
-> 当前状态：核心架构收口已完成并通过自动化回归；旧接口保持兼容。剩余工作为真实环境灰度差异观察、真实数据库并发压测、默认 Handler 剩余管线拆分和存量 Legacy Map/Presenter 强类型迁移。
+> 当前状态：本地可完成的核心架构收口已完成并通过自动化回归；旧接口保持兼容。剩余工作为真实环境灰度差异观察、真实数据库并发压测、能力级切流门禁和完整发布周期验证。
 
 ## 实施进度
 
@@ -14,10 +14,10 @@
 | 阶段 0：架构基线与保护网 | 已完成 | 2026-07-29 | README、架构基线、行为回归和 Facade/Coordinator 架构守护测试完成。 |
 | 阶段 1：规则与配置基础设施 | 已完成 | 2026-07-29 | 递归规则扫描、强类型 YAML、classpath 一致性测试完成；生产代码散落 `@Value` 已迁移到 `AgentProperties`。 |
 | 阶段 2：版本化跨服务契约 | 已完成 | 2026-07-29 | v2 OpenAPI、可信执行信封、必需访问上下文、稳定错误协议和 Java/OpenAPI 字段漂移测试完成。 |
-| 阶段 3：聊天协调器与能力处理器 | 核心完成 | 2026-07-29 | `MealPlanChatServiceImpl` 已收缩为 42 行 Facade；默认 Handler 的会话状态、兼容意图和旧客户汇总适配已拆为独立组件，生产类仅保留一个注入构造器，Handler 从 2269 行降至 1913 行。其余业务分支和线上 shadow 差异观察继续渐进执行。 |
-| 阶段 4：统一能力目录、Planner 和工具注册 | 核心完成 | 2026-07-29 | 中心 Planner 改为 Registry 路由；诊断规则移除独立工具白名单；ToolDescriptor 补齐只读、分类和 Schema 版本；历史工具执行改为目录执行器表并校验登记一致性。存量 Legacy Map 继续逐项迁移。 |
+| 阶段 3：聊天协调器与能力处理器 | 核心完成 | 2026-07-29 | `MealPlanChatServiceImpl` 已收缩为 42 行 Facade；理解、Pending/时间解析、业务结果焦点保存和审计摘要均已下沉为独立 Pipeline，生产类仅保留一个注入构造器，默认 Handler 从 2269 行降至 1667 行。线上 shadow 差异观察继续按发布流程执行。 |
+| 阶段 4：统一能力目录、Planner 和工具注册 | 核心完成 | 2026-07-29 | 中心 Planner 改为 Registry 路由；工具名和业务 responseType 分别由 `ToolCatalog`、`BusinessResponseTypeCatalog` 统一登记；Presenter 与结果校验只消费 `BusinessPresentationResult`，Legacy Map 仅保留在兼容响应/基础设施适配边界。 |
 | 阶段 5：统一会话真相源并支持并发 | 核心完成 | 2026-07-29 | 主系统持久化快照、`clientMessageId` 幂等、数据库行锁串行化和 `@Version` 冲突策略完成；真实数据库并发压测待发布前执行。 |
-| 阶段 6：通用 API、模型适配与开发体验收口 | 核心完成 | 2026-07-29 | v2 默认灰度、严格 model profile/能力检查、原始模型日志清理、可执行 JAR 和开发手册完成；线上指标基线待灰度期采集。 |
+| 阶段 6：通用 API、模型适配与开发体验收口 | 核心完成 | 2026-07-29 | v2 默认灰度、严格 model profile/能力检查、动态 capabilityId/toolName/modelProfile MDC、原始模型日志清理、可执行 JAR 和开发手册完成；线上指标基线待灰度期采集。 |
 
 ## 1. 背景与总体结论
 
@@ -92,11 +92,11 @@
 - [x] `MealPlanChatServiceImpl` 最终收缩为兼容 Facade，建议不超过 150 行。（2026-07-29；当前 42 行。）
 - [x] `ConversationCoordinator` 建议不超过 300 行，且无具体工具名字符串。（2026-07-29；当前 31 行。）
 - [x] 新增一个普通只读能力最多新增或修改 3 个主要生产文件：能力处理器、可选工具、目录定义。（2026-07-29；临时能力扩展测试不修改中心类。）
-- [ ] 核心应用层不再新增 `Map<String,Object>` 形式的内部业务契约。（新能力已强类型化；历史 Presenter/兼容响应仍待迁移。）
-- [ ] 工具名、响应类型、planner profile 不在多个类中重复硬编码。（工具名和 profile 已收口；历史 responseType 仍待目录化。）
+- [x] 核心应用层不再新增 `Map<String,Object>` 形式的内部业务契约。（2026-07-29；Presenter、结果校验和活跃客户余额 DTO 已强类型化，Map 仅留在兼容序列化/基础设施适配边界。）
+- [x] 工具名、响应类型、planner profile 不在多个类中重复硬编码。（2026-07-29；分别由 `ToolCatalog`、`BusinessResponseTypeCatalog` 和能力目录统一维护。）
 - [x] 文件系统规则与 classpath 规则的 ruleId 集合、数量和 digest 完全一致。（2026-07-29）
 - [x] 同一 session 并发请求具有确定性的版本冲突或顺序处理结果。（2026-07-29；行锁串行化与版本冲突协议完成，真实库压力数据待发布前采集。）
-- [x] 现有 API、现有评测用例和前端展示保持兼容。（2026-07-29；v1 保留，Agent/主系统回归通过。）
+- [x] 现有前端 API、评测用例和展示保持兼容。（2026-07-29；代码尚未上线，未发布的 Agent 服务间 v1 路径按确认直接删除，前端仍调用主系统原接口。）
 
 ## 4. 非目标
 
@@ -497,7 +497,7 @@ AgentExecutionEnvelope
 - [x] `availableTools`、Pending、Last Context、Task Stack 不再表现为普通用户请求字段。（2026-07-29）
 - [x] `clientMessageId` 由 Agent 原样回传，不再依赖主系统客户端补齐。（2026-07-29）
 - [x] 请求和响应均携带 `contractVersion`。（2026-07-29）
-- [x] 新字段遵循兼容式新增，旧字段至少保留一个完整发布周期。（2026-07-29；v1 当前保留，删除时点仍受发布周期约束。）
+- [x] 新字段遵循兼容式新增；已上线旧字段按发布周期管理。（2026-07-29；当前改造尚未上线，不存在生产兼容对象，未发布 v1 已直接删除。）
 
 ### 任务 2.3：建立统一错误契约
 
@@ -576,10 +576,10 @@ AgentExecutionEnvelope
 - [x] 会话快照装载；（2026-07-29；由 `ConversationStateSupport` 承载。）
 - [x] 槽位合并；（2026-07-29；由 `ConversationStateSupport` 承载。）
 - [x] 用户轮次记录；（2026-07-29；由 `ConversationStateSupport` 承载。）
-- [ ] 理解管线调用；（仍在默认 Handler，待抽为独立 Pipeline。）
+- [x] 理解管线调用；（2026-07-29；`BusinessConversationUnderstandingPipeline` 统一理解、Pending 合并、时间解析和语义追踪。）
 - [x] 能力路由；（2026-07-29；Coordinator 与 `CapabilityHandlerRegistry` 分层路由。）
-- [ ] 通用结果保存；（仍在默认 Handler 的响应工厂/状态逻辑中。）
-- [ ] 审计摘要；（已有受控摘要，待从默认 Handler 下沉为公共管线阶段。）
+- [x] 通用结果保存；（2026-07-29；`BusinessConversationResultPipeline` 统一保存稳定对象焦点和最近查询上下文。）
+- [x] 审计摘要；（2026-07-29；结果管线统一生成查询计划指纹、限长回答摘要和脱敏结果形状。）
 - [x] 异常转稳定结果。（2026-07-29；统一异常协议和稳定错误码。）
 
 ### 任务 3.3：将历史顶层行为抽为 Handler
@@ -596,7 +596,7 @@ AgentExecutionEnvelope
 
 - [x] `MealPlanChatServiceImpl` 暂时保留为 Facade，内部委托 Coordinator。（2026-07-29）
 - [x] 每迁移一个分支，先对比旧实现和新实现的结构化响应。（2026-07-29；本轮拆分由既有 40 个 Handler 刻画测试和新增组件测试保护。）
-- [ ] 灰度开关支持按能力切回旧路径。（当前只有 v1/v2 和会话理解级开关，能力级切换待灰度建设。）
+- [ ] 灰度开关支持按能力切回旧 Handler。（服务间契约固定为 v2；当前仅有会话理解级开关，能力级 Handler 切换待灰度建设。）
 - [x] 不在本阶段删除旧代码。（2026-07-29；旧业务行为整体保留在默认 Handler，仅移动职责和删除重复构造链。）
 
 ### 任务 3.4：取消生产构造函数兼容链
@@ -684,7 +684,7 @@ public record CapabilityDefinition(
 要求：
 
 - [x] 核心能力层不能读取任意 Map key。（2026-07-29；兼容 Map 读取隔离在旧适配/展示边界。）
-- [ ] Presenter 只消费受控 DTO。（强类型 Transport 已建立；历史 `BusinessAnswerComposer/ResponseFactory` 仍消费兼容 Map。）
+- [x] Presenter 只消费受控 DTO。（2026-07-29；`BusinessAnswerComposer`、`BusinessQueryResponseFactory` 和 `BusinessResultValidator` 统一消费 `BusinessPresentationResult`，架构测试防止回退。）
 - [x] 敏感字段校验既检查 DTO schema，也检查序列化结果。（2026-07-29）
 
 ### 任务 4.5：新增扩展性契约测试
@@ -763,15 +763,14 @@ public record CapabilityDefinition(
 
 建议：
 
-- Add: `POST /api/agent/v2/chat`
-- Keep: `POST /api/agent/meal-plan/chat`
+- [x] Add: `POST /api/agent/v2/chat`（2026-07-29）
+- [x] Delete: `POST /api/agent/meal-plan/chat` Agent 服务间旧路径（2026-07-29；尚未上线，无需保留 v1）
 
 迁移策略：
 
-- [x] 旧接口内部委托 v2 Coordinator。（2026-07-29）
-- [x] 旧接口响应保持字段兼容。（2026-07-29）
-- [ ] 主系统先切换 v2，再观察一个完整发布周期。（开发配置已默认 v2，完整发布周期尚未结束。）
-- [x] API 文档标记旧接口 deprecated，但不立即删除。（2026-07-29）
+- [x] 主系统固定使用 v2 可信执行信封。（2026-07-29；删除双路径和契约版本开关。）
+- [x] 未发布旧接口直接删除。（2026-07-29；不再维护 v1 Controller、配置和测试。）
+- [x] API 文档明确区分主系统前端接口与 Agent 服务间接口。（2026-07-29）
 - [x] 排餐一次性诊断 `/diagnose` 继续作为独立能力保留。（2026-07-29）
 
 ### 任务 6.2：引入 `AgentModelGateway`
@@ -802,7 +801,7 @@ public record CapabilityDefinition(
 - [x] HTTP/MDC 逻辑下沉到 Filter/Interceptor。（2026-07-27）
 - [x] Coordinator 和 Handler 只记录领域事件。（2026-07-29）
 - [x] 测试 profile 将 `me.zhengjie.agent` 日志降为 WARN。（2026-07-27）
-- [ ] 增加 capabilityId、toolName、contractVersion、sessionVersion、modelProfile。（日志格式/MDC 基础已建立，部分调用点的 capabilityId/toolName/modelProfile 动态赋值仍待补齐。）
+- [x] 增加 capabilityId、toolName、contractVersion、sessionVersion、modelProfile。（2026-07-29；Filter/Controller 提供契约与版本字段，Coordinator、工具目录和模型适配器在调用作用域动态补齐并恢复 MDC。）
 - [ ] 记录 P50/P95 耗时、澄清率、能力缺失率、工具失败率、版本冲突率。（待灰度环境建立基线。）
 - [x] 不记录原始 Prompt、模型完整输出、工具原始结果和敏感字段。（2026-07-29；异常消息、sessionId、客户标识也从日志和诊断 trace 中移除。）
 
@@ -1058,21 +1057,22 @@ mvn -q -Preal-model-eval -Dtest=RealModelIntentEvaluationTest test
 
 本轮已完成方案的核心架构闭环，但仍按“核心完成”而非“全部完成”管理。自动化和运行验收结果如下：
 
-- `agent-service` 全量单元测试：329 个测试，0 failure，0 error，1 skipped。
+- `agent-service` 全量单元测试：340 个测试，0 failure，0 error，1 skipped。
 - 主系统 Agent 相关测试：118 个测试，0 failure，0 error，0 skipped。
 - `agent-service` 已生成 Spring Boot 可执行 JAR；从项目外临时目录启动成功，并能加载 classpath 中的规则、语义目录和 OpenAPI。
 - `MealPlanChatServiceImpl` 已收缩为只依赖 `ConversationCoordinator` 的兼容 Facade；能力编译由 `CapabilityHandlerRegistry` 路由。
-- `DefaultConversationHandler` 已抽出 `ConversationStateSupport`、`BusinessQueryIntentPolicy` 和 `LegacyCustomerInsightAdapter`；旧客户餐数、核销、订单汇总 Map 的字段读取不再留在默认 Handler。
+- `DefaultConversationHandler` 已抽出 `ConversationStateSupport`、`BusinessQueryIntentPolicy`、`LegacyCustomerInsightAdapter`、`BusinessConversationUnderstandingPipeline` 和 `BusinessConversationResultPipeline`；理解、Pending/时间解析、结果焦点保存和审计摘要不再留在默认 Handler。
 - `DefaultConversationHandler` 生产代码只保留一个构造器，`BusinessQueryChatService` 与 `ContextReferenceResolver` 均由 Spring 注入；测试依赖统一由 Fixture 组装。
 - `ToolCatalog` 的历史只读工具改为表驱动执行，描述符和执行器名称集合在类初始化时强制一致；架构测试禁止中心执行方法回退为工具名分支链。
-- v2 契约默认开启，v1 保留一个发布周期，可通过 `AGENT_CHAT_CONTRACT_VERSION=v1` 回滚。
+- 主系统到 Agent 固定使用 v2 契约；未上线的 v1 Controller、双路径配置和环境变量切换已删除。
 - 同 session 写入增加数据库行锁，保留 `clientMessageId` 幂等和 `sessionVersion` 冲突检测。
 - 日志与诊断 trace 不记录 Prompt、模型完整输出、工具原始结果、异常消息、sessionId 或客户标识。
+- 工具名与业务响应类型分别由 `ToolCatalog` 和 `BusinessResponseTypeCatalog` 统一登记；Presenter、ResponseFactory 和结果校验器只消费强类型 `BusinessPresentationResult`。
+- capabilityId、toolName 和 modelProfile 已按 Handler、工具及模型调用作用域动态写入 MDC，并在调用结束后恢复外层值。
 
 尚未关闭的发布期事项：
 
 1. 在真实数据库环境执行同 session 多线程压测，并保存冲突率、幂等命中率和最终快照校验记录。
-2. 在灰度环境执行 v1/v2 shadow 差异观察，补齐 P50/P95、澄清率、能力缺失率、工具失败率和版本冲突率基线。
-3. 继续将 `DefaultConversationHandler` 中尚未迁移的理解、结果保存、审计摘要及套餐、退餐、排餐、菜品、运营统计分支拆为独立 Pipeline/Handler。
-4. 将历史 `BusinessAnswerComposer/BusinessQueryResponseFactory` 的兼容 Map 输入迁为强类型 Presenter DTO，并目录化剩余 responseType。
-5. 灰度稳定后补齐 capabilityId/toolName/modelProfile 动态日志字段，并删除或限制可变内存 session 为测试专用实现。
+2. 在灰度环境观察 v2 的 P50/P95、澄清率、能力缺失率、工具失败率和版本冲突率基线。
+3. 在灰度环境落地 capability 级 legacy/handler 切流门禁，保存结构化差异报告和回滚验证记录。
+4. 完成 v2 一个完整发布周期观察后，再评估删除历史 Legacy Map 基础设施适配器和显式排障用内存 session 实现。

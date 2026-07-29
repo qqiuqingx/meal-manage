@@ -9,9 +9,9 @@ import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 /**
- * 聊天兼容入口。
+ * v2 聊天应用服务入口。
  *
- * <p>本类只负责将历史请求映射到应用层命令；业务判断、工具选择和回答组装均由
+ * <p>本类只负责将内部聊天请求映射到应用层命令；业务判断、工具选择和回答组装均由
  * {@link ConversationCoordinator} 路由到能力处理器。</p>
  */
 @Service
@@ -25,10 +25,10 @@ public class MealPlanChatServiceImpl implements MealPlanChatService {
     }
 
     /**
-     * 将历史聊天请求交给统一协调器。
+     * 将 v2 控制器转换后的聊天请求交给统一协调器。
      *
-     * @param request 历史或 v2 API 映射后的聊天请求
-     * @return 保持历史字段兼容的聊天响应
+     * @param request v2 API 映射后的内部聊天请求
+     * @return 结构化聊天响应
      */
     @Override
     public AgentChatResponse chat(AgentChatRequest request) {

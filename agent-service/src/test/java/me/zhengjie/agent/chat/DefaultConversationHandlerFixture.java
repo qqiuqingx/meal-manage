@@ -4,6 +4,8 @@ import me.zhengjie.agent.analysis.BusinessQuestionAnalyzer;
 import me.zhengjie.agent.analysis.BusinessTemporalResolver;
 import me.zhengjie.agent.analysis.ContextReferenceResolver;
 import me.zhengjie.agent.analysis.RuleBasedBusinessQuestionAnalyzer;
+import me.zhengjie.agent.application.conversation.BusinessConversationUnderstandingPipeline;
+import me.zhengjie.agent.application.conversation.BusinessConversationResultPipeline;
 import me.zhengjie.agent.client.DiagnosisToolDataClient;
 import me.zhengjie.agent.config.AgentProperties;
 import me.zhengjie.agent.config.BusinessTimeProperties;
@@ -108,10 +110,11 @@ final class DefaultConversationHandlerFixture {
             businessQueryDataClient,
             new BusinessQueryChatService(
                 businessQueryDataClient, queryPlanValidator, businessAnswerValidator),
-            businessQuestionAnalyzer,
             planningService,
-            temporalResolver,
             new ContextReferenceResolver(),
+            new BusinessConversationUnderstandingPipeline(
+                businessQuestionAnalyzer, temporalResolver, properties),
+            new BusinessConversationResultPipeline(),
             properties,
             new ConversationStateSupport(),
             new BusinessQueryIntentPolicy(),

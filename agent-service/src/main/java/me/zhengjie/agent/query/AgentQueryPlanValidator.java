@@ -9,6 +9,7 @@ import me.zhengjie.agent.query.domain.AgentQueryMetric;
 import me.zhengjie.agent.query.domain.AgentMetricCatalog;
 import me.zhengjie.agent.query.domain.AgentMetricDefinition;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
+import me.zhengjie.agent.tool.ToolCatalog;
 import me.zhengjie.agent.query.tool.AgentBusinessToolRegistry;
 import org.springframework.stereotype.Component;
 
@@ -87,7 +88,8 @@ public class AgentQueryPlanValidator {
     private void validateV3(AgentQueryPlan plan, List<AgentQueryPlanValidationError> errors) {
         if (!AgentQueryPlan.SCHEMA_VERSION_V3.equals(plan.getVersion())) return;
         if (plan.getDomain() != AgentQueryDomain.MEAL_PLAN || plan.getAction() != AgentQueryAction.LIST
-            || plan.getToolNames() == null || !plan.getToolNames().equals(List.of("listMealPlans"))) {
+            || plan.getToolNames() == null
+            || !plan.getToolNames().equals(List.of(ToolCatalog.LIST_MEAL_PLANS))) {
             errors.add(error("plan", "V3_GRAPH_NOT_ALLOWED", "V3 排餐分析只能使用登记的范围排餐查询图"));
         }
         if (!V3_SUBJECTS.equals(toSet(plan.getSubjects())) || !V3_RELATIONS.equals(toSet(plan.getRelations()))
@@ -282,10 +284,11 @@ public class AgentQueryPlanValidator {
     private void validateToolSpecificConstraints(AgentQueryPlan plan, List<AgentQueryPlanValidationError> errors) {
         if (plan.getToolNames() == null || plan.getFilters() == null) return;
         String mealType = normalize(plan.getFilters().getMealType());
-        if (plan.getToolNames().contains("previewDishCandidates") && !"LUNCH".equals(mealType) && !"DINNER".equals(mealType)) {
+        if (plan.getToolNames().contains(ToolCatalog.PREVIEW_DISH_CANDIDATES)
+            && !"LUNCH".equals(mealType) && !"DINNER".equals(mealType)) {
             errors.add(error("filters.mealType", "CANDIDATE_DISH_MEAL_TYPE_INVALID", "候选菜预览仅支持午餐或晚餐"));
         }
-        if (plan.getToolNames().contains("listScheduledDishes") && !mealType.isEmpty()
+        if (plan.getToolNames().contains(ToolCatalog.LIST_SCHEDULED_DISHES) && !mealType.isEmpty()
             && !"LUNCH".equals(mealType) && !"DINNER".equals(mealType)) {
             errors.add(error("filters.mealType", "SCHEDULED_MENU_MEAL_TYPE_INVALID", "公共排期菜单仅支持午餐或晚餐"));
         }

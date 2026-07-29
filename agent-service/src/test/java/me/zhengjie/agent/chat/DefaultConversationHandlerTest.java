@@ -1405,8 +1405,8 @@ class DefaultConversationHandlerTest {
             calls.incrementAndGet();
             me.zhengjie.agent.query.client.dto.ActiveCustomerBalanceResponse response = new me.zhengjie.agent.query.client.dto.ActiveCustomerBalanceResponse();
             response.setMetricDefinitionId("AGENT_ACTIVE_CUSTOMER_V1"); response.setTotal(1L); response.setPage(page); response.setSize(size);
-            response.setItems(List.of(Map.of("customerCode", "B3303", "customerNameMasked", "张*", "remainingBreakfast", 2,
-                "remainingLunchDinner", 4, "remainingTotal", 6)));
+            response.setItems(List.of(new me.zhengjie.agent.query.client.dto.ActiveCustomerBalanceResponse.ActiveCustomerBalanceItem(
+                "B3303", "张*", 2, 4, 6)));
             return response;
         }
     }

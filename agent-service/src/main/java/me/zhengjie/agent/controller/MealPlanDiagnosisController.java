@@ -1,16 +1,12 @@
 package me.zhengjie.agent.controller;
 
 import jakarta.validation.Valid;
-import me.zhengjie.agent.chat.MealPlanChatService;
-import me.zhengjie.agent.domain.dto.AgentChatRequest;
-import me.zhengjie.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.agent.domain.dto.DiagnosisRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.domain.dto.LlmConnectivityRequest;
 import me.zhengjie.agent.domain.dto.LlmConnectivityResponse;
 import me.zhengjie.agent.service.LlmConnectivityService;
 import me.zhengjie.agent.service.MealPlanDiagnosisService;
-import me.zhengjie.agent.security.AgentAccessContextHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -36,17 +32,17 @@ public class MealPlanDiagnosisController {
 
     private final MealPlanDiagnosisService diagnosisService;
     private final LlmConnectivityService connectivityService;
-    private final MealPlanChatService chatService;
 
     /**
-     * 注入诊断服务，控制器只负责接收请求和返回结果。
+     * 注入诊断与模型连通性服务，控制器只负责接收请求和返回结果。
+     *
+     * @param diagnosisService 排餐诊断服务
+     * @param connectivityService 模型连通性检测服务
      */
     public MealPlanDiagnosisController(MealPlanDiagnosisService diagnosisService,
-                                       LlmConnectivityService connectivityService,
-                                       MealPlanChatService chatService) {
+                                       LlmConnectivityService connectivityService) {
         this.diagnosisService = diagnosisService;
         this.connectivityService = connectivityService;
-        this.chatService = chatService;
     }
 
     /**
@@ -77,40 +73,6 @@ public class MealPlanDiagnosisController {
                 System.currentTimeMillis() - start, ex.getClass().getSimpleName());
             throw ex;
         } finally {
-            clearDiagnosticMdc();
-        }
-    }
-
-    /**
-     * 聊天式排餐诊断。
-     */
-    @PostMapping("/chat")
-    public AgentChatResponse chat(@RequestHeader(value = "X-Request-Id", required = false) String requestId,
-                                  @RequestHeader(value = "X-Agent-Access-Context", required = false) String accessContext,
-                                  @Valid @RequestBody AgentChatRequest request) {
-        String traceId = resolveRequestId(requestId);
-        MDC.put(REQUEST_ID_KEY, traceId);
-        MDC.put(STAGE_KEY, "CHAT_CONTROLLER_RECEIVED");
-        long start = System.currentTimeMillis();
-        try {
-            AgentAccessContextHolder.bind(accessContext, request.getSessionId());
-            AgentAccessContextHolder.bindAvailableTools(request.getAvailableTools());
-            log.info("聊天诊断阶段 stage=接收请求 requestId={}", traceId);
-            AgentChatResponse response = chatService.chat(request);
-            response.setRequestId(traceId);
-            MDC.put(STAGE_KEY, safe(response.getConversationStage()));
-            MDC.put(FALLBACK_KEY, String.valueOf(response.getDiagnosisResult() != null && response.getDiagnosisResult().isFallback()));
-            MDC.put(FALLBACK_REASON_KEY, response.getDiagnosisResult() == null ? "" : safe(response.getDiagnosisResult().getFallbackReason()));
-            log.info("聊天诊断阶段 stage=请求完成 requestId={} status={} costMs={}",
-                traceId, response.getStatus(), System.currentTimeMillis() - start);
-            return response;
-        } catch (RuntimeException ex) {
-            MDC.put(STAGE_KEY, "CHAT_CONTROLLER_FAILED");
-            log.error("聊天诊断阶段 stage=请求失败 requestId={} costMs={} errorType={}",
-                traceId, System.currentTimeMillis() - start, ex.getClass().getSimpleName());
-            throw ex;
-        } finally {
-            AgentAccessContextHolder.clear();
             clearDiagnosticMdc();
         }
     }

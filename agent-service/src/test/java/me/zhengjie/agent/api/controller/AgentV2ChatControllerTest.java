@@ -21,7 +21,7 @@ class AgentV2ChatControllerTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
-    void shouldReturnContractVersionAndClientMessageIdWithoutChangingLegacyService() throws Exception {
+    void shouldReturnContractVersionAndClientMessageId() throws Exception {
         MealPlanChatService service = request -> {
             AgentChatResponse response = new AgentChatResponse();
             response.setSessionId(request.getSessionId());

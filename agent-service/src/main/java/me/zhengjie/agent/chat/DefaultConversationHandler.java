@@ -1,8 +1,6 @@
 package me.zhengjie.agent.chat;
 
-import me.zhengjie.agent.analysis.BusinessQuestionAnalyzer;
 import me.zhengjie.agent.analysis.LegacyBusinessQuestionAnalysisFactory;
-import me.zhengjie.agent.analysis.BusinessTemporalResolver;
 import me.zhengjie.agent.analysis.ContextReferenceResolver;
 import me.zhengjie.agent.analysis.ConversationUnderstandingService;
 import me.zhengjie.agent.analysis.ConversationUnderstandingValidator;
@@ -20,9 +18,7 @@ import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
 import me.zhengjie.agent.analysis.domain.ConversationContextHandle;
 import me.zhengjie.agent.analysis.domain.ContextHandleKind;
 import me.zhengjie.agent.analysis.domain.SemanticEntityType;
-import me.zhengjie.agent.analysis.domain.SemanticOperation;
 import me.zhengjie.agent.query.domain.PendingBusinessQueryContext;
-import me.zhengjie.agent.query.domain.SemanticTraceSummary;
 import me.zhengjie.agent.query.domain.AgentMetricCatalog;
 import me.zhengjie.agent.query.domain.AgentMetricDefinition;
 import me.zhengjie.agent.query.domain.AgentQueryFilters;
@@ -30,10 +26,13 @@ import me.zhengjie.agent.query.domain.AgentQueryMetric;
 import me.zhengjie.agent.query.domain.AgentQueryDomain;
 import me.zhengjie.agent.query.domain.AgentQueryAction;
 import me.zhengjie.agent.query.domain.AgentQueryDimension;
+import me.zhengjie.agent.query.domain.BusinessResponseTypeCatalog;
+import me.zhengjie.agent.query.presentation.BusinessPresentationResult;
 import me.zhengjie.agent.analysis.domain.BusinessInteractionMode;
 import me.zhengjie.agent.analysis.domain.BusinessQueryTarget;
 import me.zhengjie.agent.analysis.domain.MealScope;
 import me.zhengjie.agent.query.tool.AgentBusinessToolExecutor.ToolExecutionResult;
+import me.zhengjie.agent.tool.ToolCatalog;
 import me.zhengjie.agent.domain.chat.ChatIntent;
 import me.zhengjie.agent.domain.chat.ChatStatus;
 import me.zhengjie.agent.domain.chat.MissingSlot;
@@ -44,6 +43,8 @@ import me.zhengjie.agent.domain.dto.DiagnosisRequest;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import me.zhengjie.agent.service.MealPlanDiagnosisService;
+import me.zhengjie.agent.application.conversation.BusinessConversationResultPipeline;
+import me.zhengjie.agent.application.conversation.BusinessConversationUnderstandingPipeline;
 import me.zhengjie.agent.application.conversation.ChatCommand;
 import me.zhengjie.agent.application.conversation.ChatResult;
 import me.zhengjie.agent.application.conversation.ConversationExecutionContext;
@@ -60,8 +61,6 @@ import java.util.List;
 import java.util.Map;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 
 /**
  * 默认聊天能力处理器。
@@ -89,14 +88,12 @@ public class DefaultConversationHandler implements ConversationHandler {
     private final LegacyCustomerInsightAdapter legacyCustomerInsightAdapter;
     private final BusinessQueryDataClient businessQueryDataClient;
     private final BusinessQueryChatService businessQueryChatService;
-    private final BusinessQuestionAnalyzer businessQuestionAnalyzer;
     private final BusinessQueryPlanningService businessQueryPlanningService;
-    private final BusinessTemporalResolver businessTemporalResolver;
     private final ContextReferenceResolver contextReferenceResolver;
+    private final BusinessConversationUnderstandingPipeline understandingPipeline;
+    private final BusinessConversationResultPipeline resultPipeline;
     private final ConversationStateSupport conversationStateSupport;
     private final BusinessQueryIntentPolicy businessQueryIntentPolicy;
-    private final int pendingContextTtlMinutes;
-    private boolean pendingContextEnabled = true;
     private ConversationUnderstandingService conversationUnderstandingService;
     private ConversationUnderstandingValidator conversationUnderstandingValidator;
     private MultiIntentPlanningService multiIntentPlanningService;
@@ -112,10 +109,10 @@ public class DefaultConversationHandler implements ConversationHandler {
                                       MealPlanFollowUpService followUpService,
                                       BusinessQueryDataClient businessQueryDataClient,
                                       BusinessQueryChatService businessQueryChatService,
-                                      BusinessQuestionAnalyzer businessQuestionAnalyzer,
                                       BusinessQueryPlanningService businessQueryPlanningService,
-                                      BusinessTemporalResolver businessTemporalResolver,
                                       ContextReferenceResolver contextReferenceResolver,
+                                      BusinessConversationUnderstandingPipeline understandingPipeline,
+                                      BusinessConversationResultPipeline resultPipeline,
                                       AgentProperties properties,
                                       ConversationStateSupport conversationStateSupport,
                                       BusinessQueryIntentPolicy businessQueryIntentPolicy,
@@ -127,15 +124,12 @@ public class DefaultConversationHandler implements ConversationHandler {
         this.legacyCustomerInsightAdapter = legacyCustomerInsightAdapter;
         this.businessQueryDataClient = businessQueryDataClient;
         this.businessQueryChatService = businessQueryChatService;
-        this.businessQuestionAnalyzer = businessQuestionAnalyzer;
         this.businessQueryPlanningService = businessQueryPlanningService;
-        this.businessTemporalResolver = businessTemporalResolver;
         this.contextReferenceResolver = contextReferenceResolver;
+        this.understandingPipeline = understandingPipeline;
+        this.resultPipeline = resultPipeline;
         this.conversationStateSupport = conversationStateSupport;
         this.businessQueryIntentPolicy = businessQueryIntentPolicy;
-        this.pendingContextTtlMinutes = Math.max(1,
-            properties.getChat().getBusinessSemantic().getPendingContextTtlMinutes());
-        this.pendingContextEnabled = properties.getChat().getBusinessSemantic().isPendingContextEnabled();
         this.conversationUnderstandingMode =
             properties.getChat().getConversationUnderstanding().getMode().name();
     }
@@ -279,13 +273,14 @@ public class DefaultConversationHandler implements ConversationHandler {
 
         if (intent == ChatIntent.BUSINESS_RULE_QUERY) {
             if (businessQueryDataClient == null) {
-                return response(session, ChatStatus.ERROR, "业务规则查询服务暂不可用，请稍后重试。", null, List.of(), List.of(), "BUSINESS_QUERY_RULE");
+                return response(session, ChatStatus.ERROR, "业务规则查询服务暂不可用，请稍后重试。", null, List.of(), List.of(), BusinessResponseTypeCatalog.RULE);
             }
-            ToolExecutionResult execution = executeBusinessTool(businessQueryOrchestrator, "BUSINESS_QUERY_RULE",
-                session.getSlots(), "explainRule", ruleTopic(request.getMessage()), List.of());
+            ToolExecutionResult execution = executeBusinessTool(businessQueryOrchestrator, BusinessResponseTypeCatalog.RULE,
+                session.getSlots(), ToolCatalog.EXPLAIN_RULE, ruleTopic(request.getMessage()), List.of());
             Map<String, Object> result = execution.result();
-            AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_RULE", result,
-                composer().businessRule(result), List.of("剩余餐数怎么算", "订单什么时候有效", "清空会话"));
+            AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.RULE, result,
+                composer().businessRule(presentation(result)),
+                List.of("剩余餐数怎么算", "订单什么时候有效", "清空会话"));
             applyToolExecution(response, execution);
             session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
             sessionStore.save(session);
@@ -297,12 +292,13 @@ public class DefaultConversationHandler implements ConversationHandler {
             List<MissingSlot> missing = missingSlots(session.getSlots(), intent);
             if (!missing.isEmpty()) return response(session, ChatStatus.NEED_MORE_INFO,
                 "请补充菜单日期，例如今天、明天或 2026-07-12。", null, missing, quickRepliesFor(missing), "SLOT_REQUIRED");
-            ToolExecutionResult execution = executeBusinessTool(businessQueryOrchestrator, "BUSINESS_QUERY_SCHEDULED_MENU",
-                session.getSlots(), "listScheduledDishes", null, List.of());
-            AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_SCHEDULED_MENU", execution.result(),
-                composer().scheduledMenu(execution.result()), List.of("今天菜单", "明天菜单", "清空会话"));
+            ToolExecutionResult execution = executeBusinessTool(businessQueryOrchestrator, BusinessResponseTypeCatalog.SCHEDULED_MENU,
+                session.getSlots(), ToolCatalog.LIST_SCHEDULED_DISHES, null, List.of());
+            AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.SCHEDULED_MENU, execution.result(),
+                composer().scheduledMenu(presentation(execution.result())),
+                List.of("今天菜单", "明天菜单", "清空会话"));
             applyToolExecution(response, execution);
-            captureLastBusinessQueryContext(session, response);
+            resultPipeline.captureLastBusinessQueryContext(session, response);
             sessionStore.save(session);
             return response;
         }
@@ -328,19 +324,21 @@ public class DefaultConversationHandler implements ConversationHandler {
                 return response;
             }
             if (businessQueryDataClient == null) {
-                return response(session, ChatStatus.ERROR, "排餐查询服务暂不可用，请稍后重试。", null, List.of(), List.of(), "BUSINESS_QUERY_MEAL_PLAN");
+                return response(session, ChatStatus.ERROR, "排餐查询服务暂不可用，请稍后重试。", null, List.of(), List.of(), BusinessResponseTypeCatalog.MEAL_PLAN);
             }
             Long resolvedCustomerId = session.getSlots().getCustomerId();
             boolean directMealPlanRecord = session.getSlots().getMealPlanRecordId() != null;
             if (resolvedCustomerId == null && !directMealPlanRecord) {
                 ToolExecutionResult overviewExecution = executeBusinessTool(businessQueryOrchestrator,
-                    "BUSINESS_QUERY_CUSTOMER", session.getSlots(), "customerOverview", null, List.of());
+                    BusinessResponseTypeCatalog.CUSTOMER, session.getSlots(), ToolCatalog.CUSTOMER_OVERVIEW,
+                    null, List.of());
                 Map<String, Object> overview = overviewExecution.result();
                 Object overviewCustomerId = overview.get("customerId");
                 if (overviewCustomerId instanceof Number) resolvedCustomerId = ((Number) overviewCustomerId).longValue();
                 if (resolvedCustomerId == null) {
-                    AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_CUSTOMER", overview,
-                        composer().customerOverview(overview), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                    AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.CUSTOMER, overview,
+                        composer().customerOverview(presentation(overview)),
+                        CUSTOMER_INSIGHT_QUICK_REPLIES);
                     applyToolExecution(response, overviewExecution);
                     return response;
                 }
@@ -349,9 +347,11 @@ public class DefaultConversationHandler implements ConversationHandler {
             if (resolvedCustomerId != null) resolvedSlots.setCustomerId(resolvedCustomerId);
             if (intent == ChatIntent.DISH_CANDIDATE_QUERY) {
                 ToolExecutionResult candidateExecution = executeBusinessTool(businessQueryOrchestrator,
-                    "BUSINESS_QUERY_DISH_CANDIDATES", resolvedSlots, "previewDishCandidates", null, List.of());
-                AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_DISH_CANDIDATES", candidateExecution.result(),
-                    composer().dishCandidates(candidateExecution.result()), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                    BusinessResponseTypeCatalog.DISH_CANDIDATES, resolvedSlots,
+                    ToolCatalog.PREVIEW_DISH_CANDIDATES, null, List.of());
+                AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.DISH_CANDIDATES, candidateExecution.result(),
+                    composer().dishCandidates(presentation(candidateExecution.result())),
+                    CUSTOMER_INSIGHT_QUICK_REPLIES);
                 applyToolExecution(response, candidateExecution);
                 session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
                 sessionStore.save(session);
@@ -359,22 +359,25 @@ public class DefaultConversationHandler implements ConversationHandler {
                 return response;
             }
             ToolExecutionResult mealPlanExecution = executeBusinessTool(businessQueryOrchestrator,
-                "BUSINESS_QUERY_MEAL_PLAN", resolvedSlots, "listMealPlans", null, List.of());
+                BusinessResponseTypeCatalog.MEAL_PLAN, resolvedSlots, ToolCatalog.LIST_MEAL_PLANS,
+                null, List.of());
             Map<String, Object> result = mealPlanExecution.result();
             if (intent == ChatIntent.MEAL_BALANCE_NO_PLAN_QUERY) {
                 AgentQueryPlan comboPlan = mealBalanceNoPlanPlan(resolvedSlots);
                 ToolExecutionResult overviewExecution = businessQueryOrchestrator.execute(comboPlan,
-                    "customerOverview", null, List.of());
+                    ToolCatalog.CUSTOMER_OVERVIEW, null, List.of());
                 Map<String, Object> overview = overviewExecution.result();
-                AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_MEAL_PLAN", result,
-                    composer().mealBalanceWithoutPlan(overview, result), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.MEAL_PLAN, result,
+                    composer().mealBalanceWithoutPlan(presentation(overview),
+                        presentation(result)), CUSTOMER_INSIGHT_QUICK_REPLIES);
                 applyToolExecution(response, mealPlanExecution, overviewExecution);
                 return response;
             }
             if (intent == ChatIntent.MEAL_PLAN_UNVERIFIED_QUERY) {
                 Map<String, Object> unverified = filterUnverifiedMealPlans(result);
-                AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_MEAL_PLAN", unverified,
-                    composer().unverifiedMealPlans(unverified), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.MEAL_PLAN, unverified,
+                    composer().unverifiedMealPlans(presentation(unverified)),
+                    CUSTOMER_INSIGHT_QUICK_REPLIES);
                 applyToolExecution(response, mealPlanExecution);
                 session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
                 sessionStore.save(session);
@@ -384,13 +387,15 @@ public class DefaultConversationHandler implements ConversationHandler {
             if (intent == ChatIntent.DISH_INGREDIENT_QUERY) {
                 List<Integer> dishIds = extractDishIds(result);
                 if (dishIds.isEmpty()) {
-                    return insightResponse(session, "BUSINESS_QUERY_DISH", Map.of(), "该客户指定餐次没有可查询配料的排餐菜品。", CUSTOMER_INSIGHT_QUICK_REPLIES);
+                    return insightResponse(session, BusinessResponseTypeCatalog.DISH, Map.of(), "该客户指定餐次没有可查询配料的排餐菜品。", CUSTOMER_INSIGHT_QUICK_REPLIES);
                 }
                 ToolExecutionResult dishExecution = executeBusinessTool(businessQueryOrchestrator,
-                    "BUSINESS_QUERY_DISH", resolvedSlots, "listDishes", null, dishIds);
+                    BusinessResponseTypeCatalog.DISH, resolvedSlots, ToolCatalog.LIST_DISHES,
+                    null, dishIds);
                 Map<String, Object> dishes = dishExecution.result();
-                AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_DISH", dishes,
-                    composer().dishIngredients(dishes), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.DISH, dishes,
+                    composer().dishIngredients(presentation(dishes)),
+                    CUSTOMER_INSIGHT_QUICK_REPLIES);
                 applyToolExecution(response, mealPlanExecution, dishExecution);
                 session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
                 sessionStore.save(session);
@@ -400,8 +405,9 @@ public class DefaultConversationHandler implements ConversationHandler {
             boolean historicalMealPlan = !isNotBlank(resolvedSlots.getRecordDate())
                 && !isNotBlank(resolvedSlots.getStartDate()) && !isNotBlank(resolvedSlots.getEndDate())
                 && resolvedSlots.getMealPlanRecordId() == null;
-            AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_MEAL_PLAN", result,
-                composer().mealPlan(result, historicalMealPlan), CUSTOMER_INSIGHT_QUICK_REPLIES);
+            AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.MEAL_PLAN, result,
+                composer().mealPlan(presentation(result), historicalMealPlan),
+                CUSTOMER_INSIGHT_QUICK_REPLIES);
             applyToolExecution(response, mealPlanExecution);
             session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
             sessionStore.save(session);
@@ -535,8 +541,8 @@ public class DefaultConversationHandler implements ConversationHandler {
         if (slots.getCustomerId() != null || isNotBlank(slots.getCustomerCode()) || !isNotBlank(slots.getCustomerName())) {
             return null;
         }
-        ToolExecutionResult execution = executeBusinessTool(orchestrator, "BUSINESS_QUERY_CUSTOMER_CANDIDATES",
-            slots, "resolveCustomer", null, List.of());
+        ToolExecutionResult execution = executeBusinessTool(orchestrator, BusinessResponseTypeCatalog.CUSTOMER_CANDIDATES,
+            slots, ToolCatalog.RESOLVE_CUSTOMER, null, List.of());
         Map<String, Object> result = execution.result();
         long total = resultCount(result.get("total"));
         List<?> items = result.get("items") instanceof List ? (List<?>) result.get("items") : List.of();
@@ -552,7 +558,7 @@ public class DefaultConversationHandler implements ConversationHandler {
         String message = items.isEmpty()
             ? "未找到匹配该姓名的客户，请改用客户编号或客户ID。"
             : "找到多个同名客户，请选择一个客户后继续查询。";
-        AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_CUSTOMER_CANDIDATES", result,
+        AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.CUSTOMER_CANDIDATES, result,
             message, List.of("客户编号 C10001", "客户ID 1001", "清空会话"));
         response.setStatus(ChatStatus.NEED_MORE_INFO);
         response.setMissingSlots(List.of(MissingSlot.CUSTOMER));
@@ -612,8 +618,7 @@ public class DefaultConversationHandler implements ConversationHandler {
      */
     private AgentChatResponse handleOperationStatistics(MealPlanChatSession session, String message,
                                                         BusinessQueryOrchestrator orchestrator) {
-        BusinessQuestionAnalysis analysis = businessQuestionAnalyzer.analyze(message, session.getSlots());
-        analysis = resolveTemporalAnalysis(analysis, session, false);
+        BusinessQuestionAnalysis analysis = understandingPipeline.understandOperation(session, message);
         return executeOperationAnalysis(session, message, orchestrator, analysis, false);
     }
 
@@ -621,9 +626,12 @@ public class DefaultConversationHandler implements ConversationHandler {
     private AgentChatResponse executeOperationAnalysis(MealPlanChatSession session, String message,
                                                        BusinessQueryOrchestrator orchestrator,
                                                        BusinessQuestionAnalysis analysis,
-                                                       boolean pendingReused) {
+        boolean pendingReused) {
         if (analysis == null || analysis.isRequiresClarification()) {
-            if (analysis != null) savePendingContext(session, analysis, missingFields(analysis), message);
+            if (analysis != null) {
+                understandingPipeline.savePendingContext(session, analysis,
+                    understandingPipeline.missingFields(analysis));
+            }
             String clarification = analysis == null || !isNotBlank(analysis.getClarificationQuestion())
                 ? "你想查今天待排餐、待配送还是待核销的客户数？" : analysis.getClarificationQuestion();
             return response(session, ChatStatus.NEED_MORE_INFO, clarification, null,
@@ -640,7 +648,7 @@ public class DefaultConversationHandler implements ConversationHandler {
         }
         boolean report = queryPlan.getMetrics() != null && queryPlan.getMetrics().size() > 1;
         if (requiresRecordDate(queryPlan) && (queryPlan.getFilters() == null || !isNotBlank(queryPlan.getFilters().getRecordDate()))) {
-            savePendingContext(session, analysis, List.of("recordDate"), message);
+            understandingPipeline.savePendingContext(session, analysis, List.of("recordDate"));
             return response(session, ChatStatus.NEED_MORE_INFO, "请补充统计日期，例如今天、明天或 2026-07-13。", null,
                 List.of(MissingSlot.RECORD_DATE), List.of("今天", "明天"), "BUSINESS_QUERY_OPERATION_CLARIFICATION");
         }
@@ -648,20 +656,22 @@ public class DefaultConversationHandler implements ConversationHandler {
         AgentMetricDefinition metricDefinition = AgentMetricCatalog.definition(primaryMetric);
         if (metricDefinition == null) return response(session, ChatStatus.ERROR, "运营指标未登记，已停止执行。", null,
             List.of(), List.of(), "BUSINESS_QUERY_OPERATION");
-        String responseType = report ? "BUSINESS_QUERY_OPERATION_REPORT" : metricDefinition.getResponseType();
+        String responseType = report ? BusinessResponseTypeCatalog.OPERATION_REPORT
+            : metricDefinition.getResponseType();
         String tool = queryPlan.getToolNames().get(0);
         ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, queryPlan, tool, null, List.of());
         Map<String, Object> result = report ? operationReportResult(execution.result(), queryPlan) : execution.result();
-        String answer = report ? composer().operationReport(result, queryPlan.getMetrics())
-            : composer().operationStatistics(result, primaryMetric);
-        clearPendingContext(session, true);
-        applyResolvedFiltersToSlots(session, queryPlan.getFilters());
+        String answer = report
+            ? composer().operationReport(presentation(result), queryPlan.getMetrics())
+            : composer().operationStatistics(presentation(result), primaryMetric);
+        understandingPipeline.clearPendingContext(session, true);
+        understandingPipeline.applyResolvedFiltersToSlots(session, queryPlan.getFilters());
         AgentChatResponse response = insightResponse(session, responseType, result, answer,
             List.of("今天待核销客户", "今天已排餐客户", "活跃客户"));
         response.setQueryPlan(queryPlan);
         applyToolExecution(response, execution);
-        response.setSemanticTraceSummary(semanticTrace(analysis, pendingReused));
-        captureLastBusinessQueryContext(session, response);
+        response.setSemanticTraceSummary(understandingPipeline.semanticTrace(analysis, pendingReused));
+        resultPipeline.captureLastBusinessQueryContext(session, response);
         return response;
     }
 
@@ -677,27 +687,23 @@ public class DefaultConversationHandler implements ConversationHandler {
                                                           BusinessQueryOrchestrator orchestrator) {
         AgentChatResponse multiFrameResponse = handleMultiFrameUnderstanding(session, message, orchestrator);
         if (multiFrameResponse != null) return multiFrameResponse;
-        BusinessQuestionAnalysis analysis = resolvePendingAnalysis(session, message);
-        boolean pendingReused = analysis != null;
-        if (analysis == null) {
-            if (session.getConversationState().getPendingBusinessQueryContext() != null && !isPureSlotReply(message)) {
-                clearPendingContext(session, false);
-            }
-            analysis = businessQuestionAnalyzer.analyze(message, session.getSlots(),
-                session.getConversationState().getLastBusinessQueryContext());
-            analysis = resolveTemporalAnalysis(analysis, session, false);
-        }
+        BusinessConversationUnderstandingPipeline.UnderstandingOutcome understanding =
+            understandingPipeline.understand(session, message);
+        BusinessQuestionAnalysis analysis = understanding.analysis();
+        boolean pendingReused = understanding.pendingReused();
         if (analysis == null) return null;
         AgentChatResponse contextFollowUp = handleActiveCustomerBalanceFollowUp(session, analysis, orchestrator);
         if (contextFollowUp != null) return contextFollowUp;
         if (analysis.isRequiresClarification()) {
             // 未识别出任何领域时保留既有细粒度意图兼容入口；已识别领域的歧义统一由语义层追问。
             if (analysis.getDomains() == null || analysis.getDomains().isEmpty()) return null;
-            savePendingContext(session, analysis, missingFields(analysis), message);
+            understandingPipeline.savePendingContext(session, analysis,
+                understandingPipeline.missingFields(analysis));
             AgentChatResponse clarification = response(session, ChatStatus.NEED_MORE_INFO,
                 isNotBlank(analysis.getClarificationQuestion()) ? analysis.getClarificationQuestion() : "请补充需要查询的业务对象或条件。",
                 null, List.of(), List.of("今天菜单", "客户订单"), "BUSINESS_QUERY_CLARIFICATION");
-            clarification.setSemanticTraceSummary(semanticTrace(analysis, pendingReused));
+            clarification.setSemanticTraceSummary(
+                understandingPipeline.semanticTrace(analysis, pendingReused));
             return clarification;
         }
         if (analysis.getDomains() != null && (analysis.getDomains().contains(me.zhengjie.agent.query.domain.AgentQueryDomain.OPERATION_STATISTICS)
@@ -720,20 +726,21 @@ public class DefaultConversationHandler implements ConversationHandler {
         if (analysis.getQueryTarget() != BusinessQueryTarget.SCHEDULED_MENU) return null;
         if (!isNotBlank(analysis.getFilters().getRecordDate())) {
             return response(session, ChatStatus.NEED_MORE_INFO, "请补充菜单日期，例如今天、明天或 2026-07-13。", null,
-                List.of(MissingSlot.RECORD_DATE), List.of("今天", "明天"), "BUSINESS_QUERY_SCHEDULED_MENU");
+                List.of(MissingSlot.RECORD_DATE), List.of("今天", "明天"), BusinessResponseTypeCatalog.SCHEDULED_MENU);
         }
         if (businessQueryDataClient == null) {
             return response(session, ChatStatus.ERROR, "公共菜单查询服务暂不可用，请稍后重试。", null,
-                List.of(), List.of(), "BUSINESS_QUERY_SCHEDULED_MENU");
+                List.of(), List.of(), BusinessResponseTypeCatalog.SCHEDULED_MENU);
         }
         AgentQueryPlan queryPlan = businessQueryPlanningService.plan(analysis);
         if (queryPlan == null) {
-            savePendingContext(session, analysis, List.of("recordDate", "mealType"), message);
+            understandingPipeline.savePendingContext(session, analysis,
+                List.of("recordDate", "mealType"));
             return response(session, ChatStatus.NEED_MORE_INFO, "公共菜单仅支持查询午餐或晚餐，请确认需要的餐次。", null,
-                List.of(), List.of("今天午餐菜单", "今天晚餐菜单"), "BUSINESS_QUERY_SCHEDULED_MENU");
+                List.of(), List.of("今天午餐菜单", "今天晚餐菜单"), BusinessResponseTypeCatalog.SCHEDULED_MENU);
         }
         LastBusinessQueryContext previous = session.getConversationState().getLastBusinessQueryContext();
-        String fingerprint = queryPlanFingerprint(queryPlan);
+        String fingerprint = resultPipeline.queryPlanFingerprint(queryPlan);
         if (analysis.getInteractionMode() == BusinessInteractionMode.CORRECTION && previous != null
             && fingerprint.equals(previous.getQueryPlanFingerprint())) {
             return response(session, ChatStatus.NEED_MORE_INFO,
@@ -741,20 +748,22 @@ public class DefaultConversationHandler implements ConversationHandler {
                 null, List.of(), List.of("今天公共菜单", "B3303 今天吃什么", "B3303 今天有哪些候选菜"),
                 "BUSINESS_QUERY_CORRECTION_CLARIFICATION");
         }
-        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, queryPlan, "listScheduledDishes", null, List.of());
+        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator,
+            queryPlan, ToolCatalog.LIST_SCHEDULED_DISHES, null, List.of());
         Map<String, Object> result = execution.result();
-        String answer = composer().scheduledMenu(result);
+        String answer = composer().scheduledMenu(presentation(result));
         if (analysis.getInteractionMode() == BusinessInteractionMode.CORRECTION) {
             answer = "已重新规划查询口径：按指定日期的公共排期菜单分别查询午餐和晚餐。" + answer;
         }
-        AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_SCHEDULED_MENU", result, answer,
+        AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.SCHEDULED_MENU, result, answer,
             List.of("今天午餐菜单", "今天晚餐菜单", "清空会话"));
         response.setQueryPlan(queryPlan);
-        response.setSemanticTraceSummary(semanticTrace(analysis, pendingReused));
-        clearPendingContext(session, true);
+        response.setSemanticTraceSummary(
+            understandingPipeline.semanticTrace(analysis, pendingReused));
+        understandingPipeline.clearPendingContext(session, true);
         applyToolExecution(response, execution);
         applyResultValidation(response, queryPlan, result);
-        captureLastBusinessQueryContext(session, response);
+        resultPipeline.captureLastBusinessQueryContext(session, response);
         session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
         return response;
     }
@@ -807,7 +816,8 @@ public class DefaultConversationHandler implements ConversationHandler {
         }
         AgentQueryPlan plan = plans.get(0); Map<String, Object> result = blocks.get(0).getResult();
         String answer = plan.getMetrics().contains(AgentQueryMetric.ACTIVE_CUSTOMER_MEAL_BALANCE_DETAIL)
-            ? composer().activeCustomerBalances(result) : "已完成本轮受控业务查询。";
+            ? composer().activeCustomerBalances(presentation(result))
+            : "已完成本轮受控业务查询。";
         AgentChatResponse response = insightResponse(session, multiFrameResponseType(plan), result,
             answer, List.of("活跃客户数", "清空会话"));
         response.setQueryPlan(plan); applyToolExecution(response, firstExecution); response.setResultBlocks(blocks);
@@ -827,11 +837,11 @@ public class DefaultConversationHandler implements ConversationHandler {
     /** 将固定计划映射为受控展示类型，不读取用户文本。 */
     private String multiFrameResponseType(AgentQueryPlan plan) {
         if (plan == null || plan.getDomain() == null) return "BUSINESS_QUERY";
-        if (plan.getDomain() == AgentQueryDomain.ORDER) return "BUSINESS_QUERY_ORDER";
-        if (plan.getDomain() == AgentQueryDomain.VERIFICATION) return "BUSINESS_QUERY_VERIFICATION";
-        if (plan.getDomain() == AgentQueryDomain.REFUND) return "BUSINESS_QUERY_REFUND";
-        if (plan.getDomain() == AgentQueryDomain.MEAL_PLAN) return "BUSINESS_QUERY_MEAL_PLAN";
-        return "BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES";
+        if (plan.getDomain() == AgentQueryDomain.ORDER) return BusinessResponseTypeCatalog.ORDER;
+        if (plan.getDomain() == AgentQueryDomain.VERIFICATION) return BusinessResponseTypeCatalog.VERIFICATION;
+        if (plan.getDomain() == AgentQueryDomain.REFUND) return BusinessResponseTypeCatalog.REFUND;
+        if (plan.getDomain() == AgentQueryDomain.MEAL_PLAN) return BusinessResponseTypeCatalog.MEAL_PLAN;
+        return BusinessResponseTypeCatalog.ACTIVE_CUSTOMER_BALANCES;
     }
 
     /**
@@ -866,12 +876,19 @@ public class DefaultConversationHandler implements ConversationHandler {
         plan.setVersion(AgentQueryPlan.SCHEMA_VERSION_V2); plan.setDomain(AgentQueryDomain.OPERATION_STATISTICS);
         plan.setAction(AgentQueryAction.BREAKDOWN); plan.setMetrics(List.of(AgentQueryMetric.ACTIVE_CUSTOMER_MEAL_BALANCE_DETAIL));
         plan.setDimensions(List.of(AgentQueryDimension.CUSTOMER)); plan.setLimit(50); plan.getFilters().setPage(1); plan.getFilters().setSize(50);
-        plan.setToolNames(List.of("listActiveCustomerMealBalances")); plan.setMetricVersion(AgentMetricCatalog.VERSION); plan.setTimezone("Asia/Shanghai"); plan.setAnalysisSource(analysis.getSource()); plan.setAnalysisConfidence(analysis.getConfidence());
-        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, plan, "listActiveCustomerMealBalances", null, List.of());
+        plan.setToolNames(List.of(ToolCatalog.LIST_ACTIVE_CUSTOMER_MEAL_BALANCES));
+        plan.setMetricVersion(AgentMetricCatalog.VERSION); plan.setTimezone("Asia/Shanghai");
+        plan.setAnalysisSource(analysis.getSource());
+        plan.setAnalysisConfidence(analysis.getConfidence());
+        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, plan,
+            ToolCatalog.LIST_ACTIVE_CUSTOMER_MEAL_BALANCES, null, List.of());
         Map<String, Object> result = execution.result();
-        String answer = composer().activeCustomerBalances(result);
-        AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES", result, answer, List.of("活跃客户数", "清空会话"));
-        response.setQueryPlan(plan); applyToolExecution(response, execution); response.setSemanticTraceSummary(semanticTrace(analysis, false));
+        String answer = composer().activeCustomerBalances(presentation(result));
+        AgentChatResponse response = insightResponse(session,
+            BusinessResponseTypeCatalog.ACTIVE_CUSTOMER_BALANCES, result, answer,
+            List.of("活跃客户数", "清空会话"));
+        response.setQueryPlan(plan); applyToolExecution(response, execution);
+        response.setSemanticTraceSummary(understandingPipeline.semanticTrace(analysis, false));
         return response;
     }
 
@@ -892,7 +909,7 @@ public class DefaultConversationHandler implements ConversationHandler {
                                                           boolean pendingReused) {
         if (businessQueryDataClient == null) {
             return response(session, ChatStatus.ERROR, "排餐查询服务暂不可用，请稍后重试。", null,
-                List.of(), List.of(), "BUSINESS_QUERY_MEAL_PLAN");
+                List.of(), List.of(), BusinessResponseTypeCatalog.MEAL_PLAN);
         }
         syncSemanticCustomerToSlots(session.getSlots(), analysis);
         AgentQueryPlan queryPlan = businessQueryPlanningService.plan(analysis);
@@ -903,7 +920,7 @@ public class DefaultConversationHandler implements ConversationHandler {
         if (queryPlan.getEntities().getCustomerId() == null) {
             ResolvedCustomer resolved = resolveCustomerForBusinessQuery(orchestrator, session);
             if (resolved.response() != null) {
-                clearPendingContext(session, false);
+                understandingPipeline.clearPendingContext(session, false);
                 return resolved.response();
             }
             session.getSlots().setCustomerId(resolved.customerId());
@@ -914,17 +931,20 @@ public class DefaultConversationHandler implements ConversationHandler {
             queryPlan.getFilters().setPage(1);
             queryPlan.getFilters().setSize(1);
         }
-        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, queryPlan, "listMealPlans", null, List.of());
+        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator,
+            queryPlan, ToolCatalog.LIST_MEAL_PLANS, null, List.of());
         Map<String, Object> result = execution.result();
-        clearPendingContext(session, true);
-        applyResolvedFiltersToSlots(session, queryPlan.getFilters());
-        AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_MEAL_PLAN", result,
-            composer().mealPlan(result, historical), CUSTOMER_INSIGHT_QUICK_REPLIES);
+        understandingPipeline.clearPendingContext(session, true);
+        understandingPipeline.applyResolvedFiltersToSlots(session, queryPlan.getFilters());
+        AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.MEAL_PLAN, result,
+            composer().mealPlan(presentation(result), historical),
+            CUSTOMER_INSIGHT_QUICK_REPLIES);
         response.setQueryPlan(queryPlan);
-        response.setSemanticTraceSummary(semanticTrace(analysis, pendingReused));
+        response.setSemanticTraceSummary(
+            understandingPipeline.semanticTrace(analysis, pendingReused));
         applyToolExecution(response, execution);
         applyResultValidation(response, queryPlan, result);
-        captureLastBusinessQueryContext(session, response);
+        resultPipeline.captureLastBusinessQueryContext(session, response);
         session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
         return response;
     }
@@ -973,7 +993,7 @@ public class DefaultConversationHandler implements ConversationHandler {
                                                            boolean pendingReused) {
         if (businessQueryDataClient == null) {
             return response(session, ChatStatus.ERROR, "客户信息查询服务暂不可用，请稍后重试。", null,
-                List.of(), List.of(), "BUSINESS_QUERY_CUSTOMER");
+                List.of(), List.of(), BusinessResponseTypeCatalog.CUSTOMER);
         }
         syncSemanticCustomerToSlots(session.getSlots(), analysis);
         if (session.getSlots().getCustomerId() == null && !isNotBlank(session.getSlots().getCustomerCode())
@@ -983,16 +1003,19 @@ public class DefaultConversationHandler implements ConversationHandler {
         }
         AgentQueryPlan queryPlan = businessQueryPlanningService.plan(analysis);
         if (queryPlan == null) return null;
-        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, queryPlan, "customerOverview", null, List.of());
+        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator,
+            queryPlan, ToolCatalog.CUSTOMER_OVERVIEW, null, List.of());
         Map<String, Object> result = execution.result();
-        clearPendingContext(session, true);
-        AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_CUSTOMER", result,
-            composer().customerOverview(result), CUSTOMER_INSIGHT_QUICK_REPLIES);
+        understandingPipeline.clearPendingContext(session, true);
+        AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.CUSTOMER, result,
+            composer().customerOverview(presentation(result)),
+            CUSTOMER_INSIGHT_QUICK_REPLIES);
         response.setQueryPlan(queryPlan);
-        response.setSemanticTraceSummary(semanticTrace(analysis, pendingReused));
+        response.setSemanticTraceSummary(
+            understandingPipeline.semanticTrace(analysis, pendingReused));
         applyToolExecution(response, execution);
         applyResultValidation(response, queryPlan, result);
-        captureLastBusinessQueryContext(session, response);
+        resultPipeline.captureLastBusinessQueryContext(session, response);
         session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
         return response;
     }
@@ -1048,17 +1071,19 @@ public class DefaultConversationHandler implements ConversationHandler {
                                                             BusinessQueryOrchestrator orchestrator) {
         if (businessQueryDataClient == null) {
             return response(session, ChatStatus.ERROR, "排餐查询服务暂不可用，请稍后重试。", null,
-                List.of(), List.of(), "BUSINESS_QUERY_MEAL_PLAN_ALLERGY");
+                List.of(), List.of(), BusinessResponseTypeCatalog.MEAL_PLAN_ALLERGY);
         }
         AgentQueryPlan queryPlan = businessQueryPlanningService.plan(analysis);
         if (queryPlan == null) {
             return response(session, ChatStatus.NEED_MORE_INFO, "请补充要查询的排餐日期和餐次，例如今天午餐。", null,
-                List.of(MissingSlot.RECORD_DATE, MissingSlot.MEAL_TYPE), List.of("今天午餐", "今天晚餐"), "BUSINESS_QUERY_MEAL_PLAN_ALLERGY");
+                List.of(MissingSlot.RECORD_DATE, MissingSlot.MEAL_TYPE), List.of("今天午餐", "今天晚餐"), BusinessResponseTypeCatalog.MEAL_PLAN_ALLERGY);
         }
-        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, queryPlan, "listMealPlans", null, List.of());
+        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator,
+            queryPlan, ToolCatalog.LIST_MEAL_PLANS, null, List.of());
         Map<String, Object> result = allergyFilteredMealPlans(execution.result());
-        AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_MEAL_PLAN_ALLERGY", result,
-            composer().mealPlanAllergy(result), List.of("今天午餐排餐客户对哪些菜过敏", "今天晚餐排餐客户对哪些菜过敏", "清空会话"));
+        AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.MEAL_PLAN_ALLERGY, result,
+            composer().mealPlanAllergy(presentation(result)),
+            List.of("今天午餐排餐客户对哪些菜过敏", "今天晚餐排餐客户对哪些菜过敏", "清空会话"));
         response.setQueryPlan(queryPlan);
         applyToolExecution(response, execution);
         session.getConversationState().setStage(DiagnosisConversationState.DIAGNOSED);
@@ -1101,7 +1126,8 @@ public class DefaultConversationHandler implements ConversationHandler {
 
     /** 将菜单结果的领域合理性告警合并到响应，异常时不再声称它是完整菜单。 */
     private void applyResultValidation(AgentChatResponse response, AgentQueryPlan queryPlan, Map<String, Object> result) {
-        List<String> codes = new BusinessResultValidator().validate(response.getResponseType(), queryPlan, result);
+        List<String> codes = new BusinessResultValidator().validate(
+            response.getResponseType(), queryPlan, presentation(result));
         if (codes.isEmpty()) return;
         List<String> warnings = new ArrayList<>(response.getWarnings() == null ? List.of() : response.getWarnings());
         codes.forEach(code -> { if (!warnings.contains(code)) warnings.add(code); });
@@ -1160,13 +1186,14 @@ public class DefaultConversationHandler implements ConversationHandler {
         }
         // 兼容已持久化会话或模型 Schema 中的 0 占位符，继续按客户编号/姓名解析真实内部 ID。
         slots.setCustomerId(null);
-        ToolExecutionResult overviewExecution = executeBusinessTool(orchestrator, "BUSINESS_QUERY_CUSTOMER",
-            slots, "customerOverview", null, List.of());
+        ToolExecutionResult overviewExecution = executeBusinessTool(orchestrator, BusinessResponseTypeCatalog.CUSTOMER,
+            slots, ToolCatalog.CUSTOMER_OVERVIEW, null, List.of());
         Map<String, Object> overview = overviewExecution.result();
         Object overviewCustomerId = overview.get("customerId");
         if (overviewCustomerId instanceof Number) return new ResolvedCustomer(((Number) overviewCustomerId).longValue(), null);
-        AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_CUSTOMER", overview,
-            composer().customerOverview(overview), CUSTOMER_INSIGHT_QUICK_REPLIES);
+        AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.CUSTOMER, overview,
+            composer().customerOverview(presentation(overview)),
+            CUSTOMER_INSIGHT_QUICK_REPLIES);
         applyToolExecution(response, overviewExecution);
         return new ResolvedCustomer(null, response);
     }
@@ -1205,9 +1232,10 @@ public class DefaultConversationHandler implements ConversationHandler {
                 if (businessQueryDataClient != null) {
                     AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, slots);
                     ToolExecutionResult execution = executeBusinessTool(orchestrator, queryPlan,
-                        "customerOverview", null, List.of());
-                    AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_CUSTOMER", execution.result(),
-                        composer().customerOverview(execution.result()), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                        ToolCatalog.CUSTOMER_OVERVIEW, null, List.of());
+                    AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.CUSTOMER, execution.result(),
+                        composer().customerOverview(presentation(execution.result())),
+                        CUSTOMER_INSIGHT_QUICK_REPLIES);
                     response.setQueryPlan(queryPlan);
                     applyToolExecution(response, execution);
                     return response;
@@ -1225,9 +1253,10 @@ public class DefaultConversationHandler implements ConversationHandler {
                     resolvedSlots.setCustomerId(resolved.customerId);
                     AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, resolvedSlots);
                     ToolExecutionResult execution = executeBusinessTool(orchestrator, queryPlan,
-                        "listVerifications", null, List.of());
-                    AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_VERIFICATION", execution.result(),
-                        composer().verificationList(execution.result()), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                        ToolCatalog.LIST_VERIFICATIONS, null, List.of());
+                    AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.VERIFICATION, execution.result(),
+                        composer().verificationList(presentation(execution.result())),
+                        CUSTOMER_INSIGHT_QUICK_REPLIES);
                     response.setQueryPlan(queryPlan);
                     applyToolExecution(response, execution);
                     return response;
@@ -1242,10 +1271,11 @@ public class DefaultConversationHandler implements ConversationHandler {
                     if (slots.getOrderId() != null || isNotBlank(slots.getOrderCode())) {
                         AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, slots);
                         ToolExecutionResult execution = executeBusinessTool(orchestrator, queryPlan,
-                            "orderDetail", null, List.of());
+                            ToolCatalog.ORDER_DETAIL, null, List.of());
                         Map<String, Object> result = singleItemResult(execution.result());
-                        AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_ORDER", result,
-                            composer().orderList(result), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                        AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.ORDER, result,
+                            composer().orderList(presentation(result)),
+                            CUSTOMER_INSIGHT_QUICK_REPLIES);
                         response.setQueryPlan(queryPlan);
                         applyToolExecution(response, execution);
                         return response;
@@ -1256,9 +1286,10 @@ public class DefaultConversationHandler implements ConversationHandler {
                     resolvedSlots.setCustomerId(resolved.customerId);
                     AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, resolvedSlots);
                     ToolExecutionResult execution = executeBusinessTool(orchestrator, queryPlan,
-                        "listOrders", null, List.of());
-                    AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_ORDER", execution.result(),
-                        composer().orderList(execution.result()), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                        ToolCatalog.LIST_ORDERS, null, List.of());
+                    AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.ORDER, execution.result(),
+                        composer().orderList(presentation(execution.result())),
+                        CUSTOMER_INSIGHT_QUICK_REPLIES);
                     response.setQueryPlan(queryPlan);
                     applyToolExecution(response, execution);
                     return response;
@@ -1276,26 +1307,28 @@ public class DefaultConversationHandler implements ConversationHandler {
                     resolvedSlots.setCustomerId(resolved.customerId);
                     AgentQueryPlan queryPlan = legacyBusinessQueryPlan(intent, resolvedSlots);
                     ToolExecutionResult execution = executeBusinessTool(orchestrator, queryPlan,
-                        "listRefunds", null, List.of());
-                    AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_REFUND", execution.result(),
-                        composer().refundList(execution.result()), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                        ToolCatalog.LIST_REFUNDS, null, List.of());
+                    AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.REFUND, execution.result(),
+                        composer().refundList(presentation(execution.result())),
+                        CUSTOMER_INSIGHT_QUICK_REPLIES);
                     response.setQueryPlan(queryPlan);
                     applyToolExecution(response, execution);
                     return response;
                 }
-                return insightResponse(session, "BUSINESS_QUERY_REFUND", Map.of(), "退餐查询服务暂不可用，请稍后重试。", CUSTOMER_INSIGHT_QUICK_REPLIES);
+                return insightResponse(session, BusinessResponseTypeCatalog.REFUND, Map.of(), "退餐查询服务暂不可用，请稍后重试。", CUSTOMER_INSIGHT_QUICK_REPLIES);
             }
             case CUSTOMER_PACKAGE_QUERY: {
                 if (businessQueryDataClient == null) {
-                    return insightResponse(session, "BUSINESS_QUERY_CUSTOMER", Map.of(), "套餐查询服务暂不可用，请稍后重试。", CUSTOMER_INSIGHT_QUICK_REPLIES);
+                    return insightResponse(session, BusinessResponseTypeCatalog.CUSTOMER, Map.of(), "套餐查询服务暂不可用，请稍后重试。", CUSTOMER_INSIGHT_QUICK_REPLIES);
                 }
-                ToolExecutionResult overviewExecution = executeBusinessTool(orchestrator, "BUSINESS_QUERY_CUSTOMER",
-                    slots, "customerOverview", null, List.of());
+                ToolExecutionResult overviewExecution = executeBusinessTool(orchestrator, BusinessResponseTypeCatalog.CUSTOMER,
+                    slots, ToolCatalog.CUSTOMER_OVERVIEW, null, List.of());
                 Map<String, Object> overview = overviewExecution.result();
                 List<Long> packageIds = extractParentPackageIds(overview);
                 if (packageIds.isEmpty()) {
-                    AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_CUSTOMER", overview,
-                        composer().customerPackages(overview), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                    AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.CUSTOMER, overview,
+                        composer().customerPackages(presentation(overview)),
+                        CUSTOMER_INSIGHT_QUICK_REPLIES);
                     applyToolExecution(response, overviewExecution);
                     return response;
                 }
@@ -1305,7 +1338,8 @@ public class DefaultConversationHandler implements ConversationHandler {
                 for (Long packageId : packageIds) {
                     AgentQueryPlan packagePlan = packageDetailPlan(slots, packageId);
                     ToolExecutionResult execution = orchestrator == null ? ToolExecutionResult.failure("BUSINESS_QUERY_CLIENT_UNAVAILABLE")
-                        : orchestrator.execute(packagePlan, "packageDetail", null, List.of());
+                        : orchestrator.execute(packagePlan, ToolCatalog.PACKAGE_DETAIL,
+                            null, List.of());
                     executions.add(execution);
                     if (!execution.partial() && !execution.result().isEmpty()) details.add(execution.result());
                 }
@@ -1313,36 +1347,41 @@ public class DefaultConversationHandler implements ConversationHandler {
                 result.put("total", details.size());
                 result.put("items", details);
                 result.put("truncated", isPackageListTruncated(overview));
-                AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_PACKAGE", result,
-                    composer().packageDetails(result), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.PACKAGE, result,
+                    composer().packageDetails(presentation(result)),
+                    CUSTOMER_INSIGHT_QUICK_REPLIES);
                 applyToolExecution(response, executions.toArray(new ToolExecutionResult[0]));
                 return response;
             }
             case MEAL_BALANCE_CHANGE_QUERY: {
-                if (businessQueryDataClient == null) return insightResponse(session, "BUSINESS_QUERY_CUSTOMER", Map.of(), "餐数变化查询服务暂不可用，请稍后重试。", CUSTOMER_INSIGHT_QUICK_REPLIES);
-                ToolExecutionResult overviewExecution = executeBusinessTool(orchestrator, "BUSINESS_QUERY_CUSTOMER",
-                    slots, "customerOverview", null, List.of());
+                if (businessQueryDataClient == null) return insightResponse(session, BusinessResponseTypeCatalog.CUSTOMER, Map.of(), "餐数变化查询服务暂不可用，请稍后重试。", CUSTOMER_INSIGHT_QUICK_REPLIES);
+                ToolExecutionResult overviewExecution = executeBusinessTool(orchestrator, BusinessResponseTypeCatalog.CUSTOMER,
+                    slots, ToolCatalog.CUSTOMER_OVERVIEW, null, List.of());
                 Map<String, Object> overview = overviewExecution.result();
                 Long resolvedCustomerId = overview.get("customerId") instanceof Number ? ((Number) overview.get("customerId")).longValue() : customerId;
                 if (resolvedCustomerId == null) {
-                    AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_CUSTOMER", overview,
-                        composer().customerOverview(overview), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                    AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.CUSTOMER, overview,
+                        composer().customerOverview(presentation(overview)),
+                        CUSTOMER_INSIGHT_QUICK_REPLIES);
                     applyToolExecution(response, overviewExecution);
                     return response;
                 }
                 DiagnosisSlots resolvedSlots = conversationStateSupport.copy(slots);
                 resolvedSlots.setCustomerId(resolvedCustomerId);
-                ToolExecutionResult verificationExecution = executeBusinessTool(orchestrator, "BUSINESS_QUERY_VERIFICATION",
-                    resolvedSlots, "listVerifications", null, List.of());
-                ToolExecutionResult refundExecution = executeBusinessTool(orchestrator, "BUSINESS_QUERY_REFUND",
-                    resolvedSlots, "listRefunds", null, List.of());
-                ToolExecutionResult cachedOverviewExecution = executeBusinessTool(orchestrator, "BUSINESS_QUERY_CUSTOMER",
-                    slots, "customerOverview", null, List.of());
+                ToolExecutionResult verificationExecution = executeBusinessTool(orchestrator, BusinessResponseTypeCatalog.VERIFICATION,
+                    resolvedSlots, ToolCatalog.LIST_VERIFICATIONS, null, List.of());
+                ToolExecutionResult refundExecution = executeBusinessTool(orchestrator, BusinessResponseTypeCatalog.REFUND,
+                    resolvedSlots, ToolCatalog.LIST_REFUNDS, null, List.of());
+                ToolExecutionResult cachedOverviewExecution = executeBusinessTool(orchestrator, BusinessResponseTypeCatalog.CUSTOMER,
+                    slots, ToolCatalog.CUSTOMER_OVERVIEW, null, List.of());
                 Map<String, Object> changeResult = new LinkedHashMap<>(overview);
                 changeResult.put("verificationRecordCount", verificationExecution.result().getOrDefault("total", 0));
                 changeResult.put("refundRecordCount", refundExecution.result().getOrDefault("total", 0));
-                AgentChatResponse response = insightResponse(session, "BUSINESS_QUERY_CUSTOMER", changeResult,
-                    composer().mealBalanceChange(overview, verificationExecution.result(), refundExecution.result()), CUSTOMER_INSIGHT_QUICK_REPLIES);
+                AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.CUSTOMER, changeResult,
+                    composer().mealBalanceChange(presentation(overview),
+                        presentation(verificationExecution.result()),
+                        presentation(refundExecution.result())),
+                    CUSTOMER_INSIGHT_QUICK_REPLIES);
                 applyToolExecution(response, overviewExecution, verificationExecution, refundExecution, cachedOverviewExecution);
                 return response;
             }
@@ -1353,6 +1392,11 @@ public class DefaultConversationHandler implements ConversationHandler {
 
     /** 返回本轮业务查询使用的统一固定话术组装器。 */
     private BusinessAnswerComposer composer() { return businessQueryChatService.responseFactory().answerComposer(); }
+
+    /** 将兼容展示 Map 隔离在 Handler 边界，Presenter 只消费强类型结果。 */
+    private BusinessPresentationResult presentation(Map<String, Object> result) {
+        return BusinessPresentationResult.fromLegacyMap(result);
+    }
 
     /** 从客户概览的受控套餐摘要提取最多五个父套餐标识，拒绝用户自由传入套餐 ID。 */
     @SuppressWarnings("unchecked")
@@ -1371,7 +1415,7 @@ public class DefaultConversationHandler implements ConversationHandler {
 
     /** 构造仅从客户套餐摘要派生套餐 ID 的受控规格查询计划。 */
     private AgentQueryPlan packageDetailPlan(DiagnosisSlots slots, Long packageId) {
-        AgentQueryPlan plan = buildQueryPlan("BUSINESS_QUERY_PACKAGE", slots);
+        AgentQueryPlan plan = buildQueryPlan(BusinessResponseTypeCatalog.PACKAGE, slots);
         plan.getEntities().setPackageId(packageId);
         return plan;
     }
@@ -1414,137 +1458,21 @@ public class DefaultConversationHandler implements ConversationHandler {
     private AgentChatResponse insightResponse(MealPlanChatSession session, String responseType,
                                               Map<String, Object> insightResult, String message,
                                               List<String> quickReplies) {
-        captureBusinessFocus(session, responseType, insightResult);
+        MDC.put("capabilityId", safe(responseType));
+        BusinessPresentationResult presentationResult = presentation(insightResult);
+        resultPipeline.captureBusinessFocus(session, responseType, presentationResult);
         AgentChatResponse response = businessQueryChatService.responseFactory().create(session.getSessionId(), conversationStateSupport.copy(session.getSlots()),
             conversationStateSupport.copyMap(session.getSlots().getSlotConfidence()), session.getConversationState().getStage(),
-            responseType, insightResult, message, quickReplies);
-        captureLastBusinessQueryContext(session, response);
+            responseType, presentationResult, message, quickReplies);
+        resultPipeline.captureLastBusinessQueryContext(session, response);
         response.setActiveTaskStack(session.getConversationState().getTaskStack());
         return response;
-    }
-
-    /** 从已脱敏的聊天响应提取下一轮重新规划所需摘要，禁止保存工具原始响应和客户敏感字段。 */
-    @SuppressWarnings("unchecked")
-    private void captureLastBusinessQueryContext(MealPlanChatSession session, AgentChatResponse response) {
-        if (session == null || response == null || response.getQueryPlan() == null || !isBusinessResponse(response.getResponseType())) return;
-        LastBusinessQueryContext context = new LastBusinessQueryContext();
-        context.setResponseType(response.getResponseType());
-        context.setQueryTarget(queryTarget(response.getResponseType()));
-        context.setDomain(response.getQueryPlan().getDomain() == null ? null : response.getQueryPlan().getDomain().name());
-        context.setQueryPlanFingerprint(queryPlanFingerprint(response.getQueryPlan()));
-        context.setRecordDate(response.getQueryPlan().getFilters() == null ? null : response.getQueryPlan().getFilters().getRecordDate());
-        context.setStartDate(response.getQueryPlan().getFilters() == null ? null : response.getQueryPlan().getFilters().getStartDate());
-        context.setEndDate(response.getQueryPlan().getFilters() == null ? null : response.getQueryPlan().getFilters().getEndDate());
-        context.setMetric(response.getQueryPlan().getMetrics() == null || response.getQueryPlan().getMetrics().isEmpty()
-            ? null : response.getQueryPlan().getMetrics().get(0).name());
-        context.setMealScope(response.getQueryPlan().getMealScope());
-        context.setAssistantSummary(limitText(response.getAssistantMessage(), 160));
-        context.setQueriedAt(OffsetDateTime.now(ZoneOffset.ofHours(8)));
-        Map<String, Object> shape = new LinkedHashMap<>();
-        Map<String, Object> result = response.getInsightResult();
-        if (result != null && result.get("total") instanceof Number) shape.put("total", result.get("total"));
-        if ("BUSINESS_QUERY_OPERATION_ACTIVE".equals(response.getResponseType()) && result != null && result.get("total") instanceof Number) {
-            ConversationContextHandle handle = new ConversationContextHandle();
-            handle.setHandleId("ctx-" + java.util.UUID.randomUUID()); handle.setKind(ContextHandleKind.ENTITY_SET);
-            handle.setEntityType(SemanticEntityType.CUSTOMER); handle.setDefinitionId("AGENT_ACTIVE_CUSTOMER_V1");
-            handle.setCardinality(((Number) result.get("total")).intValue());
-            handle.setSafeDescriptor(Map.of("metric", "ACTIVE_CUSTOMER_COUNT"));
-            handle.setAllowedOperations(List.of(SemanticOperation.COUNT, SemanticOperation.PROJECT, SemanticOperation.GROUP, SemanticOperation.FILTER));
-            handle.setSalience(1D); handle.setCreatedAt(context.getQueriedAt()); handle.setExpiresAt(context.getQueriedAt().plusMinutes(30));
-            context.setContextHandles(List.of(handle));
-        }
-        if ("BUSINESS_QUERY_SCHEDULED_MENU".equals(response.getResponseType()) && result != null && result.get("groups") instanceof List) {
-            Map<String, Integer> mealTypes = new LinkedHashMap<>();
-            Map<String, Integer> dishTypes = new LinkedHashMap<>();
-            for (Object groupValue : (List<?>) result.get("groups")) {
-                if (!(groupValue instanceof Map)) continue;
-                Map<String, Object> group = (Map<String, Object>) groupValue;
-                String mealType = String.valueOf(group.get("mealTypeCode"));
-                Object total = group.get("total");
-                mealTypes.put(mealType, total instanceof Number ? ((Number) total).intValue() : 0);
-                Object items = group.get("items");
-                if (items instanceof List) for (Object itemValue : (List<?>) items) {
-                    if (itemValue instanceof Map) {
-                        String dishType = String.valueOf(((Map<?, ?>) itemValue).get("dishTypeCode"));
-                        dishTypes.put(dishType, dishTypes.getOrDefault(dishType, 0) + 1);
-                    }
-                }
-            }
-            shape.put("mealTypes", mealTypes);
-            shape.put("dishTypeDistribution", dishTypes);
-            shape.put("warnings", response.getWarnings() == null ? List.of() : new ArrayList<>(response.getWarnings()));
-        }
-        context.setResultShape(shape);
-        session.getConversationState().setLastBusinessQueryContext(context);
-        response.setLastBusinessQueryContext(context);
-    }
-
-    /** 计算不可逆的受控查询计划指纹，用于阻止纠错轮重复执行同一计划。 */
-    private String queryPlanFingerprint(AgentQueryPlan plan) {
-        if (plan == null) return "";
-        String material = String.valueOf(plan.getDomain()) + "|" + plan.getAction() + "|" + plan.getMealScope() + "|"
-            + (plan.getFilters() == null ? "" : plan.getFilters().getRecordDate()) + "|"
-            + (plan.getFilters() == null ? "" : plan.getFilters().getMealType()) + "|" + plan.getToolNames();
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(material.getBytes(StandardCharsets.UTF_8));
-            StringBuilder encoded = new StringBuilder("sha256:");
-            for (byte value : digest) encoded.append(String.format("%02x", value));
-            return encoded.toString();
-        } catch (Exception ignored) {
-            return "sha256:unavailable";
-        }
-    }
-
-    /** 将响应类型映射为受控查询目标，未登记类型不保存为可纠错上下文。 */
-    private BusinessQueryTarget queryTarget(String responseType) {
-        if ("BUSINESS_QUERY_SCHEDULED_MENU".equals(responseType)) return BusinessQueryTarget.SCHEDULED_MENU;
-        if ("BUSINESS_QUERY_MEAL_PLAN".equals(responseType)) return BusinessQueryTarget.CUSTOMER_MEAL_PLAN;
-        if ("BUSINESS_QUERY_DISH_CANDIDATES".equals(responseType)) return BusinessQueryTarget.DISH_CANDIDATES;
-        if ("BUSINESS_QUERY_ORDER".equals(responseType)) return BusinessQueryTarget.ORDER;
-        if ("BUSINESS_QUERY_VERIFICATION".equals(responseType)) return BusinessQueryTarget.VERIFICATION;
-        if ("BUSINESS_QUERY_REFUND".equals(responseType)) return BusinessQueryTarget.REFUND;
-        return BusinessQueryTarget.CUSTOMER;
-    }
-
-    private boolean isBusinessResponse(String responseType) {
-        return responseType != null && responseType.startsWith("BUSINESS_QUERY");
-    }
-
-    /** 截断仅用于受控上下文的助手摘要，避免历史话术无限增长。 */
-    private String limitText(String value, int maxLength) {
-        if (value == null) return null;
-        return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 
     private AgentQueryPlan buildQueryPlan(String responseType, DiagnosisSlots slots) {
         return businessQueryChatService.plan(responseType, slots);
     }
 
-    /**
-     * 将受控查询成功返回的稳定对象标识回写到会话，供刷新、多实例和后续指代查询复用。
-     *
-     * @param session 当前会话
-     * @param responseType 受控查询响应类型
-     * @param result 已脱敏的查询结果
-     */
-    @SuppressWarnings("unchecked")
-    private void captureBusinessFocus(MealPlanChatSession session, String responseType, Map<String, Object> result) {
-        if (session == null || result == null || !Boolean.TRUE.equals(result.getOrDefault("present", true))) return;
-        DiagnosisSlots slots = session.getSlots();
-        if (result.get("customerId") instanceof Number) slots.setCustomerId(((Number) result.get("customerId")).longValue());
-        if (result.get("customerCode") != null) slots.setCustomerCode(String.valueOf(result.get("customerCode")));
-        if (!(result.get("items") instanceof List) || ((List<?>) result.get("items")).size() != 1) return;
-        Object value = ((List<?>) result.get("items")).get(0);
-        if (!(value instanceof Map)) return;
-        Map<String, Object> item = (Map<String, Object>) value;
-        if ("BUSINESS_QUERY_ORDER".equals(responseType)) {
-            if (item.get("orderId") instanceof Number) slots.setOrderId(((Number) item.get("orderId")).longValue());
-            if (item.get("orderCode") != null) slots.setOrderCode(String.valueOf(item.get("orderCode")));
-        }
-        if ("BUSINESS_QUERY_MEAL_PLAN".equals(responseType) && item.get("customerMealPlanId") instanceof Number) {
-            slots.setMealPlanRecordId(((Number) item.get("customerMealPlanId")).longValue());
-        }
-    }
 
     /**
      * 构建“有餐未排”组合查询计划，计划内显式登记排餐查询和客户概览两个工具。
@@ -1553,8 +1481,9 @@ public class DefaultConversationHandler implements ConversationHandler {
      * @return 可交给编排器执行的组合 QueryPlan
      */
     private AgentQueryPlan mealBalanceNoPlanPlan(DiagnosisSlots slots) {
-        AgentQueryPlan plan = buildQueryPlan("BUSINESS_QUERY_MEAL_PLAN", slots);
-        plan.setToolNames(List.of("listMealPlans", "customerOverview"));
+        AgentQueryPlan plan = buildQueryPlan(BusinessResponseTypeCatalog.MEAL_PLAN, slots);
+        plan.setToolNames(List.of(ToolCatalog.LIST_MEAL_PLANS,
+            ToolCatalog.CUSTOMER_OVERVIEW));
         return plan;
     }
 
@@ -1582,6 +1511,7 @@ public class DefaultConversationHandler implements ConversationHandler {
                                        List<MissingSlot> missingSlots,
                                        List<String> quickReplies,
                                        String responseType) {
+        MDC.put("capabilityId", safe(responseType));
         AgentChatResponse response = new AgentChatResponse();
         response.setSessionId(session.getSessionId());
         response.setStatus(status);
@@ -1597,182 +1527,6 @@ public class DefaultConversationHandler implements ConversationHandler {
         response.setLastBusinessQueryContext(session.getConversationState().getLastBusinessQueryContext());
         response.setActiveTaskStack(session.getConversationState().getTaskStack());
         return response;
-    }
-
-    /**
-     * 纯槽位回复优先复用待执行语义；过期或仍缺条件时更新 Pending，不调用模型重新选择领域。
-     */
-    private BusinessQuestionAnalysis resolvePendingAnalysis(MealPlanChatSession session, String message) {
-        if (!pendingContextEnabled) {
-            clearPendingContext(session, false);
-            return null;
-        }
-        PendingBusinessQueryContext pending = session.getConversationState().getPendingBusinessQueryContext();
-        if (pending == null || !isPureSlotReply(message)) return null;
-        OffsetDateTime now = OffsetDateTime.now(businessTemporalResolver.getZoneId());
-        if (pending.isExpired(now) || pending.getAnalysis() == null) {
-            session.getConversationState().setPendingBusinessQueryContext(null);
-            session.getConversationState().getTaskStack().failActivePending();
-            return null;
-        }
-        BusinessQuestionAnalysis analysis = pending.getAnalysis();
-        analysis.setRequiresClarification(false);
-        analysis.setClarificationQuestion(null);
-        analysis.setAmbiguities(new ArrayList<>());
-        analysis = resolveTemporalAnalysis(analysis, session, true);
-        List<String> unresolved = unresolvedPendingFields(pending.getMissingFields(), analysis);
-        if (!unresolved.isEmpty()) {
-            analysis.setRequiresClarification(true);
-            analysis.setClarificationQuestion("还需要补充：" + String.join("、", unresolved) + "。");
-            pending.setMissingFields(unresolved);
-            session.getConversationState().setPendingBusinessQueryContext(pending);
-        }
-        return analysis;
-    }
-
-    /** 校验 Pending 声明的缺失字段是否已由本轮确定性槽位补齐。 */
-    private List<String> unresolvedPendingFields(List<String> fields, BusinessQuestionAnalysis analysis) {
-        if (fields == null || fields.isEmpty()) return List.of();
-        List<String> unresolved = new ArrayList<>();
-        for (String field : fields) {
-            boolean resolved;
-            if ("recordDate".equals(field)) {
-                AgentQueryFilters filters = analysis.getFilters();
-                resolved = filters != null && (isNotBlank(filters.getRecordDate())
-                    || isNotBlank(filters.getStartDate()) && isNotBlank(filters.getEndDate()));
-            } else if ("mealType".equals(field)) {
-                resolved = analysis.getFilters() != null && isNotBlank(analysis.getFilters().getMealType());
-            } else if ("customer".equals(field) || "customerOrOrder".equals(field)) {
-                resolved = analysis.getEntities() != null && (analysis.getEntities().getCustomerId() != null
-                    || isNotBlank(analysis.getEntities().getCustomerCode()) || isNotBlank(analysis.getEntities().getCustomerName())
-                    || "customerOrOrder".equals(field) && (analysis.getEntities().getOrderId() != null || isNotBlank(analysis.getEntities().getOrderCode())));
-            } else {
-                resolved = false;
-            }
-            if (!resolved) unresolved.add(field);
-        }
-        return unresolved;
-    }
-
-    /**
-     * 判断输入是否只携带确定性槽位组合。允许“明天晚餐”“B3303 午餐”等组合，
-     * 但任何无法由日期、餐次、客户/订单标识完全消解的文本都会重新进入会话理解。
-     */
-    private boolean isPureSlotReply(String message) {
-        if (message == null) return false;
-        String text = message.trim();
-        if (text.isEmpty()) return false;
-        String remainder = text.replaceAll("今天|今日|昨天|昨日|明天|明日|本周|这周|下周|早餐|午餐|晚餐", "")
-            .replaceAll("\\d{4}-\\d{2}-\\d{2}", "").replaceAll("(?i)[A-Z]\\d{3,}", "").replaceAll("\\d{1,18}", "")
-            .replaceAll("[，,、/\\s]+", "");
-        return remainder.isEmpty();
-    }
-
-    /** 合并确定性槽位后解析相对时间，确保 QueryPlan 只接收 yyyy-MM-dd 日期。 */
-    private BusinessQuestionAnalysis resolveTemporalAnalysis(BusinessQuestionAnalysis analysis,
-                                                             MealPlanChatSession session,
-                                                             boolean pendingReused) {
-        if (analysis == null) return null;
-        mergeDeterministicSlots(analysis, session.getSlots());
-        if (pendingReused) analysis.setSource("PENDING_CONTEXT");
-        return businessTemporalResolver.resolve(analysis, session.getConversationState().getPendingBusinessQueryContext(),
-            session.getConversationState().getLastBusinessQueryContext());
-    }
-
-    /** 本轮明确提取的实体、日期和餐次优先于模型推断。 */
-    private void mergeDeterministicSlots(BusinessQuestionAnalysis analysis, DiagnosisSlots slots) {
-        if (slots == null) return;
-        if (analysis.getEntities() == null) analysis.setEntities(new me.zhengjie.agent.query.domain.AgentEntityReference());
-        if (slots.getCustomerId() != null && slots.getCustomerId() > 0) analysis.getEntities().setCustomerId(slots.getCustomerId());
-        if (isNotBlank(slots.getCustomerCode())) analysis.getEntities().setCustomerCode(slots.getCustomerCode());
-        if (isNotBlank(slots.getCustomerName())) analysis.getEntities().setCustomerName(slots.getCustomerName());
-        if (slots.getOrderId() != null && slots.getOrderId() > 0) analysis.getEntities().setOrderId(slots.getOrderId());
-        if (isNotBlank(slots.getOrderCode())) analysis.getEntities().setOrderCode(slots.getOrderCode());
-        AgentQueryFilters filters = analysis.getFilters() == null ? new AgentQueryFilters() : analysis.getFilters();
-        analysis.setFilters(filters);
-        if (isNotBlank(slots.getRecordDate())) filters.setRecordDate(slots.getRecordDate());
-        if (isNotBlank(slots.getStartDate()) && isNotBlank(slots.getEndDate())) {
-            filters.setRecordDate(null); filters.setStartDate(slots.getStartDate()); filters.setEndDate(slots.getEndDate());
-        }
-        if (isNotBlank(slots.getMealType())) filters.setMealType(slots.getMealType());
-    }
-
-    /** 保存待补语义，过期时间按配置业务时区生成，摘要仅包含登记指标或领域。 */
-    private void savePendingContext(MealPlanChatSession session, BusinessQuestionAnalysis analysis,
-                                    List<String> missingFields, String ignoredOriginalQuestion) {
-        if (session == null || analysis == null) return;
-        if (!pendingContextEnabled) {
-            session.getConversationState().setPendingBusinessQueryContext(null);
-            return;
-        }
-        OffsetDateTime now = OffsetDateTime.now(businessTemporalResolver.getZoneId());
-        PendingBusinessQueryContext pending = new PendingBusinessQueryContext();
-        pending.setAnalysis(analysis);
-        pending.setMissingFields(missingFields == null ? List.of() : new ArrayList<>(missingFields));
-        AgentMetricDefinition definition = analysis.getMetrics() == null || analysis.getMetrics().isEmpty()
-            ? null : AgentMetricCatalog.definition(analysis.getMetrics().get(0));
-        pending.setOriginalQuestionSummary(limitText(definition == null
-            ? (analysis.getDomains() == null || analysis.getDomains().isEmpty() ? "受控业务查询" : analysis.getDomains().get(0).name())
-            : definition.getSemanticDescription(), 120));
-        pending.setSourceRequestId(MDC.get(REQUEST_ID_KEY));
-        pending.setCreatedAt(now);
-        pending.setExpiresAt(now.plusMinutes(pendingContextTtlMinutes));
-        session.getConversationState().setPendingBusinessQueryContext(pending);
-        session.getConversationState().getTaskStack().registerPending(pending);
-    }
-
-    /** 清理 Pending 上下文时同步结束对应任务，避免跨实例恢复已执行或已取消的语义。 */
-    private void clearPendingContext(MealPlanChatSession session, boolean completed) {
-        if (session == null) return;
-        session.getConversationState().setPendingBusinessQueryContext(null);
-        if (completed) session.getConversationState().getTaskStack().completeActivePending();
-        else session.getConversationState().getTaskStack().cancelActivePending();
-    }
-
-    /** 根据受控分析结构生成待补字段，不使用用户原文猜测缺失项。 */
-    private List<String> missingFields(BusinessQuestionAnalysis analysis) {
-        List<String> missing = new ArrayList<>();
-        if (analysis == null) return missing;
-        if (analysis.getFilters() == null || !isNotBlank(analysis.getFilters().getRecordDate())
-            && !(isNotBlank(analysis.getFilters().getStartDate()) && isNotBlank(analysis.getFilters().getEndDate()))) {
-            missing.add("recordDate");
-        }
-        if (analysis.getAmbiguities() != null) analysis.getAmbiguities().forEach(item -> {
-            if (item != null && isNotBlank(item.getField()) && !missing.contains(item.getField())) missing.add(item.getField());
-        });
-        return missing;
-    }
-
-    /** 将解析后的日期同步到响应槽位，供主系统会话字段和下一轮确定性提取复用。 */
-    private void applyResolvedFiltersToSlots(MealPlanChatSession session, AgentQueryFilters filters) {
-        if (session == null || filters == null) return;
-        session.getSlots().setRecordDate(filters.getRecordDate());
-        session.getSlots().setStartDate(filters.getStartDate());
-        session.getSlots().setEndDate(filters.getEndDate());
-        if (isNotBlank(filters.getMealType())) session.getSlots().setMealType(filters.getMealType());
-    }
-
-    /** 创建不含原始问题、Prompt 和结果数据的语义追踪摘要。 */
-    private SemanticTraceSummary semanticTrace(BusinessQuestionAnalysis analysis, boolean pendingReused) {
-        SemanticTraceSummary trace = new SemanticTraceSummary();
-        trace.setSemanticSource(analysis == null ? null : analysis.getSource());
-        trace.setFallbackReason(analysis == null ? null : analysis.getFallbackReason());
-        trace.setSemanticConfidence(analysis == null ? null : analysis.getConfidence());
-        trace.setSemanticCatalogVersion(analysis == null || analysis.getSemanticCatalogVersion() == null
-            ? AgentMetricCatalog.VERSION : analysis.getSemanticCatalogVersion());
-        if (analysis != null && analysis.getTemporal() != null && analysis.getTemporal().getExpression() != null) {
-            trace.setTemporalExpression(analysis.getTemporal().getExpression().name());
-        }
-        if (analysis != null && analysis.getFilters() != null) {
-            trace.setResolvedRecordDate(analysis.getFilters().getRecordDate());
-            trace.setResolvedStartDate(analysis.getFilters().getStartDate());
-            trace.setResolvedEndDate(analysis.getFilters().getEndDate());
-        }
-        trace.setPendingContextReused(pendingReused);
-        trace.setInteractionMode(analysis == null || analysis.getInteractionMode() == null ? null : analysis.getInteractionMode().name());
-        double confidence = analysis == null ? 0D : analysis.getConfidence();
-        trace.setConfidenceBucket(confidence >= .90D ? "HIGH" : confidence >= .80D ? "MEDIUM" : "LOW");
-        return trace;
     }
 
     /**

@@ -159,7 +159,7 @@
 - 语义追踪只记录来源、稳定 fallback 原因、目录版本、时间枚举、解析日期和 Pending 复用标记。审计升级脚本为 `eladmin/sql/alter_agent_business_query_audit_semantic_trace.sql`。
 # v2 跨服务契约（2026-07-24）
 
-Agent 服务间聊天契约的唯一权威定义为 `agent-service/src/main/resources/openapi/agent-service-v2.yaml`。新增内部路径 `POST /api/agent/v2/chat` 仅接收主系统组装的可信执行信封：前端消息字段与 `availableTools`、会话上下文、Pending/Last Context、任务栈严格分离；响应固定回传 `contractVersion`、`requestId`、`clientMessageId`。既有接口暂不删除，主系统切换后至少保留一个完整发布周期。
+Agent 服务间聊天契约的唯一权威定义为 `agent-service/src/main/resources/openapi/agent-service-v2.yaml`。内部路径 `POST /api/agent/v2/chat` 仅接收主系统组装的可信执行信封：前端消息字段与 `availableTools`、会话上下文、Pending/Last Context、任务栈严格分离；响应固定回传 `contractVersion`、`requestId`、`clientMessageId`。由于当前代码尚未上线正式环境，未发布的 v1 服务间路径已直接删除，不提供双轨切换。
 
 ## 6. 2026-07-29 架构调整
 

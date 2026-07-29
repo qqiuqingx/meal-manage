@@ -1,5 +1,7 @@
 package me.zhengjie.agent.query.domain;
 
+import me.zhengjie.agent.tool.ToolCatalog;
+
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -39,61 +41,61 @@ public final class AgentMetricCatalog {
         register(result, AgentQueryMetric.DAILY_SCHEDULED_CUSTOMER_COUNT, "已排餐客户数",
             "指定业务日已生成有效排餐的客户去重数", AgentQueryDomain.OPERATION_STATISTICS,
             AgentDefaultTemporalPolicy.CURRENT_DAY, true, "客户", "scheduledCustomerCount",
-            List.of("已排餐客户", "已经安排餐"), "getDailyCustomerWorkload", "BUSINESS_QUERY_OPERATION_SCHEDULED",
+            List.of("已排餐客户", "已经安排餐"), ToolCatalog.GET_DAILY_CUSTOMER_WORKLOAD, "BUSINESS_QUERY_OPERATION_SCHEDULED",
             AgentQueryDimension.RECORD_DATE, AgentQueryDimension.MEAL_TYPE, AgentQueryDimension.PACKAGE, AgentQueryDimension.CUSTOMER_SOURCE);
         register(result, AgentQueryMetric.DAILY_VERIFIED_CUSTOMER_COUNT, "已核销客户数",
             "指定业务日已完成有效核销的客户去重数", AgentQueryDomain.OPERATION_STATISTICS,
             AgentDefaultTemporalPolicy.CURRENT_DAY, true, "客户", "verifiedCustomerCount",
-            List.of("已核销客户", "已经核销"), "getDailyCustomerWorkload", "BUSINESS_QUERY_OPERATION_VERIFIED",
+            List.of("已核销客户", "已经核销"), ToolCatalog.GET_DAILY_CUSTOMER_WORKLOAD, "BUSINESS_QUERY_OPERATION_VERIFIED",
             AgentQueryDimension.RECORD_DATE, AgentQueryDimension.MEAL_TYPE, AgentQueryDimension.PACKAGE, AgentQueryDimension.CUSTOMER_SOURCE);
         register(result, AgentQueryMetric.DAILY_UNVERIFIED_CUSTOMER_COUNT, "待核销客户数",
             "指定业务日已排餐但尚未核销的客户去重数", AgentQueryDomain.OPERATION_STATISTICS,
             AgentDefaultTemporalPolicy.CURRENT_DAY, true, "客户", "unverifiedCustomerCount",
-            List.of("排了但没核销", "待核销客户"), "getDailyCustomerWorkload", "BUSINESS_QUERY_OPERATION_UNVERIFIED",
+            List.of("排了但没核销", "待核销客户"), ToolCatalog.GET_DAILY_CUSTOMER_WORKLOAD, "BUSINESS_QUERY_OPERATION_UNVERIFIED",
             AgentQueryDimension.RECORD_DATE, AgentQueryDimension.MEAL_TYPE, AgentQueryDimension.PACKAGE, AgentQueryDimension.CUSTOMER_SOURCE);
         register(result, AgentQueryMetric.DAILY_EXPECTED_CUSTOMER_COUNT, "应服务客户数",
             "指定业务日按订单有效期、餐次、排餐模式、排除规则和餐数池上限应服务的客户数", AgentQueryDomain.OPERATION_STATISTICS,
             AgentDefaultTemporalPolicy.CURRENT_DAY, true, "客户", "expectedCustomerCount",
-            List.of("应该送餐", "应服务客户"), "getDailyCustomerWorkload", "BUSINESS_QUERY_OPERATION_EXPECTED",
+            List.of("应该送餐", "应服务客户"), ToolCatalog.GET_DAILY_CUSTOMER_WORKLOAD, "BUSINESS_QUERY_OPERATION_EXPECTED",
             AgentQueryDimension.RECORD_DATE, AgentQueryDimension.MEAL_TYPE, AgentQueryDimension.PACKAGE, AgentQueryDimension.CUSTOMER_SOURCE);
         register(result, AgentQueryMetric.DAILY_UNSCHEDULED_CUSTOMER_COUNT, "待排餐客户数",
             "指定业务日应服务但尚未生成有效排餐的客户数，不等同于所有仍有餐数的客户", AgentQueryDomain.OPERATION_STATISTICS,
             AgentDefaultTemporalPolicy.CURRENT_DAY, true, "客户", "unscheduledCustomerCount",
-            List.of("有餐数没有排餐", "待排餐客户", "还没安排餐"), "getDailyCustomerWorkload", "BUSINESS_QUERY_OPERATION_UNSCHEDULED",
+            List.of("有餐数没有排餐", "待排餐客户", "还没安排餐"), ToolCatalog.GET_DAILY_CUSTOMER_WORKLOAD, "BUSINESS_QUERY_OPERATION_UNSCHEDULED",
             AgentQueryDimension.RECORD_DATE, AgentQueryDimension.MEAL_TYPE, AgentQueryDimension.PACKAGE, AgentQueryDimension.CUSTOMER_SOURCE);
         register(result, AgentQueryMetric.CUSTOMER_PROFILE_COUNT, "客户档案总数",
             "当前授权数据范围内已录入系统的客户档案数量", AgentQueryDomain.OPERATION_STATISTICS,
             AgentDefaultTemporalPolicy.NONE, false, "位", "total",
-            List.of("系统客户总数", "客户档案总数", "录入客户数"), "getCustomerProfileCount", "BUSINESS_QUERY_OPERATION_CUSTOMER_TOTAL");
+            List.of("系统客户总数", "客户档案总数", "录入客户数"), ToolCatalog.GET_CUSTOMER_PROFILE_COUNT, "BUSINESS_QUERY_OPERATION_CUSTOMER_TOTAL");
         register(result, AgentQueryMetric.ACTIVE_CUSTOMER_COUNT, "活跃客户数",
             "存在进行中且按订单餐数与有效核销实时计算后仍有任一餐数池余额的客户去重数，不要求当天未排餐", AgentQueryDomain.OPERATION_STATISTICS,
             AgentDefaultTemporalPolicy.NONE, false, "客户", "total",
-            List.of("还有餐数的客户", "活跃客户"), "getActiveCustomerSummary", "BUSINESS_QUERY_OPERATION_ACTIVE",
+            List.of("还有餐数的客户", "活跃客户"), ToolCatalog.GET_ACTIVE_CUSTOMER_SUMMARY, "BUSINESS_QUERY_OPERATION_ACTIVE",
             new AgentQueryDimension[0]);
         register(result, AgentQueryMetric.ACTIVE_CUSTOMER_MEAL_BALANCE_DETAIL, "活跃客户餐数余额明细",
             "对已登记且授权的活跃客户集合，按客户返回早餐和午晚餐剩余餐数，不返回金额或联系方式", AgentQueryDomain.OPERATION_STATISTICS,
             AgentDefaultTemporalPolicy.NONE, false, "客户", "items",
-            List.of(), "listActiveCustomerMealBalances", "BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES",
+            List.of(), ToolCatalog.LIST_ACTIVE_CUSTOMER_MEAL_BALANCES, "BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES",
             AgentQueryDimension.CUSTOMER);
         register(result, AgentQueryMetric.ACTIVE_ORDER_COUNT, "进行中订单数", "状态为进行中且未删除的订单数",
             AgentQueryDomain.OPERATION_STATISTICS, AgentDefaultTemporalPolicy.NONE, false, "订单", "total",
-            List.of("进行中订单"), "getActiveCustomerSummary", "BUSINESS_QUERY_OPERATION_ACTIVE_ORDER",
+            List.of("进行中订单"), ToolCatalog.GET_ACTIVE_CUSTOMER_SUMMARY, "BUSINESS_QUERY_OPERATION_ACTIVE_ORDER",
             AgentQueryDimension.PACKAGE, AgentQueryDimension.CUSTOMER_SOURCE, AgentQueryDimension.ORDER_STATUS);
         register(result, AgentQueryMetric.EXPIRING_ORDER_COUNT, "即将到期订单数", "指定日期范围内到期的进行中订单数",
             AgentQueryDomain.OPERATION_STATISTICS, AgentDefaultTemporalPolicy.REQUIRE_EXPLICIT, false, "订单", "total",
-            List.of("即将到期", "快到期订单"), "getExpiringOrderSummary", "BUSINESS_QUERY_OPERATION_EXPIRING",
+            List.of("即将到期", "快到期订单"), ToolCatalog.GET_EXPIRING_ORDER_SUMMARY, "BUSINESS_QUERY_OPERATION_EXPIRING",
             AgentQueryDimension.PACKAGE, AgentQueryDimension.CUSTOMER_SOURCE);
         register(result, AgentQueryMetric.MEAL_PLAN_FAILURE_COUNT, "排餐失败数", "指定业务日、可选餐次的排餐失败记录数",
             AgentQueryDomain.OPERATION_STATISTICS, AgentDefaultTemporalPolicy.CURRENT_DAY, true, "记录", "mealPlanFailureCount",
-            List.of("排餐失败", "生成失败"), "getMealPlanFailureSummary", "BUSINESS_QUERY_OPERATION_FAILURE",
+            List.of("排餐失败", "生成失败"), ToolCatalog.GET_MEAL_PLAN_FAILURE_SUMMARY, "BUSINESS_QUERY_OPERATION_FAILURE",
             AgentQueryDimension.RECORD_DATE, AgentQueryDimension.MEAL_TYPE, AgentQueryDimension.PACKAGE);
         register(result, AgentQueryMetric.VERIFICATION_COUNT, "核销次数", "指定日期或日期范围内未删除的有效核销次数",
             AgentQueryDomain.VERIFICATION, AgentDefaultTemporalPolicy.REQUIRE_EXPLICIT, false, "餐次", "total",
-            List.of("核销次数", "核销了多少餐"), "listVerifications", "BUSINESS_QUERY_VERIFICATION",
+            List.of("核销次数", "核销了多少餐"), ToolCatalog.LIST_VERIFICATIONS, "BUSINESS_QUERY_VERIFICATION",
             AgentQueryDimension.RECORD_DATE, AgentQueryDimension.MEAL_TYPE, AgentQueryDimension.VERIFICATION_STATUS);
         register(result, AgentQueryMetric.REFUND_COUNT, "退餐次数", "指定日期或日期范围内的退餐记录数",
             AgentQueryDomain.REFUND, AgentDefaultTemporalPolicy.REQUIRE_EXPLICIT, false, "记录", "total",
-            List.of("退餐次数"), "listRefunds", "BUSINESS_QUERY_REFUND",
+            List.of("退餐次数"), ToolCatalog.LIST_REFUNDS, "BUSINESS_QUERY_REFUND",
             AgentQueryDimension.RECORD_DATE, AgentQueryDimension.MEAL_TYPE);
         return Map.copyOf(result);
     }

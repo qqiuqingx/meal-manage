@@ -13,6 +13,26 @@ import java.util.Map;
 
 /** 工具描述的唯一权威来源；旧注册表仅作为兼容门面读取此目录。 */
 public final class ToolCatalog {
+    public static final String RESOLVE_CUSTOMER = "resolveCustomer";
+    public static final String CUSTOMER_OVERVIEW = "customerOverview";
+    public static final String LIST_ORDERS = "listOrders";
+    public static final String ORDER_DETAIL = "orderDetail";
+    public static final String LIST_MEAL_PLANS = "listMealPlans";
+    public static final String LIST_VERIFICATIONS = "listVerifications";
+    public static final String LIST_REFUNDS = "listRefunds";
+    public static final String PACKAGE_DETAIL = "packageDetail";
+    public static final String LIST_DISHES = "listDishes";
+    public static final String LIST_SCHEDULED_DISHES = "listScheduledDishes";
+    public static final String PREVIEW_DISH_CANDIDATES = "previewDishCandidates";
+    public static final String EXPLAIN_RULE = "explainRule";
+    public static final String GET_DAILY_CUSTOMER_WORKLOAD = "getDailyCustomerWorkload";
+    public static final String GET_CUSTOMER_PROFILE_COUNT = "getCustomerProfileCount";
+    public static final String GET_ACTIVE_CUSTOMER_SUMMARY = "getActiveCustomerSummary";
+    public static final String LIST_ACTIVE_CUSTOMER_MEAL_BALANCES =
+        "listActiveCustomerMealBalances";
+    public static final String GET_EXPIRING_ORDER_SUMMARY = "getExpiringOrderSummary";
+    public static final String GET_MEAL_PLAN_FAILURE_SUMMARY = "getMealPlanFailureSummary";
+
     public static final String GET_CUSTOMER_PROFILE = "getCustomerProfile";
     public static final String LIST_CUSTOMER_ORDERS = "listCustomerOrders";
     public static final String GET_MEAL_PLAN = "getMealPlan";
@@ -67,45 +87,45 @@ public final class ToolCatalog {
      */
     private static Map<String, BusinessToolInvoker> buildBusinessToolInvokers() {
         Map<String, BusinessToolInvoker> result = new LinkedHashMap<>();
-        result.put("resolveCustomer", (client, call) -> client.resolveCustomerTyped(call.entities().getCustomerId(),
+        result.put(RESOLVE_CUSTOMER, (client, call) -> client.resolveCustomerTyped(call.entities().getCustomerId(),
             call.entities().getCustomerCode(), call.entities().getCustomerName()).toPresentationMap());
-        result.put("customerOverview", (client, call) -> client.customerOverviewTyped(call.entities().getCustomerId(),
+        result.put(CUSTOMER_OVERVIEW, (client, call) -> client.customerOverviewTyped(call.entities().getCustomerId(),
             call.entities().getCustomerCode()).toPresentationMap());
-        result.put("listOrders", (client, call) -> client.listOrdersTyped(call.entities().getCustomerId(),
+        result.put(LIST_ORDERS, (client, call) -> client.listOrdersTyped(call.entities().getCustomerId(),
             orderStatus(call.filters()), page(call.filters()), size(call.filters())).toPresentationMap());
-        result.put("orderDetail", (client, call) -> client.orderDetailTyped(call.entities().getOrderId(),
+        result.put(ORDER_DETAIL, (client, call) -> client.orderDetailTyped(call.entities().getOrderId(),
             call.entities().getOrderCode(), call.entities().getCustomerId()).toPresentationMap());
-        result.put("listMealPlans", (client, call) -> client.listMealPlansTyped(call.entities().getCustomerId(),
+        result.put(LIST_MEAL_PLANS, (client, call) -> client.listMealPlansTyped(call.entities().getCustomerId(),
             call.filters().getRecordDate(), call.filters().getStartDate(), call.filters().getEndDate(),
             call.filters().getMealType(), call.entities().getMealPlanRecordId(), page(call.filters()),
             size(call.filters())).toPresentationMap());
-        result.put("listVerifications", (client, call) -> client.listVerificationsTyped(call.entities().getCustomerId(),
+        result.put(LIST_VERIFICATIONS, (client, call) -> client.listVerificationsTyped(call.entities().getCustomerId(),
             call.entities().getOrderId(), call.filters().getMealType(), recentLimit(call.filters()),
             call.filters().getStartDate(), call.filters().getEndDate()).toPresentationMap());
-        result.put("listRefunds", (client, call) -> client.listRefundsTyped(call.entities().getCustomerId(),
+        result.put(LIST_REFUNDS, (client, call) -> client.listRefundsTyped(call.entities().getCustomerId(),
             call.entities().getOrderId(), recentLimit(call.filters()), call.filters().getStartDate(),
             call.filters().getEndDate()).toPresentationMap());
-        result.put("packageDetail", (client, call) ->
+        result.put(PACKAGE_DETAIL, (client, call) ->
             client.packageDetailTyped(call.entities().getPackageId()).toPresentationMap());
-        result.put("explainRule", (client, call) -> client.explainRuleTyped(call.ruleTopic()).toPresentationMap());
-        result.put("listDishes", (client, call) -> client.listDishesTyped(
+        result.put(EXPLAIN_RULE, (client, call) -> client.explainRuleTyped(call.ruleTopic()).toPresentationMap());
+        result.put(LIST_DISHES, (client, call) -> client.listDishesTyped(
             call.dishIds().stream().distinct().limit(20).toList()).toPresentationMap());
-        result.put("listScheduledDishes", (client, call) -> client.listScheduledDishes(
+        result.put(LIST_SCHEDULED_DISHES, (client, call) -> client.listScheduledDishes(
             call.filters().getRecordDate(), scheduledMenuMealTypes(call.plan())));
-        result.put("previewDishCandidates", (client, call) -> client.previewDishCandidates(
+        result.put(PREVIEW_DISH_CANDIDATES, (client, call) -> client.previewDishCandidates(
             call.entities().getCustomerId(), call.filters().getRecordDate(),
             call.filters().getMealType()).toPresentationMap());
         BusinessToolInvoker workload = (client, call) -> client.dailyCustomerWorkload(
             call.filters().getRecordDate(), call.filters().getMealType(),
             call.plan().getDimensions() == null ? List.of() : call.plan().getDimensions().stream()
                 .map(Enum::name).collect(java.util.stream.Collectors.toList()));
-        result.put("getDailyCustomerWorkload", workload);
-        result.put("getMealPlanFailureSummary", workload);
-        result.put("getCustomerProfileCount", (client, call) -> client.customerProfileCount());
-        result.put("getActiveCustomerSummary", (client, call) -> client.activeCustomerSummary());
-        result.put("listActiveCustomerMealBalances", (client, call) ->
+        result.put(GET_DAILY_CUSTOMER_WORKLOAD, workload);
+        result.put(GET_MEAL_PLAN_FAILURE_SUMMARY, workload);
+        result.put(GET_CUSTOMER_PROFILE_COUNT, (client, call) -> client.customerProfileCount());
+        result.put(GET_ACTIVE_CUSTOMER_SUMMARY, (client, call) -> client.activeCustomerSummary());
+        result.put(LIST_ACTIVE_CUSTOMER_MEAL_BALANCES, (client, call) ->
             client.activeCustomerBalances(page(call.filters()), size(call.filters())).toPresentationMap());
-        result.put("getExpiringOrderSummary", (client, call) ->
+        result.put(GET_EXPIRING_ORDER_SUMMARY, (client, call) ->
             client.expiringOrderSummary(call.filters().getStartDate(), call.filters().getEndDate()));
         return Map.copyOf(result);
     }
@@ -138,24 +158,24 @@ public final class ToolCatalog {
 
     private static Map<String, AgentBusinessToolDescriptor> buildBusinessTools() {
         Map<String, AgentBusinessToolDescriptor> result = new LinkedHashMap<>();
-        register(result, "resolveCustomer", "CUSTOMER", "LIST", "customerProfile:list", 10, "customerId|customerCode|customerName", "AgentCustomerCandidateDto[]");
-        register(result, "customerOverview", "CUSTOMER", "OVERVIEW", "customerProfile:list", 1, "customerId|customerCode", "AgentCustomerOverviewDto");
-        register(result, "listOrders", "ORDER", "LIST", "customerOrder:list", 20, "customerId|status|page|size", "AgentOrderSummaryDto[]");
-        register(result, "orderDetail", "ORDER", "DETAIL", "customerOrder:list", 1, "orderId|orderCode|customerId", "AgentOrderSummaryDto");
-        register(result, "listMealPlans", "MEAL_PLAN", "LIST", "mealPlan:list", 50, "customerId?|recordDate?|startDate?|endDate?|mealType?|customerMealPlanId?|page?|size?", "AgentMealPlanSummaryDto[]");
-        register(result, "listVerifications", "VERIFICATION", "LIST", "mealPlan:list", 50, "customerId|orderId|mealType|limit", "AgentVerificationLogDto[]");
-        register(result, "listRefunds", "REFUND", "LIST", "customerOrder:list+mealPlan:list", 50, "customerId|orderId|limit", "AgentRefundLogDto[]");
-        register(result, "packageDetail", "PACKAGE", "DETAIL", "package:list", 5, "parentPackageId", "AgentPackageSpecDto");
-        register(result, "listDishes", "DISH", "LIST", "dish:list", 20, "dishIds<=20", "AgentDishSummaryDto[]");
-        register(result, "listScheduledDishes", "DISH", "LIST", "mealPlan:list+dish:list", 20, "recordDate|mealTypes(LUNCH,DINNER)", "AgentScheduledMenuResponseDto");
-        register(result, "previewDishCandidates", "DISH", "LIST", "customerProfile:list+customerOrder:list+package:list+dish:list", 20, "customerId|recordDate|mealType", "AgentDishCandidatePreviewDto");
-        register(result, "explainRule", "BUSINESS_RULE", "EXPLAIN", "agentDiagnosis:list", 1, "topic", "AgentBusinessRuleDto");
-        register(result, "getDailyCustomerWorkload", "OPERATION_STATISTICS", "SUMMARY", "mealPlan:list", 100, "recordDate|mealType", "AgentDailyCustomerStatsDto");
-        register(result, "getCustomerProfileCount", "OPERATION_STATISTICS", "SUMMARY", "customerProfile:list", 1, "none", "AgentOperationCountDto");
-        register(result, "getActiveCustomerSummary", "OPERATION_STATISTICS", "SUMMARY", "customerOrder:list", 1, "dateRange", "AgentOperationCountDto");
-        register(result, "listActiveCustomerMealBalances", "OPERATION_STATISTICS", "BREAKDOWN", "customerOrder:list", 50, "activeCustomerSet|page|size", "ActiveCustomerBalanceResponse");
-        register(result, "getExpiringOrderSummary", "OPERATION_STATISTICS", "SUMMARY", "customerOrder:list", 1, "startDate|endDate", "AgentOperationCountDto");
-        register(result, "getMealPlanFailureSummary", "OPERATION_STATISTICS", "SUMMARY", "mealPlan:list", 1, "recordDate|mealType", "AgentDailyCustomerStatsDto");
+        register(result, RESOLVE_CUSTOMER, "CUSTOMER", "LIST", "customerProfile:list", 10, "customerId|customerCode|customerName", "AgentCustomerCandidateDto[]");
+        register(result, CUSTOMER_OVERVIEW, "CUSTOMER", "OVERVIEW", "customerProfile:list", 1, "customerId|customerCode", "AgentCustomerOverviewDto");
+        register(result, LIST_ORDERS, "ORDER", "LIST", "customerOrder:list", 20, "customerId|status|page|size", "AgentOrderSummaryDto[]");
+        register(result, ORDER_DETAIL, "ORDER", "DETAIL", "customerOrder:list", 1, "orderId|orderCode|customerId", "AgentOrderSummaryDto");
+        register(result, LIST_MEAL_PLANS, "MEAL_PLAN", "LIST", "mealPlan:list", 50, "customerId?|recordDate?|startDate?|endDate?|mealType?|customerMealPlanId?|page?|size?", "AgentMealPlanSummaryDto[]");
+        register(result, LIST_VERIFICATIONS, "VERIFICATION", "LIST", "mealPlan:list", 50, "customerId|orderId|mealType|limit", "AgentVerificationLogDto[]");
+        register(result, LIST_REFUNDS, "REFUND", "LIST", "customerOrder:list+mealPlan:list", 50, "customerId|orderId|limit", "AgentRefundLogDto[]");
+        register(result, PACKAGE_DETAIL, "PACKAGE", "DETAIL", "package:list", 5, "parentPackageId", "AgentPackageSpecDto");
+        register(result, LIST_DISHES, "DISH", "LIST", "dish:list", 20, "dishIds<=20", "AgentDishSummaryDto[]");
+        register(result, LIST_SCHEDULED_DISHES, "DISH", "LIST", "mealPlan:list+dish:list", 20, "recordDate|mealTypes(LUNCH,DINNER)", "AgentScheduledMenuResponseDto");
+        register(result, PREVIEW_DISH_CANDIDATES, "DISH", "LIST", "customerProfile:list+customerOrder:list+package:list+dish:list", 20, "customerId|recordDate|mealType", "AgentDishCandidatePreviewDto");
+        register(result, EXPLAIN_RULE, "BUSINESS_RULE", "EXPLAIN", "agentDiagnosis:list", 1, "topic", "AgentBusinessRuleDto");
+        register(result, GET_DAILY_CUSTOMER_WORKLOAD, "OPERATION_STATISTICS", "SUMMARY", "mealPlan:list", 100, "recordDate|mealType", "AgentDailyCustomerStatsDto");
+        register(result, GET_CUSTOMER_PROFILE_COUNT, "OPERATION_STATISTICS", "SUMMARY", "customerProfile:list", 1, "none", "AgentOperationCountDto");
+        register(result, GET_ACTIVE_CUSTOMER_SUMMARY, "OPERATION_STATISTICS", "SUMMARY", "customerOrder:list", 1, "dateRange", "AgentOperationCountDto");
+        register(result, LIST_ACTIVE_CUSTOMER_MEAL_BALANCES, "OPERATION_STATISTICS", "BREAKDOWN", "customerOrder:list", 50, "activeCustomerSet|page|size", "ActiveCustomerBalanceResponse");
+        register(result, GET_EXPIRING_ORDER_SUMMARY, "OPERATION_STATISTICS", "SUMMARY", "customerOrder:list", 1, "startDate|endDate", "AgentOperationCountDto");
+        register(result, GET_MEAL_PLAN_FAILURE_SUMMARY, "OPERATION_STATISTICS", "SUMMARY", "mealPlan:list", 1, "recordDate|mealType", "AgentDailyCustomerStatsDto");
         return Map.copyOf(result);
     }
 

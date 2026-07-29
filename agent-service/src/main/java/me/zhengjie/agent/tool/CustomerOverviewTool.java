@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class CustomerOverviewTool implements AgentTool<CustomerOverviewTool.Input, CustomerOverviewResponse> {
     private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
-        "customerOverview", "CUSTOMER", "OVERVIEW", "customerProfile:list", 1, 3000,
+        ToolCatalog.CUSTOMER_OVERVIEW, "CUSTOMER", "OVERVIEW", "customerProfile:list", 1, 3000,
         "INTERNAL", true, "v1", "v1", "CustomerOverviewTool.Input", "CustomerOverviewResponse"
     );
     private final BusinessQueryDataClient client;

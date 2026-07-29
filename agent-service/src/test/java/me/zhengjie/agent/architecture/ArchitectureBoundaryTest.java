@@ -3,6 +3,10 @@ package me.zhengjie.agent.architecture;
 import me.zhengjie.agent.application.conversation.ConversationCoordinator;
 import me.zhengjie.agent.chat.DefaultConversationHandler;
 import me.zhengjie.agent.chat.MealPlanChatServiceImpl;
+import me.zhengjie.agent.query.BusinessAnswerComposer;
+import me.zhengjie.agent.query.BusinessQueryResponseFactory;
+import me.zhengjie.agent.query.BusinessResultValidator;
+import me.zhengjie.agent.query.presentation.BusinessPresentationResult;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -54,6 +58,10 @@ class ArchitectureBoundaryTest {
         assertTrue(handler.contains("BusinessQueryIntentPolicy businessQueryIntentPolicy"));
         assertTrue(handler.contains("LegacyCustomerInsightAdapter legacyCustomerInsightAdapter"));
         assertTrue(handler.contains("BusinessQueryChatService businessQueryChatService"));
+        assertTrue(handler.contains(
+            "BusinessConversationUnderstandingPipeline understandingPipeline"));
+        assertTrue(handler.contains(
+            "BusinessConversationResultPipeline resultPipeline"));
         assertFalse(handler.contains(
             "this.businessQueryChatService = new BusinessQueryChatService"));
         assertFalse(handler.contains("new ContextReferenceResolver()"));
@@ -66,6 +74,21 @@ class ArchitectureBoundaryTest {
             "private String buildMealBalanceMessage(")) {
             assertFalse(handler.contains(forbidden), forbidden);
         }
+    }
+
+    @Test
+    void presenterAndResultValidationMustConsumeControlledDto() {
+        assertTrue(java.util.Arrays.stream(BusinessAnswerComposer.class.getDeclaredMethods())
+            .flatMap(method -> java.util.Arrays.stream(method.getParameterTypes()))
+            .noneMatch(java.util.Map.class::equals));
+        assertTrue(java.util.Arrays.stream(BusinessQueryResponseFactory.class.getDeclaredMethods())
+            .filter(method -> "create".equals(method.getName()))
+            .allMatch(method -> java.util.Arrays.asList(method.getParameterTypes())
+                .contains(BusinessPresentationResult.class)));
+        assertTrue(java.util.Arrays.stream(BusinessResultValidator.class.getDeclaredMethods())
+            .filter(method -> "validate".equals(method.getName()))
+            .allMatch(method -> method.getParameterTypes()[2]
+                == BusinessPresentationResult.class));
     }
 
     @Test

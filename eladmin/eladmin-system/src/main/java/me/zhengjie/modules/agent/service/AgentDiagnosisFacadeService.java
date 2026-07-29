@@ -9,12 +9,14 @@ public interface AgentDiagnosisFacadeService {
 
     AgentDiagnosisResponse diagnoseMealPlan(AgentDiagnosisRequest request);
 
-    AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId);
-
     /**
-     * 带短期客服访问上下文的聊天调用；保留旧接口以兼容既有诊断调用方。
+     * 使用 v2 可信信封所需的短期访问上下文执行聊天。
+     *
+     * @param request 主系统会话服务组装的聊天请求
+     * @param requestId 请求链路标识
+     * @param accessContext 主系统签发的短期访问上下文
+     * @return Agent 聊天响应
      */
-    default AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId, String accessContext) {
-        return chatMealPlan(request, requestId);
-    }
+    AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId,
+                                   String accessContext);
 }

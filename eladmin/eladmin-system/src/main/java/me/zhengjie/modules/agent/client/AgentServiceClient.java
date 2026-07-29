@@ -9,12 +9,14 @@ public interface AgentServiceClient {
 
     AgentDiagnosisResponse diagnoseMealPlan(AgentDiagnosisRequest request);
 
-    AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId);
-
     /**
-     * 带短期客服访问上下文的聊天调用；兼容旧实现时默认退回两参数调用。
+     * 使用 v2 可信信封和短期客服访问上下文调用 Agent 聊天接口。
+     *
+     * @param request 主系统从持久化会话组装的内部请求
+     * @param requestId 请求链路标识
+     * @param accessContext 主系统签发的短期访问上下文
+     * @return Agent v2 聊天响应
      */
-    default AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId, String accessContext) {
-        return chatMealPlan(request, requestId);
-    }
+    AgentChatResponse chatMealPlan(AgentChatRequest request, String requestId,
+                                   String accessContext);
 }

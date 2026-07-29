@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.analysis.domain.ConversationContextHandle;
 import me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
+import me.zhengjie.agent.infrastructure.observability.AgentMdcScope;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
 import java.util.List;
@@ -29,7 +30,7 @@ public class LlmConversationUnderstandingService implements ConversationUndersta
     /** {@inheritDoc} */
     @Override
     public ConversationUnderstandingResult understand(String message, DiagnosisSlots slots, List<ConversationContextHandle> handles) {
-        try {
+        try (AgentMdcScope ignored = AgentMdcScope.put("modelProfile", "default")) {
             String raw = client.prompt().system("你是内部客服会话理解器，只返回 JSON；不得输出 SQL、URL、工具名、表名或任意结果字段。上下文引用只能声明 requiredKind 和 requiredEntityType，禁止输出 resolvedHandleId。")
                 .user("Schema:" + converter.getFormat() + "。frames 最多三个。当前消息：" + safe(message) + "；确定性槽位：" + mapper.writeValueAsString(slots) + "；可引用句柄摘要：" + mapper.writeValueAsString(handles == null ? List.of() : handles))
                 .call().content();

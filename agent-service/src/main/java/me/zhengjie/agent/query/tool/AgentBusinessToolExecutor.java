@@ -7,6 +7,7 @@ import me.zhengjie.agent.query.client.BusinessQueryClientException;
 import me.zhengjie.agent.query.domain.AgentEntityReference;
 import me.zhengjie.agent.query.domain.AgentQueryFilters;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
+import me.zhengjie.agent.infrastructure.observability.AgentMdcScope;
 import me.zhengjie.agent.security.AgentAccessContextHolder;
 import me.zhengjie.agent.tool.ToolCatalog;
 
@@ -66,12 +67,15 @@ public class AgentBusinessToolExecutor {
             return ToolExecutionResult.failure("TOOL_DATA_BUDGET_EXCEEDED");
         }
         try {
-            Map<String, Object> result = ToolCatalog.execute(client, plan, toolName, ruleTopic, dishIds);
-            Map<String, Object> safe = result == null ? Map.of() : result;
-            roundCache.put(key, safe);
-            callCount++;
-            reservedDataItems += reservedItems;
-            return ToolExecutionResult.success(safe);
+            try (AgentMdcScope ignored = AgentMdcScope.put("toolName", toolName)) {
+                Map<String, Object> result =
+                    ToolCatalog.execute(client, plan, toolName, ruleTopic, dishIds);
+                Map<String, Object> safe = result == null ? Map.of() : result;
+                roundCache.put(key, safe);
+                callCount++;
+                reservedDataItems += reservedItems;
+                return ToolExecutionResult.success(safe);
+            }
         } catch (BusinessQueryClientException exception) {
             return ToolExecutionResult.failure(exception.getFailureCode());
         } catch (RuntimeException exception) {
@@ -99,9 +103,13 @@ public class AgentBusinessToolExecutor {
         if (descriptor == null) return MAX_DATA_ITEMS + 1;
         AgentQueryFilters filters = plan.getFilters();
         int requested = descriptor.maxResults();
-        if ("listOrders".equals(toolName) || "listMealPlans".equals(toolName)) requested = size(filters);
-        else if ("listVerifications".equals(toolName) || "listRefunds".equals(toolName)) requested = recentLimit(filters);
-        else if ("listDishes".equals(toolName) && dishIds != null) requested = dishIds.stream().distinct().limit(20).toList().size();
+        if (ToolCatalog.LIST_ORDERS.equals(toolName)
+            || ToolCatalog.LIST_MEAL_PLANS.equals(toolName)) requested = size(filters);
+        else if (ToolCatalog.LIST_VERIFICATIONS.equals(toolName)
+            || ToolCatalog.LIST_REFUNDS.equals(toolName)) requested = recentLimit(filters);
+        else if (ToolCatalog.LIST_DISHES.equals(toolName) && dishIds != null) {
+            requested = dishIds.stream().distinct().limit(20).toList().size();
+        }
         return Math.min(Math.max(requested, 0), descriptor.maxResults());
     }
 

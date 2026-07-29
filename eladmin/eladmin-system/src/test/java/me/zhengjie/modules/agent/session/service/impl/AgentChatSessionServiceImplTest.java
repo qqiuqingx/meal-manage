@@ -185,7 +185,8 @@ class AgentChatSessionServiceImplTest {
         assertEquals("MEAL_BALANCE", response.getLastBusinessQueryContext().get("metric"));
         assertEquals("PENDING_CONTEXT", response.getSemanticTraceSummary().get("semanticSource"));
         verify(sessionMapper).selectBySessionIdForUpdate("session-1");
-        verify(diagnosisFacadeService, never()).chatMealPlan(any(AgentChatRequest.class), any());
+        verify(diagnosisFacadeService, never()).chatMealPlan(
+            any(AgentChatRequest.class), any(), any());
         verify(messageMapper, never()).insert(any(AgentChatMessage.class));
     }
 

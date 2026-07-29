@@ -42,7 +42,8 @@ class HttpAgentServiceClientTest {
         request.setSessionId(null);
         request.setMessage("查 C10001 今天午餐");
 
-        AgentChatResponse response = client.chatMealPlan(request, "request-1");
+        AgentChatResponse response =
+            client.chatMealPlan(request, "request-1", "signed-context");
 
         assertEquals("session-1", response.getSessionId());
         assertEquals("ANSWERED", response.getStatus());
@@ -58,8 +59,7 @@ class HttpAgentServiceClientTest {
         when(restTemplate.postForEntity(anyString(), any(), any())).thenReturn(ResponseEntity.ok(responseBody));
         HttpAgentServiceClient client = clientWithRestTemplate(restTemplate);
         ReflectionTestUtils.setField(client, "baseUrl", "http://localhost:18081");
-        ReflectionTestUtils.setField(client, "v2ChatPath", "/api/agent/v2/chat");
-        ReflectionTestUtils.setField(client, "chatContractVersion", "v2");
+        ReflectionTestUtils.setField(client, "chatPath", "/api/agent/v2/chat");
 
         AgentChatRequest request = new AgentChatRequest();
         request.setSessionId("session-v2");
@@ -121,7 +121,8 @@ class HttpAgentServiceClientTest {
         request.setSessionId("session-1");
         request.setMessage("查 C10001 今天午餐");
 
-        AgentChatResponse response = client.chatMealPlan(request, "request-1");
+        AgentChatResponse response =
+            client.chatMealPlan(request, "request-1", "signed-context");
 
         assertEquals("request-1", response.getRequestId());
         assertEquals("session-1", response.getSessionId());

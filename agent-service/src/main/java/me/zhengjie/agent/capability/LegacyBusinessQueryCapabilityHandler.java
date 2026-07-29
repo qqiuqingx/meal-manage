@@ -12,6 +12,7 @@ import me.zhengjie.agent.query.domain.AgentQueryDimension;
 import me.zhengjie.agent.query.domain.AgentQueryDomain;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
+import me.zhengjie.agent.tool.ToolCatalog;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -52,22 +53,22 @@ public class LegacyBusinessQueryCapabilityHandler implements CapabilityHandler {
         if ("CUSTOMER_ORDER_LIST_V1".equals(plannerProfile) && frame.getTargetEntity() == SemanticEntityType.ORDER) {
             plan.setDomain(AgentQueryDomain.ORDER);
             plan.setAction(AgentQueryAction.LIST);
-            plan.setToolNames(List.of("listOrders"));
+            plan.setToolNames(List.of(ToolCatalog.LIST_ORDERS));
         } else if ("CUSTOMER_VERIFICATION_LIST_V1".equals(plannerProfile)
             && frame.getTargetEntity() == SemanticEntityType.VERIFICATION) {
             plan.setDomain(AgentQueryDomain.VERIFICATION);
             plan.setAction(AgentQueryAction.LIST);
-            plan.setToolNames(List.of("listVerifications"));
+            plan.setToolNames(List.of(ToolCatalog.LIST_VERIFICATIONS));
         } else if ("CUSTOMER_REFUND_LIST_V1".equals(plannerProfile)
             && frame.getTargetEntity() == SemanticEntityType.REFUND) {
             plan.setDomain(AgentQueryDomain.REFUND);
             plan.setAction(AgentQueryAction.LIST);
-            plan.setToolNames(List.of("listRefunds"));
+            plan.setToolNames(List.of(ToolCatalog.LIST_REFUNDS));
         } else if ("CUSTOMER_MEAL_PLAN_LIST_V1".equals(plannerProfile)
             && frame.getTargetEntity() == SemanticEntityType.MEAL_PLAN) {
             plan.setDomain(AgentQueryDomain.MEAL_PLAN);
             plan.setAction(AgentQueryAction.LIST);
-            plan.setToolNames(List.of("listMealPlans"));
+            plan.setToolNames(List.of(ToolCatalog.LIST_MEAL_PLANS));
         } else {
             throw unavailable(plannerProfile);
         }
@@ -96,7 +97,7 @@ public class LegacyBusinessQueryCapabilityHandler implements CapabilityHandler {
         plan.setLimit(50);
         plan.getFilters().setPage(1);
         plan.getFilters().setSize(50);
-        plan.setToolNames(List.of("listActiveCustomerMealBalances"));
+        plan.setToolNames(List.of(ToolCatalog.LIST_ACTIVE_CUSTOMER_MEAL_BALANCES));
         return plan;
     }
 
