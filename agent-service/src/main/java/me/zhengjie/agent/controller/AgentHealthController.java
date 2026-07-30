@@ -50,6 +50,7 @@ public class AgentHealthController {
             response.setRuleVersionDigest(null);
         }
         response.setModelConfigured(modelGateway.isConfigured("default"));
+        response.setFallbackModelConfigured(modelGateway.hasFallback("default"));
         response.setToolClientConfigured(toolDataClient != null
             && StringUtils.hasText(properties.getContextBaseUrl())
             && StringUtils.hasText(properties.getInternalToken()));

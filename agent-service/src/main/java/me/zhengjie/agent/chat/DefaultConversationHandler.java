@@ -272,8 +272,15 @@ public class DefaultConversationHandler implements ConversationHandler {
             if (businessQueryDataClient == null) {
                 return response(session, ChatStatus.ERROR, "业务规则查询服务暂不可用，请稍后重试。", null, List.of(), List.of(), BusinessResponseTypeCatalog.RULE);
             }
+            if (extraction.getRuleIntent() == null || extraction.getRuleIntent().trim().isEmpty()) {
+                AgentChatResponse response = response(session, ChatStatus.ANSWERED,
+                    "当前问题尚未登记为可解释的业务规则，请按业务文档或人工确认。", null,
+                    List.of(), List.of("清空会话"), BusinessResponseTypeCatalog.RULE);
+                sessionStore.save(session);
+                return response;
+            }
             ToolExecutionResult execution = executeBusinessTool(businessQueryOrchestrator, BusinessResponseTypeCatalog.RULE,
-                session.getSlots(), ToolCatalog.EXPLAIN_RULE, ruleTopic(request.getMessage()), List.of());
+                session.getSlots(), ToolCatalog.EXPLAIN_RULE, extraction.getRuleIntent(), List.of());
             Map<String, Object> result = execution.result();
             AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.RULE, result,
                 composer().businessRule(presentation(result)),
@@ -819,6 +826,7 @@ public class DefaultConversationHandler implements ConversationHandler {
             answer, List.of("活跃客户数", "清空会话"));
         response.setQueryPlan(plan); applyToolExecution(response, firstExecution); response.setResultBlocks(blocks);
         response.setActiveTaskStack(session.getConversationState().getTaskStack());
+        response.setConversationFocus(conversationFocus(session.getSlots()));
         return response;
     }
 
@@ -1408,21 +1416,6 @@ public class DefaultConversationHandler implements ConversationHandler {
             .map(Number::intValue).distinct().limit(20).collect(java.util.stream.Collectors.toList());
     }
 
-    /**
-     * 将受控规则问法映射到主系统白名单主题，避免把用户原文作为任意规则标识传递。
-     *
-     * @param message 客服问题
-     * @return 主系统认可的规则主题
-     */
-    private String ruleTopic(String message) {
-        String text = message == null ? "" : message;
-        if (text.contains("订单") && (text.contains("有效") || text.contains("什么时候"))) return "ORDER_EFFECTIVE";
-        if (text.contains("排餐模式") || text.contains("餐次匹配") || text.contains("不能排")) return "MEAL_PLAN_MATCH";
-        if (text.contains("过敏") || text.contains("忌口") || text.contains("排除日期") || text.contains("菜") && text.contains("过滤")) return "DIETARY_FILTER";
-        if (text.contains("退餐") || text.contains("核销") && (text.contains("影响") || text.contains("规则") || text.contains("餐数"))) return "VERIFICATION_REFUND_EFFECT";
-        return "MEAL_BALANCE";
-    }
-
     @SuppressWarnings("unchecked")
     private Map<String, Object> filterUnverifiedMealPlans(Map<String, Object> result) {
         if (result == null || !(result.get("items") instanceof List)) return Map.of("total", 0, "items", List.of());
@@ -1445,7 +1438,19 @@ public class DefaultConversationHandler implements ConversationHandler {
             responseType, presentationResult, message, quickReplies);
         resultPipeline.captureLastBusinessQueryContext(session, response);
         response.setActiveTaskStack(session.getConversationState().getTaskStack());
+        response.setConversationFocus(conversationFocus(session.getSlots()));
         return response;
+    }
+
+    /** 仅返回已解析的非敏感上下文句柄，禁止把姓名、手机号、地址或金额回传为会话焦点。 */
+    private Map<String, String> conversationFocus(DiagnosisSlots slots) {
+        if (slots == null) return Map.of();
+        Map<String, String> focus = new LinkedHashMap<>();
+        if (isNotBlank(slots.getCustomerCode())) focus.put("客户编号", slots.getCustomerCode());
+        if (isNotBlank(slots.getOrderCode())) focus.put("订单编号", slots.getOrderCode());
+        if (isNotBlank(slots.getRecordDate())) focus.put("日期", slots.getRecordDate());
+        if (isNotBlank(slots.getMealType())) focus.put("餐次", slots.getMealType());
+        return focus;
     }
 
     private AgentQueryPlan buildQueryPlan(String responseType, DiagnosisSlots slots) {
@@ -1505,6 +1510,13 @@ public class DefaultConversationHandler implements ConversationHandler {
         response.setPendingBusinessQueryContext(session.getConversationState().getPendingBusinessQueryContext());
         response.setLastBusinessQueryContext(session.getConversationState().getLastBusinessQueryContext());
         response.setActiveTaskStack(session.getConversationState().getTaskStack());
+        response.setConversationFocus(conversationFocus(session.getSlots()));
+        if (diagnosisResult != null) {
+            me.zhengjie.agent.domain.dto.AgentResponseValidation validation = new me.zhengjie.agent.domain.dto.AgentResponseValidation();
+            validation.setStatus("AI_SUGGESTION");
+            validation.setSuggestion(true);
+            response.setValidation(validation);
+        }
         return response;
     }
 

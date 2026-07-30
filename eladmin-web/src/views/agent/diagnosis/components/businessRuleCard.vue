@@ -7,6 +7,8 @@
         <el-descriptions-item label="规则版本">{{ result.version || '-' }}</el-descriptions-item>
         <el-descriptions-item label="责任模块">{{ result.ownerModule || '-' }}</el-descriptions-item>
         <el-descriptions-item label="依据文档">{{ result.evidenceDocument || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="依据章节">{{ result.evidenceAnchor || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="生效时间">{{ result.effectiveFrom || '-' }}</el-descriptions-item>
         <el-descriptions-item label="更新时间">{{ result.updatedAt || '-' }}</el-descriptions-item>
       </el-descriptions>
       <div class="rule-content">{{ result.content || '-' }}</div>

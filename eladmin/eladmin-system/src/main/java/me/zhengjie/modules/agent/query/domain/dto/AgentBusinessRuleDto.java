@@ -12,5 +12,7 @@ public class AgentBusinessRuleDto {
     /** 结构化规则说明。 */ private String content;
     /** 责任模块。 */ private String ownerModule;
     /** 业务依据文档相对路径。 */ private String evidenceDocument;
+    /** 业务依据文档中的唯一章节锚点。 */ private String evidenceAnchor;
+    /** 规则生效时间。 */ private String effectiveFrom;
     /** 更新时间。 */ private String updatedAt;
 }

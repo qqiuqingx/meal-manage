@@ -26,6 +26,21 @@ spring:
 
 agent:
   models:
+    providers:
+      deepseek:
+        enabled: ${AGENT_DEEPSEEK_ENABLED:true}
+        protocol: DEEPSEEK
+        structured-output: true
+        tool-calling: true
+      openai-compatible:
+        enabled: ${AGENT_FALLBACK_OPENAI_ENABLED:false}
+        protocol: OPENAI_COMPATIBLE
+        base-url: ${AGENT_FALLBACK_OPENAI_BASE_URL:}
+        api-key: ${AGENT_FALLBACK_OPENAI_API_KEY:}
+        model: ${AGENT_FALLBACK_OPENAI_MODEL:}
+        structured-output: ${AGENT_FALLBACK_OPENAI_STRUCTURED_OUTPUT:true}
+        tool-calling: ${AGENT_FALLBACK_OPENAI_TOOL_CALLING:true}
+    fallback-order: [openai-compatible]
     profiles:
       default:
         model: ${AGENT_MODEL_DEFAULT:${AGENT_DEEPSEEK_MODEL:${AGENT_OPENAI_MODEL:deepseek-chat}}}
@@ -33,12 +48,16 @@ agent:
         structured-output: ${AGENT_MODEL_DEFAULT_STRUCTURED_OUTPUT:true}
         tool-calling: ${AGENT_MODEL_DEFAULT_TOOL_CALLING:true}
         max-retries: ${AGENT_MODEL_DEFAULT_MAX_RETRIES:1}
+        provider: deepseek
+        fallback-providers: [openai-compatible]
       diagnosis:
         model: ${AGENT_MODEL_DIAGNOSIS:${AGENT_MODEL_DEFAULT:${AGENT_DEEPSEEK_MODEL:${AGENT_OPENAI_MODEL:deepseek-chat}}}}
         timeout-ms: ${AGENT_MODEL_DIAGNOSIS_TIMEOUT_MS:8000}
         structured-output: ${AGENT_MODEL_DIAGNOSIS_STRUCTURED_OUTPUT:true}
         tool-calling: ${AGENT_MODEL_DIAGNOSIS_TOOL_CALLING:true}
         max-retries: ${AGENT_MODEL_DIAGNOSIS_MAX_RETRIES:1}
+        provider: deepseek
+        fallback-providers: [openai-compatible]
   rules:
     # 外部目录存在时完整覆盖 classpath 同场景资源，避免规则来源混杂。
     base-path: ${AGENT_RULES_BASE_PATH:rules}

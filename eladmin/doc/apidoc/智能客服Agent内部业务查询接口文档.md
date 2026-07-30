@@ -109,7 +109,9 @@
 
 `POST /api/internal/agent/query/rules/explain`
 
-权限：`agentDiagnosis:list`。`topic` 只能是白名单规则主题：`MEAL_BALANCE`、`ORDER_EFFECTIVE`、`MEAL_PLAN_MATCH`、`DIETARY_FILTER`、`VERIFICATION_REFUND_EFFECT`；返回规则 ID、版本、责任模块、业务依据文档相对路径和结构化说明，不读取任意文档路径，也不依赖模型常识。规则目录固定为 `config/agent-business-rules.json`，服务启动时校验规则 ID、主题、版本、责任模块、依据文档与展示内容；目录错误时规则不会注册。
+权限：`agentDiagnosis:list`。`topic` 只能是白名单规则主题：`MEAL_BALANCE`、`ORDER_EFFECTIVE`、`MEAL_PLAN_MATCH`、`DIETARY_FILTER`、`VERIFICATION_REFUND_EFFECT`；返回规则 ID、版本、责任模块、业务依据文档相对路径、唯一 Markdown 章节锚点（`evidenceAnchor`）、生效时间和结构化说明，不读取任意文档路径，也不依赖模型常识。规则目录固定为 `config/agent-business-rules.json`，服务启动时校验规则 ID、主题、版本、状态、责任模块、依据文档、章节唯一性、文档 SHA-256 和展示内容；仅 `EFFECTIVE` 规则会注册，文档变更而目录哈希未同步时应用拒绝启动。
+
+Agent 对外聊天响应中的规则卡片只展示以上受控字段；`present=false` 或任一版本/依据字段缺失时，Agent 返回稳定的“未登记规则”提示，不能以默认规则代替。
 
 ### 3.9 菜品与配料摘要
 

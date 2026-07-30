@@ -1,0 +1,27 @@
+# 规则问法唯一来源。topic 必须是主系统 agent-business-rules.json 中 EFFECTIVE 条目的主题。
+rules:
+  - ruleId: ORDER_MEAL_BALANCE
+    topic: MEAL_BALANCE
+    priority: 100
+    aliases: ["剩余餐数", "餐数怎么算"]
+    patterns: ["午餐.*扣.*哪个池", "晚餐.*扣.*哪个池", "核销.*扣.*哪个池"]
+  - ruleId: ORDER_EFFECTIVE
+    topic: ORDER_EFFECTIVE
+    priority: 90
+    aliases: ["订单有效性"]
+    patterns: ["订单.*有效.*规则", "订单.*什么时候有效"]
+  - ruleId: MEAL_PLAN_MATCH
+    topic: MEAL_PLAN_MATCH
+    priority: 80
+    aliases: ["排餐模式", "餐次匹配"]
+    patterns: ["为什么.*不能排.*(?:早餐|午餐|晚餐)"]
+  - ruleId: DIETARY_FILTER
+    topic: DIETARY_FILTER
+    priority: 70
+    aliases: ["排除日期", "过敏过滤", "忌口过滤"]
+    patterns: ["(?:过敏|忌口|排除日期).*(?:规则|过滤)", "为什么.*菜.*过滤"]
+  - ruleId: VERIFICATION_REFUND_EFFECT
+    topic: VERIFICATION_REFUND_EFFECT
+    priority: 60
+    aliases: ["核销规则", "退餐规则"]
+    patterns: ["(?:核销|退餐).*(?:影响|规则|餐数)", "退餐.*扣.*餐", "核销.*餐数"]

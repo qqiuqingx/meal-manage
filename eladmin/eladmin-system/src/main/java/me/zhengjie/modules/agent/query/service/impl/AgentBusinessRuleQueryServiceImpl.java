@@ -26,6 +26,8 @@ public class AgentBusinessRuleQueryServiceImpl implements AgentBusinessRuleQuery
         dto.setContent(rule.getContent());
         dto.setOwnerModule(rule.getOwnerModule());
         dto.setEvidenceDocument(rule.getEvidenceDocument());
+        dto.setEvidenceAnchor(rule.getEvidenceAnchor());
+        dto.setEffectiveFrom(rule.getEffectiveFrom());
         dto.setUpdatedAt(rule.getUpdatedAt());
         return dto;
     }

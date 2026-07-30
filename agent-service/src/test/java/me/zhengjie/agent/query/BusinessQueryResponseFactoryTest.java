@@ -82,6 +82,22 @@ class BusinessQueryResponseFactoryTest {
     }
 
     @Test
+    void shouldVerifyActiveCustomerBalanceSummaryWithControlledFacts() {
+        DiagnosisSlots slots = new DiagnosisSlots();
+        var response = factory.create("session-1", slots, Map.of(), "DIAGNOSED",
+            "BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES",
+            result(Map.of("total", 2, "metricDefinitionId", "AGENT_ACTIVE_CUSTOMER_V1",
+                "items", List.of(Map.of("customerCode", "B3303", "remainingBreakfast", 2,
+                    "remainingLunchDinner", 4, "totalRemaining", 6)))),
+            "当前仍有可用餐数的活跃客户共 2 位，已展示 1 位客户各自的早餐、午晚餐和合计剩余餐数。", List.of());
+
+        assertEquals(2, response.getFacts().size());
+        assertEquals("ACTIVE_CUSTOMER_MEAL_BALANCE_DETAIL", response.getFacts().get(0).getSourceType());
+        assertEquals("VERIFIED", response.getValidation().getStatus());
+        assertFalse(response.getInsightResult().isEmpty());
+    }
+
+    @Test
     void shouldLabelScheduledMenuTotalAsScheduledDishes() {
         DiagnosisSlots slots = new DiagnosisSlots(); slots.setRecordDate("2026-07-12");
         var response = factory.create("session-1", slots, Map.of(), "DIAGNOSED", "BUSINESS_QUERY_SCHEDULED_MENU",

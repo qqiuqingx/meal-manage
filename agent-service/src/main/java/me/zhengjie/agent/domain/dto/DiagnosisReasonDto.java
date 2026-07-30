@@ -15,6 +15,8 @@ public class DiagnosisReasonDto {
     private List<String> ruleIds = new ArrayList<>();
     private String description;
     private String suggestion;
+    /** 建议文案固定标注为 AI_SUGGESTION，不能与已验证证据混淆。 */
+    private String suggestionType = "AI_SUGGESTION";
     private List<String> nextActions = new ArrayList<>();
     private List<DiagnosisEvidenceDto> evidence = new ArrayList<>();
 
@@ -73,6 +75,8 @@ public class DiagnosisReasonDto {
     public void setSuggestion(String suggestion) {
         this.suggestion = suggestion;
     }
+    public String getSuggestionType() { return suggestionType; }
+    public void setSuggestionType(String value) { suggestionType = value; }
 
     public List<String> getNextActions() {
         return nextActions;

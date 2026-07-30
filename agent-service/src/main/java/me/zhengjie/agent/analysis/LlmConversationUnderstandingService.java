@@ -6,6 +6,7 @@ import me.zhengjie.agent.analysis.domain.ConversationContextHandle;
 import me.zhengjie.agent.analysis.domain.ConversationUnderstandingResult;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import me.zhengjie.agent.infrastructure.observability.AgentMdcScope;
+import me.zhengjie.agent.infrastructure.llm.AgentModelGateway;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
 import java.util.List;
@@ -17,6 +18,7 @@ public class LlmConversationUnderstandingService implements ConversationUndersta
     private static final Set<String> FRAME = Set.of("frameId", "goal", "targetEntity", "scope", "measures", "dimensions", "operations", "constraints", "outputShape", "missingInformation", "dependsOnFrameIds", "confidence");
     private static final Set<String> SCOPE = Set.of("type", "requiredKind", "requiredEntityType");
     private final ChatClient client;
+    private final AgentModelGateway modelGateway;
     private final ObjectMapper mapper;
     private final BeanOutputConverter<ConversationUnderstandingResult> converter;
     private final ConversationUnderstandingValidator validator;
@@ -26,14 +28,21 @@ public class LlmConversationUnderstandingService implements ConversationUndersta
     /** 使用统一模型网关提供的通用 ChatClient。 */
     public LlmConversationUnderstandingService(ChatClient client, ObjectMapper mapper, ConversationUnderstandingValidator validator) {
         this.client = client; this.mapper = mapper; this.converter = new BeanOutputConverter<>(ConversationUnderstandingResult.class, mapper); this.validator = validator;
+        this.modelGateway = null;
+    }
+    /** 使用调用级模型网关，网络失败可安全重放到备用 provider。 */
+    public LlmConversationUnderstandingService(AgentModelGateway modelGateway, ObjectMapper mapper, ConversationUnderstandingValidator validator) {
+        this.client = null; this.modelGateway = modelGateway; this.mapper = mapper;
+        this.converter = new BeanOutputConverter<>(ConversationUnderstandingResult.class, mapper); this.validator = validator;
     }
     /** {@inheritDoc} */
     @Override
     public ConversationUnderstandingResult understand(String message, DiagnosisSlots slots, List<ConversationContextHandle> handles) {
         try (AgentMdcScope ignored = AgentMdcScope.put("modelProfile", "default")) {
-            String raw = client.prompt().system("你是内部客服会话理解器，只返回 JSON；不得输出 SQL、URL、工具名、表名或任意结果字段。上下文引用只能声明 requiredKind 和 requiredEntityType，禁止输出 resolvedHandleId。")
-                .user("Schema:" + converter.getFormat() + "。frames 最多三个。当前消息：" + safe(message) + "；确定性槽位：" + mapper.writeValueAsString(slots) + "；可引用句柄摘要：" + mapper.writeValueAsString(handles == null ? List.of() : handles))
-                .call().content();
+            String system = "你是内部客服会话理解器，只返回 JSON；不得输出 SQL、URL、工具名、表名或任意结果字段。上下文引用只能声明 requiredKind 和 requiredEntityType，禁止输出 resolvedHandleId。";
+            String user = "Schema:" + converter.getFormat() + "。frames 最多三个。当前消息：" + safe(message) + "；确定性槽位：" + mapper.writeValueAsString(slots) + "；可引用句柄摘要：" + mapper.writeValueAsString(handles == null ? List.of() : handles);
+            String raw = modelGateway == null ? client.prompt().system(system).user(user).call().content()
+                : modelGateway.execute("default", chatClient -> chatClient.prompt().system(system).user(user).call().content());
             JsonNode node = mapper.readTree(stripFence(raw));
             if (!node.isObject() || node.fieldNames().hasNext() && hasUnknown(node) || hasUnsafeFrames(node) || containsForbidden(node)) return clarification("MODEL_INVALID");
             ConversationUnderstandingResult result = mapper.treeToValue(node, ConversationUnderstandingResult.class);

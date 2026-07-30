@@ -18,9 +18,11 @@ class AgentBusinessRuleQueryServiceImplTest {
         for (String topic : new String[] {"MEAL_BALANCE", "ORDER_EFFECTIVE", "MEAL_PLAN_MATCH", "DIETARY_FILTER", "VERIFICATION_REFUND_EFFECT"}) {
             AgentBusinessRuleDto rule = service.explain(topic);
             assertTrue(rule.isPresent());
-            assertEquals("1.0", rule.getVersion());
+            assertEquals("1.1", rule.getVersion());
             assertFalse(rule.getContent().contains("金额"));
             assertTrue(rule.getEvidenceDocument().startsWith("doc/business/"));
+            assertTrue(rule.getEvidenceAnchor().startsWith("#"));
+            assertTrue(rule.getEffectiveFrom().startsWith("2026-07-30"));
         }
     }
 

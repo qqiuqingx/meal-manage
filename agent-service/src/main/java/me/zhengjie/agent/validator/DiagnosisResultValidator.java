@@ -52,6 +52,7 @@ public class DiagnosisResultValidator {
         List<DiagnosisValidationError> errors) {
         if (errors.isEmpty()) {
             fillContext(response, context, ruleVersionDigest, response.isFallback());
+            markSuggestions(response);
             return response;
         }
         log.warn("诊断阶段 stage=结果校验失败 errors={}", summarizeErrors(errors));
@@ -63,6 +64,7 @@ public class DiagnosisResultValidator {
         fallback.setNextActions(List.of("核对客户档案", "核对订单有效性", "核对排餐记录", "核对候选菜配置"));
         fillContext(fallback, context, ruleVersionDigest, true);
         fallback.setFallbackReason("AI 诊断结果校验失败，需人工核对。");
+        markSuggestions(fallback);
         return fallback;
     }
 
@@ -251,6 +253,12 @@ public class DiagnosisResultValidator {
         response.setMealType(context.getMealType());
         response.setRuleVersionDigest(ruleVersionDigest);
         response.setFallback(fallback);
+    }
+
+    /** 诊断建议即使规则和证据校验通过，也始终以 AI 建议而非业务事实展示。 */
+    private void markSuggestions(DiagnosisResponse response) {
+        if (response == null || response.getReasons() == null) return;
+        response.getReasons().forEach(reason -> { if (reason != null) reason.setSuggestionType("AI_SUGGESTION"); });
     }
 
     private DiagnosisValidationError error(String field, String code, String message, Object rawValue) {

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.domain.dto.IntentClassificationRequest;
 import me.zhengjie.agent.domain.dto.IntentClassificationResult;
 import org.springframework.ai.chat.client.ChatClient;
+import me.zhengjie.agent.infrastructure.llm.AgentModelGateway;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
@@ -18,16 +19,19 @@ public class LlmIntentClassifier implements ChatIntentClassifier {
 
     private static final Logger log = LoggerFactory.getLogger(LlmIntentClassifier.class);
     private final ChatClient chatClient;
+    private final AgentModelGateway modelGateway;
     private final ObjectMapper objectMapper;
 
     /** 供单元测试替换分类行为，不创建真实模型客户端。 */
     protected LlmIntentClassifier() {
         this.chatClient = null;
+        this.modelGateway = null;
         this.objectMapper = null;
     }
 
-    public LlmIntentClassifier(ChatClient.Builder chatClientBuilder, ObjectMapper objectMapper) {
-        this.chatClient = chatClientBuilder.build();
+    public LlmIntentClassifier(AgentModelGateway modelGateway, ObjectMapper objectMapper) {
+        this.chatClient = null;
+        this.modelGateway = modelGateway;
         this.objectMapper = objectMapper;
     }
 
@@ -41,7 +45,8 @@ public class LlmIntentClassifier implements ChatIntentClassifier {
     public IntentClassificationResult classify(IntentClassificationRequest request) {
         try {
             String prompt = buildPrompt(request);
-            String content = chatClient.prompt().user(prompt).call().content();
+            String content = modelGateway == null ? chatClient.prompt().user(prompt).call().content()
+                : modelGateway.execute("default", client -> client.prompt().user(prompt).call().content());
             IntentClassificationResult result = objectMapper.readValue(normalizeJson(content), IntentClassificationResult.class);
             if (result == null || result.getIntent() == null || result.getConfidence() < 0.0 || result.getConfidence() > 1.0) {
                 return failed("模型返回了未知意图或非法置信度");

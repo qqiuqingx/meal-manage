@@ -8,6 +8,8 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 
 /**
  * 校验受控业务查询回答不携带金额或写操作声称；复杂模型润色必须经过本校验器。
@@ -37,6 +39,9 @@ public class BusinessAnswerValidator {
             if (containsSensitivePhone(String.valueOf(fact.getValue())) || containsSensitivePhone(fact.getCustomerCode())
                 || containsSensitivePhone(fact.getSourceId()) || containsSensitivePhone(fact.getSourceRecordId())) return false;
             if ("MEAL_PLAN_DISH_ITEM".equals(fact.getSourceType()) && (fact.getCustomerCode() == null || fact.getCustomerCode().trim().isEmpty())) return false;
+            if (fact.getSourceType() == null || !fact.getSourceType().matches("[A-Z][A-Z0-9_]{2,}")) return false;
+            if (fact.getRecordDate() != null && !validDate(fact.getRecordDate())) return false;
+            if (fact.getMealType() != null && !Set.of("BREAKFAST", "LUNCH", "DINNER").contains(fact.getMealType())) return false;
             factIds.add(fact.getFactId());
         }
         return !containsSensitivePhone(message) && !containsUnknownFactReference(message, factIds) && !containsUnfoundedQuantifiedNumber(message, facts);
@@ -56,6 +61,13 @@ public class BusinessAnswerValidator {
     }
     /** 原始大陆手机号不得进入回答或事实；已脱敏号码不匹配该规则。 */
     private boolean containsSensitivePhone(String value) { return value != null && MAINLAND_PHONE.matcher(value).find(); }
+    /** 事实日期必须是服务端受控业务日期，禁止模型或下游以自由文本伪造日期。 */
+    private boolean validDate(String value) {
+        if (value == null) return false;
+        String normalized = value.trim();
+        if (normalized.length() >= 10) normalized = normalized.substring(0, 10);
+        try { LocalDate.parse(normalized); return true; } catch (DateTimeParseException ignored) { return false; }
+    }
     /** 校验回答中出现的事实引用均由本轮结构化事实提供，防止模型伪造引用。 */
     private boolean containsUnknownFactReference(String message, Set<String> factIds) {
         Matcher matcher = FACT_REFERENCE.matcher(message);

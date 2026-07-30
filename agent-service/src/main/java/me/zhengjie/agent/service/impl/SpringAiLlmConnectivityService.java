@@ -31,10 +31,7 @@ public class SpringAiLlmConnectivityService implements LlmConnectivityService {
             String prompt = resolvePrompt(request);
             if (!modelGateway.isConfigured("connectivity")) throw new IllegalStateException("MODEL_PROFILE_NOT_AVAILABLE");
             log.info("llm connectivity test start modelProfile={} promptChars={}", profile.id(), prompt.length());
-            String content = modelGateway.chatClient("connectivity").prompt()
-                .user(prompt)
-                .call()
-                .content();
+            String content = modelGateway.execute("connectivity", client -> client.prompt().user(prompt).call().content());
             response.setSuccess(true);
             response.setContent(content);
             response.setCostMs(System.currentTimeMillis() - start);

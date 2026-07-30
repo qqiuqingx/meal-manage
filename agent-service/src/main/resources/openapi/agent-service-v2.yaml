@@ -126,6 +126,10 @@ components:
         resultBlocks:
           type: array
           items: { $ref: '#/components/schemas/BusinessQueryResultBlock' }
+        validation: { $ref: '#/components/schemas/AgentResponseValidation' }
+        conversationFocus:
+          type: object
+          additionalProperties: { type: string, maxLength: 128 }
     ConversationPatch:
       type: object
       additionalProperties: false
@@ -220,6 +224,14 @@ components:
         recordDate: { type: string, format: date }
         mealType: { type: string }
         sourceRecordId: { type: string, maxLength: 128 }
+    AgentResponseValidation:
+      type: object
+      additionalProperties: false
+      properties:
+        version: { type: string, enum: [v1] }
+        status: { type: string, enum: [VERIFIED, DEGRADED, AI_SUGGESTION] }
+        verifiedFactCount: { type: integer, minimum: 0 }
+        suggestion: { type: boolean }
     BusinessQueryResultBlock:
       type: object
       additionalProperties: false

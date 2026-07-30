@@ -83,21 +83,23 @@ public class RuleBasedSlotExtractor {
     private static final Pattern MEAL_PLAN_UNVERIFIED_PATTERN = Pattern.compile("排.*未核销|已排.*没核销|已排.*未核销|排餐.*没核销|排餐.*未核销", Pattern.CASE_INSENSITIVE);
     private static final Pattern MEAL_BALANCE_NO_PLAN_PATTERN = Pattern.compile("有.*餐.*没排|有餐数.*没排|有餐.*未排|还有餐.*没排", Pattern.CASE_INSENSITIVE);
     private static final Pattern MEAL_BALANCE_CHANGE_PATTERN = Pattern.compile("餐数.*变化|为什么.*餐.*少|为什么.*剩.*餐", Pattern.CASE_INSENSITIVE);
-    private static final Pattern MEAL_BALANCE_RULE_PATTERN = Pattern.compile("剩余餐数.*怎么算|餐数.*怎么算|午餐.*扣.*哪个池|晚餐.*扣.*哪个池|核销.*扣.*哪个池", Pattern.CASE_INSENSITIVE);
-    private static final Pattern ORDER_EFFECTIVE_RULE_PATTERN = Pattern.compile("订单.*有效.*规则|订单.*什么时候有效|订单有效性", Pattern.CASE_INSENSITIVE);
-    private static final Pattern MEAL_PLAN_MATCH_RULE_PATTERN = Pattern.compile("排餐模式.*规则|排餐模式.*匹配|餐次.*匹配.*规则|为什么.*不能排.*(?:早餐|午餐|晚餐)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern DIETARY_FILTER_RULE_PATTERN = Pattern.compile("(?:过敏|忌口|排除日期).*(?:规则|过滤)|为什么.*菜.*过滤", Pattern.CASE_INSENSITIVE);
-    private static final Pattern VERIFICATION_REFUND_RULE_PATTERN = Pattern.compile("(?:核销|退餐).*(?:影响|规则|餐数)|退餐.*扣.*餐|核销.*餐数", Pattern.CASE_INSENSITIVE);
     private static final Pattern OPERATION_STATISTICS_PATTERN = Pattern.compile("待核销|未核销.*客户|待排餐|没排餐|未排餐|已排餐.*客户|(?:已经)?生成排餐.*客户|排餐(?:的)?客户.*(?:多少|几)|排餐失败|生成失败|失败记录|活跃客户|进行中客户|即将到期.*订单|快到期.*订单|(?:会|将)?到期.*订单|还有多少客户|还有几个人|几个人没弄完|剩下的客户|剩余客户|还有谁没有处理|没完成的客户|今天还有多少人|还差多少客户|今天没做完的是谁", Pattern.CASE_INSENSITIVE);
 
     private final Clock clock;
+    private final AgentBusinessRuleTopicResolver businessRuleTopicResolver;
 
     public RuleBasedSlotExtractor() {
-        this(Clock.system(ZoneId.of("Asia/Shanghai")));
+        this(Clock.system(ZoneId.of("Asia/Shanghai")), new ResourceAgentBusinessRuleTopicResolver());
     }
 
     public RuleBasedSlotExtractor(Clock clock) {
+        this(clock, new ResourceAgentBusinessRuleTopicResolver());
+    }
+
+    /** 创建可替换规则主题目录的提取器，供路由契约测试精确验证。 */
+    public RuleBasedSlotExtractor(Clock clock, AgentBusinessRuleTopicResolver businessRuleTopicResolver) {
         this.clock = clock;
+        this.businessRuleTopicResolver = businessRuleTopicResolver;
     }
 
     public ChatExtractionResult extract(String message, DiagnosisSlots existingSlots) {
@@ -149,6 +151,9 @@ public class RuleBasedSlotExtractor {
         // 普通自然语言统一进入受控业务语义分析；单客户诊断只能由模型高置信度显式选择。
         ChatIntent intent = insightIntent == null ? ChatIntent.BUSINESS_QUERY : insightIntent;
         result.setIntent(intent);
+        if (intent == ChatIntent.BUSINESS_RULE_QUERY) {
+            result.setRuleIntent(businessRuleTopicResolver.resolve(text).orElse(null));
+        }
         result.setMissingSlots(missingSlots(merged, intent));
         return result;
     }
@@ -158,13 +163,12 @@ public class RuleBasedSlotExtractor {
      * 先检查 reset/retry/out_of_scope，再检查客户信息查询，最后回退诊断。
      */
     private ChatIntent detectCustomerInsightIntent(String text) {
+        java.util.Optional<String> ruleTopic = businessRuleTopicResolver.resolve(text);
+        if (ruleTopic.isPresent()) {
+            return ChatIntent.BUSINESS_RULE_QUERY;
+        }
         if (OPERATION_STATISTICS_PATTERN.matcher(text).find()) {
             return ChatIntent.OPERATION_STATISTICS_QUERY;
-        }
-        if (MEAL_BALANCE_RULE_PATTERN.matcher(text).find() || ORDER_EFFECTIVE_RULE_PATTERN.matcher(text).find()
-            || MEAL_PLAN_MATCH_RULE_PATTERN.matcher(text).find() || DIETARY_FILTER_RULE_PATTERN.matcher(text).find()
-            || VERIFICATION_REFUND_RULE_PATTERN.matcher(text).find()) {
-            return ChatIntent.BUSINESS_RULE_QUERY;
         }
         if (CUSTOMER_OVERVIEW_PATTERN.matcher(text).find()) {
             return ChatIntent.CUSTOMER_MEAL_BALANCE_QUERY;

@@ -27,5 +27,15 @@ public class AgentPropertiesValidator implements SmartInitializingSingleton {
                 throw new IllegalStateException("agent.rules.scene-directories must contain non-blank scene and directory");
             }
         });
+        properties.getModels().getProviders().forEach((id, provider) -> {
+            if (provider == null || !provider.isEnabled()) return;
+            if (!StringUtils.hasText(id) || !StringUtils.hasText(provider.getProtocol())) {
+                throw new IllegalStateException("enabled agent model provider must have id and protocol");
+            }
+            if ("OPENAI_COMPATIBLE".equals(provider.getProtocol())
+                && (!StringUtils.hasText(provider.getBaseUrl()) || !StringUtils.hasText(provider.getApiKey()) || !StringUtils.hasText(provider.getModel()))) {
+                throw new IllegalStateException("enabled OPENAI_COMPATIBLE provider requires base-url, api-key and model");
+            }
+        });
     }
 }

@@ -2,6 +2,7 @@ package me.zhengjie.agent.query;
 
 import me.zhengjie.agent.domain.chat.ChatStatus;
 import me.zhengjie.agent.domain.dto.AgentChatResponse;
+import me.zhengjie.agent.domain.dto.AgentResponseValidation;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import me.zhengjie.agent.query.domain.AgentQueryFact;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
@@ -65,7 +66,7 @@ public class BusinessQueryResponseFactory {
         AgentQueryPlan queryPlan = plan(responseType, slots);
         List<AgentQueryFact> facts = buildFacts(responseType, insightResult);
         boolean planMatches = matchesQueryPlan(queryPlan, insightResult);
-        boolean safe = answerValidator.isSafe(message, facts) && planMatches;
+        boolean safe = answerValidator.isSafe(message, facts) && planMatches && validRule(responseType, insightResult);
         AgentChatResponse response = new AgentChatResponse();
         response.setSessionId(sessionId); response.setStatus(ChatStatus.ANSWERED);
         response.setAssistantMessage(safe ? answerComposer.appendFactReferences(message, facts) : "查询结果包含当前回答契约不允许展示的内容，请到业务页面人工核对。");
@@ -80,7 +81,22 @@ public class BusinessQueryResponseFactory {
             || insightResult != null && insightResult.isTruncated());
         response.setQueriedAt(OffsetDateTime.now(ZoneOffset.ofHours(8)).toString());
         response.setQueryPlan(queryPlan);
+        AgentResponseValidation validation = new AgentResponseValidation();
+        validation.setStatus(safe ? "VERIFIED" : "DEGRADED");
+        validation.setVerifiedFactCount(safe ? facts.size() : 0);
+        validation.setSuggestion(false);
+        response.setValidation(validation);
         return response;
+    }
+
+    /** 规则卡片只接受主系统明确登记且携带版本和依据定位的返回，缺一不可展示为已验证规则。 */
+    private boolean validRule(String responseType, BusinessPresentationResult result) {
+        if (!BusinessResponseTypeCatalog.RULE.equals(responseType)) return true;
+        return result != null && result.isPresent()
+            && result.getRuleId() != null && result.getRuleId().matches("[A-Z][A-Z0-9_]{2,}")
+            && result.getVersion() != null && result.getVersion().matches("\\d+\\.\\d+(?:\\.\\d+)?")
+            && result.getEvidenceDocument() != null && result.getEvidenceDocument().startsWith("doc/business/")
+            && result.getEvidenceAnchor() != null && result.getEvidenceAnchor().startsWith("#");
     }
 
     /** 校验主系统返回对象与当前受控 QueryPlan 的客户、订单、日期和餐次约束一致。 */
@@ -197,6 +213,8 @@ public class BusinessQueryResponseFactory {
             }
         } else if (BusinessResponseTypeCatalog.OPERATION_REPORT.equals(responseType)) {
             addOperationReportFacts(facts, result);
+        } else if (BusinessResponseTypeCatalog.ACTIVE_CUSTOMER_BALANCES.equals(responseType)) {
+            addActiveCustomerBalanceFacts(facts, result);
         } else if (responseType.startsWith("BUSINESS_QUERY_OPERATION_")) {
             AgentMetricDefinition definition = AgentMetricCatalog.definitionByResponseType(responseType);
             Object value = definition == null ? null : result.metricValue(definition.getMetric());
@@ -225,6 +243,22 @@ public class BusinessQueryResponseFactory {
                 null, "BUSINESS_RULE", result.getRuleId()));
         }
         return facts;
+    }
+
+    /**
+     * 为活跃客户余额列表建立聚合和当前页展示数量的事实引用。
+     *
+     * <p>该响应类型来自已登记的明细工具，不能复用指标版本号作为 sourceType；
+     * sourceType 必须保持受控、可校验的业务来源类型。</p>
+     */
+    private void addActiveCustomerBalanceFacts(List<AgentQueryFact> facts,
+                                               BusinessPresentationResult result) {
+        String sourceId = result.getMetricDefinitionId();
+        Object total = result.totalOr(result.getItems().size());
+        facts.add(new AgentQueryFact("F1", "活跃客户数", total,
+            "位", "ACTIVE_CUSTOMER_MEAL_BALANCE_DETAIL", sourceId));
+        facts.add(new AgentQueryFact("F2", "当前展示客户数", result.getItems().size(),
+            "位", "ACTIVE_CUSTOMER_MEAL_BALANCE_DETAIL", sourceId));
     }
 
     /** 为每条实际过敏过滤菜品建立客户编号绑定证据，客户主动排除菜品不会成为事实。 */

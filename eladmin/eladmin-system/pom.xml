@@ -82,6 +82,19 @@
 
     <!-- 打包 -->
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- 规则目录必须校验其依据文档；将业务说明随模块打包，避免运行环境绕过该校验。 -->
+            <resource>
+                <directory>../doc</directory>
+                <targetPath>doc</targetPath>
+                <includes>
+                    <include>business/**/*.md</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

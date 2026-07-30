@@ -9,6 +9,8 @@ public class AgentHealthResponse {
     private boolean ruleRegistryLoaded;
     private String ruleVersionDigest;
     private boolean modelConfigured;
+    /** 是否启用至少一个模型备用 provider；false 不影响单 provider 可用性。 */
+    private boolean fallbackModelConfigured;
     private boolean toolClientConfigured;
 
     public String getStatus() {
@@ -42,6 +44,8 @@ public class AgentHealthResponse {
     public void setModelConfigured(boolean modelConfigured) {
         this.modelConfigured = modelConfigured;
     }
+    public boolean isFallbackModelConfigured() { return fallbackModelConfigured; }
+    public void setFallbackModelConfigured(boolean value) { fallbackModelConfigured = value; }
 
     public boolean isToolClientConfigured() {
         return toolClientConfigured;

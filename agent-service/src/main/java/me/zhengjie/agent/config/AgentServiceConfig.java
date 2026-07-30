@@ -73,7 +73,7 @@ public class AgentServiceConfig {
             return ruleAnalyzer;
         }
         modelGateway.requireCapabilities("default", true, false);
-        LlmBusinessQuestionAnalyzer llmAnalyzer = new LlmBusinessQuestionAnalyzer(modelGateway.chatClient("default"), objectMapper, semanticPromptRenderer);
+        LlmBusinessQuestionAnalyzer llmAnalyzer = new LlmBusinessQuestionAnalyzer(modelGateway, objectMapper, semanticPromptRenderer);
         if (semanticMode == AgentProperties.BusinessSemanticMode.SHADOW) {
             return new ShadowBusinessQuestionAnalyzer(ruleAnalyzer, llmAnalyzer);
         }
@@ -132,7 +132,7 @@ public class AgentServiceConfig {
             };
         }
         modelGateway.requireCapabilities("default", true, false);
-        return new LlmConversationUnderstandingService(modelGateway.chatClient("default"), objectMapper, validator);
+        return new LlmConversationUnderstandingService(modelGateway, objectMapper, validator);
     }
 
     /** 加载并校验受控语义能力目录；启动失败优于静默开放未知能力。 */

@@ -12,6 +12,7 @@ import me.zhengjie.agent.query.domain.AgentQueryMetric;
 import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
 import me.zhengjie.agent.security.AgentAccessContextHolder;
 import me.zhengjie.agent.infrastructure.observability.AgentMdcScope;
+import me.zhengjie.agent.infrastructure.llm.AgentModelGateway;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.slf4j.Logger;
@@ -38,6 +39,8 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
     private static final Set<String> TEMPORAL_FIELDS = Set.of("expression", "explicitDate", "explicitStartDate", "explicitEndDate");
     private static final Set<String> NON_EXECUTABLE_MODEL_FIELDS = Set.of("observations", "analysisContext");
     private final ChatClient chatClient;
+    private final AgentModelGateway modelGateway;
+    private final String modelProfile;
     private final ObjectMapper objectMapper;
     private final BeanOutputConverter<BusinessQuestionAnalysis> outputConverter;
     private final BusinessSemanticPromptRenderer semanticPromptRenderer;
@@ -56,8 +59,18 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
     public LlmBusinessQuestionAnalyzer(ChatClient chatClient, ObjectMapper objectMapper,
                                        BusinessSemanticPromptRenderer semanticPromptRenderer) {
         this.chatClient = chatClient;
+        this.modelGateway = null;
+        this.modelProfile = "default";
         this.objectMapper = objectMapper;
         this.outputConverter = new BeanOutputConverter<>(BusinessQuestionAnalysis.class, objectMapper);
+        this.semanticPromptRenderer = semanticPromptRenderer;
+    }
+
+    /** 使用完整调用级 fallback 网关，结构化解析失败仍由当前调用方稳定降级，不切 provider。 */
+    public LlmBusinessQuestionAnalyzer(AgentModelGateway modelGateway, ObjectMapper objectMapper,
+                                       BusinessSemanticPromptRenderer semanticPromptRenderer) {
+        this.chatClient = null; this.modelGateway = modelGateway; this.modelProfile = "default";
+        this.objectMapper = objectMapper; this.outputConverter = new BeanOutputConverter<>(BusinessQuestionAnalysis.class, objectMapper);
         this.semanticPromptRenderer = semanticPromptRenderer;
     }
 
@@ -72,11 +85,10 @@ public class LlmBusinessQuestionAnalyzer implements BusinessQuestionAnalyzer {
                                             LastBusinessQueryContext lastBusinessQueryContext) {
         lastFailureReason.remove();
         try (AgentMdcScope ignored = AgentMdcScope.put("modelProfile", "default")) {
-            String content = chatClient.prompt()
-                .system(systemPrompt())
-                .user(userPrompt(question, context, lastBusinessQueryContext))
-                .call()
-                .content();
+            String system = systemPrompt();
+            String user = userPrompt(question, context, lastBusinessQueryContext);
+            String content = modelGateway == null ? chatClient.prompt().system(system).user(user).call().content()
+                : modelGateway.execute(modelProfile, client -> client.prompt().system(system).user(user).call().content());
             JsonNode rawRoot = objectMapper.readTree(normalizeJson(content));
             if (containsForbiddenText(rawRoot)) {
                 lastFailureReason.set("MODEL_INVALID");

@@ -8,6 +8,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -70,8 +72,15 @@ public class AgentProperties {
     public static class Models {
         @Valid
         private Map<String, ModelProfile> profiles = new LinkedHashMap<>(Map.of("default", new ModelProfile()));
+        @Valid
+        private Map<String, ModelProvider> providers = new LinkedHashMap<>(Map.of("deepseek", new ModelProvider()));
+        private List<String> fallbackOrder = new ArrayList<>();
         public Map<String, ModelProfile> getProfiles() { return profiles; }
         public void setProfiles(Map<String, ModelProfile> profiles) { this.profiles = profiles == null ? new LinkedHashMap<>() : profiles; }
+        public Map<String, ModelProvider> getProviders() { return providers; }
+        public void setProviders(Map<String, ModelProvider> value) { providers = value == null ? new LinkedHashMap<>() : value; }
+        public List<String> getFallbackOrder() { return fallbackOrder; }
+        public void setFallbackOrder(List<String> value) { fallbackOrder = value == null ? new ArrayList<>() : value; }
     }
 
     public static class ModelProfile {
@@ -85,6 +94,8 @@ public class AgentProperties {
         @Min(0)
         @Max(5)
         private int maxRetries = 1;
+        private String provider = "deepseek";
+        private List<String> fallbackProviders = new ArrayList<>();
         public String getModel() { return model; }
         public void setModel(String model) { this.model = model; }
         public long getTimeoutMs() { return timeoutMs; }
@@ -95,6 +106,35 @@ public class AgentProperties {
         public void setToolCalling(boolean toolCalling) { this.toolCalling = toolCalling; }
         public int getMaxRetries() { return maxRetries; }
         public void setMaxRetries(int maxRetries) { this.maxRetries = maxRetries; }
+        public String getProvider() { return provider; }
+        public void setProvider(String value) { provider = value == null || value.trim().isEmpty() ? "deepseek" : value.trim(); }
+        public List<String> getFallbackProviders() { return fallbackProviders; }
+        public void setFallbackProviders(List<String> value) { fallbackProviders = value == null ? new ArrayList<>() : value; }
+    }
+
+    /** 单个模型 provider 的非敏感运行配置；密钥只从环境变量绑定，绝不记录到日志。 */
+    public static class ModelProvider {
+        private boolean enabled = true;
+        private String protocol = "DEEPSEEK";
+        private String baseUrl = "";
+        private String apiKey = "";
+        private String model = "";
+        private boolean structuredOutput = true;
+        private boolean toolCalling = true;
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean value) { enabled = value; }
+        public String getProtocol() { return protocol; }
+        public void setProtocol(String value) { protocol = value == null ? "" : value.trim().toUpperCase(); }
+        public String getBaseUrl() { return baseUrl; }
+        public void setBaseUrl(String value) { baseUrl = value == null ? "" : value.trim(); }
+        public String getApiKey() { return apiKey; }
+        public void setApiKey(String value) { apiKey = value == null ? "" : value.trim(); }
+        public String getModel() { return model; }
+        public void setModel(String value) { model = value == null ? "" : value.trim(); }
+        public boolean isStructuredOutput() { return structuredOutput; }
+        public void setStructuredOutput(boolean value) { structuredOutput = value; }
+        public boolean isToolCalling() { return toolCalling; }
+        public void setToolCalling(boolean value) { toolCalling = value; }
     }
 
     /** 排餐诊断执行配置。 */

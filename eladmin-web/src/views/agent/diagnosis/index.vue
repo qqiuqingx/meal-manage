@@ -169,7 +169,7 @@
                         <el-tag v-if="reason.confidence" size="mini" :type="confidenceTag(reason.confidence)">{{ reason.confidence }}</el-tag>
                       </template>
                       <div class="reason-desc">{{ reason.description }}</div>
-                      <div class="reason-suggestion">建议：{{ reason.suggestion || '请人工继续核对。' }}</div>
+                      <div class="reason-suggestion"><el-tag size="mini" type="warning">{{ reason.suggestionType || 'AI_SUGGESTION' }}</el-tag> 建议：{{ reason.suggestion || '请人工继续核对。' }}</div>
                       <div v-if="reason.ruleIds && reason.ruleIds.length" class="reason-ruleids">
                         规则：{{ reason.ruleIds.join(' / ') }}
                       </div>
@@ -216,6 +216,8 @@
                 </div>
                 <div v-if="message.responseType && message.responseType.indexOf('BUSINESS_QUERY') === 0 && message.insightResult" class="insight-section business-query-card">
                   <div class="block-title">业务查询结果</div>
+                  <el-alert v-if="message.validation && message.validation.status === 'DEGRADED'" title="查询结果未通过完整验证，已隐藏为非结论性提示，请到业务页面人工核对。" type="warning" :closable="false" show-icon />
+                  <div v-if="message.conversationFocus && Object.keys(message.conversationFocus).length" class="query-time">当前对象：{{ conversationFocusText(message.conversationFocus) }}</div>
                   <customer-overview-card v-if="message.responseType === 'BUSINESS_QUERY_CUSTOMER'" :result="message.insightResult" />
                   <customer-candidate-card v-if="message.responseType === 'BUSINESS_QUERY_CUSTOMER_CANDIDATES'" :result="message.insightResult" @select="selectCustomerCandidate" />
                   <business-order-list-card v-if="message.responseType === 'BUSINESS_QUERY_ORDER'" :result="message.insightResult" />
@@ -839,9 +841,14 @@ export default {
         partial: response.partial === true,
         queriedAt: response.queriedAt,
         queryPlan: response.queryPlan,
+        validation: response.validation,
+        conversationFocus: response.conversationFocus || {},
         resultBlocks: response.resultBlocks || []
       })
       this.loadActionAudits()
+    },
+    conversationFocusText(focus) {
+      return Object.keys(focus || {}).map(key => `${key}：${focus[key]}`).join('，')
     },
     async clearSession() {
       await this.createSession()

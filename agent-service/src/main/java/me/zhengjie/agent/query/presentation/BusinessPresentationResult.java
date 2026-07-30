@@ -60,6 +60,8 @@ public final class BusinessPresentationResult {
     private final String metricDefinitionId;
     private final String version;
     private final String ruleId;
+    private final String evidenceDocument;
+    private final String evidenceAnchor;
     private final String replaceReason;
     private final Long customerId;
     private final Long orderId;
@@ -120,6 +122,8 @@ public final class BusinessPresentationResult {
         this.metricDefinitionId = text(safe.get("metricDefinitionId"));
         this.version = text(safe.get("version"));
         this.ruleId = text(safe.get("ruleId"));
+        this.evidenceDocument = text(safe.get("evidenceDocument"));
+        this.evidenceAnchor = text(safe.get("evidenceAnchor"));
         this.replaceReason = text(safe.get("replaceReason"));
         this.customerId = longValue(safe.get("customerId"));
         this.orderId = longValue(safe.get("orderId"));
@@ -190,6 +194,8 @@ public final class BusinessPresentationResult {
     public String getMetricDefinitionId() { return metricDefinitionId; }
     public String getVersion() { return version; }
     public String getRuleId() { return ruleId; }
+    public String getEvidenceDocument() { return evidenceDocument; }
+    public String getEvidenceAnchor() { return evidenceAnchor; }
     public String getReplaceReason() { return replaceReason; }
     public Long getCustomerId() { return customerId; }
     public Long getOrderId() { return orderId; }

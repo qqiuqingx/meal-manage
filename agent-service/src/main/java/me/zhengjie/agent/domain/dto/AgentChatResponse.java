@@ -54,6 +54,10 @@ public class AgentChatResponse {
     private SemanticTraceSummary semanticTraceSummary;
     private ConversationTaskStack activeTaskStack;
     private List<BusinessQueryResultBlock> resultBlocks = new ArrayList<>();
+    /** 已验证事实与 AI 建议的展示边界摘要。 */
+    private AgentResponseValidation validation;
+    /** 当前仅由授权且已验证槽位构成的会话焦点。 */
+    private Map<String, String> conversationFocus = new LinkedHashMap<>();
 
     public String getResponseType() {
         return responseType;
@@ -92,6 +96,10 @@ public class AgentChatResponse {
     public void setActiveTaskStack(ConversationTaskStack activeTaskStack) { this.activeTaskStack = activeTaskStack; }
     public List<BusinessQueryResultBlock> getResultBlocks() { return resultBlocks; }
     public void setResultBlocks(List<BusinessQueryResultBlock> resultBlocks) { this.resultBlocks = resultBlocks == null ? new ArrayList<>() : resultBlocks; }
+    public AgentResponseValidation getValidation() { return validation; }
+    public void setValidation(AgentResponseValidation value) { validation = value; }
+    public Map<String, String> getConversationFocus() { return conversationFocus; }
+    public void setConversationFocus(Map<String, String> value) { conversationFocus = value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value); }
 
     public String getRequestId() {
         return requestId;

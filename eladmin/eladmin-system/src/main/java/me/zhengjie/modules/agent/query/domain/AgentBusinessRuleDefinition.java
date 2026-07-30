@@ -11,9 +11,14 @@ public class AgentBusinessRuleDefinition {
     /** 稳定规则 ID。 */ private String ruleId;
     /** 白名单查询主题及同义主题。 */ private List<String> topics = new ArrayList<>();
     /** 规则版本。 */ private String version;
+    /** 规则生效状态，仅 EFFECTIVE 条目可在运行时查询。 */ private String status;
     /** 面向客服的规则主题。 */ private String title;
     /** 经过审核的只读说明。 */ private String content;
     /** 规则责任模块。 */ private String ownerModule;
     /** 业务依据文档相对路径。 */ private String evidenceDocument;
+    /** 业务依据文档中的唯一 Markdown 标题锚点。 */ private String evidenceAnchor;
+    /** 业务依据文档内容的 SHA-256 摘要。 */ private String evidenceHash;
+    /** 规则生效时间。 */ private String effectiveFrom;
     /** 规则最后更新时间。 */ private String updatedAt;
+    /** 被当前规则替代的历史规则版本。 */ private String supersedes;
 }

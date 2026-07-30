@@ -57,6 +57,8 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
     private final BeanOutputConverter<DiagnosisResponse> outputConverter;
     private final boolean toolModeEnabled;
     private final String modelName;
+    /** 生产路径使用调用级 fallback；兼容构造器保留单 ChatClient 供既有单测使用。 */
+    private AgentModelGateway modelGateway;
 
     private boolean phase2Enabled = true;
 
@@ -99,6 +101,7 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
         this.maxToolCalls = properties.getDiagnosis().getMaxToolCalls();
         this.traceEnabled = properties.getDiagnosis().isTraceEnabled();
         this.suggestionTemplateEnabled = properties.getDiagnosis().isSuggestionTemplateEnabled();
+        this.modelGateway = modelGateway;
     }
 
     /** 校验诊断任务的结构化输出和可选工具调用能力后再创建客户端。 */
@@ -157,24 +160,11 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
             log.info("诊断阶段 stage=提示词已构建 requestId={} recordDate={} mealType={} toolModeEnabled={} promptChars={} ruleCount={}",
                 MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType(),
                 toolModeEnabled, prompt.length(), ruleRegistry.getRules() == null ? 0 : ruleRegistry.getRules().size());
-            ChatClient.ChatClientRequestSpec requestSpec = chatClient.prompt();
-            if (toolModeEnabled) {
-                // 显式启用 ToolCallAdvisor，把工具循环放到 advisor 链里，便于按轮次打日志。
-                requestSpec = requestSpec
-                    .advisors(ToolCallAdvisor.builder().build(), toolCallLoggingAdvisor)
-                    .tools(agentToolRegistry);
-            } else {
-                // 兼容旧模式时仍保留模型调用日志，但不注册任何工具。
-                requestSpec = requestSpec.advisors(toolCallLoggingAdvisor);
-            }
             MDC.put(STAGE_KEY, "MODEL_CALLING");
             log.info("诊断阶段 stage=开始模型调用 requestId={} recordDate={} mealType={} toolModeEnabled={} promptChars={} ruleCount={}",
                 MDC.get(REQUEST_ID_KEY), context.getRecordDate(), context.getMealType(),
                 toolModeEnabled, prompt.length(), ruleRegistry.getRules() == null ? 0 : ruleRegistry.getRules().size());
-            ChatClient.CallResponseSpec callResponseSpec = requestSpec.user(prompt).call();
-            ChatClientResponse rawClientResponse = callResponseSpec.chatClientResponse();
-            ChatResponse rawChatResponse = rawClientResponse == null ? null : rawClientResponse.chatResponse();
-            DiagnosisResponse response = responseParser.parse(extractContent(rawChatResponse));
+            DiagnosisResponse response = responseParser.parse(invokeModel(prompt));
             if (toolModeEnabled && !hasRequiredToolEvidence(response, ruleRegistry)) {
                 response = null;
             }
@@ -233,6 +223,21 @@ public class SpringAiDiagnosisAiClient implements DiagnosisAiClient {
         }
         response.setDiagnosisTrace(traceCollector.snapshotTrace());
         response.setToolCallSummary(traceCollector.snapshotToolSummary());
+    }
+
+    /** 每次 provider 尝试都重新创建 prompt 与 ToolCallAdvisor，失败会话绝不复用工具中间态。 */
+    private String invokeModel(String prompt) {
+        java.util.function.Function<ChatClient, String> invocation = client -> {
+            ChatClient.ChatClientRequestSpec requestSpec = client.prompt();
+            if (toolModeEnabled) {
+                requestSpec = requestSpec.advisors(ToolCallAdvisor.builder().build(), toolCallLoggingAdvisor).tools(agentToolRegistry);
+            } else {
+                requestSpec = requestSpec.advisors(toolCallLoggingAdvisor);
+            }
+            ChatClientResponse response = requestSpec.user(prompt).call().chatClientResponse();
+            return extractContent(response == null ? null : response.chatResponse());
+        };
+        return modelGateway == null ? invocation.apply(chatClient) : modelGateway.execute("diagnosis", invocation);
     }
 
     private String extractContent(ChatResponse chatResponse) {

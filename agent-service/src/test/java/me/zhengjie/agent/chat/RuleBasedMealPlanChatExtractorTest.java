@@ -49,13 +49,14 @@ class RuleBasedMealPlanChatExtractorTest {
         ChatExtractionResult result = extractor.extract("午餐核销扣哪个池", new DiagnosisSlots());
 
         assertEquals(ChatIntent.BUSINESS_RULE_QUERY, result.getIntent());
+        assertEquals("MEAL_BALANCE", result.getRuleIntent());
     }
 
     @Test
     void shouldExtractMealPlanAndDietaryRuleQuestions() {
-        assertEquals(ChatIntent.BUSINESS_RULE_QUERY, extractor.extract("排餐模式怎么匹配餐次", new DiagnosisSlots()).getIntent());
-        assertEquals(ChatIntent.BUSINESS_RULE_QUERY, extractor.extract("过敏菜为什么会被过滤", new DiagnosisSlots()).getIntent());
-        assertEquals(ChatIntent.BUSINESS_RULE_QUERY, extractor.extract("退餐对餐数有什么影响", new DiagnosisSlots()).getIntent());
+        assertEquals("MEAL_PLAN_MATCH", extractor.extract("排餐模式怎么匹配餐次", new DiagnosisSlots()).getRuleIntent());
+        assertEquals("DIETARY_FILTER", extractor.extract("过敏菜为什么会被过滤", new DiagnosisSlots()).getRuleIntent());
+        assertEquals("VERIFICATION_REFUND_EFFECT", extractor.extract("退餐对餐数有什么影响", new DiagnosisSlots()).getRuleIntent());
     }
 
     /** 客服常用的客户概览问法不应被误判为需要日期和餐次的排餐诊断。 */
