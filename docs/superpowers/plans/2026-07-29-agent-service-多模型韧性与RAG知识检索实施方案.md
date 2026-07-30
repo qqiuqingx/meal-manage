@@ -88,9 +88,15 @@ AgentModelGateway (interface)
 
 ### 2.3 技术方案
 
+#### 2.3.0 实施前约束
+
+- 备用 Claude 必须使用 **Anthropic 原生适配器**（`spring-ai-starter-model-anthropic`、`spring.ai.anthropic.*`），不能把 `https://api.anthropic.com` 直接配置为 `spring.ai.openai.base-url`。只有接入了已验收的 OpenAI 兼容代理时，才允许使用 OpenAI 适配器，并必须在配置中明确代理地址、责任方和协议验收用例。
+- 现有 `AgentModelGateway.chatClient(profile)` 只在构造期返回一个固定 `ChatClient`。Fallback 不能仅在该方法中选一次 client；必须围绕一次完整的模型调用（含 prompt、结构化解析和工具调用循环）执行，异常才有机会切换 provider 后重放同一请求。
+- DeepSeek 当前默认模型名 `deepseek-chat` 是历史兼容配置。实施时应以发布日官方模型列表为准，将生产模型通过环境变量显式指定，并增加启动期模型/能力探测；不在新方案中继续把历史模型名作为长期默认承诺。
+
 #### 2.3.1 多 Provider 配置
 
-Spring AI 支持同时配置多个 provider，通过限定符区分：
+Spring AI 的模型抽象可承载多个 provider，但本项目需显式创建并以 provider 名称注入各自的 `ChatModel`/`ChatClient.Builder`；不得依赖自动配置“选择第一个 bean”或隐式限定符：
 
 ```yaml
 # application.yml
@@ -102,15 +108,16 @@ spring:
       base-url: ${AGENT_DEEPSEEK_BASE_URL:https://api.deepseek.com}
       chat:
         options:
-          model: ${AGENT_DEEPSEEK_MODEL:deepseek-chat}
-    # 备用 provider：Anthropic Claude（OpenAI 兼容协议，通过代理）
-    openai:
+          model: ${AGENT_DEEPSEEK_MODEL}
+    # 备用 provider：Anthropic Claude 原生协议
+    anthropic:
       api-key: ${AGENT_CLAUDE_API_KEY}
       base-url: ${AGENT_CLAUDE_BASE_URL:https://api.anthropic.com}
       chat:
-        options:
-          model: ${AGENT_CLAUDE_MODEL:claude-sonnet-4-20250514}
+        model: ${AGENT_CLAUDE_MODEL}
 ```
+
+同时在 `pom.xml` 增加 `spring-ai-starter-model-anthropic`。如果选择代理方案，则该段改为 `spring.ai.openai`，并在部署文档中写明代理的 OpenAI 兼容性、鉴权头和可用区；两种方案不得混用。
 
 #### 2.3.2 AgentProperties 扩展：Provider 绑定
 
@@ -120,16 +127,16 @@ spring:
 public static class Models {
     private Map<String, ModelProfile> profiles = new LinkedHashMap<>(Map.of("default", new ModelProfile()));
     private Map<String, ProviderConfig> providers = new LinkedHashMap<>();
-    private List<String> fallbackOrder = List.of("deepseek", "openai");
+    private List<String> fallbackOrder = List.of("deepseek", "claude");
     // ...
 }
 
 public static class ProviderConfig {
-    private String type = "openai-compatible"; // openai-compatible, anthropic
-    private String apiKeyEnv;
+    private String type; // deepseek, anthropic, openai-compatible（仅代理）
+    private String apiKey;
     private String baseUrl;
     private boolean enabled = true;
-    private int weight = 100; // 负载权重，暂不启用
+    // 本阶段不做负载均衡，避免“fallback 顺序”和权重路由并存。
 }
 
 public static class ModelProfile {
@@ -141,21 +148,24 @@ public static class ModelProfile {
 
 #### 2.3.3 Fallback 链实现
 
-新增 `FallbackModelGateway` 包装 `AgentModelGateway`：
+新增按**完整调用**执行的 `FallbackModelExecutor`，并由 provider 专属 gateway 负责构建 `ChatClient`：
 
 ```
-FallbackModelGateway implements AgentModelGateway
-    ├── providerGateways: Map<String, AgentModelGateway>
+FallbackModelExecutor
+    ├── providerGateways: Map<String, ProviderModelGateway>
     │   ├── "deepseek" → SpringAiAgentModelGateway(deepseek ChatClient)
-    │   └── "openai"  → SpringAiAgentModelGateway(openai ChatClient)
-    ├── fallbackOrder: ["deepseek", "openai"]
+    │   └── "claude"  → SpringAiAgentModelGateway(anthropic ChatClient)
+    ├── fallbackOrder: ["deepseek", "claude"]
     ├── healthChecker: ProviderHealthChecker
-    └── chatClient(profile):
+    └── execute(profile, request):
         1. 读取 profile 绑定的 provider
         2. 按 provider → fallbackProviders 顺序尝试
-        3. 健康检查 + 超时熔断
-        4. 全部不可用 → 抛出 MODEL_UNAVAILABLE
+        3. 对同一受控 request 执行完整调用；仅网络超时、5xx、限流等可恢复错误进入 fallback
+        4. 解析/Schema/工具执行错误不切换，保留稳定失败码和审计摘要
+        5. 全部 provider 不可用 → 抛出 MODEL_UNAVAILABLE
 ```
+
+业务分析、会话理解和诊断客户端应依赖这个执行端口，而非在 Bean 初始化时保存单一 `ChatClient`。工具调用场景的重放必须使用新的工具调用会话，禁止复用失败 provider 的中间会话或工具结果。
 
 **熔断策略**：
 - 连续失败 3 次 → 标记 provider 为 unhealthy，冷却 30 秒
@@ -163,7 +173,7 @@ FallbackModelGateway implements AgentModelGateway
 - 探测成功 → 恢复 healthy；失败 → 重新冷却
 
 **健康检查**：
-- 启动时对所有 provider 做一次轻量探测（发送简单 prompt，验证响应格式）
+- 启动时仅校验配置、模型能力与客户端 Bean；不发送收费 prompt。深度连通性由受控运维探测接口或灰度任务显式触发。
 - 运行时通过 `ChatClient` 调用异常自动触发熔断
 - 不引入独立的 health check 定时任务（避免额外 API 费用）
 
@@ -174,22 +184,22 @@ agent:
   models:
     providers:
       deepseek:
-        type: openai-compatible
+        type: deepseek
         enabled: true
       claude:
-        type: openai-compatible
+        type: anthropic
         enabled: ${AGENT_CLAUDE_ENABLED:false}
         base-url: ${AGENT_CLAUDE_BASE_URL:https://api.anthropic.com}
     profiles:
       default:
-        model: ${AGENT_MODEL_DEFAULT:deepseek-chat}
+        model: ${AGENT_MODEL_DEFAULT:${AGENT_DEEPSEEK_MODEL}}
         provider: deepseek
         fallback-providers: [claude]
         timeout-ms: 3000
         structured-output: true
         tool-calling: true
       diagnosis:
-        model: ${AGENT_MODEL_DIAGNOSIS:deepseek-chat}
+        model: ${AGENT_MODEL_DIAGNOSIS:${AGENT_DEEPSEEK_MODEL}}
         provider: deepseek
         fallback-providers: [claude]
         timeout-ms: 8000
@@ -203,11 +213,11 @@ agent:
 |------|--------|------|
 | `AGENT_DEEPSEEK_API_KEY` | 空 | DeepSeek API Key（主 provider） |
 | `AGENT_DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek API 地址 |
-| `AGENT_DEEPSEEK_MODEL` | `deepseek-chat` | DeepSeek 模型名 |
+| `AGENT_DEEPSEEK_MODEL` | 无固定长期默认值 | DeepSeek 模型名，生产环境必须显式设置并经能力评测 |
 | `AGENT_CLAUDE_ENABLED` | `false` | 是否启用 Claude 备用 provider |
 | `AGENT_CLAUDE_API_KEY` | 空 | Claude API Key |
 | `AGENT_CLAUDE_BASE_URL` | `https://api.anthropic.com` | Claude API 地址 |
-| `AGENT_CLAUDE_MODEL` | `claude-sonnet-4-20250514` | Claude 模型名 |
+| `AGENT_CLAUDE_MODEL` | 空 | Claude 模型名，启用 Claude 时必填并经结构化输出/工具调用评测 |
 
 ### 2.4 新增/修改文件
 
@@ -282,60 +292,71 @@ agent-service/src/main/java/me/zhengjie/agent/
 
 #### 3.3.2 向量数据库选型
 
-| 方案 | 优点 | 缺点 | 结论 |
-|------|------|------|------|
-| **Redis Vector Search** | 项目已有 Redis，无需新依赖 | 需 Redis 7.2+，功能有限 | ✅ 推荐 |
-| Chroma（内嵌） | 零运维，Java 有 SDK | 新增依赖，数据不持久化 | 备选 |
-| PGVector | 功能完整 | 项目用 MySQL，无 PG | 不适用 |
-| 内存向量（InMemory） | 零依赖，启动快 | 仅适合小规模 | 开发/测试用 |
+本项目的首批语料约 110KB，预计只有数百个 chunk；选型重点不是极限吞吐，而是中文召回、可审计的版本切换、数据不出域和运维复杂度。不得把普通 Redis 或 `SimpleVectorStore` 当作生产向量库：Spring AI 明确将后者定位为测试/演示用途。
 
-**推荐方案**：**分层策略**
-- 开发/测试环境：内存向量存储（InMemoryVectorStore）
-- 生产环境：Redis Vector Search（利用现有 Redis，需确认版本 ≥ 7.2）
+| 方案 | 与当前项目的匹配度 | 优点 | 主要成本/否决条件 | 结论 |
+|------|------|------|------|------|
+| **Redis Stack / Redis Query Engine + RedisVectorStore** | 高（条件成立） | 复用 Redis 运维体系；支持向量检索、metadata filter 与全文 BM25；Spring AI 1.1.6 有对应 starter | 现有 Redis 必须实际具备 RedisJSON/Query Engine、持久化、备份与独立 key namespace；不能只看 Redis 版本 | **首选，须通过 POC** |
+| **Qdrant + QdrantVectorStore** | 中 | 向量库职责清晰、collection 版本切换直接，不污染缓存 Redis | 新增服务、监控、备份和高可用成本 | Redis POC 不通过时的**生产备选** |
+| Elasticsearch/OpenSearch | 低 | 可做成熟的全文/向量混合检索 | 项目未部署该搜索集群，新增运维成本对数百 chunk 不划算 | 仅在已有集群时复用 |
+| Chroma | 低 | 原型快速 | 是独立服务而非“内嵌零运维”；生产备份、鉴权、升级策略仍需维护 | 不作为本项目生产方案 |
+| MySQL / PGVector | 低 | 可与关系数据邻近部署 | 当前 MySQL 架构没有 Spring AI 1.1.6 的标准 MySQL VectorStore；项目也没有 PostgreSQL | 不引入 |
+| Simple/InMemory | 仅测试 | 零外部依赖 | 进程级数据、全量扫描，Spring AI 不建议生产使用 | 仅单元测试 |
+
+**阶段 2 暂定决策**：以 **Redis Stack + 本地 embedding + 稠密向量/BM25 混合召回** 为首选；若 POC 未满足准入指标，则改为 **Qdrant + 同一 embedding 模型**，而不是生产环境回退 InMemory。语料规模小，首期使用精确 `FLAT` 检索即可；仅在 chunk 数量和压测显示需要时再切换 HNSW。暂不引入 reranker。
+
+**Redis 准入 POC（必须在编码前完成）**：确认运行实例具备 Redis Query Engine/RedisJSON，使用独立 `agent:knowledge:{version}:` namespace，验证向量 schema 显式创建、metadata filter、BM25、删除、备份恢复、ACL 隔离和 20 并发检索。Spring AI 的 RedisVectorStore 需要 Redis Stack/Query Engine 和单独的 starter，且 schema 初始化默认需要显式开启；依赖版本必须锁定到现有 Spring AI `1.1.6` BOM 后验证。
 
 #### 3.3.3 Embedding 模型
 
-使用 DeepSeek Embedding API（与现有 LLM provider 一致）：
+Embedding 必须作为独立依赖决策，不能假定聊天 provider 同时提供 embedding，也不能使用未验证的 `deepseek-embedding` 默认值。
+
+**首选**：在独立的本地 Ollama 服务运行 `bge-m3`，通过 Spring AI 1.1.6 的 Ollama model starter 接入。该模型支持中文/多语言，Ollama 发布物约 1.2GB、向量维度为 1024；镜像构建期预拉取固定 digest，生产环境禁止首启自动下载。Embedding 服务与 agent-service 分开部署，限制网络访问与资源配额。
+
+选择本地 embedding 只解决“入库向量化不出域”，不自动解决 RAG 上下文出域：检索到的原文仍会发给答案生成 LLM。知识清单必须先经数据安全评审，敏感字段/内部地址/凭证不得入库；如果聊天模型部署在外部 provider，发送前还要执行上下文最小化、敏感内容扫描和出域审批。
+
+备选是已完成安全评审的远程 embedding 服务；它必须独立配置 endpoint、模型、维度、密钥和数据保留条款。远程 embedding 不能与聊天 provider 的 API key 或模型名混用。
+
+配置必须独立于聊天模型，例如：
 
 ```yaml
-spring:
-  ai:
-    deepseek:
-      embedding:
-        api-key: ${AGENT_DEEPSEEK_API_KEY}
-        base-url: ${AGENT_DEEPSEEK_BASE_URL:https://api.deepseek.com}
-        options:
-          model: ${AGENT_DEEPSEEK_EMBEDDING_MODEL:deepseek-embedding}
+agent:
+  knowledge:
+    embedding:
+      provider: ${AGENT_KNOWLEDGE_EMBEDDING_PROVIDER:}
+      model: ${AGENT_KNOWLEDGE_EMBEDDING_MODEL:bge-m3}
+      dimensions: ${AGENT_KNOWLEDGE_EMBEDDING_DIMENSIONS:1024}
 ```
 
-**备选**：如果 DeepSeek Embedding 不可用，使用 BGE-small-zh（本地 CPU 推理，无需额外服务）。
+`provider`、`model` 或 `dimensions` 未通过启动校验时，知识库能力保持关闭并报告稳定的配置错误；不得回退到不兼容维度的旧索引。embedding 模型、模型 digest、维度、chunker 版本和检索策略都是 collection version 的组成部分。上线前以脱敏中文评测集对比 **BM25-only、dense-only、RRF 混合召回**，以 Recall@3、来源命中率、P95 延迟和拒答率决定是否启用混合检索；首期不接 reranker。
 
 #### 3.3.4 文档处理管道
 
 ```
-eladmin/doc/business/*.md
+受控知识清单（manifest）中的 Markdown 文档
     ↓
 DocumentLoader（Markdown 解析、分段）
     ↓
 DocumentChunker（按 ## 标题分段，每段 500-1500 tokens）
     ↓
-DocumentMetadataEnricher（添加标题、文件名、最后修改时间）
+DocumentMetadataEnricher（添加文档 ID、Git revision/内容 hash、标题、文件名、段落锚点）
     ↓
-EmbeddingGenerator（调用 DeepSeek Embedding API）
+EmbeddingGenerator（调用独立本地/已审批远程 EmbeddingModel）
     ↓
-VectorStore（Redis / InMemory）
+HybridRetriever（Redis Stack 的 dense + BM25；测试替身仅用于单测）
 ```
 
 **分段策略**：
-- 以 Markdown `##` 标题为自然边界
+- 以 Markdown `##` 标题为自然边界；超长标题段继续按段落边界拆分
 - 每段 500-1500 tokens（中文约 750-2250 字）
 - 相邻段落保留 100 字重叠（overlap），确保跨段信息不丢失
 - 表格保留完整（不截断表格）
 
-**文档更新机制**：
-- 启动时全量加载一次
-- 提供手动刷新端点：`POST /api/internal/agent/knowledge/refresh`
-- 后续可扩展为文件监听自动刷新
+**文档来源与更新机制**：
+- 不扫描目录中所有新增 `.md`。维护受代码评审的 knowledge manifest，只纳入业务规则类文档；草稿、实施计划、运维密钥说明、用户可写内容和未审核文件默认排除，避免提示注入和过期流程进入知识库。
+- `AGENT_KNOWLEDGE_DOCS_PATH` 必须是部署时挂载的绝对路径；启动时校验 manifest 文件存在、可读且内容 hash 与索引版本一致。不得依赖 JAR 的当前工作目录或仓库相对路径。
+- 刷新采用“构建新版本 → 检索/引用验收 → 原子切换 active collection”的两阶段流程。每个 chunk ID 由文档 ID、段落锚点、内容 hash 和 embedding 版本组成；切换后清理旧版本，确保修改和删除的文档不会残留旧向量。
+- `POST /api/internal/agent/knowledge/refresh` 仅作为异步任务提交入口，返回 jobId 和目标版本。接口须由 agent-service 入站管理员鉴权、网络隔离、幂等锁、限流和审计保护；不能把 agent 调用主系统所用的内部 token 直接当成缺少校验的入站鉴权。
 
 #### 3.3.5 意图扩展
 
@@ -349,7 +370,7 @@ public enum ChatIntent {
 }
 ```
 
-意图分类器扩展：在 `RuleBasedIntentClassifier` 中增加知识问答的关键词模式（"怎么"、"如何"、"什么是"、"规则"、"流程"），在 `LlmIntentClassifier` 的 prompt 中增加 `KNOWLEDGE_QUERY` 类型。
+路由优先级必须固定：已有 `BUSINESS_RULE_QUERY`、数据查询和诊断意图优先；仅当问题不要求实时数据、命中 knowledge manifest 且没有受控规则工具答案时才进入 `KNOWLEDGE_QUERY`。不能仅以“怎么”“规则”“流程”等通用词触发，否则会把“剩余餐数怎么算”等已有强类型规则查询错误送入 RAG。
 
 #### 3.3.6 路由集成
 
@@ -370,19 +391,20 @@ if (intent == ChatIntent.KNOWLEDGE_QUERY) {
 
 ```json
 {
-  "type": "KNOWLEDGE_ANSWER",
-  "content": "订单的剩余餐数分为早餐餐数和午餐晚餐餐数，两者独立计算。\n\n剩余早餐数 = 订单早餐数 - 已核销早餐数\n剩余午餐晚餐数 = 订单午餐晚餐数 - 已核销午餐数 - 已核销晚餐数",
+  "responseType": "KNOWLEDGE_ANSWER",
+  "assistantMessage": "订单的剩余餐数分为早餐餐数和午餐晚餐餐数，两者独立计算。",
   "sources": [
     {
       "document": "订单管理业务说明.md",
       "section": "订单剩余餐数计算规则",
-      "relevance": 0.92
+      "anchor": "#订单剩余餐数计算规则",
+      "documentVersion": "sha256:..."
     }
   ]
 }
 ```
 
-### 3.4 新增文件
+### 3.4 新增/修改文件与契约
 
 ```
 agent-service/src/main/java/me/zhengjie/agent/
@@ -407,13 +429,20 @@ agent-service/src/main/java/me/zhengjie/agent/
     └── application.yml                        # [修改] 增加 embedding 配置
 ```
 
+以下文件同样是阶段 2 的必改范围，不能只改 agent-service 内部包：
+
+- `agent-service/pom.xml`：增加已选 embedding/vector store 的依赖；现有 `spring.ai.model.embedding: none` 必须按知识库开关做条件化配置。
+- `agent-service/src/main/resources/openapi/agent-service-v2.yaml`：增加 `KnowledgeSource`、`knowledgeSources`、刷新任务的请求/响应和 `KNOWLEDGE_UNAVAILABLE` 错误码；维持 `additionalProperties: false`。
+- `eladmin-system` 的 agent-service client、DTO、会话快照持久化/恢复：透传并保存来源信息和知识库版本。
+- `eladmin-web`：按来源安全地渲染文档名和锚点；链接只能指向受控文档查看页，不得让模型返回任意 URL。
+
 ### 3.5 测试策略
 
 - `DocumentChunkerTest`：不同 Markdown 结构的分段正确性
-- `VectorStoreServiceTest`：检索准确性（@SpringBootTest，需 Redis）
+- `VectorStoreServiceTest`：检索准确性、索引版本原子切换、删除文档后不再命中（测试容器或独立测试 Redis）
 - `KnowledgeQueryPipelineTest`：端到端知识问答（Mock LLM）
 - `ChatIntentClassifierTest`：知识问答意图识别准确率
-- 评测集：10 个典型知识问答 case，评估答案准确率和来源正确率
+- 评测集：至少覆盖既有强类型规则查询、纯知识问答、冲突文档、删除文档和提示注入样本；评估召回率、答案准确率、来源正确率与拒答率
 
 ### 3.6 关键设计决策
 
@@ -438,7 +467,7 @@ agent-service/src/main/java/me/zhengjie/agent/
 #### 4.2.1 分层检测策略
 
 ```
-LLM 生成输出
+模型参与生成的诊断/知识回答
     ↓
 [第 1 层] 结构化数据校验
     - 提取输出中的数字/日期/状态等数据断言
@@ -459,7 +488,7 @@ LLM 生成输出
 
 #### 4.2.2 第 1 层：数据断言校验
 
-**实现方式**：在 `BusinessAnswerComposer` 之后增加 `DataAssertionValidator`：
+**实现方式**：在模型输出进入展示层之前增加 `DataAssertionValidator`。强类型业务查询不走自由生成，`BusinessAnswerComposer` 只基于主系统受控 DTO 生成确定性话术，继续复用现有 `BusinessAnswerValidator`、facts 和 `BusinessResultValidator`，不再额外反向调用 API。
 
 ```java
 public class DataAssertionValidator {
@@ -478,11 +507,11 @@ public class DataAssertionValidator {
 }
 ```
 
-**关键点**：这个校验只在**数据查询类意图**中启用——因为只有这类意图的 LLM 输出才包含可校验的数据断言。知识问答类意图不需要此校验（知识回答来自文档，数据准确性由文档保证）。
+**关键点**：仅对模型生成且包含当前受控 QueryPlan 的数据断言启用。知识问答也不能因“来自文档”而跳过校验：它至少要校验引用的文档版本、段落锚点和答案中的引用覆盖率；文档与实时业务状态冲突时必须提示以业务系统实时数据为准。
 
 #### 4.2.3 第 2 层：规则断言校验
 
-**实现方式**：在诊断建议输出中，校验 LLM 引用的规则是否在 YAML 规则库中真实存在：
+**实现方式**：扩展既有 `DiagnosisResultValidator` 对 ruleId、reasonCode 和 evidence 字段的校验，不新增只靠正则提取文本的平行校验链：
 
 ```java
 public class RuleAssertionValidator {
@@ -490,24 +519,24 @@ public class RuleAssertionValidator {
      * 校验 LLM 输出中引用的诊断规则是否在 RuleRegistry 中存在。
      */
     public ValidationResult validate(String diagnosisOutput, RuleRegistry registry) {
-        // 1. 提取诊断输出中的 reasonCode 引用
-        // 2. 在 RuleRegistry 中查找对应规则
-        // 3. 校验规则描述是否匹配
+        // 1. 校验结构化 ruleId、reasonCode 与 evidence
+        // 2. 在 RuleRegistry 中查找对应规则和版本
+        // 3. 不匹配时返回稳定错误或受控兜底，不展示原始模型断言
     }
 }
 ```
 
 #### 4.2.4 前端呈现
 
-检测结果通过现有 `AgentChatResponse` 的扩展字段返回：
+检测结果通过版本化的 `AgentChatResponse` 扩展字段返回，并同步更新 OpenAPI、主系统 DTO/快照和前端。对外仅返回事实引用 ID、规则 ID、版本和稳定校验状态；不要把可能包含敏感数据的原始断言或 `actual` 值作为通用诊断字段回传：
 
 ```json
 {
   "content": "该客户剩余早餐数为 3 餐...",
   "validation": {
     "dataAssertions": [
-      { "claim": "剩余早餐数为 3 餐", "verified": true },
-      { "claim": "最近一次核销为 7月28日", "verified": false, "actual": "7月29日" }
+      { "factId": "F1", "verified": true },
+      { "factId": "F2", "verified": false, "reason": "VALUE_MISMATCH" }
     ],
     "confidence": "HIGH"
   }
@@ -531,12 +560,14 @@ agent-service/src/main/java/me/zhengjie/agent/
 │       ├── ValidationResult.java              # 校验结果
 │       └── DataAssertion.java                 # 数据断言
 ├── query/
-│   └── BusinessAnswerComposer.java            # [修改] 集成校验
+│   └── BusinessAnswerValidator.java           # [修改] 复用强类型 facts 校验
 ├── summary/
-│   └── TemplateDiagnosisSummaryService.java   # [修改] 集成校验
+│   └── TemplateDiagnosisSummaryService.java   # [修改] 仅展示已通过结构化校验的诊断摘要
 └── domain/dto/
     └── AgentChatResponse.java                 # [修改] 增加 validation 字段
 ```
+
+并同步修改 `agent-service-v2.yaml`、主系统 agent client/会话快照和前端展示契约。灰度期可只标记不阻断，但“校验失败”的原模型内容不得继续当作已核实事实展示。
 
 ---
 
@@ -550,13 +581,17 @@ agent-service/src/main/java/me/zhengjie/agent/
 
 | 维度 | 指标 | 权重 | 数据来源 |
 |------|------|------|---------|
-| **排餐健康度** | 近 30 天排餐失败次数 | 30% | meal_plan_generation_snapshot |
-| **核销异常度** | 近 30 天未核销天数 | 20% | meal_verification_log |
-| **退款风险** | 近 90 天退款次数 | 25% | meal_refund |
+| **排餐健康度** | 近 30 天应排餐次中的失败次数/失败率 | 30% | 主系统新增的客户维度历史排餐聚合接口 |
+| **核销异常度** | 近 30 天应服务且已排餐次中的超期未核销率 | 20% | 主系统新增的客户维度核销聚合接口 |
+| **退款风险** | 近 90 天退餐次数/有效订单数 | 25% | `meal_refund_log` 的主系统只读聚合接口 |
 | **餐数紧张度** | 剩余餐数 / 总餐数比例 | 15% | customer_order |
 | **过敏复杂度** | 过敏食物种类数 | 10% | customer_dietary_restrictions |
 
-### 5.3 计算方式
+### 5.3 数据边界与计算方式
+
+agent-service 不直连数据库，也不应从单日 `meal-plan-generation-snapshot` 推算 30 天客户历史。阶段 4 必须先由主系统提供受权限、部门数据范围和时间范围约束的**强类型聚合 API/tool**，返回每个分量的分子、分母、缺失原因、数据截至时间和口径版本；Agent 仅负责组合和展示。
+
+“未核销”分母只包括实际应服务、已生成排餐且未被排除日期、停餐或退餐覆盖的餐次；不能把没有有效订单、未排餐或无需服务的自然日计为异常。过敏复杂度使用已启用的过敏/忌口条目并区分过敏与主动排除菜。
 
 ```java
 public class CustomerHealthScorer {
@@ -564,9 +599,9 @@ public class CustomerHealthScorer {
      * 0-100 分，分数越低风险越高。
      */
     public HealthScore calculate(Long customerId) {
-        // 各维度分别计算子分数（0-100）
-        // 加权求和得到总分
-        // 返回分数 + 各维度明细 + 风险标签
+        // 根据主系统返回的版本化分子/分母计算各维度子分数（0-100）
+        // 仅对数据完整的维度加权；缺失维度明确标记 UNKNOWN，不伪造总分
+        // 返回分数、各维度明细、口径版本、数据截至时间和风险标签
     }
 }
 ```
@@ -577,7 +612,7 @@ public class CustomerHealthScorer {
 2. **查询时**：客户查询结果中附带健康度标签
 3. **主动查询**：运营人员可单独查询客户健康度
 
-### 5.5 新增文件
+### 5.5 新增/修改文件
 
 ```
 agent-service/src/main/java/me/zhengjie/agent/
@@ -589,22 +624,28 @@ agent-service/src/main/java/me/zhengjie/agent/
 │       └── HealthDimension.java               # 评分维度定义
 ```
 
+还需新增或修改：
+
+- `eladmin-system`：健康度聚合查询 controller/service/DTO、权限与部门数据范围校验、对应 API 文档；不得暴露自由 SQL 或原始金额。
+- `agent-service`：受控 tool descriptor、typed client、QueryPlan/capability、OpenAPI 和会话快照字段。
+- 配置与评测：权重、阈值和口径版本必须可追溯；先用脱敏历史样本校准，并覆盖暂停、退餐、排除日期、无排餐、数据缺失等边界测试。
+
 ---
 
 ## 6. 实施顺序与依赖
 
 ```
 阶段 1：多模型韧性（1 周）
-    │  无外部依赖，纯基础设施改造
+    │  依赖：Anthropic/代理协议验收、双 provider 能力评测
     │
     ├──→ 阶段 2：RAG 知识检索（2-3 周）
-    │       依赖：Embedding API、Redis 版本确认
+    │       依赖：Redis Stack/Qdrant POC、本地 embedding 部署与数据安全评审
     │
     ├──→ 阶段 3：幻觉检测（2 周）
     │       依赖：阶段 1 多模型（需 LLM 做断言提取）
     │
     └──→ 阶段 4：客户健康度评分（2 周）
-            依赖：阶段 2 上线后可联动
+            依赖：主系统历史聚合 API、口径评审与脱敏样本校准；不依赖阶段 2
 ```
 
 **并行空间**：阶段 2 和阶段 3 可部分并行（阶段 2 的 RAG 管道搭建和阶段 3 的校验框架不冲突）。
@@ -613,11 +654,11 @@ agent-service/src/main/java/me/zhengjie/agent/
 
 | 风险 | 影响 | 对策 |
 |------|------|------|
-| Redis 版本 < 7.2 不支持 Vector Search | RAG 无法使用 Redis 存储 | 降级为 Chroma 内嵌模式或 InMemory |
-| DeepSeek Embedding API 不可用 | 文档无法向量化 | 使用 BGE-small-zh 本地推理 |
+| Redis 未部署可持久化的 Vector Search | RAG 索引不可用或重启丢失 | 阶段 2 POC 后选择已验收的独立向量存储；生产环境不静默降级为 InMemory |
+| 选定 embedding provider 不可用或向量维度变更 | 文档无法向量化或旧索引不可用 | 以 provider/model/dimensions 版本构建新 collection，验收后原子切换 |
 | Claude API 不在国内可用 | 备用 provider 不可用 | 使用国内可用的备用模型（如 Moonshot、Qwen） |
-| 业务文档格式不统一 | 分段质量差 | 文档预处理脚本 + 人工审核分段结果 |
-| 多 provider 增加 API 费用 | 成本上升 | 备用 provider 仅在故障时启用，健康检查用轻量探测 |
+| 未审核文档或提示注入进入知识库 | 错误规则、敏感内容或恶意指令被检索 | 使用受评审 manifest、内容 hash、来源白名单和刷新前验收 |
+| 多 provider 增加 API 费用 | 成本上升 | 备用 provider 仅在故障时启用；深度连通性仅由受控运维任务按需探测 |
 
 ## 8. 验证清单
 
@@ -630,8 +671,9 @@ mvn -q test -Dtest='*Fallback*Test'
 # 阶段 2：RAG 知识检索
 # 运行知识问答评测集
 mvn -q test -Dtest='*Knowledge*Test'
-# 手动刷新知识库
-curl -X POST http://localhost:18081/api/internal/agent/knowledge/refresh
+# 提交知识库刷新（接口实施后；需要独立的入站管理员鉴权）
+curl -X POST http://localhost:18081/api/internal/agent/knowledge/refresh \
+  -H "X-Agent-Knowledge-Admin: ${AGENT_KNOWLEDGE_ADMIN_TOKEN}"
 
 # 阶段 3：幻觉检测
 mvn -q test -Dtest='*Validation*Test'

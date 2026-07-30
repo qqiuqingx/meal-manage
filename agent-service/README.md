@@ -36,18 +36,21 @@ export AGENT_INTERNAL_TOKEN=local-agent-token
 | `AGENT_CHAT_INTENT_CLASSIFIER_MODE` | `hybrid` | 仅允许 `rule_only`、`llm_only`、`hybrid` |
 | `AGENT_CHAT_BUSINESS_SEMANTIC_MODE` | `llm_first` | 仅允许 `rule_only`、`shadow`、`llm_first` |
 | `AGENT_CHAT_CONVERSATION_UNDERSTANDING_MODE` | `shadow` | 多帧理解灰度模式，仅允许 `shadow`、`new` |
-| `AGENT_DEEPSEEK_API_KEY` | 空 | DeepSeek API Key（主 provider） |
+| `AGENT_DEEPSEEK_API_KEY` | 空 | DeepSeek API Key |
 | `AGENT_DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek API 地址 |
-| `AGENT_DEEPSEEK_MODEL` | `deepseek-chat` | DeepSeek 模型名 |
-| `AGENT_CLAUDE_ENABLED` | `false` | 是否启用 Claude 备用 provider（阶段 1 实施中） |
-| `AGENT_CLAUDE_API_KEY` | 空 | Claude API Key（阶段 1 实施中） |
-| `AGENT_CLAUDE_BASE_URL` | `https://api.anthropic.com` | Claude API 地址（阶段 1 实施中） |
-| `AGENT_CLAUDE_MODEL` | `claude-sonnet-4-20250514` | Claude 模型名（阶段 1 实施中） |
-| `AGENT_DEEPSEEK_EMBEDDING_MODEL` | `deepseek-embedding` | Embedding 模型名（阶段 2 实施中） |
-| `AGENT_KNOWLEDGE_ENABLED` | `false` | 是否启用 RAG 知识检索（阶段 2 实施中） |
-| `AGENT_KNOWLEDGE_DOCS_PATH` | `../eladmin/doc/business` | 知识库文档路径（阶段 2 实施中） |
+| `AGENT_DEEPSEEK_MODEL` | 当前代码为 `deepseek-chat` | DeepSeek 模型名；生产环境请显式设置为经当前官方能力评测的模型 |
 
 聊天 mode 已使用枚举绑定，未知值会在启动期失败。Spring 激活 `prod`、`production`、`pre`、`preprod` 或 `staging` profile 时，`AGENT_INTERNAL_TOKEN` 为空同样会拒绝启动，并在错误中指出 `agent.internal-token` 配置路径。
+
+### 尚未生效的规划配置
+
+以下变量属于路线图中的阶段 1/2；**当前版本尚未读取它们，设置不会启用备用模型或 RAG**。待对应代码、依赖、OpenAPI 和主系统契约一并发布后，以实施方案中的启动校验为准：
+
+| 规划变量 | 适用阶段 | 约束 |
+|---|---|---|
+| `AGENT_CLAUDE_ENABLED`、`AGENT_CLAUDE_API_KEY`、`AGENT_CLAUDE_BASE_URL`、`AGENT_CLAUDE_MODEL` | 阶段 1 | Claude 采用 Anthropic 原生适配器，或使用已验收的 OpenAI 兼容代理；不能将 Anthropic 原生地址配置为 OpenAI endpoint。 |
+| `AGENT_KNOWLEDGE_ENABLED`、`AGENT_KNOWLEDGE_DOCS_PATH` | 阶段 2 | 文档路径必须为部署挂载的绝对路径，并由受评审 manifest 选择文件。 |
+| `AGENT_KNOWLEDGE_EMBEDDING_PROVIDER`、`AGENT_KNOWLEDGE_EMBEDDING_MODEL`、`AGENT_KNOWLEDGE_EMBEDDING_DIMENSIONS` | 阶段 2 | embedding provider 独立于聊天模型；三项均须经启动校验，禁止使用未验证的默认 embedding 模型。 |
 
 真实模型评测只可在显式配置 API Key 后运行：
 
@@ -84,7 +87,7 @@ mvn -q -Preal-model-eval -Dtest=RealModelIntentEvaluationTest test
 | 阶段 | 能力 | 状态 | 说明 |
 |---|---|---|---|
 | 阶段 1 | 多模型韧性 | 待实施 | 主备双 LLM provider（DeepSeek + Claude）+ 熔断自动切换 + 规则兜底 |
-| 阶段 2 | RAG 知识检索 | 待实施 | 从 `eladmin/doc/business/` 构建知识库，支持"怎么做""规则是什么"类问答 |
+| 阶段 2 | RAG 知识检索 | 待实施 | 从受评审 manifest 选择的业务文档构建知识库，支持"怎么做""规则是什么"类问答 |
 | 阶段 3 | 幻觉检测 | 待实施 | 数据断言 API 反向校验 + 规则断言 YAML 匹配 + AI 建议标注 |
 | 阶段 4 | 客户健康度评分 | 待实施 | 排餐失败/退款/核销异常/餐数紧张/过敏复杂度 五维度风险评分 |
 
@@ -92,10 +95,10 @@ mvn -q -Preal-model-eval -Dtest=RealModelIntentEvaluationTest test
 
 **新增扩展约定**（阶段实施后启用）：
 
-- 新知识库文档：放入 `eladmin/doc/business/`，重启 agent-service 后自动索引；或调用 `POST /api/internal/agent/knowledge/refresh` 手动刷新。
-- 新 provider：在 `AgentProperties.models.providers` 声明 type、apiKey、baseUrl；在 profile 的 `fallbackProviders` 中注册；provider 适配代码放在 `infrastructure/llm`。
+- 新知识库文档：先进入受代码评审的 knowledge manifest；不得因文件放入 `eladmin/doc/business/` 就自动索引。刷新采用新索引版本构建、验收和原子切换，删除文件后必须清理旧 chunk。生产路径使用部署挂载的绝对路径。
+- 新 provider：在 `AgentProperties.models.providers` 声明 type、apiKey、baseUrl；在 profile 的 `fallbackProviders` 中注册；provider 适配代码放在 `infrastructure/llm`。Claude 原生 API 使用 Anthropic 适配器；只有已验收的代理才可标为 OpenAI-compatible。
 - 新健康度维度：在 `health/domain/HealthDimension` 中定义维度枚举，在 `CustomerHealthScorer` 中实现计算逻辑，补充权重配置和测试。
-- 幻觉检测仅对数据查询类意图启用；新增数据断言模式时同步更新 `DataAssertionValidator` 的正则提取规则。
+- 幻觉检测仅对模型生成且带受控 QueryPlan 的数据断言启用；强类型业务查询继续复用 facts、`BusinessAnswerValidator` 与既有诊断规则校验，不新增正则反查链。
 
 ## 跨服务契约
 
@@ -111,9 +114,10 @@ v2 必须携带 `X-Agent-Access-Context`。常见稳定错误码：
 | `SESSION_VERSION_CONFLICT` | 409 | 是 | 重新读取会话快照后重试 |
 | `CAPABILITY_NOT_AVAILABLE` / `TOOL_NOT_AVAILABLE` | 422 | 否 | 检查能力目录、Handler 和工具登记 |
 | `DEPENDENCY_UNAVAILABLE` | 502 | 是 | 检查主系统内部接口连通性 |
-| `MODEL_UNAVAILABLE` | 503 | 是 | 检查对应模型 profile/provider；多 provider 全部不可用时触发 |
+| `MODEL_UNAVAILABLE` | 503 | 是 | 当前版本表示选定模型 profile 不可用；阶段 1 发布后才表示 fallback 链中全部 provider 不可用 |
 | `MODEL_CAPABILITY_UNSUPPORTED` | 503 | 否 | 为任务选择支持结构化输出/工具调用的 profile |
-| `KNOWLEDGE_UNAVAILABLE` | 503 | 是 | 知识库未加载或向量存储不可用；检查文档路径和向量数据库连接 |
+
+`KNOWLEDGE_UNAVAILABLE`、知识来源字段和知识库刷新接口均未进入当前 v2 OpenAPI；阶段 2 必须先完成 OpenAPI、主系统 client/会话快照与前端的同版本契约发布，再将它们加入稳定错误码表。
 
 ## 排障与回滚
 
@@ -125,9 +129,10 @@ v2 必须携带 `X-Agent-Access-Context`。常见稳定错误码：
 - 多帧理解默认 `shadow`；异常时设置 `AGENT_CHAT_CONVERSATION_UNDERSTANDING_MODE=shadow` 或关闭对应能力开关。
 - 模型 profile 异常时切回已验证 profile；不要通过关闭权限、Schema 校验或工具白名单绕过。
 - 会话冲突只允许刷新快照重试，不允许用 Agent 本地缓存覆盖主系统版本。
-- 多模型韧性：备用 provider 默认关闭（`AGENT_CLAUDE_ENABLED=false`），上线后逐步开启；主 provider 不可用时自动切换，无需手动干预。
-- RAG 知识检索：默认关闭（`AGENT_KNOWLEDGE_ENABLED=false`），知识问答意图不命中时走现有规则兜底；异常时关闭开关即可回退。
-- 幻觉检测：灰度期间仅标记不阻断，前端展示校验结果但不强制拦截；稳定后逐步收紧。
+- 当前版本没有多 provider fallback、RAG 或扩展校验字段；出现模型异常时按已验证的单一模型 profile 回退或切换规则模式。
+- 阶段 1 发布后，备用 provider 默认关闭并灰度开启；只有可恢复的网络/服务端错误才自动切换，Schema、工具调用和业务校验失败不切换。
+- 阶段 2 发布后，RAG 异常时关闭知识库开关并回退到既有强类型规则/数据查询；刷新必须使用独立入站管理员鉴权，不能只依赖 Agent 出站内部 token。
+- 阶段 3 灰度期可标记不阻断，但校验失败的模型内容不得作为已核实事实展示。
 
 ## 验证清单
 
@@ -150,15 +155,17 @@ cd "$(mktemp -d)"
 java -jar /absolute/path/agent-service/target/agent-service-1.0.0-SNAPSHOT.jar \
   --agent.internal-token=local-agent-token --agent.ai.enabled=false
 
+# 以下命令为对应阶段代码发布后的验收项，当前版本不存在这些测试类和刷新接口。
+
 # 多模型 fallback（阶段 1）
-# 模拟主 provider 不可达，验证自动切换到备用 provider
+# 模拟主 provider 不可达，验证自动切换到备用 provider；同时断言不可恢复错误不会切换
 AGENT_DEEPSEEK_BASE_URL=http://localhost:9999 mvn -q test -Dtest='*Fallback*Test'
 
 # 知识库刷新（阶段 2）
 curl -X POST http://localhost:18081/api/internal/agent/knowledge/refresh \
-  -H "X-Agent-Internal-Token: ${AGENT_INTERNAL_TOKEN}"
+  -H "X-Agent-Knowledge-Admin: ${AGENT_KNOWLEDGE_ADMIN_TOKEN}"
 
-# 知识问答评测集（阶段 2）
+# 知识问答评测集（阶段 2，包含删除文档、旧索引不可命中和提示注入样本）
 mvn -q test -Dtest='*Knowledge*Test'
 
 # 幻觉检测（阶段 3）
