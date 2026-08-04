@@ -5,10 +5,7 @@ jest.mock('@/api/agentDiagnosis', () => ({
   createChatSession: jest.fn(),
   diagnoseMealPlan: jest.fn(),
   getChatSession: jest.fn(),
-  queryActionAudits: jest.fn(),
   queryChatSessions: jest.fn(),
-  queryAgentOperationStats: jest.fn(),
-  queryAgentRuleGaps: jest.fn(),
   submitDiagnosisFeedback: jest.fn(),
   updateChatSessionTitle: jest.fn()
 }))
@@ -44,56 +41,21 @@ function createCtx() {
     mapSessionMessages: AgentDiagnosis.methods.mapSessionMessages,
     sessionOptionLabel: AgentDiagnosis.methods.sessionOptionLabel,
     generateClientMessageId: AgentDiagnosis.methods.generateClientMessageId,
-    formatSessionTime: AgentDiagnosis.methods.formatSessionTime,
     togglePanel: AgentDiagnosis.methods.togglePanel,
     mealTypeText: AgentDiagnosis.methods.mealTypeText,
     missingSlotText: AgentDiagnosis.methods.missingSlotText,
     stageText: AgentDiagnosis.methods.stageText,
     slotLabel: AgentDiagnosis.methods.slotLabel,
-    formatMissingSlots: AgentDiagnosis.methods.formatMissingSlots,
     levelTag: AgentDiagnosis.methods.levelTag,
     confidenceTag: AgentDiagnosis.methods.confidenceTag,
-    riskTag: AgentDiagnosis.methods.riskTag,
     shortDigest: AgentDiagnosis.methods.shortDigest,
-    compactJson: AgentDiagnosis.methods.compactJson,
-    prettyJson: AgentDiagnosis.methods.prettyJson,
     openFeedbackDialog: AgentDiagnosis.methods.openFeedbackDialog,
     submitFeedback: AgentDiagnosis.methods.submitFeedback,
-    extractReasonCodes: AgentDiagnosis.methods.extractReasonCodes,
-    loadActionAudits: AgentDiagnosis.methods.loadActionAudits,
-    loadOperationStats: AgentDiagnosis.methods.loadOperationStats,
-    auditStatusTag: AgentDiagnosis.methods.auditStatusTag,
-    percent: AgentDiagnosis.methods.percent,
-    numberText: AgentDiagnosis.methods.numberText
+    extractReasonCodes: AgentDiagnosis.methods.extractReasonCodes
   }
-  Object.defineProperty(ctx, 'currentCustomer', {
-    get() {
-      return AgentDiagnosis.computed.currentCustomer.call(ctx)
-    }
-  })
-  Object.defineProperty(ctx, 'slotConfidenceList', {
-    get() {
-      return AgentDiagnosis.computed.slotConfidenceList.call(ctx)
-    }
-  })
   Object.defineProperty(ctx, 'feedbackReasonOptions', {
     get() {
       return AgentDiagnosis.computed.feedbackReasonOptions.call(ctx)
-    }
-  })
-  Object.defineProperty(ctx, 'topReasonCodes', {
-    get() {
-      return AgentDiagnosis.computed.topReasonCodes.call(ctx)
-    }
-  })
-  Object.defineProperty(ctx, 'topFailureTypes', {
-    get() {
-      return AgentDiagnosis.computed.topFailureTypes.call(ctx)
-    }
-  })
-  Object.defineProperty(ctx, 'topFallbackSources', {
-    get() {
-      return AgentDiagnosis.computed.topFallbackSources.call(ctx)
     }
   })
   Object.defineProperty(ctx, 'filteredSessions', {
@@ -112,11 +74,7 @@ describe('AgentDiagnosis chat page logic', () => {
     api.queryChatSessions.mockReset()
     api.archiveChatSession.mockReset()
     api.updateChatSessionTitle.mockReset()
-    api.queryActionAudits.mockReset()
-    api.queryAgentOperationStats.mockReset()
-    api.queryAgentRuleGaps.mockReset()
     api.submitDiagnosisFeedback.mockReset()
-    api.queryActionAudits.mockResolvedValue({ content: [] })
     api.createChatSession.mockResolvedValue({ sessionId: 'session-1', title: '新会话' })
   })
 
@@ -138,8 +96,7 @@ describe('AgentDiagnosis chat page logic', () => {
       slots: { customerCode: 'C10001', recordDate: '2026-05-22' },
       slotConfidence: { customer: 'HIGH', recordDate: 'HIGH' },
       missingSlots: ['MEAL_TYPE'],
-      conversationStage: 'COLLECTING_SLOTS',
-      quickReplies: ['早餐', '午餐', '晚餐']
+      conversationStage: 'COLLECTING_SLOTS'
     })
     const ctx = createCtx()
     ctx.inputMessage = '查 C10001 今天'
@@ -161,8 +118,6 @@ describe('AgentDiagnosis chat page logic', () => {
     })
     expect(ctx.slotConfidence.customer).toBe('HIGH')
     expect(ctx.missingSlots).toEqual(['MEAL_TYPE'])
-    expect(ctx.quickReplies).toEqual(['早餐', '午餐', '晚餐'])
-    expect(api.queryActionAudits).toHaveBeenCalledWith({ sessionId: 'session-1', page: 0, size: 5 })
   })
 
   test('appends diagnosis result and keeps latest diagnosis context', async() => {
@@ -180,8 +135,7 @@ describe('AgentDiagnosis chat page logic', () => {
         toolCallSummary: [{ eventType: 'TOOL_CALL', toolName: 'getCustomerProfile' }],
         reasons: [],
         mealType: 'LUNCH'
-      },
-      quickReplies: ['重新排查', '清空会话']
+      }
     })
     const ctx = createCtx()
     ctx.inputMessage = '查 C10001 今天午餐'
@@ -193,7 +147,6 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(ctx.currentDiagnosis.summary).toBe('命中客户排除日期')
     expect(ctx.currentDiagnosis.nextActions).toEqual(['核对客户档案停送配置'])
     expect(ctx.conversationStage).toBe('DIAGNOSED')
-    expect(ctx.quickReplies).toEqual(['重新排查', '清空会话'])
   })
 
   test('shows fallback reason and trace data in state', async() => {
@@ -211,8 +164,7 @@ describe('AgentDiagnosis chat page logic', () => {
         toolCallSummary: [{ eventType: 'TOOL_CALL', toolName: 'getMealPlan' }],
         diagnosisTrace: [{ eventType: 'MODEL_ROUND_COMPLETED', round: 1 }],
         reasons: []
-      },
-      quickReplies: ['重新排查', '清空会话']
+      }
     })
     const ctx = createCtx()
     ctx.inputMessage = '查 C10001 今天午餐'
@@ -245,8 +197,7 @@ describe('AgentDiagnosis chat page logic', () => {
           afterPreview: { executeMode: 'MANUAL_CONFIRM_REQUIRED' }
         }],
         reasons: []
-      },
-      quickReplies: ['重新排查']
+      }
     })
     const ctx = createCtx()
     ctx.inputMessage = '查 C10001 今天午餐'
@@ -293,30 +244,6 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(ctx.$message.success).toHaveBeenCalledWith('诊断反馈已记录')
   })
 
-  test('loads operation stats for dashboard', async() => {
-    api.queryAgentOperationStats.mockResolvedValue({
-      diagnosisCount: 8,
-      fallbackRate: 0.25,
-      feedbackAcceptedRate: 0.5,
-      fallbackSourceDistribution: { ELADMIN_CLIENT: 2 },
-      failureTypeDistribution: { AGENT_SERVICE_TIMEOUT: 2 },
-      reasonCodeDistribution: {
-        ORDER_EXPIRED: 3,
-        CUSTOMER_EXCLUDE_DATE_HIT: 5
-      }
-    })
-    const ctx = createCtx()
-
-    await AgentDiagnosis.methods.loadOperationStats.call(ctx)
-
-    expect(api.queryAgentOperationStats).toHaveBeenCalledWith({})
-    expect(ctx.operationStats.diagnosisCount).toBe(8)
-    expect(ctx.percent(ctx.operationStats.fallbackRate)).toBe('25%')
-    expect(ctx.topReasonCodes[0]).toEqual({ code: 'CUSTOMER_EXCLUDE_DATE_HIT', count: 5 })
-    expect(ctx.topFailureTypes[0]).toEqual({ code: 'AGENT_SERVICE_TIMEOUT', count: 2 })
-    expect(ctx.topFallbackSources[0]).toEqual({ code: 'ELADMIN_CLIENT', count: 2 })
-  })
-
   test('togglePanel expands tool summary section', () => {
     const ctx = createCtx()
 
@@ -353,8 +280,7 @@ describe('AgentDiagnosis chat page logic', () => {
     api.chatMealPlan.mockResolvedValue({
       sessionId: 'session-1',
       status: 'NEED_MORE_INFO',
-      assistantMessage: '请补充餐次：早餐、午餐还是晚餐？',
-      quickReplies: ['午餐']
+      assistantMessage: '请补充餐次：早餐、午餐还是晚餐？'
     })
     const ctx = createCtx()
 
@@ -368,8 +294,7 @@ describe('AgentDiagnosis chat page logic', () => {
     api.chatMealPlan.mockResolvedValue({
       sessionId: 'session-1',
       status: 'ANSWERED',
-      assistantMessage: '客户已选择。',
-      quickReplies: ['还剩多少餐']
+      assistantMessage: '客户已选择。'
     })
     const ctx = createCtx()
     ctx.activeSessionId = 'session-1'
@@ -465,7 +390,7 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(ctx.messages[1].result.summary).toBe('命中订单过期')
   })
 
-  test('filters sessions by keyword and formats session label fields', () => {
+  test('filters sessions by keyword and formats session labels', () => {
     const ctx = createCtx()
     ctx.sessions = [
       { sessionId: 'session-1', title: 'C10001 午餐排查', customerCode: 'C10001', mealType: 'LUNCH', lastSummary: '命中排除日期', lastMessageTime: '2026-07-08 12:30:00' },
@@ -475,7 +400,6 @@ describe('AgentDiagnosis chat page logic', () => {
 
     expect(ctx.filteredSessions).toHaveLength(1)
     expect(ctx.filteredSessions[0].sessionId).toBe('session-1')
-    expect(ctx.formatSessionTime('2026-07-08 12:30:00')).toBe('07-08 12:30')
     expect(ctx.sessionOptionLabel({ customerCode: 'C10003', recordDate: '2026-07-08', mealType: 'LUNCH' })).toContain('C10003')
   })
 
