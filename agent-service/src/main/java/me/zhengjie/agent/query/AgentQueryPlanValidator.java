@@ -223,7 +223,8 @@ public class AgentQueryPlanValidator {
             missing(missingFields, "customer");
         }
         if (plan.getDomain() == AgentQueryDomain.ORDER && plan.getAction() == AgentQueryAction.DETAIL && !order) missing(missingFields, "order");
-        if (plan.getDomain() == AgentQueryDomain.ORDER && plan.getAction() != AgentQueryAction.DETAIL && !customer && !order) missing(missingFields, "customerOrOrder");
+        if (plan.getDomain() == AgentQueryDomain.ORDER && plan.getAction() != AgentQueryAction.DETAIL
+            && !customer && !order && !isActiveOrderScope(plan)) missing(missingFields, "customerOrOrder");
         // 普通排餐列表的客户、日期、餐次均为可选过滤条件；V3 过敏分析仍由 validateV3 强制单日范围。
         if ((plan.getDomain() == AgentQueryDomain.VERIFICATION || plan.getDomain() == AgentQueryDomain.REFUND) && !customer && !order) missing(missingFields, "customerOrOrder");
         if (plan.getDomain() == AgentQueryDomain.PACKAGE && plan.getAction() == AgentQueryAction.DETAIL && !packageRef) missing(missingFields, "package");
@@ -267,6 +268,14 @@ public class AgentQueryPlanValidator {
         }
         if (recordDate != null && (startDate != null || endDate != null)) errors.add(error("filters", "DATE_FILTER_CONFLICT", "单日与日期范围条件不能同时使用"));
         if (notBlank(filters.getMealType()) && !MEAL_TYPES.contains(normalize(filters.getMealType()))) errors.add(error("filters.mealType", "MEAL_TYPE_INVALID", "餐次仅支持 BREAKFAST、LUNCH 或 DINNER"));
+        if (notBlank(filters.getOrderStatus())) {
+            try {
+                int status = Integer.parseInt(filters.getOrderStatus());
+                if (status < 0 || status > 3) errors.add(error("filters.orderStatus", "ORDER_STATUS_INVALID", "订单状态必须在 0 至 3 之间"));
+            } catch (NumberFormatException exception) {
+                errors.add(error("filters.orderStatus", "ORDER_STATUS_INVALID", "订单状态必须使用数字代码"));
+            }
+        }
         if (filters.getPage() != null && filters.getPage() < 1) errors.add(error("filters.page", "PAGE_INVALID", "页码必须大于等于 1"));
         if (filters.getSize() != null && (filters.getSize() < 1 || filters.getSize() > MAX_PAGE_SIZE)) errors.add(error("filters.size", "PAGE_SIZE_INVALID", "单页条数必须在 1 至 50 之间"));
         if (filters.getRecentLimit() != null && (filters.getRecentLimit() < 1 || filters.getRecentLimit() > MAX_RECENT_LIMIT)) errors.add(error("filters.recentLimit", "RECENT_LIMIT_INVALID", "最近记录数必须在 1 至 50 之间"));
@@ -292,6 +301,20 @@ public class AgentQueryPlanValidator {
             && !"LUNCH".equals(mealType) && !"DINNER".equals(mealType)) {
             errors.add(error("filters.mealType", "SCHEDULED_MENU_MEAL_TYPE_INVALID", "公共排期菜单仅支持午餐或晚餐"));
         }
+        if (plan.getToolNames().contains(ToolCatalog.LIST_ORDERS)
+            && plan.getFilters().getSize() != null && plan.getFilters().getSize() > 20) {
+            errors.add(error("filters.size", "ORDER_PAGE_SIZE_INVALID", "订单列表单页最多返回 20 条"));
+        }
+    }
+
+    /** 仅允许以固定 status=1 和受控分页展开当前授权范围内的进行中订单集合。 */
+    private boolean isActiveOrderScope(AgentQueryPlan plan) {
+        AgentQueryFilters filters = plan == null ? null : plan.getFilters();
+        return plan != null && plan.getDomain() == AgentQueryDomain.ORDER
+            && plan.getAction() == AgentQueryAction.LIST
+            && plan.getToolNames() != null && plan.getToolNames().equals(List.of(ToolCatalog.LIST_ORDERS))
+            && filters != null && "1".equals(filters.getOrderStatus())
+            && filters.getPage() != null && filters.getSize() != null;
     }
 
     private LocalDate parseDate(String field, String value, List<AgentQueryPlanValidationError> errors) {

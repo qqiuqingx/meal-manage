@@ -28,6 +28,7 @@ public final class ToolCatalog {
     public static final String GET_DAILY_CUSTOMER_WORKLOAD = "getDailyCustomerWorkload";
     public static final String GET_CUSTOMER_PROFILE_COUNT = "getCustomerProfileCount";
     public static final String GET_ACTIVE_CUSTOMER_SUMMARY = "getActiveCustomerSummary";
+    public static final String GET_ACTIVE_ORDER_SUMMARY = "getActiveOrderSummary";
     public static final String LIST_ACTIVE_CUSTOMER_MEAL_BALANCES =
         "listActiveCustomerMealBalances";
     public static final String GET_EXPIRING_ORDER_SUMMARY = "getExpiringOrderSummary";
@@ -123,6 +124,7 @@ public final class ToolCatalog {
         result.put(GET_MEAL_PLAN_FAILURE_SUMMARY, workload);
         result.put(GET_CUSTOMER_PROFILE_COUNT, (client, call) -> client.customerProfileCount());
         result.put(GET_ACTIVE_CUSTOMER_SUMMARY, (client, call) -> client.activeCustomerSummary());
+        result.put(GET_ACTIVE_ORDER_SUMMARY, (client, call) -> client.activeOrderSummary());
         result.put(LIST_ACTIVE_CUSTOMER_MEAL_BALANCES, (client, call) ->
             client.activeCustomerBalances(page(call.filters()), size(call.filters())).toPresentationMap());
         result.put(GET_EXPIRING_ORDER_SUMMARY, (client, call) ->
@@ -160,7 +162,7 @@ public final class ToolCatalog {
         Map<String, AgentBusinessToolDescriptor> result = new LinkedHashMap<>();
         register(result, RESOLVE_CUSTOMER, "CUSTOMER", "LIST", "customerProfile:list", 10, "customerId|customerCode|customerName", "AgentCustomerCandidateDto[]");
         register(result, CUSTOMER_OVERVIEW, "CUSTOMER", "OVERVIEW", "customerProfile:list", 1, "customerId|customerCode", "AgentCustomerOverviewDto");
-        register(result, LIST_ORDERS, "ORDER", "LIST", "customerOrder:list", 20, "customerId|status|page|size", "AgentOrderSummaryDto[]");
+        register(result, LIST_ORDERS, "ORDER", "LIST", "customerOrder:list", 20, "customerId?|status|page|size", "AgentOrderSummaryDto[]");
         register(result, ORDER_DETAIL, "ORDER", "DETAIL", "customerOrder:list", 1, "orderId|orderCode|customerId", "AgentOrderSummaryDto");
         register(result, LIST_MEAL_PLANS, "MEAL_PLAN", "LIST", "mealPlan:list", 50, "customerId?|recordDate?|startDate?|endDate?|mealType?|customerMealPlanId?|page?|size?", "AgentMealPlanSummaryDto[]");
         register(result, LIST_VERIFICATIONS, "VERIFICATION", "LIST", "mealPlan:list", 50, "customerId|orderId|mealType|limit", "AgentVerificationLogDto[]");
@@ -173,6 +175,7 @@ public final class ToolCatalog {
         register(result, GET_DAILY_CUSTOMER_WORKLOAD, "OPERATION_STATISTICS", "SUMMARY", "mealPlan:list", 100, "recordDate|mealType", "AgentDailyCustomerStatsDto");
         register(result, GET_CUSTOMER_PROFILE_COUNT, "OPERATION_STATISTICS", "SUMMARY", "customerProfile:list", 1, "none", "AgentOperationCountDto");
         register(result, GET_ACTIVE_CUSTOMER_SUMMARY, "OPERATION_STATISTICS", "SUMMARY", "customerOrder:list", 1, "dateRange", "AgentOperationCountDto");
+        register(result, GET_ACTIVE_ORDER_SUMMARY, "OPERATION_STATISTICS", "SUMMARY", "customerOrder:list", 1, "authorizedScope", "AgentOperationCountDto");
         register(result, LIST_ACTIVE_CUSTOMER_MEAL_BALANCES, "OPERATION_STATISTICS", "BREAKDOWN", "customerOrder:list", 50, "activeCustomerSet|page|size", "ActiveCustomerBalanceResponse");
         register(result, GET_EXPIRING_ORDER_SUMMARY, "OPERATION_STATISTICS", "SUMMARY", "customerOrder:list", 1, "startDate|endDate", "AgentOperationCountDto");
         register(result, GET_MEAL_PLAN_FAILURE_SUMMARY, "OPERATION_STATISTICS", "SUMMARY", "mealPlan:list", 1, "recordDate|mealType", "AgentDailyCustomerStatsDto");

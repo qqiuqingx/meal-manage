@@ -9,7 +9,10 @@ class ToolCatalogTest {
     @Test
     void exposesLegacyToolFromSingleCatalog() {
         assertTrue(ToolCatalog.isRegistered("listOrders"));
+        assertTrue(ToolCatalog.isRegistered("getActiveOrderSummary"));
         assertEquals("customerOrder:list", ToolCatalog.descriptor("listOrders").requiredPermission());
+        assertEquals("customerOrder:list",
+            ToolCatalog.descriptor("getActiveOrderSummary").requiredPermission());
         assertEquals(ToolCatalog.descriptor("listOrders"),
             me.zhengjie.agent.query.tool.AgentBusinessToolRegistry.descriptor("listOrders"));
     }

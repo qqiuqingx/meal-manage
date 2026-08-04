@@ -13,10 +13,11 @@ import java.util.regex.Pattern;
 @Component
 public class RuleBasedIntentClassifier implements ChatIntentClassifier {
 
-    private static final Pattern PRONOUN_OR_CONTEXT = Pattern.compile("他|她|这个客户|那午餐|那晚餐|这个订单|为什么|原因|解释|换成|改成|不对|不应该|查错|怎么全是|明显");
+    private static final Pattern PRONOUN_OR_CONTEXT = Pattern.compile("他|她|他们|这些订单|这批订单|这个客户|那午餐|那晚餐|这个订单|为什么|原因|解释|换成|改成|不对|不应该|查错|怎么全是|明显");
     private static final Pattern RESET = Pattern.compile("清空|重新开始");
     private static final Pattern RETRY = Pattern.compile("重新排查|重新诊断|再查一次");
-    private static final Pattern OUT_OF_SCOPE = Pattern.compile("修改|改一下|下单|申请退款|执行退款|退款一下|修改地址|订单金额|退款金额|优惠金额|已收金额|单价|多少钱|价格");
+    private static final Pattern OUT_OF_SCOPE = Pattern.compile("修改|改一下|申请退款|执行退款|退款一下|修改地址|订单金额|退款金额|优惠金额|已收金额|单价|多少钱|价格");
+    private static final Pattern ORDER_WRITE = Pattern.compile("(?:帮我|给|替|新建|创建|新增|提交|立即|我要).{0,8}下单|下一个订单");
 
     /**
      * 对明确控制指令、客户查询和诊断请求进行规则分类。
@@ -29,7 +30,9 @@ public class RuleBasedIntentClassifier implements ChatIntentClassifier {
         String text = request == null || request.getUserMessage() == null ? "" : request.getUserMessage().trim();
         if (RESET.matcher(text).find()) return result(ChatIntent.RESET, 1.0, "显式清空会话指令");
         if (RETRY.matcher(text).find()) return result(ChatIntent.RETRY, 1.0, "显式重新排查指令");
-        if (OUT_OF_SCOPE.matcher(text).find()) return result(ChatIntent.OUT_OF_SCOPE, 1.0, "命中非排餐业务操作关键词");
+        if (OUT_OF_SCOPE.matcher(text).find() || ORDER_WRITE.matcher(text).find()) {
+            return result(ChatIntent.OUT_OF_SCOPE, 1.0, "命中非排餐业务操作关键词");
+        }
 
         ChatIntent candidate = parseCandidate(request == null ? null : request.getRuleIntentCandidate());
         if (candidate == null) return result(null, 0.0, "规则无法确定意图");

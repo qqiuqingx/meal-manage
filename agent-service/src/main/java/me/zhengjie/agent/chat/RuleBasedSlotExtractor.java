@@ -67,7 +67,7 @@ public class RuleBasedSlotExtractor {
 
     // 订单查询关键词
     private static final Pattern ORDER_PATTERN = Pattern.compile(
-            "有哪些订单|订单情况|进行中订单|订单状态|买了什么套餐|.*订单.*有哪|.*订单.*什么|.*订单.*情况",
+            "有哪些订单|订单情况|进行中订单|订单状态|买了什么套餐|下单时间|什么时候下单|何时下单|.*订单.*有哪|.*订单.*什么|.*订单.*情况",
             Pattern.CASE_INSENSITIVE
     );
     private static final Pattern ORDER_DETAIL_PATTERN = Pattern.compile(
@@ -75,6 +75,7 @@ public class RuleBasedSlotExtractor {
             Pattern.CASE_INSENSITIVE
     );
     private static final Pattern ACTIVE_ORDER_PATTERN = Pattern.compile("进行中订单|有效订单", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ORDER_WRITE_PATTERN = Pattern.compile("(?:帮我|给|替|新建|创建|新增|提交|立即|我要).{0,8}下单|下一个订单", Pattern.CASE_INSENSITIVE);
     private static final Pattern MEAL_PLAN_QUERY_PATTERN = Pattern.compile("排餐了吗|排了吗|排过餐吗|是否排过餐|有没有排过餐|有没有排餐|有没有排|吃什么|吃了什么|排餐情况|菜单|菜品", Pattern.CASE_INSENSITIVE);
     private static final Pattern REFUND_QUERY_PATTERN = Pattern.compile("退过餐|退餐记录|退餐情况|最近退餐|退了多少餐", Pattern.CASE_INSENSITIVE);
     private static final Pattern CUSTOMER_PACKAGE_QUERY_PATTERN = Pattern.compile("签.*套餐|什么套餐|套餐是什么|套餐详情|用.*套餐", Pattern.CASE_INSENSITIVE);
@@ -509,7 +510,8 @@ public class RuleBasedSlotExtractor {
     }
 
     private boolean isOutOfScope(String text) {
-        return text.contains("修改") || text.contains("改一下") || text.contains("下单") || text.contains("申请退款") || text.contains("执行退款") || text.contains("退款一下") || text.contains("修改地址")
+        return text.contains("修改") || text.contains("改一下") || ORDER_WRITE_PATTERN.matcher(text).find()
+            || text.contains("申请退款") || text.contains("执行退款") || text.contains("退款一下") || text.contains("修改地址")
             || text.contains("订单金额") || text.contains("退款金额") || text.contains("优惠金额") || text.contains("已收金额") || text.contains("单价") || text.contains("多少钱") || text.contains("价格");
     }
 

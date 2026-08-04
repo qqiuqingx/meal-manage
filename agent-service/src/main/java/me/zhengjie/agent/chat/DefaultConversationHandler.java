@@ -14,6 +14,7 @@ import me.zhengjie.agent.query.BusinessQueryPlanningService;
 import me.zhengjie.agent.query.BusinessResultValidator;
 import me.zhengjie.agent.query.BusinessAnswerComposer;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
+import me.zhengjie.agent.query.domain.AgentContextDefinitions;
 import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
 import me.zhengjie.agent.analysis.domain.ConversationContextHandle;
 import me.zhengjie.agent.analysis.domain.ContextHandleKind;
@@ -248,7 +249,7 @@ public class DefaultConversationHandler implements ConversationHandler {
             session.getConversationState().setStage(resolveStage(session.getSlots(), false));
             String message = businessQueryIntentPolicy.isAmountQuery(request.getMessage())
                 ? "订单金额、退款金额、优惠金额、已收金额和单价不在本期只读查询范围内，无法查询或返回。"
-                : "我目前只能处理排餐诊断和客户信息查询（餐数余额、核销统计、订单列表），请提供客户编号。";
+                : "当前只支持已登记的客户、订单、排餐、核销、退餐、套餐、菜品和运营统计只读查询；请补充具体查询对象或条件。";
             AgentChatResponse response = response(
                 session,
                 ChatStatus.ANSWERED,
@@ -698,6 +699,8 @@ public class DefaultConversationHandler implements ConversationHandler {
         if (analysis == null) return null;
         AgentChatResponse contextFollowUp = handleActiveCustomerBalanceFollowUp(session, analysis, orchestrator);
         if (contextFollowUp != null) return contextFollowUp;
+        AgentChatResponse orderContextFollowUp = handleActiveOrderSetFollowUp(session, analysis, orchestrator);
+        if (orderContextFollowUp != null) return orderContextFollowUp;
         if (analysis.isRequiresClarification()) {
             // 未识别出任何领域时保留既有细粒度意图兼容入口；已识别领域的歧义统一由语义层追问。
             if (analysis.getDomains() == null || analysis.getDomains().isEmpty()) return null;
@@ -827,6 +830,7 @@ public class DefaultConversationHandler implements ConversationHandler {
         response.setQueryPlan(plan); applyToolExecution(response, firstExecution); response.setResultBlocks(blocks);
         response.setActiveTaskStack(session.getConversationState().getTaskStack());
         response.setConversationFocus(conversationFocus(session.getSlots()));
+        resultPipeline.captureLastBusinessQueryContext(session, response);
         return response;
     }
 
@@ -874,7 +878,8 @@ public class DefaultConversationHandler implements ConversationHandler {
             return response(session, ChatStatus.NEED_MORE_INFO, "当前存在多个可引用的客户集合，请说明要查看哪一批客户。", null,
                 List.of(), List.of(), "CONTEXT_REFERENCE_AMBIGUOUS");
         }
-        if (resolution.status() != ContextReferenceResolver.Status.RESOLVED || !"AGENT_ACTIVE_CUSTOMER_V1".equals(resolution.handle().getDefinitionId())) return null;
+        if (resolution.status() != ContextReferenceResolver.Status.RESOLVED
+            || !AgentContextDefinitions.ACTIVE_CUSTOMER.equals(resolution.handle().getDefinitionId())) return null;
         if (businessQueryDataClient == null) return response(session, ChatStatus.ERROR, "客户余额明细查询服务暂不可用，请稍后重试。", null,
             List.of(), List.of(), "CAPABILITY_NOT_AVAILABLE");
         AgentQueryPlan plan = new AgentQueryPlan();
@@ -894,6 +899,62 @@ public class DefaultConversationHandler implements ConversationHandler {
             List.of("活跃客户数", "清空会话"));
         response.setQueryPlan(plan); applyToolExecution(response, execution);
         response.setSemanticTraceSummary(understandingPipeline.semanticTrace(analysis, false));
+        return response;
+    }
+
+    /**
+     * 将“他们什么时候下单”等订单集合追问绑定到上一轮进行中订单集合。
+     * 句柄只携带稳定口径和基数，实际订单明细会按当前权限重新分页查询。
+     */
+    private AgentChatResponse handleActiveOrderSetFollowUp(MealPlanChatSession session,
+                                                            BusinessQuestionAnalysis analysis,
+                                                            BusinessQueryOrchestrator orchestrator) {
+        boolean orderQuery = analysis != null && (analysis.getQueryTarget() == BusinessQueryTarget.ORDER
+            || analysis.getDomains() != null && analysis.getDomains().contains(AgentQueryDomain.ORDER));
+        if (!orderQuery || analysis.getEntities() == null
+            || analysis.getEntities().getCustomerId() != null || isNotBlank(analysis.getEntities().getCustomerCode())
+            || analysis.getEntities().getOrderId() != null || isNotBlank(analysis.getEntities().getOrderCode())) return null;
+        LastBusinessQueryContext context = session.getConversationState().getLastBusinessQueryContext();
+        me.zhengjie.agent.analysis.domain.SemanticRequestFrame frame = new me.zhengjie.agent.analysis.domain.SemanticRequestFrame();
+        me.zhengjie.agent.analysis.domain.SemanticScope scope = new me.zhengjie.agent.analysis.domain.SemanticScope();
+        scope.setType(me.zhengjie.agent.analysis.domain.SemanticScope.Type.CONTEXT_REFERENCE);
+        scope.setRequiredKind(ContextHandleKind.ENTITY_SET);
+        scope.setRequiredEntityType(SemanticEntityType.ORDER);
+        frame.setScope(scope);
+        ContextReferenceResolver.Resolution resolution = contextReferenceResolver.resolve(frame,
+            context == null ? List.of() : context.getContextHandles(), OffsetDateTime.now(ZoneOffset.ofHours(8)));
+        if (resolution.status() == ContextReferenceResolver.Status.MISSING) return null;
+        if (resolution.status() == ContextReferenceResolver.Status.AMBIGUOUS) {
+            return response(session, ChatStatus.NEED_MORE_INFO, "当前存在多个可引用的订单集合，请说明要查看哪一批订单。", null,
+                List.of(), List.of(), "CONTEXT_REFERENCE_AMBIGUOUS");
+        }
+        if (resolution.status() != ContextReferenceResolver.Status.RESOLVED
+            || !AgentContextDefinitions.ACTIVE_ORDER.equals(resolution.handle().getDefinitionId())) return null;
+        if (businessQueryDataClient == null) return response(session, ChatStatus.ERROR, "订单明细查询服务暂不可用，请稍后重试。", null,
+            List.of(), List.of(), "CAPABILITY_NOT_AVAILABLE");
+
+        AgentQueryPlan plan = new AgentQueryPlan();
+        plan.setDomain(AgentQueryDomain.ORDER);
+        plan.setAction(AgentQueryAction.LIST);
+        plan.setDetailLevel("DETAIL");
+        plan.setLimit(20);
+        plan.getFilters().setOrderStatus("1");
+        plan.getFilters().setPage(1);
+        plan.getFilters().setSize(20);
+        plan.setToolNames(List.of(ToolCatalog.LIST_ORDERS));
+        plan.setAnalysisSource(analysis.getSource());
+        plan.setAnalysisConfidence(analysis.getConfidence());
+
+        ToolExecutionResult execution = businessQueryChatService.execute(orchestrator, plan,
+            ToolCatalog.LIST_ORDERS, null, List.of());
+        Map<String, Object> result = execution.result();
+        AgentChatResponse response = insightResponse(session, BusinessResponseTypeCatalog.ORDER, result,
+            composer().activeOrderTimes(presentation(result)), List.of("查看进行中订单数", "清空会话"));
+        response.setQueryPlan(plan);
+        applyToolExecution(response, execution);
+        response.setSemanticTraceSummary(understandingPipeline.semanticTrace(analysis, false));
+        // insightResponse 会先按兼容响应类型构造计划；覆盖为集合计划后重新保存，确保句柄可跨实例续接。
+        resultPipeline.captureLastBusinessQueryContext(session, response);
         return response;
     }
 

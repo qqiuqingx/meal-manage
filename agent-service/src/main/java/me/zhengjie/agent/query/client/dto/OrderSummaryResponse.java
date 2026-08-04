@@ -11,6 +11,8 @@ public class OrderSummaryResponse {
     private String customerCode;
     private Integer statusCode;
     private String statusName;
+    private String dealTime;
+    private String createTime;
     private String startDate;
     private String startMealTypeCode;
     private String endDate;
@@ -31,6 +33,8 @@ public class OrderSummaryResponse {
     public String getCustomerCode() { return customerCode; } public void setCustomerCode(String value) { customerCode = value; }
     public Integer getStatusCode() { return statusCode; } public void setStatusCode(Integer value) { statusCode = value; }
     public String getStatusName() { return statusName; } public void setStatusName(String value) { statusName = value; }
+    public String getDealTime() { return dealTime; } public void setDealTime(String value) { dealTime = value; }
+    public String getCreateTime() { return createTime; } public void setCreateTime(String value) { createTime = value; }
     public String getStartDate() { return startDate; } public void setStartDate(String value) { startDate = value; }
     public String getStartMealTypeCode() { return startMealTypeCode; } public void setStartMealTypeCode(String value) { startMealTypeCode = value; }
     public String getEndDate() { return endDate; } public void setEndDate(String value) { endDate = value; }
@@ -49,7 +53,8 @@ public class OrderSummaryResponse {
     public Map<String, Object> toPresentationMap() {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("orderId", orderId); result.put("orderCode", orderCode); result.put("customerId", customerId); result.put("customerCode", customerCode);
-        result.put("statusCode", statusCode); result.put("statusName", statusName); result.put("startDate", startDate); result.put("startMealTypeCode", startMealTypeCode);
+        result.put("statusCode", statusCode); result.put("statusName", statusName); result.put("dealTime", dealTime); result.put("createTime", createTime);
+        result.put("startDate", startDate); result.put("startMealTypeCode", startMealTypeCode);
         result.put("endDate", endDate); result.put("mealTypeCode", mealTypeCode); result.put("scheduleModeCode", scheduleModeCode);
         result.put("parentPackageId", parentPackageId); result.put("parentPackageName", parentPackageName); result.put("childPackageId", childPackageId); result.put("childPackageName", childPackageName);
         result.put("verificationRecordCount", verificationRecordCount); result.put("refundRecordCount", refundRecordCount); result.put("mealPlanRecordCount", mealPlanRecordCount);

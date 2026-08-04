@@ -38,6 +38,23 @@ class RuleBasedIntentClassifierTest {
         assertEquals(ChatIntent.RETRY, classifier.classify(request("重新排查", null)).getIntent());
     }
 
+    /** “下单”出现在时间查询中属于订单只读追问，不能被写操作规则误杀。 */
+    @Test
+    void shouldKeepOrderTimeFollowUpAsReadOnlyQuery() {
+        IntentClassificationResult result = classifier.classify(
+            request("他们分别是什么时候下单的", ChatIntent.CUSTOMER_ORDER_QUERY));
+
+        assertEquals(ChatIntent.CUSTOMER_ORDER_QUERY, result.getIntent());
+        assertTrue(result.isFallbackSuggested());
+    }
+
+    /** 明确要求创建订单时仍必须拒绝为只读 Agent 的越界操作。 */
+    @Test
+    void shouldRejectExplicitOrderCreation() {
+        assertEquals(ChatIntent.OUT_OF_SCOPE,
+            classifier.classify(request("帮我给这个客户下单", ChatIntent.CUSTOMER_ORDER_QUERY)).getIntent());
+    }
+
     private IntentClassificationRequest request(String message, ChatIntent intent) {
         IntentClassificationRequest request = new IntentClassificationRequest();
         request.setUserMessage(message);

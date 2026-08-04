@@ -1279,6 +1279,89 @@ class DefaultConversationHandlerTest {
         assertTrue(response.getAssistantMessage().contains("各自的早餐、午晚餐和合计剩余餐数"));
     }
 
+    /** 订单总数后的自然追问应重新展开同一进行中订单集合，并返回每笔下单时间。 */
+    @Test
+    void shouldExpandActiveOrderTimesFromPreviousSetInShadowMode() {
+        AtomicInteger orderCalls = new AtomicInteger();
+        AtomicReference<Integer> capturedStatus = new AtomicReference<>();
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
+            @Override
+            public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) {
+                orderCalls.incrementAndGet();
+                capturedStatus.set(status);
+                return Map.of("total", 2, "items", List.of(
+                        Map.of("orderId", 81L, "orderCode", "O-81", "statusCode", 1,
+                            "dealTime", "2026-08-01T09:30:00"),
+                        Map.of("orderId", 82L, "orderCode", "O-82", "statusCode", 1,
+                            "createTime", "2026-08-02T10:00:00")));
+            }
+        };
+        ChatExtractionResult extraction = result(ChatIntent.BUSINESS_QUERY,
+            new DiagnosisSlots(), List.of());
+        extraction.setRuleIntent(ChatIntent.CUSTOMER_ORDER_QUERY.name());
+        DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store(),
+            new StubExtractor(extraction), request -> new DiagnosisResponse(),
+            new MealPlanFollowUpServiceImpl(), client);
+        AgentChatRequest request = request("active-order-shadow-session", "他们分别是什么时候下单的");
+        request.setLastBusinessQueryContext(activeOrderContext());
+
+        AgentChatResponse response = service.chat(request);
+
+        assertEquals(ChatStatus.ANSWERED, response.getStatus());
+        assertEquals("BUSINESS_QUERY_ORDER", response.getResponseType());
+        assertTrue(response.getWarnings().isEmpty(), () -> String.valueOf(response.getWarnings()));
+        assertEquals(1, orderCalls.get());
+        assertEquals(1, capturedStatus.get());
+        assertEquals("2026-08-01T09:30:00",
+            ((Map<?, ?>) ((List<?>) response.getInsightResult().get("items")).get(0)).get("dealTime"));
+        assertTrue(response.getAssistantMessage().contains("下单时间"));
+        assertEquals("AGENT_ACTIVE_ORDER_V1",
+            response.getLastBusinessQueryContext().getContextHandles().get(0).getDefinitionId());
+    }
+
+    /** 完整复现线上两轮会话：订单统计响应应自动成为下一轮下单时间追问的集合上下文。 */
+    @Test
+    void shouldContinueFromActiveOrderCountToOrderTimesWithoutInjectedContext() {
+        AtomicInteger orderCalls = new AtomicInteger();
+        BusinessQueryDataClient client = new LegacyMapBusinessQueryDataClientStub() {
+            @Override
+            public Map<String, Object> activeOrderSummary() {
+                return Map.of("total", 2, "metricCode", "ACTIVE_ORDER_COUNT",
+                    "metricDefinitionId", "AGENT_ACTIVE_ORDER_V1");
+            }
+
+            @Override
+            public Map<String, Object> listOrders(Long customerId, Integer status, int page, int size) {
+                orderCalls.incrementAndGet();
+                return Map.of("total", 2, "items", List.of(
+                    Map.of("orderId", 81L, "orderCode", "O-81", "statusCode", 1,
+                        "dealTime", "2026-08-01T09:30:00"),
+                    Map.of("orderId", 82L, "orderCode", "O-82", "statusCode", 1,
+                        "createTime", "2026-08-02T10:00:00")));
+            }
+        };
+        ChatExtractionResult countExtraction = result(ChatIntent.BUSINESS_QUERY,
+            new DiagnosisSlots(), List.of());
+        countExtraction.setRuleIntent(ChatIntent.OPERATION_STATISTICS_QUERY.name());
+        ChatExtractionResult timeExtraction = result(ChatIntent.BUSINESS_QUERY,
+            new DiagnosisSlots(), List.of());
+        timeExtraction.setRuleIntent(ChatIntent.CUSTOMER_ORDER_QUERY.name());
+        DefaultConversationHandler service = DefaultConversationHandlerFixture.create(store(),
+            new StubExtractor(countExtraction, timeExtraction), request -> new DiagnosisResponse(),
+            new MealPlanFollowUpServiceImpl(), client);
+
+        AgentChatResponse count = service.chat(request("active-order-two-turn", "现在有多少订单了"));
+        AgentChatResponse times = service.chat(request("active-order-two-turn", "他们分别是什么时候下单的"));
+
+        assertEquals("BUSINESS_QUERY_OPERATION_ACTIVE_ORDER", count.getResponseType());
+        assertEquals("getActiveOrderSummary", count.getQueryPlan().getToolNames().get(0));
+        assertEquals("AGENT_ACTIVE_ORDER_V1",
+            count.getLastBusinessQueryContext().getContextHandles().get(0).getDefinitionId());
+        assertEquals("BUSINESS_QUERY_ORDER", times.getResponseType());
+        assertEquals(1, orderCalls.get());
+        assertTrue(times.getAssistantMessage().contains("下单时间"));
+    }
+
     /** 客户档案创建和首次购买时间应直接走客户概览，不再返回业务类别澄清。 */
     @Test
     void shouldAnswerCustomerCreationAndPurchaseTime() {
@@ -1384,6 +1467,21 @@ class DefaultConversationHandlerTest {
         handle.setSalience(1D); handle.setExpiresAt(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC).plusHours(1));
         me.zhengjie.agent.query.domain.LastBusinessQueryContext context = new me.zhengjie.agent.query.domain.LastBusinessQueryContext();
         context.setContextHandles(List.of(handle)); return context;
+    }
+
+    /** 构造不保存订单 ID、可由固定条件重新计算的进行中订单集合上下文。 */
+    private me.zhengjie.agent.query.domain.LastBusinessQueryContext activeOrderContext() {
+        me.zhengjie.agent.analysis.domain.ConversationContextHandle handle = new me.zhengjie.agent.analysis.domain.ConversationContextHandle();
+        handle.setHandleId("ctx-active-orders");
+        handle.setKind(me.zhengjie.agent.analysis.domain.ContextHandleKind.ENTITY_SET);
+        handle.setEntityType(me.zhengjie.agent.analysis.domain.SemanticEntityType.ORDER);
+        handle.setDefinitionId("AGENT_ACTIVE_ORDER_V1");
+        handle.setCardinality(2);
+        handle.setSalience(1D);
+        handle.setExpiresAt(java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC).plusHours(1));
+        me.zhengjie.agent.query.domain.LastBusinessQueryContext context = new me.zhengjie.agent.query.domain.LastBusinessQueryContext();
+        context.setContextHandles(List.of(handle));
+        return context;
     }
 
     /** 构造合法的集合余额语义帧，模型不提供句柄 ID 或工具名。 */

@@ -42,6 +42,14 @@ public class BusinessAnswerComposer {
             result.totalOr(count), count);
     }
 
+    /** 构造进行中订单集合的下单时间明细话术，明细由前端受控订单卡片展示。 */
+    public String activeOrderTimes(BusinessPresentationResult result) {
+        if (result == null) return "进行中订单查询异常，请稍后重试。";
+        int count = result.getItems().size();
+        return String.format("当前共有 %s 笔进行中订单，已展示 %d 笔下单时间；优先显示成交时间，缺失时显示订单创建时间。",
+            result.totalOr(count), count);
+    }
+
     /** 构造核销列表固定话术，并明确午餐和晚餐使用同一餐数池。 */
     public String verificationList(BusinessPresentationResult result) {
         if (result == null) return "核销查询异常，请稍后重试。";

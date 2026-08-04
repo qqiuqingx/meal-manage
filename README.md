@@ -82,7 +82,7 @@ flowchart TB
 | 领域 | 当前能力 | 主要只读工具 |
 | --- | --- | --- |
 | 客户 | 客户候选、综合概览、地址摘要、过敏标签、剩余餐数 | `resolveCustomer`、`customerOverview` |
-| 订单 | 客户订单列表、订单详情、有效状态和餐数余额 | `listOrders`、`orderDetail` |
+| 订单 | 客户订单列表、授权范围内进行中订单数量与分页明细、下单时间、订单详情、有效状态和餐数余额 | `getActiveOrderSummary`、`listOrders`、`orderDetail` |
 | 排餐 | 客户实际排餐、跨客户单日排餐、实际过敏过滤、排餐失败 | `listMealPlans`、`getMealPlanFailureSummary` |
 | 菜单与菜品 | 午晚餐公共排期、客户候选菜、菜品与配料摘要 | `listScheduledDishes`、`previewDishCandidates`、`listDishes` |
 | 核销与退餐 | 客户或订单核销记录、退餐记录 | `listVerifications`、`listRefunds` |

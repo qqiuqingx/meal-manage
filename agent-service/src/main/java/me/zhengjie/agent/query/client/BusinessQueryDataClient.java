@@ -205,6 +205,11 @@ public interface BusinessQueryDataClient {
         throw new UnsupportedOperationException("active customer summary client is not configured");
     }
 
+    /** 查询当前授权范围内状态为进行中的订单数。 */
+    default Map<String, Object> activeOrderSummary() {
+        throw new UnsupportedOperationException("active order summary client is not configured");
+    }
+
     /** 查询活跃客户集合的脱敏餐数余额明细，服务端固定限制为 50 条。 */
     default ActiveCustomerBalanceResponse activeCustomerBalances(int page, int size) {
         throw new UnsupportedOperationException("active customer balance client is not configured");

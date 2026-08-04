@@ -79,7 +79,7 @@ public final class AgentMetricCatalog {
             AgentQueryDimension.CUSTOMER);
         register(result, AgentQueryMetric.ACTIVE_ORDER_COUNT, "进行中订单数", "状态为进行中且未删除的订单数",
             AgentQueryDomain.OPERATION_STATISTICS, AgentDefaultTemporalPolicy.NONE, false, "订单", "total",
-            List.of("进行中订单"), ToolCatalog.GET_ACTIVE_CUSTOMER_SUMMARY, "BUSINESS_QUERY_OPERATION_ACTIVE_ORDER",
+            List.of("进行中订单"), ToolCatalog.GET_ACTIVE_ORDER_SUMMARY, "BUSINESS_QUERY_OPERATION_ACTIVE_ORDER",
             AgentQueryDimension.PACKAGE, AgentQueryDimension.CUSTOMER_SOURCE, AgentQueryDimension.ORDER_STATUS);
         register(result, AgentQueryMetric.EXPIRING_ORDER_COUNT, "即将到期订单数", "指定日期范围内到期的进行中订单数",
             AgentQueryDomain.OPERATION_STATISTICS, AgentDefaultTemporalPolicy.REQUIRE_EXPLICIT, false, "订单", "total",

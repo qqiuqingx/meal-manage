@@ -40,7 +40,8 @@ public class DefaultAgentQueryPermissionService implements AgentQueryPermissionS
         if (isAdministrator(context)) {
             return List.of("resolveCustomer", "customerOverview", "listOrders", "orderDetail", "listMealPlans",
                 "listVerifications", "listRefunds", "packageDetail", "listDishes", "listScheduledDishes", "previewDishCandidates", "explainRule",
-                "getDailyCustomerWorkload", "getCustomerProfileCount", "getActiveCustomerSummary", "listActiveCustomerMealBalances", "getExpiringOrderSummary", "getMealPlanFailureSummary");
+                "getDailyCustomerWorkload", "getCustomerProfileCount", "getActiveCustomerSummary", "getActiveOrderSummary",
+                "listActiveCustomerMealBalances", "getExpiringOrderSummary", "getMealPlanFailureSummary");
         }
         if (context == null || context.getPermissions() == null || !context.getPermissions().contains(AGENT_ENTRY_PERMISSION)) {
             return List.of();
@@ -81,6 +82,7 @@ public class DefaultAgentQueryPermissionService implements AgentQueryPermissionS
         }
         if (has(context, "customerOrder:list")) {
             tools.add("getActiveCustomerSummary");
+            tools.add("getActiveOrderSummary");
             tools.add("listActiveCustomerMealBalances");
             tools.add("getExpiringOrderSummary");
         }

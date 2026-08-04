@@ -164,6 +164,22 @@ public class AgentOperationQueryServiceImpl implements AgentOperationQueryServic
 
     /** {@inheritDoc} */
     @Override
+    public AgentOperationCountDto activeOrders() {
+        if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND) {
+            return count("ACTIVE_ORDER_COUNT", "AGENT_ACTIVE_ORDER_V1", 0);
+        }
+        Set<Long> scopedCustomerIds = AgentCustomerDataScopeContext.customerIds();
+        if (scopedCustomerIds != null && scopedCustomerIds.isEmpty()) {
+            return count("ACTIVE_ORDER_COUNT", "AGENT_ACTIVE_ORDER_V1", 0);
+        }
+        Long total = customerOrderMapper.selectCount(new LambdaQueryWrapper<CustomerOrder>()
+            .eq(CustomerOrder::getStatus, 1)
+            .in(scopedCustomerIds != null, CustomerOrder::getCustomerId, scopedCustomerIds));
+        return count("ACTIVE_ORDER_COUNT", "AGENT_ACTIVE_ORDER_V1", total == null ? 0L : total);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public AgentActiveCustomerBalanceResponse activeCustomerBalances(AgentActiveCustomerBalanceRequest request) {
         int page = request == null || request.getPage() == null ? 1 : Math.max(request.getPage(), 1);
         int size = request == null || request.getSize() == null ? 50 : request.getSize();

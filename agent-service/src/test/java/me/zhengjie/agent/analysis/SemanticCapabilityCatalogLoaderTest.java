@@ -18,7 +18,9 @@ class SemanticCapabilityCatalogLoaderTest {
     void loadsCapabilityCatalog() {
         SemanticCapabilityCatalog catalog = new SemanticCapabilityCatalogLoader().load();
         assertEquals("1.0", catalog.getCatalogVersion());
-        assertEquals(5, catalog.getCapabilities().size());
+        assertEquals(6, catalog.getCapabilities().size());
+        assertTrue(catalog.getCapabilities().stream()
+            .anyMatch(item -> "ACTIVE_ORDER_DETAIL_V1".equals(item.capabilityId())));
     }
 
     @Test

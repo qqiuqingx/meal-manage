@@ -136,7 +136,7 @@ public class AgentBusinessToolExecutor {
         return toolName + "|" + plan.getEntities().getCustomerId() + "|" + plan.getEntities().getCustomerCode() + "|"
             + plan.getEntities().getCustomerName() + "|" + plan.getEntities().getOrderId() + "|" + plan.getEntities().getOrderCode() + "|" + plan.getFilters().getRecordDate()
             + "|" + plan.getEntities().getMealPlanRecordId() + "|" + plan.getFilters().getMealType() + "|" + plan.getFilters().getStartDate() + "|" + plan.getFilters().getEndDate()
-            + "|" + page(plan.getFilters()) + "|" + size(plan.getFilters()) + "|" + ruleTopic + "|" + new ArrayList<>(dishIds == null ? List.of() : dishIds);
+            + "|" + plan.getFilters().getOrderStatus() + "|" + page(plan.getFilters()) + "|" + size(plan.getFilters()) + "|" + ruleTopic + "|" + new ArrayList<>(dishIds == null ? List.of() : dishIds);
     }
 
     /** 单次工具执行的受控结果，禁止透传异常详情或原始请求。 */

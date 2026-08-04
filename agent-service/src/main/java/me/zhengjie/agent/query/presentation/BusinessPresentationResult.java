@@ -46,6 +46,7 @@ public final class BusinessPresentationResult {
     private final String customerCode;
     private final String customerName;
     private final String orderCode;
+    private final String dealTime;
     private final String createTime;
     private final String firstPurchaseTime;
     private final String parentPackageName;
@@ -108,6 +109,7 @@ public final class BusinessPresentationResult {
         this.customerCode = text(safe.get("customerCode"));
         this.customerName = text(safe.get("customerName"));
         this.orderCode = text(safe.get("orderCode"));
+        this.dealTime = text(safe.get("dealTime"));
         this.createTime = text(safe.get("createTime"));
         this.firstPurchaseTime = text(safe.get("firstPurchaseTime"));
         this.parentPackageName = text(safe.get("parentPackageName"));
@@ -180,6 +182,7 @@ public final class BusinessPresentationResult {
     public String getCustomerCode() { return customerCode; }
     public String getCustomerName() { return customerName; }
     public String getOrderCode() { return orderCode; }
+    public String getDealTime() { return dealTime; }
     public String getCreateTime() { return createTime; }
     public String getFirstPurchaseTime() { return firstPurchaseTime; }
     public String getParentPackageName() { return parentPackageName; }

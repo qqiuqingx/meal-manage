@@ -49,7 +49,11 @@
 
 权限：`agentDiagnosis:list` + `customerOrder:list`
 
-请求：`customerId`（必填）、`status`（可选）、`page`、`size`。单页最大 20 条，响应包含 `total`、`items`、`truncated`。
+请求：`customerId`（可选）、`status`（可选）、`page`、`size`。单页最大 20 条，响应包含 `total`、`items`、`truncated`、`page`、`size` 和 `queriedAt`。
+
+- `customerId` 非空时只查询该客户，并继续校验客户归属。
+- `customerId` 为空时只允许由已校验 QueryPlan 在当前客服签名数据范围内执行 SQL 分页，不会先读取全量订单再过滤；目前聊天链路仅使用固定 `status=1` 展开 `AGENT_ACTIVE_ORDER_V1` 进行中订单集合。
+- 每条订单增加 `dealTime` 和 `createTime`。客服查询“下单时间”时优先展示 `dealTime`，缺失时展示 `createTime`；两者均不属于金额字段。
 
 ### 3.4 订单详情
 
@@ -145,6 +149,12 @@ Agent 对外聊天响应中的规则卡片只展示以上受控字段；`present
 - 数据仅来自启用的 `meal_schedule_plan JOIN dish`；不会追加 `dish` 主档中的全局 `RICE_TYPE` 米饭候选。
 - 响应为 `{recordDate, groups, total, truncated}`。`groups` 按午餐、晚餐稳定排序，每组包含 `mealTypeCode`、`mealTypeName`、`total` 和限量 `items`；无排期时仍返回对应的空分组。
 - `total` 的事实含义为排期菜品数，单位为“道”，来源类型为 `SCHEDULED_DISH_LIST`，不得解释为订单数量。
+
+### 3.12 进行中订单数
+
+`POST /api/internal/agent/operations/active-orders`
+
+权限：`agentDiagnosis:list` + `customerOrder:list`。返回当前客服授权数据范围内 `status=1` 的订单记录数，指标代码为 `ACTIVE_ORDER_COUNT`，口径标识为 `AGENT_ACTIVE_ORDER_V1`。该接口不按客户去重，也不复用“仍有餐数的活跃客户”口径，不返回订单明细或金额字段。
 
 ## 4. 会话历史卡片恢复
 

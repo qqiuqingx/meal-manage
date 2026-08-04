@@ -1,5 +1,6 @@
 package me.zhengjie.modules.agent.query.service.impl;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.agent.query.domain.dto.AgentOrderSummaryDto;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
@@ -20,11 +21,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -68,7 +72,14 @@ class AgentOrderQueryServiceImplTest {
         CustomerOrder order = new CustomerOrder();
         order.setId(9001L); order.setCustomerId(1001L); order.setOrderCode("O9001");
         order.setBreakfastCount(6); order.setLunchDinnerCount(12);
-        when(customerOrderMapper.selectList(org.mockito.ArgumentMatchers.any())).thenReturn(Collections.singletonList(order));
+        order.setDealTime(LocalDateTime.of(2026, 8, 4, 9, 30));
+        order.setCreateTime(LocalDateTime.of(2026, 8, 4, 9, 20));
+        when(customerOrderMapper.selectPage(any(Page.class), any())).thenAnswer(invocation -> {
+            Page<CustomerOrder> page = invocation.getArgument(0);
+            page.setRecords(Collections.singletonList(order));
+            page.setTotal(1L);
+            return page;
+        });
         when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(9001L))).thenReturn(Collections.<OrderMealVerifiedCountDto>emptyList());
         when(mealVerificationLogMapper.countActiveByOrderIds(Collections.singletonList(9001L))).thenReturn(Collections.singletonList(recordCount(9001L, 3)));
         when(mealRefundLogMapper.countByOrderIds(Collections.singletonList(9001L))).thenReturn(Collections.singletonList(recordCount(9001L, 2)));
@@ -79,9 +90,35 @@ class AgentOrderQueryServiceImplTest {
         assertEquals(3, result.getVerificationRecordCount());
         assertEquals(2, result.getRefundRecordCount());
         assertEquals(5, result.getMealPlanRecordCount());
+        assertEquals(LocalDateTime.of(2026, 8, 4, 9, 30), result.getDealTime());
+        assertEquals(LocalDateTime.of(2026, 8, 4, 9, 20), result.getCreateTime());
         verify(mealVerificationLogMapper).countActiveByOrderIds(Collections.singletonList(9001L));
         verify(mealRefundLogMapper).countByOrderIds(Collections.singletonList(9001L));
         verify(mealPlanCustomerMapper).countAllScheduledByOrderIds(Collections.singletonList(9001L));
+    }
+
+    /** 不指定客户时只能在已验签数据范围内分页查询，供订单集合追问复用。 */
+    @Test
+    void shouldListActiveOrdersWithinSignedCustomerScope() {
+        AgentCustomerDataScopeContext.bind(Set.of(1001L, 1002L));
+        when(customerOrderMapper.selectPage(any(Page.class), any())).thenAnswer(invocation -> {
+            Page<CustomerOrder> page = invocation.getArgument(0);
+            CustomerOrder order = new CustomerOrder();
+            order.setId(9001L); order.setCustomerId(1001L); order.setStatus(1);
+            page.setRecords(List.of(order));
+            page.setTotal(3L);
+            return page;
+        });
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(List.of(9001L))).thenReturn(List.of());
+        when(mealVerificationLogMapper.countActiveByOrderIds(List.of(9001L))).thenReturn(List.of());
+        when(mealRefundLogMapper.countByOrderIds(List.of(9001L))).thenReturn(List.of());
+        when(mealPlanCustomerMapper.countAllScheduledByOrderIds(List.of(9001L))).thenReturn(List.of());
+
+        var result = service.listByCustomer(null, 1, 1, 20);
+
+        assertEquals(3L, result.getTotal());
+        assertEquals(1, result.getItems().size());
+        assertEquals(1, result.getItems().get(0).getStatusCode());
     }
 
     private OrderAssociatedRecordCountDto recordCount(Long orderId, int count) {

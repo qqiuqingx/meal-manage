@@ -53,6 +53,12 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
             operation(analysis, AgentQueryMetric.DAILY_SCHEDULED_CUSTOMER_COUNT, text);
         } else if (isCustomerProfileCountQuestion(text)) {
             operation(analysis, AgentQueryMetric.CUSTOMER_PROFILE_COUNT, text);
+        } else if (isActiveOrderCountQuestion(text)) {
+            operation(analysis, AgentQueryMetric.ACTIVE_ORDER_COUNT, text);
+        } else if (isOrderTimeQuestion(text)) {
+            analysis.setDomains(List.of(AgentQueryDomain.ORDER));
+            analysis.setQueryTarget(BusinessQueryTarget.ORDER);
+            analysis.setConfidence(0.94D);
         } else if (isCustomerOverviewQuestion(text)) {
             analysis.setDomains(List.of(AgentQueryDomain.CUSTOMER));
             analysis.setQueryTarget(BusinessQueryTarget.CUSTOMER);
@@ -228,6 +234,17 @@ public class RuleBasedBusinessQuestionAnalyzer implements BusinessQuestionAnalyz
     private boolean isCustomerProfileCountQuestion(String text) {
         return contains(text, "客户总数", "客户档案总数", "录入了多少客户", "录入多少客户")
             || contains(text, "系统中有多少客户", "系统中还有多少客户", "系统里有多少客户", "系统里还有多少客户");
+    }
+
+    /** 识别当前进行中订单数量问法，避免错误复用活跃客户计数工具。 */
+    private boolean isActiveOrderCountQuestion(String text) {
+        return contains(text, "订单") && contains(text, "多少", "几笔", "订单数")
+            && !contains(text, "到期", "核销", "退餐", "金额", "价格");
+    }
+
+    /** 识别订单集合或单客户订单的下单时间投影问法。 */
+    private boolean isOrderTimeQuestion(String text) {
+        return contains(text, "下单时间", "什么时候下单", "何时下单", "哪天下单");
     }
 
     /** 识别客户基本信息、档案创建时间或首次购买时间查询，统一使用受控客户概览。 */

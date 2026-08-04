@@ -8,6 +8,9 @@ import me.zhengjie.agent.chat.MealPlanChatSession;
 import me.zhengjie.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import me.zhengjie.agent.query.domain.AgentMetricCatalog;
+import me.zhengjie.agent.query.domain.AgentContextDefinitions;
+import me.zhengjie.agent.query.domain.AgentQueryAction;
+import me.zhengjie.agent.query.domain.AgentQueryDomain;
 import me.zhengjie.agent.query.domain.AgentQueryMetric;
 import me.zhengjie.agent.query.domain.AgentQueryPlan;
 import me.zhengjie.agent.query.domain.BusinessResponseTypeCatalog;
@@ -109,6 +112,9 @@ public class BusinessConversationResultPipeline {
             + plan.getMealScope() + "|"
             + (plan.getFilters() == null ? "" : plan.getFilters().getRecordDate()) + "|"
             + (plan.getFilters() == null ? "" : plan.getFilters().getMealType()) + "|"
+            + (plan.getFilters() == null ? "" : plan.getFilters().getOrderStatus()) + "|"
+            + (plan.getFilters() == null ? "" : plan.getFilters().getPage()) + "|"
+            + (plan.getFilters() == null ? "" : plan.getFilters().getSize()) + "|"
             + plan.getToolNames();
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
@@ -132,6 +138,13 @@ public class BusinessConversationResultPipeline {
         if (activeResponseType.equals(response.getResponseType())
             && result.getTotal() instanceof Number total) {
             context.setContextHandles(List.of(activeCustomerHandle(total, context.getQueriedAt())));
+        }
+        String activeOrderResponseType = AgentMetricCatalog
+            .definition(AgentQueryMetric.ACTIVE_ORDER_COUNT).getResponseType();
+        if ((activeOrderResponseType.equals(response.getResponseType())
+            || isActiveOrderList(response.getQueryPlan()))
+            && result.getTotal() instanceof Number total) {
+            context.setContextHandles(List.of(activeOrderHandle(total, context.getQueriedAt())));
         }
         if (BusinessResponseTypeCatalog.SCHEDULED_MENU.equals(response.getResponseType())
             && !result.getGroups().isEmpty()) {
@@ -161,11 +174,38 @@ public class BusinessConversationResultPipeline {
         handle.setHandleId("ctx-" + UUID.randomUUID());
         handle.setKind(ContextHandleKind.ENTITY_SET);
         handle.setEntityType(SemanticEntityType.CUSTOMER);
-        handle.setDefinitionId("AGENT_ACTIVE_CUSTOMER_V1");
+        handle.setDefinitionId(AgentContextDefinitions.ACTIVE_CUSTOMER);
         handle.setCardinality(total.intValue());
         handle.setSafeDescriptor(Map.of("metric", "ACTIVE_CUSTOMER_COUNT"));
         handle.setAllowedOperations(List.of(SemanticOperation.COUNT,
             SemanticOperation.PROJECT, SemanticOperation.GROUP, SemanticOperation.FILTER));
+        handle.setSalience(1D);
+        handle.setCreatedAt(queriedAt);
+        handle.setExpiresAt(queriedAt.plusMinutes(30));
+        return handle;
+    }
+
+    /** 判断当前列表是否在重新展开已登记的进行中订单集合。 */
+    private boolean isActiveOrderList(AgentQueryPlan plan) {
+        return plan != null && plan.getDomain() == AgentQueryDomain.ORDER
+            && plan.getAction() == AgentQueryAction.LIST
+            && plan.getEntities() != null && plan.getEntities().getCustomerId() == null
+            && plan.getEntities().getOrderId() == null
+            && plan.getFilters() != null && "1".equals(plan.getFilters().getOrderStatus());
+    }
+
+    /** 构造短期可引用的进行中订单集合句柄，只保存口径、状态和基数。 */
+    private ConversationContextHandle activeOrderHandle(Number total,
+                                                         OffsetDateTime queriedAt) {
+        ConversationContextHandle handle = new ConversationContextHandle();
+        handle.setHandleId("ctx-" + UUID.randomUUID());
+        handle.setKind(ContextHandleKind.ENTITY_SET);
+        handle.setEntityType(SemanticEntityType.ORDER);
+        handle.setDefinitionId(AgentContextDefinitions.ACTIVE_ORDER);
+        handle.setCardinality(total.intValue());
+        handle.setSafeDescriptor(Map.of("metric", "ACTIVE_ORDER_COUNT", "status", 1));
+        handle.setAllowedOperations(List.of(SemanticOperation.COUNT,
+            SemanticOperation.LIST, SemanticOperation.PROJECT, SemanticOperation.FILTER));
         handle.setSalience(1D);
         handle.setCreatedAt(queriedAt);
         handle.setExpiresAt(queriedAt.plusMinutes(30));

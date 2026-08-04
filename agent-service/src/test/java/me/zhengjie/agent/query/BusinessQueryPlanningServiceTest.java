@@ -114,6 +114,18 @@ class BusinessQueryPlanningServiceTest {
         assertNull(plan.getFilters().getRecentLimit());
     }
 
+    /** 进行中订单数必须编译到独立订单统计工具，禁止复用活跃客户工具。 */
+    @Test
+    void shouldPlanActiveOrderCountWithDedicatedTool() {
+        BusinessQuestionAnalysis analysis = analysis(AgentQueryDomain.OPERATION_STATISTICS);
+        analysis.setMetrics(List.of(AgentQueryMetric.ACTIVE_ORDER_COUNT));
+
+        var plan = service.plan(analysis);
+
+        assertEquals(AgentQueryAction.SUMMARY, plan.getAction());
+        assertEquals(List.of("getActiveOrderSummary"), plan.getToolNames());
+    }
+
     /** 模型 Schema 的可选实体占位值不能让客户编号查询变成非法 ID 查询。 */
     @Test
     void shouldNormalizeOptionalEntityPlaceholdersBeforeValidation() {

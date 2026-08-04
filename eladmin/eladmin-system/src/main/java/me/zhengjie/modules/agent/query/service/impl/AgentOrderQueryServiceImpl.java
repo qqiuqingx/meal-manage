@@ -1,6 +1,7 @@
 package me.zhengjie.modules.agent.query.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import me.zhengjie.modules.agent.query.domain.dto.AgentListResultDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentOrderMealBalanceDto;
@@ -23,6 +24,7 @@ import me.zhengjie.modules.meal.mapper.MealRefundLogMapper;
 import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
 import org.springframework.stereotype.Service;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -52,19 +54,27 @@ public class AgentOrderQueryServiceImpl implements AgentOrderQueryService {
     @Override
     public AgentListResultDto<AgentOrderSummaryDto> listByCustomer(Long customerId, Integer status, int page, int size) {
         AgentListResultDto<AgentOrderSummaryDto> result = new AgentListResultDto<>();
-        if (customerId == null || customerId <= 0 || !AgentCustomerDataScopeContext.allows(customerId)) return result;
+        if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND
+            || customerId != null && (customerId <= 0 || !AgentCustomerDataScopeContext.allows(customerId))) return result;
+        Set<Long> scopedCustomerIds = AgentCustomerDataScopeContext.customerIds();
+        if (customerId == null && scopedCustomerIds != null && scopedCustomerIds.isEmpty()) return result;
         int safePage = Math.max(page, 1);
         int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
         LambdaQueryWrapper<CustomerOrder> wrapper = new LambdaQueryWrapper<CustomerOrder>()
-                .eq(CustomerOrder::getCustomerId, customerId)
+                .eq(customerId != null, CustomerOrder::getCustomerId, customerId)
+                .in(customerId == null && scopedCustomerIds != null, CustomerOrder::getCustomerId, scopedCustomerIds)
                 .orderByDesc(CustomerOrder::getCreateTime);
         if (status != null) wrapper.eq(CustomerOrder::getStatus, status);
-        List<CustomerOrder> allOrders = customerOrderMapper.selectList(wrapper);
-        result.setTotal(allOrders.size());
-        int fromIndex = Math.min((safePage - 1) * safeSize, allOrders.size());
-        int toIndex = Math.min(fromIndex + safeSize, allOrders.size());
-        result.setTruncated(toIndex < allOrders.size());
-        result.setItems(toSummaries(allOrders.subList(fromIndex, toIndex)));
+        Page<CustomerOrder> orderPage = customerOrderMapper.selectPage(new Page<>(safePage, safeSize), wrapper);
+        List<CustomerOrder> orders = orderPage == null || orderPage.getRecords() == null
+            ? Collections.emptyList() : orderPage.getRecords();
+        long total = orderPage == null ? 0L : orderPage.getTotal();
+        result.setTotal(total);
+        result.setPage(safePage);
+        result.setSize(safeSize);
+        result.setTruncated((long) safePage * safeSize < total);
+        result.setItems(toSummaries(orders));
+        result.setQueriedAt(java.time.ZonedDateTime.now(ZoneId.of("Asia/Shanghai")).toOffsetDateTime().toString());
         return result;
     }
 
@@ -201,6 +211,8 @@ public class AgentOrderQueryServiceImpl implements AgentOrderQueryService {
         dto.setCustomerCode(order.getCustomerCode());
         dto.setStatusCode(order.getStatus());
         dto.setStatusName(statusName(order.getStatus()));
+        dto.setDealTime(order.getDealTime());
+        dto.setCreateTime(order.getCreateTime());
         dto.setStartDate(order.getStartDate());
         dto.setStartMealTypeCode(order.getStartMealType());
         dto.setEndDate(order.getEndDate());

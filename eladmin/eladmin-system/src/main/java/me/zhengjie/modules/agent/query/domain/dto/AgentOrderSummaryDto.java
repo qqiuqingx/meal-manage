@@ -3,6 +3,7 @@ package me.zhengjie.modules.agent.query.domain.dto;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * Agent 专用订单摘要，仅包含客服只读查询需要的非金额字段。
@@ -22,6 +23,10 @@ public class AgentOrderSummaryDto {
     private Integer statusCode;
     /** 状态展示名称。 */
     private String statusName;
+    /** 订单成交时间，作为客服查询“下单时间”的首选口径。 */
+    private LocalDateTime dealTime;
+    /** 订单创建时间；成交时间缺失时用于说明订单录入时间。 */
+    private LocalDateTime createTime;
     /** 服务开始日期。 */
     private LocalDate startDate;
     /** 开始餐次代码。 */

@@ -2,15 +2,12 @@ package me.zhengjie.modules.agent.query.domain.dto;
 
 import lombok.Data;
 
-import javax.validation.constraints.NotNull;
-
 /**
- * Agent 客户订单列表受控请求。
+ * Agent 订单列表受控请求。
  */
 @Data
 public class AgentOrderListRequest {
-    /** 客户 ID。 */
-    @NotNull
+    /** 客户 ID；为空时仅允许在当前签名数据范围内执行受控分页查询。 */
     private Long customerId;
     /** 订单状态，可为空。 */
     private Integer status;

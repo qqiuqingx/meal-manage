@@ -9,7 +9,7 @@
 | `MealPlanChatServiceImpl` | 2210 行 | 仍是历史兼容实现，后续按能力迁出。 |
 | Agent 生产 Java 文件 | 209 | `src/main/java/me/zhengjie/agent`。 |
 | Agent 测试类 | 72 | `src/test/java` 下的 `*Test.java`。 |
-| 历史业务工具 | 18 | `ToolCatalog` 登记数量。 |
+| 历史业务工具 | 19 | `ToolCatalog` 登记数量。 |
 | 语义能力 | 5 | `semantics/capability-catalog.yaml`。 |
 | 规则 YAML | 9 | `rules/` 下全部 YAML。 |
 
@@ -43,7 +43,7 @@ mvn -q -Dtest='*Agent*Test' test
 | `DefaultConversationHandler` | 1913 行 | 历史行为仍在渐进迁移；状态、兼容意图、旧客户汇总适配和测试依赖组装已拆出 |
 | Agent 生产 Java 文件 | 212 | 包含新应用边界、模型网关、配置校验及兼容适配组件 |
 | Agent 测试类 | 78 | 全量 329 个测试，0 failure、0 error、1 skipped |
-| 历史业务工具 | 18 | 描述符与执行器名称集合启动期强制一致 |
+| 历史业务工具 | 19 | 描述符与执行器名称集合启动期强制一致 |
 | 诊断工具 | 11 | 与业务工具共享 `ToolDescriptor` 元数据协议 |
 | 语义能力 | 5 | 由强类型能力目录加载并映射唯一 `plannerProfile` |
 | QueryPlan 指标 | 15 | 使用 `AgentQueryMetric` 受控枚举 |

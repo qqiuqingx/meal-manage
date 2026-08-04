@@ -38,6 +38,26 @@ class AgentQueryPlanValidatorTest {
         assertTrue(validator.validate(plan).isValid());
     }
 
+    /** 无客户实体的订单列表只允许重新展开受控的进行中订单集合。 */
+    @Test
+    void shouldAcceptOnlyBoundedActiveOrderScopeWithoutCustomer() {
+        AgentQueryPlan plan = new AgentQueryPlan();
+        plan.setDomain(AgentQueryDomain.ORDER);
+        plan.setAction(AgentQueryAction.LIST);
+        plan.setEntities(new AgentEntityReference());
+        AgentQueryFilters filters = new AgentQueryFilters();
+        filters.setOrderStatus("1");
+        filters.setPage(1);
+        filters.setSize(20);
+        plan.setFilters(filters);
+        plan.setToolNames(List.of("listOrders"));
+
+        assertTrue(validator.validate(plan).isValid());
+
+        filters.setOrderStatus(null);
+        assertFalse(validator.validate(plan).isValid());
+    }
+
     @Test
     void shouldAcceptUnboundedMealPlanHistoryList() {
         AgentQueryPlan plan = new AgentQueryPlan();

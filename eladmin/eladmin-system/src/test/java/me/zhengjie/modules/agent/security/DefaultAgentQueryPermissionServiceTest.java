@@ -47,9 +47,18 @@ class DefaultAgentQueryPermissionServiceTest {
         assertDoesNotThrow(() -> service.require(context, "customerProfile:list", "customerOrder:list"));
         assertEquals(Arrays.asList("resolveCustomer", "customerOverview", "listOrders", "orderDetail", "listMealPlans",
                 "listVerifications", "listRefunds", "packageDetail", "listDishes", "listScheduledDishes", "previewDishCandidates", "explainRule",
-                "getDailyCustomerWorkload", "getCustomerProfileCount", "getActiveCustomerSummary", "listActiveCustomerMealBalances",
+                "getDailyCustomerWorkload", "getCustomerProfileCount", "getActiveCustomerSummary", "getActiveOrderSummary", "listActiveCustomerMealBalances",
                 "getExpiringOrderSummary", "getMealPlanFailureSummary"),
             service.availableToolNames(context));
+    }
+
+    /** 进行中订单统计复用订单只读权限，不应额外要求客户档案或排餐权限。 */
+    @Test
+    void shouldExposeActiveOrderSummaryWithOrderReadPermission() {
+        AgentAccessContext context = context("agentDiagnosis:list", "customerOrder:list");
+
+        org.junit.jupiter.api.Assertions.assertTrue(
+            service.availableToolNames(context).contains("getActiveOrderSummary"));
     }
 
     /** 菜单工具需要同时具备排餐与菜品权限，不能因单项权限越权。 */

@@ -23,7 +23,7 @@ import java.util.Set;
 public class LegacyBusinessQueryCapabilityHandler implements CapabilityHandler {
     public String handlerId() { return "legacy-business-query"; }
     public Set<String> plannerProfiles() {
-        return Set.of("ACTIVE_CUSTOMER_BALANCE_DETAIL_V1", "CUSTOMER_ORDER_LIST_V1", "CUSTOMER_VERIFICATION_LIST_V1",
+        return Set.of("ACTIVE_CUSTOMER_BALANCE_DETAIL_V1", "ACTIVE_ORDER_DETAIL_V1", "CUSTOMER_ORDER_LIST_V1", "CUSTOMER_VERIFICATION_LIST_V1",
             "CUSTOMER_REFUND_LIST_V1", "CUSTOMER_MEAL_PLAN_LIST_V1");
     }
 
@@ -38,9 +38,9 @@ public class LegacyBusinessQueryCapabilityHandler implements CapabilityHandler {
     @Override
     public AgentQueryPlan compile(String plannerProfile, SemanticRequestFrame frame,
                                   ConversationExecutionContext context) {
-        return "ACTIVE_CUSTOMER_BALANCE_DETAIL_V1".equals(plannerProfile)
-            ? activeCustomerBalancePlan(frame)
-            : customerHistoryPlan(frame, plannerProfile);
+        if ("ACTIVE_CUSTOMER_BALANCE_DETAIL_V1".equals(plannerProfile)) return activeCustomerBalancePlan(frame);
+        if ("ACTIVE_ORDER_DETAIL_V1".equals(plannerProfile)) return activeOrderDetailPlan(frame);
+        return customerHistoryPlan(frame, plannerProfile);
     }
 
     private AgentQueryPlan customerHistoryPlan(SemanticRequestFrame frame, String plannerProfile) {
@@ -98,6 +98,28 @@ public class LegacyBusinessQueryCapabilityHandler implements CapabilityHandler {
         plan.getFilters().setPage(1);
         plan.getFilters().setSize(50);
         plan.setToolNames(List.of(ToolCatalog.LIST_ACTIVE_CUSTOMER_MEAL_BALANCES));
+        return plan;
+    }
+
+    /** 将已解析的进行中订单集合句柄编译为固定 status=1 的受控分页查询。 */
+    private AgentQueryPlan activeOrderDetailPlan(SemanticRequestFrame frame) {
+        if (frame == null || frame.getGoal() != SemanticGoal.QUERY
+            || frame.getTargetEntity() != SemanticEntityType.ORDER || frame.getScope() == null
+            || frame.getScope().getResolvedHandleId() == null
+            || frame.getOperations().stream().noneMatch(operation -> operation == SemanticOperation.LIST
+                || operation == SemanticOperation.PROJECT)
+            || frame.getOutputShape() != SemanticOutputShape.DETAIL_LIST) {
+            throw unavailable("ACTIVE_ORDER_DETAIL_V1");
+        }
+        AgentQueryPlan plan = new AgentQueryPlan();
+        plan.setDomain(AgentQueryDomain.ORDER);
+        plan.setAction(AgentQueryAction.LIST);
+        plan.setDetailLevel("DETAIL");
+        plan.setLimit(20);
+        plan.getFilters().setOrderStatus("1");
+        plan.getFilters().setPage(1);
+        plan.getFilters().setSize(20);
+        plan.setToolNames(List.of(ToolCatalog.LIST_ORDERS));
         return plan;
     }
 

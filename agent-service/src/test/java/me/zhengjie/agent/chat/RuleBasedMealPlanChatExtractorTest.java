@@ -359,4 +359,19 @@ class RuleBasedMealPlanChatExtractorTest {
         assertEquals("B3303", result.getSlots().getCustomerCode());
         assertEquals(1, result.getSlots().getOrderStatus());
     }
+
+    /** 集合代词加下单时间应保留为订单查询，由后续上下文句柄解析具体集合。 */
+    @Test
+    void shouldExtractOrderTimeFollowUpWithoutTreatingItAsWriteAction() {
+        ChatExtractionResult result = extractor.extract("他们分别是什么时候下单的", new DiagnosisSlots());
+
+        assertEquals(ChatIntent.CUSTOMER_ORDER_QUERY, result.getIntent());
+    }
+
+    /** 明确创建订单仍不属于只读 Agent 能力范围。 */
+    @Test
+    void shouldRejectExplicitOrderCreation() {
+        assertEquals(ChatIntent.OUT_OF_SCOPE,
+            extractor.extract("帮我给这个客户下单", new DiagnosisSlots()).getIntent());
+    }
 }

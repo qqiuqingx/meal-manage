@@ -9,9 +9,9 @@ import me.zhengjie.modules.agent.query.domain.dto.AgentOrderSummaryDto;
 public interface AgentOrderQueryService {
 
     /**
-     * 按客户查询有限分页的订单摘要。
+     * 按可选客户查询有限分页的订单摘要；客户为空时查询当前签名数据范围。
      *
-     * @param customerId 客户 ID
+     * @param customerId 客户 ID，可为空
      * @param status 订单状态，可为空
      * @param page 从 1 开始的页码
      * @param size 单页数量，最大 20

@@ -288,6 +288,12 @@ public class HttpBusinessQueryDataClient implements BusinessQueryDataClient {
 
     /** {@inheritDoc} */
     @Override
+    public Map<String, Object> activeOrderSummary() {
+        return post("/api/internal/agent/operations/active-orders", Map.of(), Map.class);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public ActiveCustomerBalanceResponse activeCustomerBalances(int page, int size) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("page", page); body.put("size", size);

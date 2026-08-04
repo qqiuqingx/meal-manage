@@ -48,6 +48,26 @@ class RuleBasedBusinessQuestionAnalyzerTest {
             unscheduled.getTemporal().getExpression());
     }
 
+    /** “多少订单”必须使用进行中订单口径，不能映射成有余额客户数。 */
+    @Test
+    void shouldRecognizeActiveOrderCountIndependentlyFromActiveCustomers() {
+        BusinessQuestionAnalysis result = analyzer.analyze("现在有多少订单了", null);
+
+        assertEquals(AgentQueryDomain.OPERATION_STATISTICS, result.getDomains().get(0));
+        assertEquals(AgentQueryMetric.ACTIVE_ORDER_COUNT, result.getMetrics().get(0));
+        assertTrue(!result.isRequiresClarification());
+    }
+
+    /** 订单集合的下单时间追问应表达为订单明细查询。 */
+    @Test
+    void shouldRecognizeOrderTimeFollowUp() {
+        BusinessQuestionAnalysis result = analyzer.analyze("他们分别是什么时候下单的", null);
+
+        assertEquals(AgentQueryDomain.ORDER, result.getDomains().get(0));
+        assertEquals(BusinessQueryTarget.ORDER, result.getQueryTarget());
+        assertTrue(!result.isRequiresClarification());
+    }
+
     /** 集合追问的自然说法必须落到餐数余额指标，不能被规则兜底误判为未知问题。 */
     @Test
     void shouldRecognizeNaturalMealBalanceFollowUp() {

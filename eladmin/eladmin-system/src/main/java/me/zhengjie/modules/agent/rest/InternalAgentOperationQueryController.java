@@ -62,6 +62,15 @@ public class InternalAgentOperationQueryController {
         return ResponseEntity.ok(operationQueryService.activeCustomers());
     }
 
+    /** 查询当前授权数据范围内状态为进行中的订单数。 */
+    @AnonymousPostMapping("/active-orders")
+    public ResponseEntity<AgentOperationCountDto> activeOrders(
+            @RequestHeader("X-Request-Id") String requestId, @RequestHeader("X-Agent-Session-Id") String sessionId,
+            @RequestHeader(INTERNAL_TOKEN_HEADER) String agentToken, @RequestHeader(ACCESS_CONTEXT_HEADER) String accessToken) {
+        require(agentToken, accessToken, sessionId, requestId, "customerOrder:list");
+        return ResponseEntity.ok(operationQueryService.activeOrders());
+    }
+
     /** 查询活跃客户集合的脱敏餐数余额明细，最多返回 50 位客户。 */
     @AnonymousPostMapping("/active-customer-balances")
     public ResponseEntity<AgentActiveCustomerBalanceResponse> activeCustomerBalances(

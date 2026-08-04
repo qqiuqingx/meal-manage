@@ -125,6 +125,31 @@ class AgentOperationQueryServiceImplTest {
         }
     }
 
+    /** 进行中订单数必须直接统计状态为 1 的订单，不能复用活跃客户余额口径。 */
+    @Test
+    void shouldCountActiveOrdersIndependentlyFromActiveCustomers() {
+        MealPlanMapper planMapper = mock(MealPlanMapper.class);
+        MealPlanCustomerMapper customerMapper = mock(MealPlanCustomerMapper.class);
+        CustomerOrderMapper orderMapper = mock(CustomerOrderMapper.class);
+        CustomerProfileMapper profileMapper = mock(CustomerProfileMapper.class);
+        ParentPackageMapper parentPackageMapper = mock(ParentPackageMapper.class);
+        MealPlanService mealPlanService = mock(MealPlanService.class);
+        when(orderMapper.selectCount(any())).thenReturn(15L);
+        AgentOperationQueryServiceImpl service = new AgentOperationQueryServiceImpl(
+            planMapper, customerMapper, orderMapper, profileMapper, parentPackageMapper, mealPlanService);
+
+        AgentCustomerDataScopeContext.bind(Set.of(1L, 2L));
+        try {
+            var result = service.activeOrders();
+
+            assertEquals(15L, result.getTotal());
+            assertEquals("ACTIVE_ORDER_COUNT", result.getMetricCode());
+            assertEquals("AGENT_ACTIVE_ORDER_V1", result.getMetricDefinitionId());
+        } finally {
+            AgentCustomerDataScopeContext.clear();
+        }
+    }
+
     /** 套餐和来源分组必须复用有效订单集合，待排餐仅保留尚无成功排餐的客户餐次。 */
     @Test
     void shouldGroupDailyMetricsByPackageAndCustomerSource() {

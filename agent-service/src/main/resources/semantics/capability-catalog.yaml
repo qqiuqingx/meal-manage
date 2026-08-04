@@ -27,6 +27,20 @@ capabilities:
     requiredPermissions: [customerOrder:list]
     plannerProfile: CUSTOMER_ORDER_LIST_V1
     riskLevel: INTERNAL
+  - capabilityId: ACTIVE_ORDER_DETAIL_V1
+    displayName: 进行中订单集合明细
+    frame:
+      goal: QUERY
+      targetEntity: ORDER
+      allowedScopeKinds: [ENTITY_SET]
+      requiredMeasures: []
+      allowedDimensions: []
+      allowedOperations: [LIST, PROJECT]
+      allowedOutputShapes: [DETAIL_LIST]
+    allowedSetDefinitions: [AGENT_ACTIVE_ORDER_V1]
+    requiredPermissions: [customerOrder:list]
+    plannerProfile: ACTIVE_ORDER_DETAIL_V1
+    riskLevel: INTERNAL_SENSITIVE_LIST
   - capabilityId: CUSTOMER_VERIFICATION_LIST_V1
     displayName: 单客户核销记录
     frame:
