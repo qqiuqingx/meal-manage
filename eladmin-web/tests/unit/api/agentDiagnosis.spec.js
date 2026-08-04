@@ -4,7 +4,6 @@ jest.mock('@/utils/request', () => jest.fn())
 import axios from '@/utils/request'
 import {
   chatMealPlan,
-  diagnoseMealPlan,
   queryChatSessions,
   createChatSession,
   getChatSession,
@@ -15,16 +14,6 @@ import {
 describe('agentDiagnosis api', () => {
   beforeEach(() => {
     axios.mockClear()
-  })
-
-  test('posts diagnose request to existing endpoint', () => {
-    diagnoseMealPlan({ customerId: 1001 })
-
-    expect(axios).toHaveBeenCalledWith({
-      url: '/api/agent/meal-plan/diagnose',
-      method: 'post',
-      data: { customerId: 1001 }
-    })
   })
 
   test('posts chat request to chat endpoint', () => {

@@ -202,34 +202,8 @@
                     </el-table>
                   </div>
                 </div>
-                <div v-if="message.responseType && message.responseType.indexOf('BUSINESS_QUERY') === 0 && message.insightResult" class="insight-section business-query-card">
+                <div v-if="(message.cards && message.cards.length) || (message.toolTraceSummary && message.toolTraceSummary.length) || message.partial || (message.warnings && message.warnings.length)" class="insight-section business-query-card">
                   <div class="block-title">业务查询结果</div>
-                  <el-alert v-if="message.validation && message.validation.status === 'DEGRADED'" title="查询结果未通过完整验证，已隐藏为非结论性提示，请到业务页面人工核对。" type="warning" :closable="false" show-icon />
-                  <div v-if="message.conversationFocus && Object.keys(message.conversationFocus).length" class="query-time">当前对象：{{ conversationFocusText(message.conversationFocus) }}</div>
-                  <customer-overview-card v-if="message.responseType === 'BUSINESS_QUERY_CUSTOMER'" :result="message.insightResult" />
-                  <customer-candidate-card v-if="message.responseType === 'BUSINESS_QUERY_CUSTOMER_CANDIDATES'" :result="message.insightResult" @select="selectCustomerCandidate" />
-                  <business-order-list-card v-if="message.responseType === 'BUSINESS_QUERY_ORDER'" :result="message.insightResult" />
-                  <business-meal-plan-card v-if="message.responseType === 'BUSINESS_QUERY_MEAL_PLAN' || message.responseType === 'BUSINESS_QUERY_MEAL_PLAN_ALLERGY'" :result="message.insightResult" />
-                  <business-history-card v-if="message.responseType === 'BUSINESS_QUERY_VERIFICATION'" :result="message.insightResult" type="verification" />
-                  <business-history-card v-if="message.responseType === 'BUSINESS_QUERY_REFUND'" :result="message.insightResult" type="refund" />
-                  <business-dish-card v-if="message.responseType === 'BUSINESS_QUERY_DISH'" :result="message.insightResult" />
-                  <business-scheduled-menu-card v-if="message.responseType === 'BUSINESS_QUERY_SCHEDULED_MENU'" :result="message.insightResult" />
-                  <business-dish-candidate-card v-if="message.responseType === 'BUSINESS_QUERY_DISH_CANDIDATES'" :result="message.insightResult" />
-                  <business-rule-card v-if="message.responseType === 'BUSINESS_QUERY_RULE'" :result="message.insightResult" />
-                  <business-package-card v-if="message.responseType === 'BUSINESS_QUERY_PACKAGE'" :result="message.insightResult" />
-                  <business-operation-stats-card v-if="message.responseType && message.responseType.indexOf('BUSINESS_QUERY_OPERATION_') === 0 && message.responseType !== 'BUSINESS_QUERY_OPERATION_CLARIFICATION'" :result="message.insightResult" />
-                  <active-customer-balance-card v-if="message.responseType === 'BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES'" :result="message.insightResult" />
-                  <template v-for="(block, blockIndex) in message.resultBlocks || []">
-                    <div v-if="blockIndex > 0" :key="block.frameId || blockIndex" class="multi-result-block">
-                      <div class="block-title">后续请求结果</div>
-                      <active-customer-balance-card v-if="block.responseType === 'BUSINESS_QUERY_ACTIVE_CUSTOMER_BALANCES'" :result="block.result" />
-                      <business-order-list-card v-if="block.responseType === 'BUSINESS_QUERY_ORDER'" :result="block.result" />
-                      <business-history-card v-if="block.responseType === 'BUSINESS_QUERY_VERIFICATION'" :result="block.result" type="verification" />
-                      <business-history-card v-if="block.responseType === 'BUSINESS_QUERY_REFUND'" :result="block.result" type="refund" />
-                      <business-meal-plan-card v-if="block.responseType === 'BUSINESS_QUERY_MEAL_PLAN'" :result="block.result" />
-                      <el-alert v-if="block.status === 'FAILED'" title="该请求未完成，请缩小范围或稍后重试。" type="warning" :closable="false" />
-                    </div>
-                  </template>
                   <el-alert
                     v-if="message.partial || (message.warnings && message.warnings.length)"
                     :title="queryWarningText(message)"
@@ -237,20 +211,18 @@
                     :closable="false"
                     show-icon
                   />
-                  <el-table v-if="message.facts && message.facts.length" :data="message.facts" size="mini" border>
-                    <el-table-column prop="factId" label="事实" width="70" />
-                    <el-table-column prop="label" label="指标" min-width="130" />
-                    <el-table-column label="值" min-width="140">
-                      <template slot-scope="{ row }">{{ row.value }}{{ row.unit || '' }}</template>
-                    </el-table-column>
-                    <el-table-column prop="customerCode" label="客户编号" min-width="110">
-                      <template slot-scope="{ row }">{{ row.customerCode || '全局' }}</template>
-                    </el-table-column>
-                    <el-table-column prop="sourceType" label="数据来源" min-width="150" />
-                    <el-table-column prop="sourceRecordId" label="源记录" min-width="100" />
-                  </el-table>
                   <div v-if="message.queriedAt" class="query-time">查询时间：{{ message.queriedAt }}</div>
-                  <div v-if="message.queryPlan && message.queryPlan.domain" class="query-time">查询计划：{{ message.queryPlan.domain }} / {{ message.queryPlan.action }}</div>
+                  <div v-if="message.cards && message.cards.length" class="unified-tool-cards">
+                    <div v-for="(card, cardIndex) in message.cards" :key="card.sourceToolCallId || cardIndex" class="unified-tool-card">
+                      <div class="block-title">{{ unifiedCardTitle(card.type) }}</div>
+                      <pre class="unified-tool-card-data">{{ unifiedCardText(card.data) }}</pre>
+                    </div>
+                  </div>
+                  <el-table v-if="message.toolTraceSummary && message.toolTraceSummary.length" :data="message.toolTraceSummary" size="mini" border>
+                    <el-table-column prop="toolName" label="工具" width="190" />
+                    <el-table-column prop="status" label="状态" width="100" />
+                    <el-table-column prop="resultCount" label="结果数" width="90" />
+                  </el-table>
                 </div>
               </div>
             </div>
@@ -335,45 +307,19 @@ import {
   submitDiagnosisFeedback,
   updateChatSessionTitle
 } from '@/api/agentDiagnosis'
-import CustomerOverviewCard from './components/customerOverviewCard'
-import CustomerCandidateCard from './components/customerCandidateCard'
-import BusinessOrderListCard from './components/businessOrderListCard'
-import BusinessMealPlanCard from './components/businessMealPlanCard'
-import BusinessHistoryCard from './components/businessHistoryCard'
-import BusinessDishCard from './components/businessDishCard'
-import BusinessScheduledMenuCard from './components/businessScheduledMenuCard'
-import BusinessDishCandidateCard from './components/businessDishCandidateCard'
-import BusinessRuleCard from './components/businessRuleCard'
-import BusinessPackageCard from './components/businessPackageCard'
-import BusinessOperationStatsCard from './components/businessOperationStatsCard'
-import ActiveCustomerBalanceCard from './components/activeCustomerBalanceCard'
 
 function welcomeMessage() {
   return {
     role: 'assistant',
     content: '你好，我是智能客服助手。你可以查询客户、订单、排餐、核销、退餐或运营统计，例如“B3303 还有多少餐”或“今天待核销客户有多少？”。',
     status: 'ANSWERED',
-    stage: 'COLLECTING_SLOTS',
+    stage: 'READY',
     missingSlots: []
   }
 }
 
 export default {
   name: 'AgentDiagnosis',
-  components: {
-    CustomerOverviewCard,
-    CustomerCandidateCard,
-    BusinessOrderListCard,
-    BusinessMealPlanCard,
-    BusinessHistoryCard,
-    BusinessDishCard,
-    BusinessScheduledMenuCard,
-    BusinessDishCandidateCard,
-    BusinessRuleCard,
-    BusinessPackageCard,
-    BusinessOperationStatsCard,
-    ActiveCustomerBalanceCard
-  },
   data() {
     return {
       loading: false,
@@ -388,7 +334,7 @@ export default {
       slots: {},
       slotConfidence: {},
       missingSlots: [],
-      conversationStage: 'COLLECTING_SLOTS',
+      conversationStage: 'READY',
       currentDiagnosis: null,
       toolSummaryExpanded: false,
       traceExpanded: false,
@@ -574,24 +520,13 @@ export default {
       if (warnings.indexOf('TOOL_BUDGET_EXCEEDED') >= 0) {
         return '本轮查询达到安全调用上限，已返回可用部分结果。'
       }
-      if (warnings.indexOf('TOOL_CALL_FAILED') >= 0 || warnings.indexOf('BUSINESS_QUERY_CLIENT_UNAVAILABLE') >= 0) {
+      if (warnings.some(item => String(item).indexOf('TOOL_') >= 0 || String(item).indexOf('AGENT_QUERY_') >= 0)) {
         return '部分业务查询暂不可用，当前结果不构成完整结论。'
       }
       if (warnings.indexOf('MENU_RESULT_IMPLAUSIBLE') >= 0) {
         return '查询结果仅包含米饭类型菜品，不能确认这是完整公共菜单；请核对排期配置或改查客户实际排餐。'
       }
-      if (warnings.indexOf('PLAN_RESULT_MISMATCH') >= 0) {
-        return '返回结果与本轮受控查询条件不一致，系统已阻止将其作为完整结论展示。'
-      }
       if (message.partial) {
-        const result = message.insightResult || {}
-        if (result.scannedCount !== undefined && result.totalCount !== undefined) {
-          return `结果未完整，当前已扫描 ${result.scannedCount} 条记录，共 ${result.totalCount} 条。请缩小查询范围后重试。`
-        }
-        if (result.truncated && Array.isArray(result.items)) {
-          const remaining = Math.max((Number(result.total) || 0) - result.items.length, 0)
-          return `受安全展示上限限制，本次展示 ${result.items.length} 位客户${remaining > 0 ? `，还有 ${remaining} 位未展示` : ''}。`
-        }
         return '结果已按安全上限截断，请缩小查询范围后重试。'
       }
       return warnings.join('；')
@@ -613,21 +548,15 @@ export default {
         slotConfidence: response.slotConfidence || (response.slots && response.slots.slotConfidence) || {},
         slots: response.slots,
         result: response.diagnosisResult,
-        responseType: response.responseType,
-        insightResult: response.insightResult,
         facts: response.facts || [],
+        cards: response.cards || [],
+        toolFacts: response.toolFacts || [],
+        toolTraceSummary: response.toolTraceSummary || [],
         warnings: response.warnings || [],
         cached: response.cached === true,
         partial: response.partial === true,
-        queriedAt: response.queriedAt,
-        queryPlan: response.queryPlan,
-        validation: response.validation,
-        conversationFocus: response.conversationFocus || {},
-        resultBlocks: response.resultBlocks || []
+        queriedAt: response.queriedAt
       })
-    },
-    conversationFocusText(focus) {
-      return Object.keys(focus || {}).map(key => `${key}：${focus[key]}`).join('，')
     },
     async clearSession() {
       await this.createSession()
@@ -639,7 +568,7 @@ export default {
       this.slots = {}
       this.slotConfidence = {}
       this.missingSlots = []
-      this.conversationStage = 'COLLECTING_SLOTS'
+      this.conversationStage = 'READY'
       this.currentDiagnosis = null
       this.toolSummaryExpanded = false
       this.traceExpanded = false
@@ -652,7 +581,7 @@ export default {
       this.slots = (detail && detail.currentSlots) || {}
       this.slotConfidence = (detail && detail.currentSlots && detail.currentSlots.slotConfidence) || {}
       this.missingSlots = []
-      this.conversationStage = (detail && detail.stage) || 'COLLECTING_SLOTS'
+      this.conversationStage = (detail && detail.stage) || 'READY'
       this.currentDiagnosis = (detail && detail.latestDiagnosisResult) || null
       this.messages = this.restoreSessionMessages(detail)
       this.scrollToBottom()
@@ -675,7 +604,7 @@ export default {
         role: 'assistant',
         content: latestDiagnosisResult.summary || '已恢复最近一次诊断结果。',
         status: 'ANSWERED',
-        stage: (detail && detail.stage) || 'DIAGNOSED',
+        stage: (detail && detail.stage) || 'ANSWERED',
         missingSlots: [],
         slotConfidence: {},
         slots: (detail && detail.currentSlots) || {},
@@ -719,15 +648,14 @@ export default {
           slotConfidence: (message.slots && message.slots.slotConfidence) || {},
           slots: message.slots,
           result: message.diagnosisResult,
-          responseType: business.responseType,
-          insightResult: business.insightResult,
           facts: business.facts || [],
+          cards: business.cards || [],
+          toolFacts: business.toolFacts || [],
+          toolTraceSummary: business.toolTraceSummary || message.toolSummary || [],
           warnings: business.warnings || [],
           cached: business.cached === true,
           partial: business.partial === true,
-          queriedAt: business.queriedAt,
-          resultBlocks: business.resultBlocks || [],
-          queryPlan: business.queryPlan
+          queriedAt: business.queriedAt
         }
       })
     },
@@ -763,6 +691,30 @@ export default {
       }
       return map[value] || value || '-'
     },
+    unifiedCardTitle(type) {
+      const map = {
+        CUSTOMER_PROFILE_LIST: '客户档案',
+        SERVICE_CUSTOMER_LIST: '服务客户',
+        SERVICE_CUSTOMER_DETAIL: '服务客户详情',
+        MEAL_PLAN_LIST: '排餐记录',
+        VERIFICATION_LIST: '核销记录',
+        REFUND_LIST: '退餐记录',
+        DISH_LIST: '菜品摘要',
+        DISH_CANDIDATE_LIST: '候选菜预览',
+        PACKAGE_DETAIL: '套餐详情',
+        METRIC_RESULT: '运营指标',
+        BUSINESS_RULE: '业务规则'
+      }
+      return map[type] || type || '业务结果'
+    },
+    unifiedCardText(data) {
+      if (data === undefined || data === null) return '暂无结果'
+      try {
+        return JSON.stringify(data, null, 2)
+      } catch (e) {
+        return String(data)
+      }
+    },
     missingSlotText(value) {
       const map = {
         CUSTOMER: '客户',
@@ -773,11 +725,9 @@ export default {
     },
     stageText(value) {
       const map = {
-        COLLECTING_SLOTS: '收集槽位',
-        READY_TO_DIAGNOSE: '待诊断',
-        DIAGNOSING: '诊断中',
-        DIAGNOSED: '已诊断',
-        FOLLOWING_UP: '继续追问',
+        READY: '可查询',
+        ANSWERED: '已回答',
+        NEED_MORE_INFO: '需要补充',
         RESET: '已重置',
         ERROR: '异常'
       }
@@ -1274,6 +1224,32 @@ export default {
   margin-top: 8px;
   color: #909399;
   font-size: 12px;
+}
+
+.unified-tool-cards {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.unified-tool-card {
+  padding: 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  background: #fafafa;
+}
+
+.unified-tool-card-data {
+  max-height: 260px;
+  margin: 8px 0 0;
+  padding: 8px;
+  overflow: auto;
+  background: #fff;
+  color: #606266;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 @media (max-width: 1080px) {

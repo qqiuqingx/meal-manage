@@ -26,11 +26,8 @@ public class AgentChatRequest {
     private List<String> availableTools;
     /** 主系统持久化会话的乐观锁版本，仅允许服务端填充。 */
     private Long sessionVersion;
-    /** 主系统从会话表恢复的 Pending Context，前端传入值会被服务层覆盖。 */
-    private Map<String, Object> pendingBusinessQueryContext;
     /** 主系统从会话表恢复的 Last Context，前端传入值会被服务层覆盖。 */
     private Map<String, Object> lastBusinessQueryContext;
-    private Map<String, Object> activeTaskStack;
 
     public String getSessionId() {
         return sessionId;
@@ -62,10 +59,6 @@ public class AgentChatRequest {
     public void setAvailableTools(List<String> availableTools) { this.availableTools = availableTools; }
     public Long getSessionVersion() { return sessionVersion; }
     public void setSessionVersion(Long sessionVersion) { this.sessionVersion = sessionVersion; }
-    public Map<String, Object> getPendingBusinessQueryContext() { return pendingBusinessQueryContext; }
-    public void setPendingBusinessQueryContext(Map<String, Object> pendingBusinessQueryContext) { this.pendingBusinessQueryContext = pendingBusinessQueryContext; }
     public Map<String, Object> getLastBusinessQueryContext() { return lastBusinessQueryContext; }
     public void setLastBusinessQueryContext(Map<String, Object> lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
-    public Map<String, Object> getActiveTaskStack() { return activeTaskStack; }
-    public void setActiveTaskStack(Map<String, Object> activeTaskStack) { this.activeTaskStack = activeTaskStack; }
 }

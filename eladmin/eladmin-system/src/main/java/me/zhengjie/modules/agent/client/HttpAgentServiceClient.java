@@ -4,9 +4,6 @@ import com.alibaba.fastjson2.JSON;
 import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.modules.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
-import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisActionDraftDto;
-import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisRequest;
-import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
 import me.zhengjie.utils.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -20,8 +17,6 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -40,9 +35,6 @@ public class HttpAgentServiceClient implements AgentServiceClient {
     @Value("${agent.service.base-url:http://localhost:18081}")
     private String baseUrl;
 
-    @Value("${agent.service.diagnose-path:/api/agent/meal-plan/diagnose}")
-    private String diagnosePath;
-
     @Value("${agent.service.chat-path:/api/agent/v2/chat}")
     private String chatPath;
 
@@ -57,39 +49,6 @@ public class HttpAgentServiceClient implements AgentServiceClient {
 
     @Value("${agent.service.retry-backoff-ms:300}")
     private long retryBackoffMs;
-
-    private static final String FALLBACK_SOURCE_ELADMIN_CLIENT = "ELADMIN_CLIENT";
-
-    @Override
-    public AgentDiagnosisResponse diagnoseMealPlan(AgentDiagnosisRequest request) {
-        String requestId = resolveRequestId(null);
-        String url = buildUrl(diagnosePath);
-        log.info("诊断阶段 stage=调用agent-service开始 requestId={} url={} recordDate={} mealType={}",
-            requestId, url, request.getRecordDate(), request.getMealType());
-        int attempts = totalAttempts();
-        for (int attempt = 1; attempt <= attempts; attempt++) {
-            long attemptStart = System.currentTimeMillis();
-            try {
-                ResponseEntity<String> response = restTemplate().postForEntity(url, requestEntity(request, requestId), String.class);
-                AgentDiagnosisResponse diagnosisResponse = parseDiagnosisResponse(response.getBody(), requestId);
-                log.info("诊断阶段 stage=调用agent-service完成 requestId={} url={} attempt={} status={} fallback={} reasonCount={} costMs={}",
-                    requestId, url, attempt, response.getStatusCodeValue(), diagnosisResponse.isFallback(),
-                    diagnosisResponse.getReasons() == null ? 0 : diagnosisResponse.getReasons().size(),
-                    System.currentTimeMillis() - attemptStart);
-                return diagnosisResponse;
-            } catch (Exception ex) {
-                AgentServiceFailureType failureType = classifyFailure(ex);
-                boolean willRetry = shouldRetry(failureType, attempt, attempts);
-                logFailure("诊断阶段", requestId, url, failureType, attempt, attempts, attemptStart, ex);
-                if (willRetry) {
-                    sleepBackoff();
-                    continue;
-                }
-                return fallback(request, requestId, failureType);
-            }
-        }
-        return fallback(request, requestId, AgentServiceFailureType.AGENT_SERVICE_UNAVAILABLE);
-    }
 
     /** {@inheritDoc} */
     @Override
@@ -123,10 +82,6 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         return chatFallback(request, resolvedRequestId, AgentServiceFailureType.AGENT_SERVICE_UNAVAILABLE);
     }
 
-    private HttpEntity<String> requestEntity(Object request, String requestId) {
-        return requestEntity(request, requestId, null);
-    }
-
     /**
      * 构建调用 agent-service 的请求，并仅通过 HTTP Header 透传短期客服访问上下文。
      */
@@ -156,13 +111,12 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         envelope.put("messageRequest", messageRequest);
         envelope.put("contextSnapshot", request.getContextSlots());
         envelope.put("availableTools", request.getAvailableTools());
-        envelope.put("pendingBusinessQueryContext", request.getPendingBusinessQueryContext());
         envelope.put("lastBusinessQueryContext", request.getLastBusinessQueryContext());
-        envelope.put("activeTaskStack", request.getActiveTaskStack());
         envelope.put("sessionVersion", request.getSessionVersion());
         return envelope;
     }
 
+    /** 创建带连接与读取超时的下游 Agent HTTP 客户端。 */
     protected RestTemplate restTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(connectTimeout);
@@ -170,36 +124,27 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         return new RestTemplate(factory);
     }
 
+    /** 拼接主系统配置地址和固定 Agent v2 路径。 */
     private String buildUrl(String path) {
         return trimRight(baseUrl) + "/" + trimLeft(path);
     }
 
+    /** 去除 URL 基地址末尾斜杠。 */
     private String trimRight(String value) {
         return value == null ? "" : value.replaceAll("/+$", "");
     }
 
+    /** 去除接口路径开头斜杠，避免重复分隔符。 */
     private String trimLeft(String value) {
         return value == null ? "" : value.replaceAll("^/+", "");
     }
 
+    /** 复用请求 ID 或生成下游调用所需的稳定关联 ID。 */
     private String resolveRequestId(String requestId) {
         return requestId == null || requestId.trim().isEmpty() ? UUID.randomUUID().toString() : requestId.trim();
     }
 
-    private AgentDiagnosisResponse parseDiagnosisResponse(String body, String requestId) {
-        if (StringUtils.isBlank(body)) {
-            throw new AgentServiceBadResponseException("agent-service empty body");
-        }
-        AgentDiagnosisResponse response = JSON.parseObject(body, AgentDiagnosisResponse.class);
-        if (response == null) {
-            throw new AgentServiceBadResponseException("agent-service response body parsed to null");
-        }
-        if (StringUtils.isBlank(response.getRequestId())) {
-            response.setRequestId(requestId);
-        }
-        return response;
-    }
-
+    /** 解析 Agent v2 响应并补齐主系统侧缺失的关联字段。 */
     private AgentChatResponse parseChatResponse(String body, String requestId, AgentChatRequest request) {
         if (StringUtils.isBlank(body)) {
             throw new AgentServiceBadResponseException("agent-service empty body");
@@ -220,70 +165,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         return response;
     }
 
-    private AgentDiagnosisResponse fallback(AgentDiagnosisRequest request, String requestId, AgentServiceFailureType failureType) {
-        AgentDiagnosisResponse response = new AgentDiagnosisResponse();
-        response.setRequestId(requestId);
-        response.setCustomerId(request.getCustomerId());
-        response.setRecordDate(request.getRecordDate());
-        response.setMealType(request.getMealType());
-        response.setFallback(true);
-        response.setSummary(failureType.getFallbackMessage());
-        response.setFallbackReason(failureType.getFallbackMessage());
-        response.setFallbackSource(FALLBACK_SOURCE_ELADMIN_CLIENT);
-        response.setFailureType(failureType.name());
-        response.setConfidence("LOW");
-        response.setNextActions(failureType.retryable()
-            ? Arrays.asList("核对客户档案", "核对订单有效性", "核对排餐记录", "核对候选菜配置")
-            : Arrays.asList("检查客户、日期和餐次是否完整", "确认当前账号具备智能排查访问权限"));
-        return response;
-    }
-
-    /**
-     * agent-service 不可用时生成只用于展示的人工复核动作草稿。
-     */
-    private AgentDiagnosisActionDraftDto manualRecheckDraft(AgentDiagnosisRequest request, String requestId, AgentServiceFailureType failureType) {
-        AgentDiagnosisActionDraftDto draft = new AgentDiagnosisActionDraftDto();
-        draft.setActionCode("CREATE_MANUAL_RECHECK_TASK");
-        draft.setTitle("创建人工复核任务");
-        draft.setDescription("诊断服务异常时，创建人工复核任务并附带当前请求上下文。");
-        draft.setRiskLevel("LOW");
-        draft.setTargetType("RECHECK_TASK");
-        draft.setTargetId((request.getRecordDate() == null ? "" : request.getRecordDate()) + "|" + (request.getMealType() == null ? "" : request.getMealType()));
-        draft.setBeforeSnapshot(fallbackSnapshot(request, requestId, failureType));
-        draft.setAfterPreview(fallbackPreview(request));
-        draft.setRequiredPermission("agentDiagnosis:confirm");
-        draft.setConfirmApi("/api/agent/action-drafts/confirm");
-        return draft;
-    }
-
-    /**
-     * 生成兜底动作草稿的请求快照。
-     */
-    private Map<String, Object> fallbackSnapshot(AgentDiagnosisRequest request, String requestId, AgentServiceFailureType failureType) {
-        Map<String, Object> snapshot = new LinkedHashMap<>();
-        snapshot.put("source", "eladmin-fallback");
-        snapshot.put("requestId", requestId);
-        snapshot.put("failureType", failureType.name());
-        snapshot.put("customerId", request.getCustomerId());
-        snapshot.put("customerCode", request.getCustomerCode());
-        snapshot.put("recordDate", request.getRecordDate());
-        snapshot.put("mealType", request.getMealType());
-        return snapshot;
-    }
-
-    /**
-     * 生成兜底动作草稿的人工确认预览。
-     */
-    private Map<String, Object> fallbackPreview(AgentDiagnosisRequest request) {
-        Map<String, Object> preview = new LinkedHashMap<>();
-        preview.put("customerId", request.getCustomerId());
-        preview.put("recordDate", request.getRecordDate());
-        preview.put("mealType", request.getMealType());
-        preview.put("executeMode", "MANUAL_CONFIRM_REQUIRED");
-        preview.put("taskType", "MEAL_PLAN_DIAGNOSIS_RECHECK");
-        return preview;
-    }
-
+    /** 根据下游失败类型生成不含内部细节的前端兜底响应。 */
     private AgentChatResponse chatFallback(AgentChatRequest request, String requestId, AgentServiceFailureType failureType) {
         AgentChatResponse response = new AgentChatResponse();
         response.setRequestId(requestId);
@@ -291,20 +173,14 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         response.setClientMessageId(request.getClientMessageId());
         response.setStatus("ERROR");
         response.setAssistantMessage(failureType.getFallbackMessage());
-        response.setQuickReplies(Arrays.asList("重新排查", "清空会话"));
+        response.setQuickReplies(java.util.Arrays.asList("重新排查", "清空会话"));
         response.setConversationStage("ERROR");
-        AgentDiagnosisResponse diagnosisFallback = new AgentDiagnosisResponse();
-        diagnosisFallback.setRequestId(requestId);
-        diagnosisFallback.setFallback(true);
-        diagnosisFallback.setSummary(failureType.getFallbackMessage());
-        diagnosisFallback.setFallbackReason(failureType.getFallbackMessage());
-        diagnosisFallback.setFallbackSource(FALLBACK_SOURCE_ELADMIN_CLIENT);
-        diagnosisFallback.setFailureType(failureType.name());
-        diagnosisFallback.setConfidence("LOW");
-        response.setDiagnosisResult(diagnosisFallback);
+        response.setWarnings(java.util.Collections.singletonList(failureType.name()));
+        response.setPartial(true);
         return response;
     }
 
+    /** 将 HTTP、网络和响应解析异常映射为可审计的稳定失败类型。 */
     private AgentServiceFailureType classifyFailure(Exception ex) {
         if (ex instanceof AgentServiceBadResponseException) {
             return AgentServiceFailureType.AGENT_SERVICE_BAD_RESPONSE;
@@ -337,14 +213,17 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         return AgentServiceFailureType.AGENT_SERVICE_BAD_RESPONSE;
     }
 
+    /** 判断当前失败类型和尝试次数是否允许重试。 */
     private boolean shouldRetry(AgentServiceFailureType failureType, int attempt, int totalAttempts) {
         return failureType.retryable() && attempt < totalAttempts;
     }
 
+    /** 计算包含首次调用在内的总尝试次数。 */
     private int totalAttempts() {
         return Math.max(retryTimes, 0) + 1;
     }
 
+    /** 按配置执行可中断的重试退避等待。 */
     private void sleepBackoff() {
         if (retryBackoffMs <= 0) {
             return;
@@ -372,6 +251,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             System.currentTimeMillis() - attemptStart, ex.getClass().getSimpleName());
     }
 
+    /** 获取异常链最底层原因，仅供失败分类使用。 */
     private Throwable rootCause(Throwable throwable) {
         Throwable current = throwable;
         while (current.getCause() != null && current.getCause() != current) {
@@ -380,6 +260,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         return current;
     }
 
+    /** 判断异常文本是否包含指定的不区分大小写关键词。 */
     private boolean containsIgnoreCase(String source, String keyword) {
         return source != null && keyword != null && source.toLowerCase().contains(keyword.toLowerCase());
     }
@@ -399,10 +280,12 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             this.fallbackMessage = fallbackMessage;
         }
 
+        /** 返回该失败类型是否允许调用备用 provider。 */
         public boolean retryable() {
             return retryable;
         }
 
+        /** 返回该失败类型对应的安全前端提示。 */
         public String getFallbackMessage() {
             return fallbackMessage;
         }

@@ -45,6 +45,7 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
     private final AgentDiagnosisFeedbackMapper feedbackMapper;
     private final AgentBusinessQueryAuditService businessQueryAuditService;
 
+    /** 记录结构化诊断、工具调用和动作审计指标。 */
     @Override
     public void recordDiagnosis(AgentDiagnosisResponse response, String sessionId, long costMs) {
         if (response == null) {
@@ -71,6 +72,7 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
         metricMapper.insert(metric);
     }
 
+    /** 查询诊断、工具、反馈及统一业务查询的运营统计。 */
     @Override
     public AgentOperationStatsDto stats(AgentOperationStatsQuery query) {
         AgentOperationStatsQuery safeQuery = query == null ? new AgentOperationStatsQuery() : query;
@@ -123,12 +125,6 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
         target.setBusinessQueryDomainDistribution(source.getDomainDistribution());
         target.setBusinessQueryToolDistribution(source.getToolDistribution());
         target.setBusinessQueryFailureTypeDistribution(source.getFailureTypeDistribution());
-        target.setBusinessQuerySemanticFallbackCount(source.getSemanticFallbackCount());
-        target.setBusinessQuerySemanticFallbackRate(source.getSemanticFallbackRate());
-        target.setBusinessQueryPendingContextReuseCount(source.getPendingContextReuseCount());
-        target.setBusinessQueryPendingContextReuseRate(source.getPendingContextReuseRate());
-        target.setBusinessQuerySemanticSourceDistribution(source.getSemanticSourceDistribution());
-        target.setBusinessQuerySemanticFallbackReasonDistribution(source.getSemanticFallbackReasonDistribution());
     }
 
     /**
@@ -180,6 +176,7 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
             .eq(!isBlank(query.getMealType()), AgentDiagnosisFeedback::getMealType, query.getMealType());
     }
 
+    /** 提取诊断原因代码并过滤空值。 */
     private List<String> reasonCodes(AgentDiagnosisResponse response) {
         if (response.getReasons() == null) {
             return Collections.emptyList();
@@ -190,6 +187,7 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
             .collect(Collectors.toList());
     }
 
+    /** 统计诊断工具摘要中的失败调用数量。 */
     private int toolFailureCount(AgentDiagnosisResponse response) {
         if (response.getToolCallSummary() == null) {
             return 0;
@@ -203,6 +201,7 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
         return count;
     }
 
+    /** 计算诊断调用平均耗时。 */
     private Double averageCost(List<AgentDiagnosisMetric> metrics) {
         return metrics.stream()
             .map(AgentDiagnosisMetric::getDiagnosisCostMs)
@@ -212,6 +211,7 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
             .orElse(0D);
     }
 
+    /** 聚合诊断原因代码分布。 */
     private Map<String, Long> reasonDistribution(List<AgentDiagnosisMetric> metrics) {
         Map<String, Long> distribution = new LinkedHashMap<>();
         for (AgentDiagnosisMetric metric : metrics) {
@@ -222,12 +222,14 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
         return distribution;
     }
 
+    /** 聚合人工反馈确认的实际原因分布。 */
     private Map<String, Long> actualReasonDistribution(List<AgentDiagnosisFeedback> feedbacks) {
         return feedbacks.stream()
             .filter(item -> !isBlank(item.getActualReasonCode()))
             .collect(Collectors.groupingBy(AgentDiagnosisFeedback::getActualReasonCode, LinkedHashMap::new, Collectors.counting()));
     }
 
+    /** 从原因分布中提取高频未知/不可用原因。 */
     private Map<String, Long> unknownReasonDistribution(Map<String, Long> reasonDistribution) {
         Map<String, Long> result = new LinkedHashMap<>();
         for (String code : UNKNOWN_REASON_CODES) {
@@ -239,18 +241,21 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
         return result;
     }
 
+    /** 聚合降级来源分布。 */
     private Map<String, Long> fallbackSourceDistribution(List<AgentDiagnosisMetric> metrics) {
         return metrics.stream()
             .filter(item -> !isBlank(item.getFallbackSource()))
             .collect(Collectors.groupingBy(AgentDiagnosisMetric::getFallbackSource, LinkedHashMap::new, Collectors.counting()));
     }
 
+    /** 聚合诊断失败类型分布。 */
     private Map<String, Long> failureTypeDistribution(List<AgentDiagnosisMetric> metrics) {
         return metrics.stream()
             .filter(item -> !isBlank(item.getFailureType()))
             .collect(Collectors.groupingBy(AgentDiagnosisMetric::getFailureType, LinkedHashMap::new, Collectors.counting()));
     }
 
+    /** 解析历史原因代码 JSON，损坏值按单个代码降级。 */
     private List<String> parseCodes(String value) {
         if (isBlank(value)) {
             return Collections.emptyList();
@@ -264,14 +269,17 @@ public class AgentOperationStatsServiceImpl implements AgentOperationStatsServic
         }
     }
 
+    /** 计算统计比例，避免零分母。 */
     private Double rate(long numerator, long denominator) {
         return denominator == 0 ? 0D : numerator * 1D / denominator;
     }
 
+    /** 将统计 Map 中的对象安全转换为文本。 */
     private String asString(Object value) {
         return value == null ? null : String.valueOf(value);
     }
 
+    /** 判断统计筛选文本是否为空。 */
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
     }

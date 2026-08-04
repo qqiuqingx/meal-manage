@@ -37,6 +37,15 @@ public class AgentChatMessageDto {
 
     private List<Map<String, Object>> toolSummary = new ArrayList<>();
 
+    /** 工具事实生成的业务卡片。 */
+    private List<Map<String, Object>> cards = new ArrayList<>();
+
+    /** 新统一工具事实摘要。 */
+    private List<Map<String, Object>> toolFacts = new ArrayList<>();
+
+    /** 新统一工具调用追踪摘要。 */
+    private List<Map<String, Object>> toolTraceSummary = new ArrayList<>();
+
     /** 受控业务查询卡片快照，刷新历史会话时用于恢复结构化展示。 */
     private Map<String, Object> businessResult;
 
@@ -131,6 +140,13 @@ public class AgentChatMessageDto {
     public void setToolSummary(List<Map<String, Object>> toolSummary) {
         this.toolSummary = toolSummary;
     }
+
+    public List<Map<String, Object>> getCards() { return cards; }
+    public void setCards(List<Map<String, Object>> cards) { this.cards = cards == null ? new ArrayList<>() : cards; }
+    public List<Map<String, Object>> getToolFacts() { return toolFacts; }
+    public void setToolFacts(List<Map<String, Object>> toolFacts) { this.toolFacts = toolFacts == null ? new ArrayList<>() : toolFacts; }
+    public List<Map<String, Object>> getToolTraceSummary() { return toolTraceSummary; }
+    public void setToolTraceSummary(List<Map<String, Object>> toolTraceSummary) { this.toolTraceSummary = toolTraceSummary == null ? new ArrayList<>() : toolTraceSummary; }
 
     public Map<String, Object> getBusinessResult() {
         return businessResult;

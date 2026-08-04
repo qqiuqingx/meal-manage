@@ -1,9 +1,8 @@
 package me.zhengjie.agent.domain.dto;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import me.zhengjie.agent.domain.chat.ChatIntent;
+import me.zhengjie.agent.application.conversation.ConversationPatch;
 import me.zhengjie.agent.domain.chat.ChatStatus;
-import me.zhengjie.agent.domain.chat.MissingSlot;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -11,75 +10,82 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * v2 聊天 DTO 只保留受控工具事实、卡片和会话摘要字段。
+ */
 class AgentChatDtoTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * 工具卡片和事实摘要必须可以稳定往返序列化。
+     */
     @Test
-    void shouldSerializeChatResponseWithSlotsAndStatus() throws Exception {
-        DiagnosisSlots slots = new DiagnosisSlots();
-        slots.setCustomerCode("C10001");
-        slots.setRecordDate("2026-05-22");
-        slots.setMealType("LUNCH");
-
+    void shouldSerializeToolCardsAndTraceSummary() throws Exception {
         AgentChatResponse response = new AgentChatResponse();
         response.setRequestId("request-1");
         response.setSessionId("session-1");
-        response.setStatus(ChatStatus.NEED_MORE_INFO);
-        response.setAssistantMessage("请提供客户 ID 或客户编号。");
-        response.setSlots(slots);
-        response.setSlotConfidence(Map.of("customer", "HIGH"));
-        response.setMissingSlots(List.of(MissingSlot.CUSTOMER));
-        response.setQuickReplies(List.of("今天", "明天", "午餐"));
-        response.setConversationStage("COLLECTING_SLOTS");
+        response.setClientMessageId("message-1");
+        response.setStatus(ChatStatus.ANSWERED);
+        response.setAssistantMessage("已完成查询");
+        response.setCards(List.of(Map.of(
+            "type", "SERVICE_CUSTOMER_LIST",
+            "sourceToolCallId", "call-1",
+            "data", Map.of("items", List.of(Map.of("customerCode", "C10001"))))));
+        response.setToolFacts(List.of(Map.of("callId", "call-1", "toolName", "searchServiceCustomers")));
+        response.setToolTraceSummary(List.of(Map.of("toolName", "searchServiceCustomers", "status", "SUCCESS")));
+        response.setWarnings(List.of("结果可能已截断"));
+        response.setPartial(true);
 
-        String json = objectMapper.writeValueAsString(response);
-        AgentChatResponse parsed = objectMapper.readValue(json, AgentChatResponse.class);
+        AgentChatResponse parsed = objectMapper.readValue(
+            objectMapper.writeValueAsString(response), AgentChatResponse.class);
 
         assertEquals("request-1", parsed.getRequestId());
+        assertEquals("message-1", parsed.getClientMessageId());
+        assertEquals(ChatStatus.ANSWERED, parsed.getStatus());
+        assertEquals("SERVICE_CUSTOMER_LIST", parsed.getCards().get(0).get("type"));
+        assertEquals("searchServiceCustomers", parsed.getToolFacts().get(0).get("toolName"));
+        assertEquals("SUCCESS", parsed.getToolTraceSummary().get(0).get("status"));
+        assertEquals(List.of("结果可能已截断"), parsed.getWarnings());
+    }
+
+    /**
+     * 主系统下发的工具白名单和受控会话摘要必须能被 Agent 读取，空会话保持可选。
+     */
+    @Test
+    void shouldDeserializeTrustedRequestSummary() throws Exception {
+        String json = objectMapper.writeValueAsString(Map.of(
+            "sessionId", "session-1",
+            "clientMessageId", "message-1",
+            "message", "查询客户",
+            "availableTools", List.of("searchCustomerProfiles"),
+            "lastBusinessQueryContext", Map.of("toolName", "searchCustomerProfiles")));
+
+        AgentChatRequest parsed = objectMapper.readValue(json, AgentChatRequest.class);
+
         assertEquals("session-1", parsed.getSessionId());
-        assertEquals(ChatStatus.NEED_MORE_INFO, parsed.getStatus());
-        assertEquals("C10001", parsed.getSlots().getCustomerCode());
-        assertEquals("2026-05-22", parsed.getSlots().getRecordDate());
-        assertEquals("LUNCH", parsed.getSlots().getMealType());
-        assertEquals("HIGH", parsed.getSlotConfidence().get("customer"));
-        assertEquals(List.of(MissingSlot.CUSTOMER), parsed.getMissingSlots());
-        assertEquals(List.of("今天", "明天", "午餐"), parsed.getQuickReplies());
-        assertEquals("COLLECTING_SLOTS", parsed.getConversationStage());
+        assertEquals("message-1", parsed.getClientMessageId());
+        assertEquals("查询客户", parsed.getMessage());
+        assertEquals(List.of("searchCustomerProfiles"), parsed.getAvailableTools());
+        assertEquals("searchCustomerProfiles", parsed.getLastBusinessQueryContext().get("toolName"));
+        assertNull(parsed.getContextSlots());
     }
 
+    /**
+     * 会话 Patch 仅传递受控摘要，不携带固定业务规划类型。
+     */
     @Test
-    void shouldSerializeExtractionResult() throws Exception {
-        DiagnosisSlots slots = new DiagnosisSlots();
-        slots.setCustomerId(1001L);
-        slots.setCustomerConfidence("HIGH");
-        slots.setCustomerSource("EXPLICIT_INPUT");
+    void shouldSerializeConversationPatchWithControlledMaps() throws Exception {
+        ConversationPatch patch = new ConversationPatch(
+            null,
+            "ANSWERED",
+            Map.of("toolName", "listMealPlans"));
 
-        ChatExtractionResult result = new ChatExtractionResult();
-        result.setIntent(ChatIntent.DIAGNOSE);
-        result.setSlots(slots);
-        result.setMissingSlots(List.of(MissingSlot.RECORD_DATE, MissingSlot.MEAL_TYPE));
-        result.setAmbiguousSlots(List.of(MissingSlot.CUSTOMER));
-        result.setReply("");
+        String json = objectMapper.writeValueAsString(patch);
 
-        String json = objectMapper.writeValueAsString(result);
-        ChatExtractionResult parsed = objectMapper.readValue(json, ChatExtractionResult.class);
-
-        assertEquals(ChatIntent.DIAGNOSE, parsed.getIntent());
-        assertEquals(1001L, parsed.getSlots().getCustomerId());
-        assertEquals("HIGH", parsed.getSlots().getCustomerConfidence());
-        assertEquals("EXPLICIT_INPUT", parsed.getSlots().getCustomerSource());
-        assertEquals(List.of(MissingSlot.RECORD_DATE, MissingSlot.MEAL_TYPE), parsed.getMissingSlots());
-        assertEquals(List.of(MissingSlot.CUSTOMER), parsed.getAmbiguousSlots());
-        assertEquals("", parsed.getReply());
-    }
-
-    @Test
-    void shouldDeserializeNullableSessionIdRequest() throws Exception {
-        AgentChatRequest request = objectMapper.readValue("{\"sessionId\":null,\"message\":\"查 C10001 明天午餐\"}", AgentChatRequest.class);
-
-        assertNull(request.getSessionId());
-        assertEquals("查 C10001 明天午餐", request.getMessage());
+        assertTrue(json.contains("\"conversationStage\":\"ANSWERED\""));
+        assertTrue(json.contains("\"toolName\":\"listMealPlans\""));
     }
 }

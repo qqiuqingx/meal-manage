@@ -7,16 +7,13 @@
   triggerConditions:
     - 客户ID或客户编号查询不到客户档案
   requiredTools:
-    - getCustomerProfile
+    - getServiceCustomerDetail
   requiredData:
-    - customerId
-    - customerCode
-    - customerProfile
+    - data.profile
   decisionHints:
     - 如果客户档案为空，优先提示核对客户ID或客户编号。
   evidenceFields:
-    - customerId
-    - customerCode
+    - data.profile
   nextActions:
     - 核对客户编号或客户ID
     - 核对客户档案是否存在
@@ -31,15 +28,15 @@
   triggerConditions:
     - 客户排除日期包含诊断日期和餐次
   requiredTools:
-    - getCustomerExcludeDates
+    - getServiceCustomerDetail
   requiredData:
-    - customerProfile.excludeDates
+    - data.excludedDates
     - recordDate
     - mealType
   decisionHints:
     - 如果 excludeDates 包含目标日期和餐次，优先判断为客户停送或请假。
   evidenceFields:
-    - customerProfile.excludeDates
+    - data.excludedDates
   nextActions:
     - 核对客户档案停送配置
     - 确认是否需要恢复配送

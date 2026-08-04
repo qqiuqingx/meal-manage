@@ -9,7 +9,7 @@
     "ownerModule": "customer-order / meal-verification",
     "evidenceDocument": "doc/business/订单管理业务说明.md",
     "evidenceAnchor": "#餐数体系",
-    "evidenceHash": "sha256:b6acc95db63be07b67a76faf446881636a12e84f2fb1f645f92c3fcf35b34c60",
+    "evidenceHash": "sha256:ad0f878fdb98f5dac20203132619c6a48426cf10671647b979a5460844c5156c",
     "effectiveFrom": "2026-07-30T00:00:00+08:00",
     "updatedAt": "2026-07-30T00:00:00+08:00",
     "supersedes": "ORDER_MEAL_BALANCE@1.0"
@@ -24,7 +24,7 @@
     "ownerModule": "customer-order / meal-plan",
     "evidenceDocument": "doc/business/订单管理业务说明.md",
     "evidenceAnchor": "#订单生命周期",
-    "evidenceHash": "sha256:b6acc95db63be07b67a76faf446881636a12e84f2fb1f645f92c3fcf35b34c60",
+    "evidenceHash": "sha256:ad0f878fdb98f5dac20203132619c6a48426cf10671647b979a5460844c5156c",
     "effectiveFrom": "2026-07-30T00:00:00+08:00",
     "updatedAt": "2026-07-30T00:00:00+08:00",
     "supersedes": "ORDER_EFFECTIVE@1.0"
@@ -39,7 +39,7 @@
     "ownerModule": "meal-plan / customer-order",
     "evidenceDocument": "doc/business/排餐管理业务说明.md",
     "evidenceAnchor": "#1. 生成排餐计划",
-    "evidenceHash": "sha256:f3e5a35f5cc1468476602f32e475162e87464ae21cd062e4a20fde3417273166",
+    "evidenceHash": "sha256:4256be2911f1bd35a86a0170ae0c463c88c7d1f90af91bc1d0fa90f65109ae91",
     "effectiveFrom": "2026-07-30T00:00:00+08:00",
     "updatedAt": "2026-07-30T00:00:00+08:00",
     "supersedes": "MEAL_PLAN_MATCH@1.0"
@@ -54,7 +54,7 @@
     "ownerModule": "meal-plan / customer-profile",
     "evidenceDocument": "doc/business/排餐管理业务说明.md",
     "evidenceAnchor": "#1. 生成排餐计划",
-    "evidenceHash": "sha256:f3e5a35f5cc1468476602f32e475162e87464ae21cd062e4a20fde3417273166",
+    "evidenceHash": "sha256:4256be2911f1bd35a86a0170ae0c463c88c7d1f90af91bc1d0fa90f65109ae91",
     "effectiveFrom": "2026-07-30T00:00:00+08:00",
     "updatedAt": "2026-07-30T00:00:00+08:00",
     "supersedes": "DIETARY_FILTER@1.0"
@@ -69,7 +69,7 @@
     "ownerModule": "meal-verification / customer-order",
     "evidenceDocument": "doc/business/核销管理业务说明.md",
     "evidenceAnchor": "#业务规则汇总",
-    "evidenceHash": "sha256:0cc659f7c5aadd632cca4b19a4fae866131bd025e43aa88940c9c7e87eca6ee0",
+    "evidenceHash": "sha256:9cdbdcbd060c640a0bdc7a951530409e0d7d9ee790d87ccdc4170780182e1475",
     "effectiveFrom": "2026-07-30T00:00:00+08:00",
     "updatedAt": "2026-07-30T00:00:00+08:00",
     "supersedes": "VERIFICATION_REFUND_EFFECT@1.0"

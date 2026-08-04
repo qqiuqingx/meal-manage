@@ -69,11 +69,8 @@ public class AgentChatSessionDetailDto {
     private List<AgentActionAudit> recentAudits = new ArrayList<>();
 
     private List<AgentDiagnosisFeedback> recentFeedbacks = new ArrayList<>();
-    /** 当前待补条件查询的受控上下文，仅供会话恢复和内部排障。 */
-    private Map<String, Object> pendingBusinessQueryContext;
     /** 最近一次业务查询的脱敏上下文。 */
     private Map<String, Object> lastBusinessQueryContext;
-    private Map<String, Object> activeTaskStack;
 
     public String getSessionId() {
         return sessionId;
@@ -251,10 +248,6 @@ public class AgentChatSessionDetailDto {
     public void setRecentFeedbacks(List<AgentDiagnosisFeedback> recentFeedbacks) {
         this.recentFeedbacks = recentFeedbacks;
     }
-    public Map<String, Object> getPendingBusinessQueryContext() { return pendingBusinessQueryContext; }
-    public void setPendingBusinessQueryContext(Map<String, Object> pendingBusinessQueryContext) { this.pendingBusinessQueryContext = pendingBusinessQueryContext; }
     public Map<String, Object> getLastBusinessQueryContext() { return lastBusinessQueryContext; }
     public void setLastBusinessQueryContext(Map<String, Object> lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
-    public Map<String, Object> getActiveTaskStack() { return activeTaskStack; }
-    public void setActiveTaskStack(Map<String, Object> activeTaskStack) { this.activeTaskStack = activeTaskStack; }
 }

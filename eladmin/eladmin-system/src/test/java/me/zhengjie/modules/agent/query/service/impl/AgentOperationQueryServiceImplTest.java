@@ -14,6 +14,8 @@ import me.zhengjie.modules.meal.domain.MealPlanCustomer;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanMapper;
 import me.zhengjie.modules.meal.service.MealPlanService;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -27,6 +29,16 @@ import static org.mockito.Mockito.when;
 
 /** 运营统计必须按客户+餐次对比应服务集合与成功排餐集合。 */
 class AgentOperationQueryServiceImplTest {
+
+    @BeforeEach
+    void bindAllDataForUnitTest() {
+        AgentCustomerDataScopeContext.bind(null);
+    }
+
+    @AfterEach
+    void clearDataScope() {
+        AgentCustomerDataScopeContext.clear();
+    }
 
     @Test
     void shouldCalculateExpectedAndUnscheduledCustomersByCustomerMeal() {

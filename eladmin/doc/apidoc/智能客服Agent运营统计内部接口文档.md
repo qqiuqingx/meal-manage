@@ -1,75 +1,59 @@
-# 智能客服 Agent 运营统计内部接口
+# 智能客服 Agent 运营指标查询口径
 
-## 1. 安全约束
+运营指标已合并为统一工具 `queryBusinessMetrics`，主系统唯一入口为：
 
-接口仅供 `agent-service` 调用，前端不得直接访问。每个请求必须同时携带：
+`POST /api/internal/agent/query/metrics/query`
 
-- `X-Agent-Internal-Token`：服务内部令牌。
-- `X-Agent-Access-Context`：主系统签发的短期客服访问上下文。
-- `X-Agent-Session-Id`、`X-Request-Id`：会话与链路标识。
+权限由指标选择：
 
-主系统同时校验 Agent 入口权限和对应业务权限。非全量数据范围会先按“部门 -> 创建人 -> 客户”收缩授权客户集合，再计算聚合结果；接口只返回聚合数据，不返回客户明细、手机号、完整地址和金额。
+- `CUSTOMER_PROFILE_COUNT`：`agentDiagnosis:list` + `customerProfile:list`
+- `ACTIVE_SERVICE_CUSTOMER_COUNT`、`ACTIVE_ORDER_COUNT`、`EXPIRING_ORDER_COUNT`：`agentDiagnosis:list` + `customerOrder:list`
+- 其他排餐/核销相关指标：`agentDiagnosis:list` + `mealPlan:list`
 
-## 2. 每日客户工作量
+主系统仍会在内部 Controller 再次校验签名上下文和客户数据范围。接口不返回客户、订单或排餐明细，也不返回任何金额字段。
 
-`POST /api/internal/agent/operations/daily-customers`
-
-所需权限：`agentDiagnosis:list` + `mealPlan:list`。
-
-请求：
+## 请求
 
 ```json
-{"recordDate":"2026-07-13","mealType":"LUNCH","dimensions":["MEAL_TYPE","PACKAGE"]}
+{
+  "metric": "ACTIVE_ORDER_COUNT",
+  "recordDate": null,
+  "startDate": null,
+  "endDate": null,
+  "mealType": null,
+  "dimensions": []
+}
 ```
 
-响应字段：`scheduledCustomerCount`、`verifiedCustomerCount`、`unverifiedCustomerCount`、`expectedCustomerCount`、`unscheduledCustomerCount`、`mealPlanFailureCount`、`mealTypeBreakdown`、`metricMealTypeBreakdown`、`breakdownDimensions`、`metricDimensionBreakdown`、`metricDefinitionId`、`metricVersion`、`timezone`、`queriedAt`、`truncated`。
+`metric` 允许：
 
-`expectedCustomerCount` 复用排餐生成前的订单有效性、开始餐次、配送模式、人工新增、客户排除日期和餐数池上限过滤；`unscheduledCustomerCount` 以客户+餐次为键，从应服务集合中扣除成功排餐集合。
+`CUSTOMER_PROFILE_COUNT`、`ACTIVE_SERVICE_CUSTOMER_COUNT`、`ACTIVE_ORDER_COUNT`、`DAILY_SCHEDULED_CUSTOMER_COUNT`、`DAILY_VERIFIED_CUSTOMER_COUNT`、`DAILY_UNVERIFIED_CUSTOMER_COUNT`、`DAILY_UNSCHEDULED_CUSTOMER_COUNT`、`MEAL_PLAN_FAILURE_COUNT`、`EXPIRING_ORDER_COUNT`。
 
-`dimensions` 只接受 QueryPlan 传入的 `MEAL_TYPE`、`PACKAGE`、`CUSTOMER_SOURCE`，最多两个。主系统会再次校验白名单；未知维度不会降级为自由字段查询。
+`dimensions` 最多两个，只允许 `MEAL_TYPE`、`PACKAGE`、`CUSTOMER_SOURCE`。日期使用单日 `recordDate` 或范围 `startDate/endDate`，由主系统按指标口径校验。
 
-前端使用 `breakdownDimensions` 与 `metricDimensionBreakdown` 展示实际分组。后者以指标枚举名为第一层键、维度组合展示值为第二层键；每个指标独立聚合，禁止将已排餐分组复用于待核销、应服务或待排餐指标。已排餐、已核销和待核销按客户去重；应服务和待排餐按客户+餐次去重。一个客户可能对应多个套餐或来源归属时，分组之和不承诺等于跨维总数。响应始终只包含计数，不包含客户、订单或排餐明细。
+## 响应
 
-## 3. 客户档案总数
-
-`POST /api/internal/agent/operations/customer-profiles/count`
-
-所需权限：`agentDiagnosis:list` + `customerProfile:list`。返回当前客服授权数据范围内已录入的客户档案数量，不附加业务日期，也不返回客户明细。
-
-## 4. 活跃客户数
-
-`POST /api/internal/agent/operations/active-customers`
-
-所需权限：`agentDiagnosis:list` + `customerOrder:list`。返回存在进行中且剩余餐数大于零的客户去重数。
-
-活跃客户接口当前只返回总数，不支持套餐或客户来源分组。
-
-## 5. 活跃客户餐数余额明细
-
-`POST /api/internal/agent/operations/active-customer-balances`
-
-所需权限：`agentDiagnosis:list` + `customerOrder:list`。接口仅供已登记的活跃客户集合追问使用，不能按任意客户范围展开。
-
-请求可选分页参数，`page` 从 1 开始，`size` 为 1 至 50，默认 `1/50`：
+响应使用统一 `AgentUnifiedQueryResponse<MetricItem>`：
 
 ```json
-{"page":1,"size":50}
+{
+  "schemaVersion": "v1",
+  "items": [],
+  "total": 1,
+  "page": 1,
+  "size": 1,
+  "truncated": false,
+  "queriedAt": "2026-08-04T10:00:00+08:00",
+  "data": {
+    "metric": "ACTIVE_ORDER_COUNT",
+    "total": 12,
+    "dimensions": {},
+    "warnings": []
+  },
+  "warnings": []
+}
 ```
 
-响应包含 `total`、`items`、`page`、`size`、`truncated`、`metricDefinitionId`、`queriedAt` 和 `timezone`。每个明细仅包含 `customerCode`、`customerNameMasked`、`remainingBreakfast`、`remainingLunchDinner` 和 `remainingTotal`；不返回手机号、地址、金额或备注。早餐与午晚餐分别按所有进行中订单汇总，午餐和晚餐共享同一个餐数池。
+指标口径以 `eladmin/doc/business/智能客服Agent指标口径字典.md` 为准，尤其区分活跃客户去重数、进行中订单数、已排餐客户数和待核销客户数。模型不能提交工具名、URL、SQL、字段名或自由排序。
 
-自然语言追问默认固定请求 `page=1,size=50`。`truncated=true` 仅表示仍有后续客户未展示，属于安全分页结果而非工具失败；前端按实际 `items` 数量提示本次展示数和未展示数，不写死“前 50 位”。
-
-## 6. 即将到期订单数
-
-`POST /api/internal/agent/operations/expiring-orders`
-
-所需权限：`agentDiagnosis:list` + `customerOrder:list`。
-
-请求可传 `startDate` 与 `endDate`，两者格式均为 `yyyy-MM-dd`，范围不得超过 31 天；省略时默认当天起 7 天。
-
-响应统一包含 `metricCode`、`total`、`metricDefinitionId`、`metricVersion`、`timezone`、`queriedAt` 和 `truncated`。
-
-## 7. 2026-07-29 架构调整
-
-本次未改变运营指标定义、时间口径、分页上限或权限要求。活跃客户餐数余额明细能力改由目录登记的 `CapabilityHandler` 编译，仍固定调用 `listActiveCustomerMealBalances`，不得由用户文本或模型输出指定工具名。
+普通查询与排餐诊断共用该工具；不再保留 `/api/internal/agent/operations/**` 的重复 Agent 查询 Controller。

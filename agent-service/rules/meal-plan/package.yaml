@@ -7,17 +7,15 @@
   triggerConditions:
     - packageSpec.missingFields 非空
   requiredTools:
-    - getPackageSpec
+    - getPackageDetail
   requiredData:
-    - packageSpec.parentPackage
-    - packageSpec.childPackage
-    - packageSpec.missingFields
+    - data.packageName
+    - data.subPackages
   decisionHints:
     - 如果子套餐 meatCount、vegCount、includeSoup、includeRice 缺失，提示先补齐套餐规格。
   evidenceFields:
-    - packageSpec.parentPackage
-    - packageSpec.childPackage
-    - packageSpec.missingFields
+    - data.packageName
+    - data.subPackages
   nextActions:
     - 核对套餐规格配置
     - 补齐父套餐和子套餐关系

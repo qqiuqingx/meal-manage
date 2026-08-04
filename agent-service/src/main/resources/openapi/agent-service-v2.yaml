@@ -18,7 +18,7 @@ paths:
               $ref: '#/components/schemas/AgentExecutionEnvelope'
       responses:
         '200':
-          description: 兼容历史字段的聊天结果
+          description: 统一工具调用聊天结果
           content:
             application/json:
               schema:
@@ -51,7 +51,7 @@ components:
       schema: { type: string, writeOnly: true }
   responses:
     AgentError:
-      description: 不包含内部异常信息的稳定错误
+      description: 不包含内部实现细节的稳定错误
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AgentApiError' }
@@ -63,16 +63,14 @@ components:
       properties:
         contractVersion: { type: string, enum: [v2] }
         messageRequest: { $ref: '#/components/schemas/ChatMessageRequest' }
-        contextSnapshot: { $ref: '#/components/schemas/DiagnosisSlots' }
+        contextSnapshot: { $ref: '#/components/schemas/ConversationSummary' }
         availableTools:
           type: array
           maxItems: 100
           uniqueItems: true
           items: { type: string, maxLength: 80 }
-        pendingBusinessQueryContext: { $ref: '#/components/schemas/PendingBusinessQueryContext' }
-        lastBusinessQueryContext: { $ref: '#/components/schemas/LastBusinessQueryContext' }
-        activeTaskStack: { $ref: '#/components/schemas/ConversationTaskStack' }
-        sessionVersion: { type: integer, format: int64, minimum: 0, description: 主系统会话快照的乐观锁版本 }
+        lastBusinessQueryContext: { $ref: '#/components/schemas/ControlledSessionSummary' }
+        sessionVersion: { type: integer, format: int64, minimum: 0 }
     ChatMessageRequest:
       type: object
       additionalProperties: false
@@ -86,163 +84,55 @@ components:
       additionalProperties: false
       required: [contractVersion, requestId, clientMessageId, sessionId, status]
       properties:
-        contractVersion: { type: string, enum: [v2] }
         requestId: { type: string, minLength: 1, maxLength: 128 }
+        contractVersion: { type: string, enum: [v2] }
         clientMessageId: { type: string, minLength: 1, maxLength: 128 }
         expectedSessionVersion: { type: integer, format: int64, minimum: 0 }
         conversationPatch: { $ref: '#/components/schemas/ConversationPatch' }
         sessionId: { type: string, minLength: 1, maxLength: 128 }
-        status: { type: string, enum: [NEED_MORE_INFO, DIAGNOSING, ANSWERED, RESET, ERROR] }
-        responseType: { type: string, maxLength: 100 }
+        status: { type: string, enum: [ANSWERED, ERROR] }
         assistantMessage: { type: string, maxLength: 12000 }
-        slots: { $ref: '#/components/schemas/DiagnosisSlots' }
-        slotConfidence:
-          type: object
-          additionalProperties: { type: string }
-        missingSlots:
-          type: array
-          items: { type: object, additionalProperties: true }
-        diagnosisResult: { type: object, additionalProperties: true, description: 旧排餐诊断兼容对象 }
+        slots: { $ref: '#/components/schemas/ConversationSummary' }
+        diagnosisResult: { type: object, additionalProperties: true }
         quickReplies:
           type: array
           maxItems: 20
           items: { type: string, maxLength: 200 }
         conversationStage: { type: string, maxLength: 80 }
-        insightResult: { type: object, additionalProperties: true, description: 旧卡片兼容对象；新能力优先使用 facts/resultBlocks }
         facts:
           type: array
-          items: { $ref: '#/components/schemas/AgentQueryFact' }
+          items: { type: object, additionalProperties: true }
         warnings:
           type: array
           items: { type: string, maxLength: 500 }
         cached: { type: boolean }
         partial: { type: boolean }
         queriedAt: { type: string, format: date-time }
-        queryPlan: { type: object, additionalProperties: true, description: 服务端生成的只读计划摘要 }
-        pendingBusinessQueryContext: { $ref: '#/components/schemas/PendingBusinessQueryContext' }
-        lastBusinessQueryContext: { $ref: '#/components/schemas/LastBusinessQueryContext' }
-        semanticTraceSummary: { type: object, additionalProperties: true }
-        activeTaskStack: { $ref: '#/components/schemas/ConversationTaskStack' }
-        resultBlocks:
+        lastBusinessQueryContext: { $ref: '#/components/schemas/ControlledSessionSummary' }
+        cards:
           type: array
-          items: { $ref: '#/components/schemas/BusinessQueryResultBlock' }
-        validation: { $ref: '#/components/schemas/AgentResponseValidation' }
-        conversationFocus:
-          type: object
-          additionalProperties: { type: string, maxLength: 128 }
+          items: { type: object, additionalProperties: true }
+        toolFacts:
+          type: array
+          items: { type: object, additionalProperties: true }
+        toolTraceSummary:
+          type: array
+          items: { type: object, additionalProperties: true }
     ConversationPatch:
       type: object
       additionalProperties: false
       properties:
-        slots: { $ref: '#/components/schemas/DiagnosisSlots' }
+        slots: { $ref: '#/components/schemas/ConversationSummary' }
         conversationStage: { type: string, maxLength: 80 }
-        pendingBusinessQueryContext: { $ref: '#/components/schemas/PendingBusinessQueryContext' }
-        lastBusinessQueryContext: { $ref: '#/components/schemas/LastBusinessQueryContext' }
-        activeTaskStack: { $ref: '#/components/schemas/ConversationTaskStack' }
-    DiagnosisSlots:
+        lastBusinessQueryContext: { $ref: '#/components/schemas/ControlledSessionSummary' }
+    ConversationSummary:
       type: object
-      additionalProperties: false
-      properties:
-        customerId: { type: integer, format: int64 }
-        customerCode: { type: string, maxLength: 64 }
-        customerName: { type: string, maxLength: 100 }
-        orderId: { type: integer, format: int64 }
-        orderCode: { type: string, maxLength: 64 }
-        mealPlanRecordId: { type: integer, format: int64 }
-        recordDate: { type: string, format: date }
-        startDate: { type: string, format: date }
-        endDate: { type: string, format: date }
-        mealType: { type: string, enum: [BREAKFAST, LUNCH, DINNER] }
-        orderStatus: { type: integer, format: int32 }
-        slotConfidence:
-          type: object
-          additionalProperties: { type: string }
-        slotSource:
-          type: object
-          additionalProperties: { type: string }
-    PendingBusinessQueryContext:
+      additionalProperties: true
+      description: 用于指代恢复的最小会话摘要
+    ControlledSessionSummary:
       type: object
-      additionalProperties: false
-      properties:
-        analysis: { type: object, additionalProperties: true, description: 受控语义分析快照 }
-        missingFields:
-          type: array
-          maxItems: 20
-          items: { type: string, maxLength: 80 }
-        originalQuestionSummary: { type: string, maxLength: 500 }
-        sourceRequestId: { type: string, maxLength: 128 }
-        createdAt: { type: string, format: date-time }
-        expiresAt: { type: string, format: date-time }
-    LastBusinessQueryContext:
-      type: object
-      additionalProperties: false
-      properties:
-        responseType: { type: string, maxLength: 100 }
-        queryTarget: { type: string }
-        queryPlanFingerprint: { type: string, maxLength: 128 }
-        domain: { type: string }
-        recordDate: { type: string, format: date }
-        startDate: { type: string, format: date }
-        endDate: { type: string, format: date }
-        metric: { type: string }
-        mealScope: { type: string, enum: [BREAKFAST, LUNCH, DINNER, ALL_AVAILABLE] }
-        resultShape: { type: object, additionalProperties: true }
-        assistantSummary: { type: string, maxLength: 1000 }
-        queriedAt: { type: string, format: date-time }
-        contextHandles:
-          type: array
-          maxItems: 20
-          items: { type: object, additionalProperties: true }
-    ConversationTaskStack:
-      type: object
-      additionalProperties: false
-      properties:
-        tasks:
-          type: array
-          maxItems: 5
-          items:
-            type: object
-            additionalProperties: false
-            properties:
-              taskId: { type: string, maxLength: 128 }
-              status: { type: string, enum: [ACTIVE, SUSPENDED, COMPLETED, CANCELLED, FAILED] }
-              understanding: { type: object, additionalProperties: true }
-              pendingBusinessQueryContext: { $ref: '#/components/schemas/PendingBusinessQueryContext' }
-              failureCode: { type: string, maxLength: 100 }
-              updatedAt: { type: string, format: date-time }
-    AgentQueryFact:
-      type: object
-      additionalProperties: false
-      properties:
-        factId: { type: string, maxLength: 128 }
-        label: { type: string, maxLength: 200 }
-        value: {}
-        unit: { type: string, maxLength: 40 }
-        sourceType: { type: string, maxLength: 80 }
-        sourceId: { type: string, maxLength: 128 }
-        customerCode: { type: string, maxLength: 64 }
-        recordDate: { type: string, format: date }
-        mealType: { type: string }
-        sourceRecordId: { type: string, maxLength: 128 }
-    AgentResponseValidation:
-      type: object
-      additionalProperties: false
-      properties:
-        version: { type: string, enum: [v1] }
-        status: { type: string, enum: [VERIFIED, DEGRADED, AI_SUGGESTION] }
-        verifiedFactCount: { type: integer, minimum: 0 }
-        suggestion: { type: boolean }
-    BusinessQueryResultBlock:
-      type: object
-      additionalProperties: false
-      properties:
-        frameId: { type: string, maxLength: 128 }
-        responseType: { type: string, maxLength: 100 }
-        status: { type: string, maxLength: 80 }
-        result: { type: object, additionalProperties: true }
-        warnings:
-          type: array
-          items: { type: string, maxLength: 500 }
+      additionalProperties: true
+      description: 由主系统生成的受控会话摘要，不接受前端直接构造
     AgentApiError:
       type: object
       additionalProperties: false

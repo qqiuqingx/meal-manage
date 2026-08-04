@@ -7,19 +7,17 @@
   triggerConditions:
     - 客户排餐记录存在且状态为失败
   requiredTools:
-    - getMealPlanGenerationSnapshot
+    - listMealPlans
   requiredData:
-    - mealPlan
-    - customerPlans
-    - customerPlans.status
-    - customerPlans.failReason
+    - items
+    - items[].status
+    - items[].failureReason
   decisionHints:
     - 如果客户排餐记录存在且状态失败，优先展示失败原因。
   evidenceFields:
-    - mealPlan.planId
-    - customerPlans.status
-    - customerPlans.failReason
-    - mealPlan.failReason
+    - items[].recordDate
+    - items[].status
+    - items[].failureReason
   nextActions:
     - 核对排餐生成日志
     - 核对失败原因字段
@@ -35,20 +33,18 @@
     - mealPlan 存在
     - customerPlans 中不存在目标客户
   requiredTools:
-    - getMealPlan
-    - listCustomerOrders
+    - listMealPlans
+    - searchServiceCustomers
   requiredData:
-    - mealPlan.planId
-    - mealPlan.totalCustomers
-    - customerId
-    - customerCode
+    - items
+    - items[].customerCode
+    - items[].recordDate
   decisionHints:
     - 如果排餐主任务存在但客户明细缺失，应回到客户过滤条件、订单有效性和排餐任务输入清单核对。
   evidenceFields:
-    - mealPlan.planId
-    - mealPlan.totalCustomers
-    - customerId
-    - customerCode
+    - items[].customerCode
+    - items[].recordDate
+    - items[].status
   nextActions:
     - 人工核对排餐任务和客户条件
     - 核对客户是否被订单或配送规则过滤

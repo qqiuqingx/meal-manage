@@ -1,5 +1,6 @@
 package me.zhengjie.modules.agent.query.service.impl;
 
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,9 @@ import me.zhengjie.modules.meal.mapper.MealVerificationLogMapper;
 import org.springframework.stereotype.Service;
 
 import java.time.ZoneId;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.DateTimeException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -77,6 +81,99 @@ public class AgentOrderQueryServiceImpl implements AgentOrderQueryService {
         result.setQueriedAt(java.time.ZonedDateTime.now(ZoneId.of("Asia/Shanghai")).toOffsetDateTime().toString());
         return result;
     }
+
+    /** {@inheritDoc} */
+    @Override
+    public AgentListResultDto<AgentOrderSummaryDto> searchServiceCustomers(Long customerId, String customerCode,
+                                                                            Long orderId, String orderCode,
+                                                                            String status, String dealTimeFrom,
+                                                                            String dealTimeTo, String packageCode,
+                                                                            int page, int size) {
+        AgentListResultDto<AgentOrderSummaryDto> result = new AgentListResultDto<>();
+        if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND) return result;
+        Set<Long> scopedCustomerIds = AgentCustomerDataScopeContext.customerIds();
+        if (scopedCustomerIds != null && scopedCustomerIds.isEmpty()) return result;
+        if (customerId != null && !AgentCustomerDataScopeContext.allows(customerId)) return result;
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        LambdaQueryWrapper<CustomerOrder> wrapper = new LambdaQueryWrapper<CustomerOrder>()
+            .eq(customerId != null, CustomerOrder::getCustomerId, customerId)
+            .eq(hasText(customerCode), CustomerOrder::getCustomerCode, trim(customerCode))
+            .eq(orderId != null, CustomerOrder::getId, orderId)
+            .eq(hasText(orderCode), CustomerOrder::getOrderCode, trim(orderCode))
+            .in(scopedCustomerIds != null, CustomerOrder::getCustomerId, scopedCustomerIds)
+            .orderByDesc(CustomerOrder::getDealTime)
+            .orderByDesc(CustomerOrder::getCreateTime)
+            .orderByDesc(CustomerOrder::getId);
+        Integer statusCode = statusCode(status);
+        if (statusCode != null) wrapper.eq(CustomerOrder::getStatus, statusCode);
+        LocalDateTime from = parseDateBoundary(dealTimeFrom, false);
+        LocalDateTime to = parseDateBoundary(dealTimeTo, true);
+        wrapper.ge(from != null, CustomerOrder::getDealTime, from)
+            .lt(to != null, CustomerOrder::getDealTime, to);
+        applyPackageFilter(wrapper, packageCode);
+        Page<CustomerOrder> orderPage = customerOrderMapper.selectPage(new Page<>(safePage, safeSize), wrapper);
+        List<CustomerOrder> orders = orderPage == null || orderPage.getRecords() == null
+            ? Collections.emptyList() : orderPage.getRecords();
+        result.setTotal(orderPage == null ? 0L : orderPage.getTotal());
+        result.setPage(safePage);
+        result.setSize(safeSize);
+        result.setTruncated((long) safePage * safeSize < result.getTotal());
+        result.setItems(toSummaries(orders));
+        result.setQueriedAt(java.time.ZonedDateTime.now(ZoneId.of("Asia/Shanghai")).toOffsetDateTime().toString());
+        return result;
+    }
+
+    /** 将服务客户状态枚举转换为订单表中的固定状态代码。 */
+    private Integer statusCode(String status) {
+        if (!hasText(status) || "ALL".equalsIgnoreCase(status)) return null;
+        if ("ACTIVE".equalsIgnoreCase(status)) return 1;
+        if ("CANCELLED".equalsIgnoreCase(status)) return 0;
+        if ("COMPLETED".equalsIgnoreCase(status)) return 2;
+        if ("REFUNDED".equalsIgnoreCase(status)) return 3;
+        throw new IllegalArgumentException("服务客户状态不在白名单内");
+    }
+
+    /** 将 yyyy-MM-dd 转为成交时间边界，结束日期使用次日零点作为开区间。 */
+    private LocalDateTime parseDateBoundary(String value, boolean endExclusive) {
+        if (!hasText(value)) return null;
+        try {
+            LocalDate date = LocalDate.parse(value.trim());
+            return (endExclusive ? date.plusDays(1) : date).atStartOfDay();
+        } catch (DateTimeException exception) {
+            throw new IllegalArgumentException("成交日期必须使用 yyyy-MM-dd 格式", exception);
+        }
+    }
+
+    /** 将套餐编码固定解析为父套餐或子套餐 ID 集合，不允许模型提交任意字段表达式。 */
+    private void applyPackageFilter(LambdaQueryWrapper<CustomerOrder> wrapper, String packageCode) {
+        if (!hasText(packageCode)) return;
+        String code = packageCode.trim();
+        List<ParentPackage> parents = parentPackageMapper.selectList(new LambdaQueryWrapper<ParentPackage>()
+            .eq(ParentPackage::getPackageCode, code));
+        List<SubPackage> children = subPackageMapper.selectList(new LambdaQueryWrapper<SubPackage>()
+            .eq(SubPackage::getSubPackageCode, code));
+        Set<Long> parentIds = parents == null ? Collections.emptySet() : parents.stream()
+            .map(ParentPackage::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> childIds = children == null ? Collections.emptySet() : children.stream()
+            .map(SubPackage::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+        if (parentIds.isEmpty() && childIds.isEmpty()) {
+            wrapper.apply("1 = 0");
+            return;
+        }
+        wrapper.and(query -> {
+            if (!parentIds.isEmpty()) query.in(CustomerOrder::getParentPackageId, parentIds);
+            if (!childIds.isEmpty()) {
+                if (!parentIds.isEmpty()) query.or();
+                query.in(CustomerOrder::getChildPackageId, childIds);
+            }
+        });
+    }
+
+    /** 判断订单筛选参数是否包含非空文本。 */
+    private boolean hasText(String value) { return value != null && !value.trim().isEmpty(); }
+    /** 去除订单筛选参数首尾空白。 */
+    private String trim(String value) { return value == null ? null : value.trim(); }
 
     /** {@inheritDoc} */
     @Override
@@ -137,6 +234,7 @@ public class AgentOrderQueryServiceImpl implements AgentOrderQueryService {
         return orders.stream().map(CustomerOrder::getId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
     }
 
+    /** 按订单批量读取核销统计并计算早餐、午晚餐余额。 */
     private Map<Long, OrderMealBalanceDto> loadBalances(List<CustomerOrder> orders) {
         List<Long> ids = orderIds(orders);
         if (ids.isEmpty()) return Collections.emptyMap();
@@ -160,6 +258,7 @@ public class AgentOrderQueryServiceImpl implements AgentOrderQueryService {
         return result;
     }
 
+    /** 批量加载订单父套餐名称，避免逐订单查询。 */
     private Map<Long, String> parentNames(List<CustomerOrder> orders) {
         Set<Long> ids = orders.stream().map(CustomerOrder::getParentPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
         if (ids.isEmpty()) return Collections.emptyMap();
@@ -167,6 +266,7 @@ public class AgentOrderQueryServiceImpl implements AgentOrderQueryService {
                 .collect(Collectors.toMap(ParentPackage::getId, ParentPackage::getPackageName));
     }
 
+    /** 批量加载订单子套餐名称，避免逐订单查询。 */
     private Map<Long, String> childNames(List<CustomerOrder> orders) {
         Set<Long> ids = orders.stream().map(CustomerOrder::getChildPackageId).filter(Objects::nonNull).collect(Collectors.toSet());
         if (ids.isEmpty()) return Collections.emptyMap();
@@ -218,6 +318,7 @@ public class AgentOrderQueryServiceImpl implements AgentOrderQueryService {
         dto.setEndDate(order.getEndDate());
         dto.setMealTypeCode(order.getMealType());
         dto.setScheduleModeCode(order.getScheduleMode());
+        dto.setDeliveryDates(parseDeliveryDates(order.getDeliveryDates()));
         dto.setParentPackageId(order.getParentPackageId());
         dto.setParentPackageName(parentNames.get(order.getParentPackageId()));
         dto.setChildPackageId(order.getChildPackageId());
@@ -232,6 +333,19 @@ public class AgentOrderQueryServiceImpl implements AgentOrderQueryService {
         return dto;
     }
 
+    /** 将订单配送日期 JSON 裁剪为最多 31 个日期，供排餐模式诊断使用。 */
+    private List<String> parseDeliveryDates(String value) {
+        if (value == null || value.trim().isEmpty()) return Collections.emptyList();
+        try {
+            List<String> dates = JSON.parseArray(value, String.class);
+            return dates == null ? Collections.emptyList() : dates.stream()
+                .filter(this::hasText).map(String::trim).distinct().limit(31).collect(Collectors.toList());
+        } catch (RuntimeException exception) {
+            return Collections.emptyList();
+        }
+    }
+
+    /** 将订单余额内部 DTO 转换为 Agent 专用余额 DTO。 */
     private AgentOrderMealBalanceDto toBalance(OrderMealBalanceDto source) {
         AgentOrderMealBalanceDto dto = new AgentOrderMealBalanceDto();
         if (source == null) return dto;
@@ -243,6 +357,7 @@ public class AgentOrderQueryServiceImpl implements AgentOrderQueryService {
         return dto;
     }
 
+    /** 将订单状态代码转换为固定展示名称。 */
     private String statusName(Integer status) {
         if (Integer.valueOf(0).equals(status)) return "已取消";
         if (Integer.valueOf(1).equals(status)) return "进行中";

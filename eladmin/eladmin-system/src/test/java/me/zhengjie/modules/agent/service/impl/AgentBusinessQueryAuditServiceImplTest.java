@@ -36,28 +36,14 @@ class AgentBusinessQueryAuditServiceImplTest {
         response.setSessionId("session-1");
         response.setRequestId("req-1");
         response.setStatus("ANSWERED");
-        response.setResponseType("BUSINESS_QUERY_CUSTOMER");
         response.setCached(true);
         response.setPartial(false);
-        response.setInsightResult(Map.of("total", 2));
-        response.setSemanticTraceSummary(Map.of(
-            "semanticSource", "RULE_FALLBACK",
-            "fallbackReason", "MODEL_TIMEOUT",
-            "semanticCatalogVersion", "2026.07",
-            "temporalExpression", "CURRENT_DAY",
-            "resolvedRecordDate", "2026-07-14",
-            "pendingContextReused", true
-        ));
-        response.setQueryPlan(Map.of(
-            "domain", "CUSTOMER",
-            "action", "OVERVIEW",
-            "analysisSource", "RULE",
-            "analysisConfidence", 0.95D,
-            "metrics", List.of("MEAL_BALANCE"),
-            "dimensions", List.of(),
-            "toolNames", List.of("customerOverview"),
-            "entities", Map.of("orderId", 1001L, "orderCode", "O1001")
-        ));
+        me.zhengjie.modules.agent.domain.dto.DiagnosisSlots slots = new me.zhengjie.modules.agent.domain.dto.DiagnosisSlots();
+        slots.setCustomerId(1000L); slots.setCustomerCode("C1000"); slots.setOrderId(1001L);
+        slots.setOrderCode("O1001"); slots.setRecordDate("2026-07-14"); response.setSlots(slots);
+        response.setCards(List.of(Map.of("type", "SERVICE_CUSTOMER_DETAIL", "data", Map.of("total", 2))));
+        response.setToolFacts(List.of(Map.of("toolName", "getServiceCustomerDetail", "data", Map.of("total", 2))));
+        response.setToolTraceSummary(List.of(Map.of("toolName", "getServiceCustomerDetail", "resultCount", 2)));
 
         service.record(response, "service01", 123L);
 
@@ -66,57 +52,38 @@ class AgentBusinessQueryAuditServiceImplTest {
         AgentBusinessQueryAudit audit = captor.getValue();
         assertEquals("service01", audit.getOperator());
         assertEquals("CUSTOMER", audit.getQueryDomain());
-        assertEquals("OVERVIEW", audit.getQueryAction());
+        assertEquals("DETAIL", audit.getQueryAction());
         assertEquals(2, audit.getResultCount());
         assertTrue(audit.getCached());
         assertEquals(123L, audit.getCostMs());
-        assertEquals("RULE_FALLBACK", audit.getAnalysisSource());
-        assertEquals(0.95D, audit.getAnalysisConfidence());
-        assertEquals("MODEL_TIMEOUT", audit.getSemanticFallbackReason());
-        assertEquals("2026.07", audit.getSemanticCatalogVersion());
-        assertEquals("CURRENT_DAY", audit.getTemporalExpression());
+        assertEquals("LLM_TOOL_CALLING", audit.getAnalysisSource());
         assertEquals("2026-07-14", audit.getResolvedRecordDate());
-        assertTrue(audit.getPendingContextReused());
-        assertEquals("[\"MEAL_BALANCE\"]", audit.getMetricCodes());
+        assertEquals("O1001", audit.getOrderCode());
+        assertEquals("[\"getServiceCustomerDetail\"]", audit.getToolNames());
+        assertEquals("[]", audit.getMetricCodes());
         assertEquals("VALID", audit.getAnswerValidationResult());
     }
 
-    /** 旧版 Agent 的 35 位规则冲突码必须转换后再落库，避免审计写入中断聊天响应。 */
+    /** 统一工具调用响应不再写入固定查询计划字段。 */
     @Test
-    void shouldNormalizeLegacyOversizedSemanticFallbackReason() {
+    void shouldRecordToolCallingWithoutLegacySemanticFields() {
         AgentChatResponse response = new AgentChatResponse();
-        response.setSessionId("session-legacy"); response.setRequestId("req-legacy"); response.setStatus("ANSWERED");
-        response.setResponseType("BUSINESS_QUERY_MEAL_PLAN");
-        response.setSemanticTraceSummary(Map.of("fallbackReason", "MODEL_CONFLICTS_WITH_RULE_GUARDRAIL"));
+        response.setSessionId("session-tool"); response.setRequestId("req-tool"); response.setStatus("ANSWERED");
+        response.setCards(List.of(Map.of("type", "MEAL_PLAN_LIST", "data", Map.of("items", List.of()))));
+        response.setToolTraceSummary(List.of(Map.of("toolName", "listMealPlans", "resultCount", 0)));
 
         service.record(response, "service01", 10L);
 
         ArgumentCaptor<AgentBusinessQueryAudit> captor = ArgumentCaptor.forClass(AgentBusinessQueryAudit.class);
         verify(auditMapper).insert(captor.capture());
-        assertEquals("MODEL_RULE_GUARDRAIL_CONFLICT", captor.getValue().getSemanticFallbackReason());
-        assertTrue(captor.getValue().getSemanticFallbackReason().length() <= 32);
-    }
-
-    /** 非受控长文本不得进入稳定码字段。 */
-    @Test
-    void shouldReplaceInvalidSemanticFallbackReasonWithStableCode() {
-        AgentChatResponse response = new AgentChatResponse();
-        response.setSessionId("session-invalid"); response.setRequestId("req-invalid"); response.setStatus("ANSWERED");
-        response.setResponseType("BUSINESS_QUERY_MEAL_PLAN");
-        response.setSemanticTraceSummary(Map.of("fallbackReason", "模型返回了一段不应写入稳定码字段的超长自由文本"));
-
-        service.record(response, "service01", 10L);
-
-        ArgumentCaptor<AgentBusinessQueryAudit> captor = ArgumentCaptor.forClass(AgentBusinessQueryAudit.class);
-        verify(auditMapper).insert(captor.capture());
-        assertEquals("MODEL_INVALID", captor.getValue().getSemanticFallbackReason());
+        assertEquals("LLM_TOOL_CALLING", captor.getValue().getAnalysisSource());
     }
 
     @Test
     void shouldRecordStableWarningAsPartialQueryFailureType() {
         AgentChatResponse response = new AgentChatResponse();
         response.setSessionId("session-1"); response.setRequestId("req-2"); response.setStatus("ANSWERED");
-        response.setResponseType("BUSINESS_QUERY_ORDER"); response.setPartial(true); response.setWarnings(List.of("TOOL_PERMISSION_DENIED"));
+        response.setPartial(true); response.setWarnings(List.of("searchServiceCustomers:TOOL_PERMISSION_DENIED"));
 
         service.record(response, "service01", 10L);
 
@@ -126,18 +93,17 @@ class AgentBusinessQueryAuditServiceImplTest {
         assertEquals("PARTIAL", captor.getValue().getAnswerValidationResult());
     }
 
-    /** 运营统计澄清不执行工具也没有 QueryPlan，审计仍必须满足数据库非空字段约束。 */
+    /** 澄清不执行工具时仍必须写入稳定领域和动作，满足数据库非空约束。 */
     @Test
-    void shouldRecordClarificationWithoutQueryPlan() {
+    void shouldRecordClarificationWithoutLegacySemanticFields() {
         AgentChatResponse response = new AgentChatResponse();
         response.setSessionId("session-clarify"); response.setRequestId("req-clarify"); response.setStatus("NEED_MORE_INFO");
-        response.setResponseType("BUSINESS_QUERY_OPERATION_CLARIFICATION");
 
         service.record(response, "service01", 5L);
 
         ArgumentCaptor<AgentBusinessQueryAudit> captor = ArgumentCaptor.forClass(AgentBusinessQueryAudit.class);
         verify(auditMapper).insert(captor.capture());
-        assertEquals("OPERATION_STATISTICS", captor.getValue().getQueryDomain());
+        assertEquals("BUSINESS_QUERY", captor.getValue().getQueryDomain());
         assertEquals("CLARIFY", captor.getValue().getQueryAction());
         assertTrue(captor.getValue().getClarificationRequired());
     }
@@ -146,13 +112,13 @@ class AgentBusinessQueryAuditServiceImplTest {
     void shouldAggregateBusinessQueryAuditStats() {
         when(auditMapper.selectList(any())).thenAnswer(invocation -> {
             List<AgentBusinessQueryAudit> audits = Arrays.asList(
-                audit("CUSTOMER", "[\"customerOverview\"]", "[\"MEAL_BALANCE\"]", true, false, null, "VALID", 100L),
-                audit("ORDER", "[\"listOrders\",\"customerOverview\"]", "[\"ORDER_COUNT\"]", false, true, "PLAN_INVALID", "PARTIAL", 300L),
-                audit("MEAL_PLAN", "[\"listMealPlans\"]", "[\"DAILY_UNVERIFIED_CUSTOMER_COUNT\"]", false, true, "TOOL_PERMISSION_DENIED", "PARTIAL", 200L)
+                audit("CUSTOMER", "[\"searchCustomerProfiles\"]", "[\"ACTIVE_SERVICE_CUSTOMER_COUNT\"]", true, false, null, "VALID", 100L),
+                audit("ORDER", "[\"searchServiceCustomers\",\"getServiceCustomerDetail\"]", "[\"ACTIVE_ORDER_COUNT\"]", false, true, "TOOL_INPUT_INVALID", "PARTIAL", 300L),
+                audit("MEAL_PLAN", "[\"listMealPlans\"]", "[\"EXPIRING_ORDER_COUNT\"]", false, true, "TOOL_PERMISSION_DENIED", "PARTIAL", 200L)
             );
             audits.get(0).setAnalysisSource("LLM");
-            audits.get(1).setAnalysisSource("RULE_FALLBACK"); audits.get(1).setSemanticFallbackReason("MODEL_LOW_CONFIDENCE");
-            audits.get(2).setAnalysisSource("PENDING_CONTEXT"); audits.get(2).setPendingContextReused(true);
+            audits.get(1).setAnalysisSource("LLM_TOOL_CALLING");
+            audits.get(2).setAnalysisSource("LLM_TOOL_CALLING");
             return audits;
         });
 
@@ -171,14 +137,9 @@ class AgentBusinessQueryAuditServiceImplTest {
         assertEquals(1L, stats.getDirectAnswerCount());
         assertEquals(1D / 3D, stats.getDirectAnswerRate());
         assertEquals(1L, stats.getDomainDistribution().get("CUSTOMER"));
-        assertEquals(2L, stats.getToolDistribution().get("customerOverview"));
-        assertEquals(1L, stats.getMetricDistribution().get("DAILY_UNVERIFIED_CUSTOMER_COUNT"));
-        assertEquals(1L, stats.getFailureTypeDistribution().get("PLAN_INVALID"));
-        assertEquals(1L, stats.getSemanticFallbackCount());
-        assertEquals(1D / 3D, stats.getSemanticFallbackRate());
-        assertEquals(1L, stats.getPendingContextReuseCount());
-        assertEquals(1L, stats.getSemanticSourceDistribution().get("PENDING_CONTEXT"));
-        assertEquals(1L, stats.getSemanticFallbackReasonDistribution().get("MODEL_LOW_CONFIDENCE"));
+        assertEquals(1L, stats.getToolDistribution().get("searchCustomerProfiles"));
+        assertEquals(1L, stats.getMetricDistribution().get("EXPIRING_ORDER_COUNT"));
+        assertEquals(1L, stats.getFailureTypeDistribution().get("TOOL_INPUT_INVALID"));
     }
 
     private AgentBusinessQueryAudit audit(String domain, String tools, String metrics, boolean cached, boolean partial,

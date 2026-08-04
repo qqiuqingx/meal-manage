@@ -64,14 +64,8 @@ public class AgentChatSession extends BaseEntity {
     /** 最近诊断摘要。 */
     private String lastSummary;
 
-    /** 待补条件的受控业务查询上下文 JSON，不保存 Prompt、模型原文或工具结果。 */
-    private String pendingBusinessQueryJson;
-
     /** 最近一次已执行业务查询的脱敏上下文 JSON。 */
     private String lastBusinessQueryContextJson;
-
-    /** 受控任务栈 JSON，用于跨实例恢复追问和插问状态。 */
-    private String activeTaskStackJson;
 
     /** 最近消息时间。 */
     private Timestamp lastMessageTime;

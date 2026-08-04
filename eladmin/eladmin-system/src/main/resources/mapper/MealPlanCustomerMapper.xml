@@ -100,6 +100,9 @@
             <if test="mealType != null and mealType != ''">
                 and mp.meal_type = #{mealType}
             </if>
+            <if test="orderId != null">
+                and mpc.order_id = #{orderId}
+            </if>
             <if test="scopedCustomerIds != null">
                 and mpc.customer_id in
                 <foreach collection="scopedCustomerIds" item="scopedCustomerId" open="(" separator="," close=")">

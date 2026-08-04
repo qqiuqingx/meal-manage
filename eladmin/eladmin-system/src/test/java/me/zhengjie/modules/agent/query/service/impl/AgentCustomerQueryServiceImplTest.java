@@ -11,6 +11,8 @@ import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -37,6 +39,16 @@ class AgentCustomerQueryServiceImplTest {
     @Mock private AgentOrderQueryService agentOrderQueryService;
     @Mock private AgentHistoryQueryService agentHistoryQueryService;
     @InjectMocks private AgentCustomerQueryServiceImpl service;
+
+    @BeforeEach
+    void bindAllDataForUnitTest() {
+        me.zhengjie.modules.agent.security.AgentCustomerDataScopeContext.bind(null);
+    }
+
+    @AfterEach
+    void clearDataScope() {
+        me.zhengjie.modules.agent.security.AgentCustomerDataScopeContext.clear();
+    }
 
     @Test
     void shouldLimitNameCandidatesAndMaskPhone() {

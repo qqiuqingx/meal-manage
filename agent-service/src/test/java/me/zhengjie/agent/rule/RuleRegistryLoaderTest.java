@@ -46,17 +46,13 @@ class RuleRegistryLoaderTest {
         assertTrue(registry.getRules().stream()
             .flatMap(rule -> rule.getRequiredTools().stream())
             .allMatch(Set.of(
-                "getCustomerProfile",
-                "listCustomerOrders",
-                "getMealPlan",
-                "getCandidateDishStats",
-                "getCustomerExcludeDates",
-                "getOrderMealBalance",
-                "getPackageSpec",
-                "getDishCandidateDetail",
-                "listVerificationLogs",
-                "listMealRefunds",
-                "getMealPlanGenerationSnapshot"
+                "getServiceCustomerDetail",
+                "searchServiceCustomers",
+                "listMealPlans",
+                "previewDishCandidates",
+                "getPackageDetail",
+                "listVerifications",
+                "listRefunds"
             )::contains));
     }
 
@@ -94,7 +90,7 @@ class RuleRegistryLoaderTest {
               version: 1
               title: 库存为空
               requiredTools:
-                - getMealPlan
+                - listMealPlans
               evidenceFields:
                 - inventory.availableCount
               nextActions:

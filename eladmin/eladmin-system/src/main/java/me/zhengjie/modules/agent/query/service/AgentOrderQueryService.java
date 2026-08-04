@@ -20,6 +20,26 @@ public interface AgentOrderQueryService {
     AgentListResultDto<AgentOrderSummaryDto> listByCustomer(Long customerId, Integer status, int page, int size);
 
     /**
+     * 按统一服务客户条件分页查询订单；过滤、数据范围和套餐编码解析均在主系统执行。
+     *
+     * @param customerId 客户 ID，可为空
+     * @param customerCode 客户编号，可为空
+     * @param orderId 订单 ID，可为空
+     * @param orderCode 订单编号，可为空
+     * @param status 订单状态枚举，可为空
+     * @param dealTimeFrom 成交日期下界，可为空
+     * @param dealTimeTo 成交日期上界，可为空
+     * @param packageCode 父或子套餐编码，可为空
+     * @param page 从 1 开始的页码
+     * @param size 单页数量，最大 20
+     * @return 以订单为根的服务客户分页结果
+     */
+    AgentListResultDto<AgentOrderSummaryDto> searchServiceCustomers(Long customerId, String customerCode,
+                                                                     Long orderId, String orderCode, String status,
+                                                                     String dealTimeFrom, String dealTimeTo,
+                                                                     String packageCode, int page, int size);
+
+    /**
      * 查询客户订单的受控汇总集合，供客户概览计算全量餐数余额；最多处理 200 笔。
      *
      * @param customerId 客户 ID

@@ -81,7 +81,7 @@ class AgentDishQueryServiceImplTest {
         when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(List.of(relation(1, "鸡肉")));
         when(dishIngredientCategoryService.getCategoryIngredientMapping()).thenReturn(Map.of("禽肉", Set.of("鸡肉")));
 
-        AgentDishCandidatePreviewDto result = service.previewCandidates(1L, "2026-07-11", "LUNCH");
+        AgentDishCandidatePreviewDto result = service.previewCandidates(1L, null, "2026-07-11", "LUNCH");
 
         assertTrue(result.isPresent());
         assertEquals(2, result.getTotalCandidateCount());

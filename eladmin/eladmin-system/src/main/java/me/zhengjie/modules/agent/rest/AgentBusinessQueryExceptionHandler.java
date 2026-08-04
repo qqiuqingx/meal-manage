@@ -15,7 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 /** 仅约束 Agent 内部业务查询接口的稳定错误契约，避免通用异常响应泄露实现细节。 */
 @Slf4j
 @Order(Ordered.HIGHEST_PRECEDENCE)
-@RestControllerAdvice(assignableTypes = InternalAgentBusinessQueryController.class)
+@RestControllerAdvice(assignableTypes = InternalAgentUnifiedQueryController.class)
 public class AgentBusinessQueryExceptionHandler {
 
     /** 处理请求体 Bean Validation 失败。 */
@@ -51,6 +51,7 @@ public class AgentBusinessQueryExceptionHandler {
         return response(HttpStatus.INTERNAL_SERVER_ERROR, "AGENT_QUERY_INTERNAL_ERROR", "内部查询处理失败");
     }
 
+    /** 构造统一业务查询错误响应，避免向 Agent 暴露堆栈和下游原文。 */
     private ResponseEntity<AgentBusinessQueryErrorDto> response(HttpStatus status, String code, String message) {
         return ResponseEntity.status(status).body(new AgentBusinessQueryErrorDto(code, message));
     }

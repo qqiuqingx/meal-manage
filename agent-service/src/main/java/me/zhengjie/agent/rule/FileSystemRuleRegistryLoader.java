@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import me.zhengjie.agent.config.AgentProperties;
-import me.zhengjie.agent.tool.ToolCatalog;
+import me.zhengjie.agent.tool.ToolRegistry;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +44,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         this(Path.of(properties.getRules().getBasePath()), properties.getRules().getSceneDirectories());
     }
 
+    /** 使用默认场景目录映射创建规则加载器。 */
     public FileSystemRuleRegistryLoader(Path ruleBasePath) {
         this(ruleBasePath, DEFAULT_SCENE_DIRECTORIES);
     }
@@ -57,6 +58,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         this(Path.of(ruleBasePath));
     }
 
+    /** 使用指定外部根目录和场景目录映射创建规则加载器。 */
     public FileSystemRuleRegistryLoader(Path ruleBasePath, Map<String, String> sceneDirectories) {
         this.ruleBasePath = ruleBasePath;
         this.sceneDirectories = sceneDirectories == null ? DEFAULT_SCENE_DIRECTORIES : Map.copyOf(sceneDirectories);
@@ -85,6 +87,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         return buildRegistry(scene, sources);
     }
 
+    /** 将场景标识解析为安全的规则目录名。 */
     private String resolveSceneDirectory(String scene) {
         if (scene == null || scene.isBlank()) {
             throw new IllegalArgumentException("scene must not be blank");
@@ -92,6 +95,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         return sceneDirectories.getOrDefault(scene, scene.trim().toLowerCase().replace('_', '-'));
     }
 
+    /** 扫描外部场景目录下按路径排序的 YAML 规则文件。 */
     private List<RuleSource> findFileSystemSources(Path scenePath) {
         try (Stream<Path> paths = Files.walk(scenePath)) {
             return paths.filter(Files::isRegularFile)
@@ -104,6 +108,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         }
     }
 
+    /** 读取一个外部规则文件并保留相对名称用于摘要计算。 */
     private RuleSource readFileSystemSource(Path scenePath, Path path) {
         try {
             return new RuleSource(scenePath.relativize(path).toString(), Files.readString(path, StandardCharsets.UTF_8));
@@ -112,6 +117,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         }
     }
 
+    /** 扫描 classpath 规则资源并按稳定名称排序。 */
     private List<RuleSource> findClasspathSources(String sceneDirectory) {
         try {
             Resource[] resources = new PathMatchingResourcePatternResolver()
@@ -129,6 +135,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         }
     }
 
+    /** 从 classpath 资源 URL 中提取相对规则文件名。 */
     private String classpathRelativeName(Resource resource, String sceneDirectory) throws IOException {
         String location = resource.getURL().toExternalForm().replace('\\', '/');
         String marker = "rules/" + sceneDirectory + "/";
@@ -136,6 +143,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         return markerIndex < 0 ? location : location.substring(markerIndex + marker.length());
     }
 
+    /** 解析规则来源、计算版本摘要并执行目录级契约校验。 */
     private RuleRegistry buildRegistry(String scene, List<RuleSource> sources) {
         List<DiagnosisRule> rules = new ArrayList<>();
         StringBuilder digestSource = new StringBuilder(scene);
@@ -163,6 +171,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         return registry;
     }
 
+    /** 将单个 YAML 文档转换为诊断规则列表，忽略非规则根节点。 */
     private List<DiagnosisRule> parseRuleDocument(RuleSource source) {
         try {
             JsonNode root = yamlMapper.readTree(source.content());
@@ -175,6 +184,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         }
     }
 
+    /** 校验规则 ID、工具名、证据字段和下一步动作的完整性。 */
     private void validateRegistry(RuleRegistry registry) {
         Set<String> ruleIds = new HashSet<>();
         for (DiagnosisRule rule : registry.getRules()) {
@@ -185,7 +195,7 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
             if (rule.getVersion() == null || rule.getVersion() < 1) throw new IllegalStateException("version must be positive for ruleId: " + rule.getRuleId());
             if (rule.getRequiredTools() == null || rule.getRequiredTools().isEmpty()) throw new IllegalStateException("requiredTools must not be empty for ruleId: " + rule.getRuleId());
             for (String toolName : rule.getRequiredTools()) {
-                if (!ToolCatalog.isDiagnosisToolRegistered(toolName)) {
+                if (!new ToolRegistry().contains(toolName)) {
                     throw new IllegalStateException("requiredTools contains unregistered tool " + toolName
                         + " for ruleId: " + rule.getRuleId());
                 }
@@ -196,8 +206,10 @@ public class FileSystemRuleRegistryLoader implements RuleRegistryLoader {
         }
     }
 
+    /** 判断规则文本字段是否为空。 */
     private boolean isBlank(String value) { return value == null || value.trim().isEmpty(); }
 
+    /** 计算规则文件内容的 SHA-256 版本摘要。 */
     private String sha256(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));

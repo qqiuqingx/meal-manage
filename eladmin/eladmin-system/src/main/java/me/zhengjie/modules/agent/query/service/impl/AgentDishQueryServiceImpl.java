@@ -1,6 +1,8 @@
 package me.zhengjie.modules.agent.query.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.agent.query.domain.dto.AgentDishSummaryDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentDishCandidateItemDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentDishCandidatePreviewDto;
@@ -63,6 +65,33 @@ public class AgentDishQueryServiceImpl implements AgentDishQueryService {
 
     /** {@inheritDoc} */
     @Override
+    public AgentListResultDto<AgentDishSummaryDto> search(String name, String dishType, Boolean enabled,
+                                                          int page, int size) {
+        AgentListResultDto<AgentDishSummaryDto> result = new AgentListResultDto<>();
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), MAX_DISHES);
+        LambdaQueryWrapper<Dish> wrapper = new LambdaQueryWrapper<Dish>()
+            .like(name != null && !name.trim().isEmpty(), Dish::getName, name == null ? null : name.trim())
+            .eq(dishType != null && !dishType.trim().isEmpty(), Dish::getDishType, dishType == null ? null : dishType.trim())
+            .eq(enabled != null, Dish::getEnabled, enabled)
+            .orderByAsc(Dish::getSort).orderByAsc(Dish::getId);
+        Page<Dish> dishPage = dishMapper.selectPage(new Page<>(safePage, safeSize), wrapper);
+        List<Dish> dishes = dishPage == null || dishPage.getRecords() == null
+            ? Collections.emptyList() : dishPage.getRecords();
+        List<Integer> ids = dishes.stream().map(Dish::getId).filter(java.util.Objects::nonNull).collect(Collectors.toList());
+        Map<Integer, List<DishIngredientRelation>> relations = ids.isEmpty() ? Collections.emptyMap()
+            : dishIngredientMapper.findRelationsByDishIds(ids).stream().collect(Collectors.groupingBy(DishIngredientRelation::getDishId));
+        result.setTotal(dishPage == null ? 0L : dishPage.getTotal());
+        result.setPage(safePage); result.setSize(safeSize);
+        result.setTruncated((long) safePage * safeSize < result.getTotal());
+        result.setItems(dishes.stream().map(dish -> toSummary(dish, relations.getOrDefault(dish.getId(), Collections.emptyList())))
+            .collect(Collectors.toList()));
+        result.setQueriedAt(java.time.OffsetDateTime.now(java.time.ZoneOffset.ofHours(8)).toString());
+        return result;
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public AgentScheduledMenuResponseDto listScheduled(String recordDate, List<String> mealTypes) {
         LocalDate date = LocalDate.parse(recordDate);
         List<String> safeMealTypes = normalizeScheduledMealTypes(mealTypes);
@@ -107,13 +136,14 @@ public class AgentDishQueryServiceImpl implements AgentDishQueryService {
 
     /** {@inheritDoc} */
     @Override
-    public AgentDishCandidatePreviewDto previewCandidates(Long customerId, String recordDate, String mealType) {
+    public AgentDishCandidatePreviewDto previewCandidates(Long customerId, Long orderId, String recordDate, String mealType) {
         AgentDishCandidatePreviewDto result = new AgentDishCandidatePreviewDto();
         result.setCustomerId(customerId); result.setRecordDate(recordDate); result.setMealTypeCode(mealType);
         AgentCustomerOverviewDto customer = customerQueryService.getOverview(customerId, null);
         if (!customer.isPresent()) return result;
         result.setPresent(true); result.setCustomerCode(customer.getCustomerCode());
         List<Long> parentPackageIds = customer.getPackages().stream().filter(item -> item.isActive())
+            .filter(item -> orderId == null || orderId.equals(item.getOrderId()))
             .map(item -> item.getParentPackageId()).filter(java.util.Objects::nonNull).distinct().collect(Collectors.toList());
         result.setParentPackageIds(parentPackageIds);
         LocalDate date = LocalDate.parse(recordDate);

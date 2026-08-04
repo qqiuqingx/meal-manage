@@ -4,7 +4,7 @@ import jakarta.validation.Valid;
 import me.zhengjie.agent.api.contract.AgentExecutionEnvelope;
 import me.zhengjie.agent.api.contract.ChatMessageRequest;
 import me.zhengjie.agent.api.error.AgentContractException;
-import me.zhengjie.agent.chat.MealPlanChatService;
+import me.zhengjie.agent.application.BusinessAgentRunner;
 import me.zhengjie.agent.application.conversation.ConversationPatch;
 import me.zhengjie.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.agent.domain.dto.AgentChatResponse;
@@ -14,23 +14,26 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.UUID;
 import org.slf4j.MDC;
 
-/** v2 通用聊天内部接口；旧 meal-plan 路径继续保留兼容。 */
+/** v2 通用聊天内部接口；所有普通查询和排餐诊断统一进入 LLM Tool Calling Runner。 */
 @RestController
 @RequestMapping("/api/agent/v2")
 public class AgentV2ChatController {
 
-    private final MealPlanChatService chatService;
+    private final BusinessAgentRunner businessAgentRunner;
 
-    public AgentV2ChatController(MealPlanChatService chatService) {
-        this.chatService = chatService;
+    /** 生产 v2 入口使用统一 LLM Tool Calling Runner。 */
+    @Autowired
+    public AgentV2ChatController(BusinessAgentRunner businessAgentRunner) {
+        this.businessAgentRunner = businessAgentRunner;
     }
 
     /**
-     * 接收可信执行信封并委托兼容聊天服务处理。
+     * 接收可信执行信封并委托统一业务 Agent 执行。
      *
      * @param requestId 请求链路标识
      * @param accessContext 主系统签发的短期访问上下文
@@ -53,13 +56,13 @@ public class AgentV2ChatController {
         AgentAccessContextHolder.bindAvailableTools(request.getAvailableTools());
         if (envelope.getSessionVersion() != null) MDC.put("sessionVersion", String.valueOf(envelope.getSessionVersion()));
         try {
-            AgentChatResponse response = chatService.chat(request);
+            AgentChatResponse response = businessAgentRunner.run(request);
             response.setRequestId(resolveRequestId(requestId));
             response.setClientMessageId(message.getClientMessageId());
             response.setContractVersion(envelope.getContractVersion());
             response.setExpectedSessionVersion(envelope.getSessionVersion());
             response.setConversationPatch(new ConversationPatch(response.getSlots(), response.getConversationStage(),
-                response.getPendingBusinessQueryContext(), response.getLastBusinessQueryContext(), response.getActiveTaskStack()));
+                response.getLastBusinessQueryContext()));
             return response;
         } finally {
             AgentAccessContextHolder.clear();
@@ -77,9 +80,7 @@ public class AgentV2ChatController {
         request.setContextSlots(envelope.getContextSnapshot());
         request.setAvailableTools(envelope.getAvailableTools());
         request.setSessionVersion(envelope.getSessionVersion());
-        request.setPendingBusinessQueryContext(envelope.getPendingBusinessQueryContext());
         request.setLastBusinessQueryContext(envelope.getLastBusinessQueryContext());
-        request.setActiveTaskStack(envelope.getActiveTaskStack());
         return request;
     }
 

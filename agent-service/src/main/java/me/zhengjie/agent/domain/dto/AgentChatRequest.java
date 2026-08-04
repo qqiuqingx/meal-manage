@@ -2,9 +2,7 @@ package me.zhengjie.agent.domain.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
-import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
-import me.zhengjie.agent.query.domain.PendingBusinessQueryContext;
-import me.zhengjie.agent.query.domain.ConversationTaskStack;
+import java.util.Map;
 
 /**
  * 智能排查聊天请求。
@@ -25,12 +23,8 @@ public class AgentChatRequest {
     private List<String> availableTools;
     /** 主系统快照版本，供 v2 信封回传 optimistic-lock 预期值。 */
     private Long sessionVersion;
-    /** 主系统持久化的待补条件查询，只允许由可信内部会话服务下发。 */
-    private PendingBusinessQueryContext pendingBusinessQueryContext;
     /** 主系统持久化的最近已执行查询脱敏摘要。 */
-    private LastBusinessQueryContext lastBusinessQueryContext;
-    /** 主系统保存的受控任务栈，前端不得作为可信状态构造。 */
-    private ConversationTaskStack activeTaskStack;
+    private Map<String, Object> lastBusinessQueryContext;
 
     public String getSessionId() {
         return sessionId;
@@ -62,10 +56,6 @@ public class AgentChatRequest {
     public void setAvailableTools(List<String> availableTools) { this.availableTools = availableTools; }
     public Long getSessionVersion() { return sessionVersion; }
     public void setSessionVersion(Long sessionVersion) { this.sessionVersion = sessionVersion; }
-    public PendingBusinessQueryContext getPendingBusinessQueryContext() { return pendingBusinessQueryContext; }
-    public void setPendingBusinessQueryContext(PendingBusinessQueryContext pendingBusinessQueryContext) { this.pendingBusinessQueryContext = pendingBusinessQueryContext; }
-    public LastBusinessQueryContext getLastBusinessQueryContext() { return lastBusinessQueryContext; }
-    public void setLastBusinessQueryContext(LastBusinessQueryContext lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
-    public ConversationTaskStack getActiveTaskStack() { return activeTaskStack; }
-    public void setActiveTaskStack(ConversationTaskStack activeTaskStack) { this.activeTaskStack = activeTaskStack; }
+    public Map<String, Object> getLastBusinessQueryContext() { return lastBusinessQueryContext; }
+    public void setLastBusinessQueryContext(Map<String, Object> lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
 }

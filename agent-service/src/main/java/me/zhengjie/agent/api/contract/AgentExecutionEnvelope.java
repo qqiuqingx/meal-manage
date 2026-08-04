@@ -6,12 +6,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
-import me.zhengjie.agent.query.domain.ConversationTaskStack;
-import me.zhengjie.agent.query.domain.LastBusinessQueryContext;
-import me.zhengjie.agent.query.domain.PendingBusinessQueryContext;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 主系统向 Agent 下发的可信执行信封。
@@ -29,9 +27,7 @@ public class AgentExecutionEnvelope {
     @NotNull
     @Size(max = 100)
     private List<@NotBlank @Size(max = 80) String> availableTools = new ArrayList<>();
-    private PendingBusinessQueryContext pendingBusinessQueryContext;
-    private LastBusinessQueryContext lastBusinessQueryContext;
-    private ConversationTaskStack activeTaskStack;
+    private Map<String, Object> lastBusinessQueryContext;
     /** 主系统读取会话快照时的乐观锁版本；Agent 仅回传，不自行提交会话。 */
     @NotNull
     @PositiveOrZero
@@ -45,12 +41,8 @@ public class AgentExecutionEnvelope {
     public void setContextSnapshot(DiagnosisSlots contextSnapshot) { this.contextSnapshot = contextSnapshot; }
     public List<String> getAvailableTools() { return availableTools; }
     public void setAvailableTools(List<String> availableTools) { this.availableTools = availableTools == null ? new ArrayList<>() : availableTools; }
-    public PendingBusinessQueryContext getPendingBusinessQueryContext() { return pendingBusinessQueryContext; }
-    public void setPendingBusinessQueryContext(PendingBusinessQueryContext pendingBusinessQueryContext) { this.pendingBusinessQueryContext = pendingBusinessQueryContext; }
-    public LastBusinessQueryContext getLastBusinessQueryContext() { return lastBusinessQueryContext; }
-    public void setLastBusinessQueryContext(LastBusinessQueryContext lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
-    public ConversationTaskStack getActiveTaskStack() { return activeTaskStack; }
-    public void setActiveTaskStack(ConversationTaskStack activeTaskStack) { this.activeTaskStack = activeTaskStack; }
+    public Map<String, Object> getLastBusinessQueryContext() { return lastBusinessQueryContext; }
+    public void setLastBusinessQueryContext(Map<String, Object> lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
     public Long getSessionVersion() { return sessionVersion; }
     public void setSessionVersion(Long sessionVersion) { this.sessionVersion = sessionVersion; }
 }

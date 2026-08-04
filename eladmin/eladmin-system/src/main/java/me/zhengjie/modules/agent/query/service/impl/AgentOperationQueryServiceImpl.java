@@ -51,6 +51,7 @@ public class AgentOperationQueryServiceImpl implements AgentOperationQueryServic
     /** {@inheritDoc} */
     @Override
     public AgentDailyCustomerStatsDto dailyCustomers(AgentOperationDailyRequest request) {
+        if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND) return emptyDailyResult(request);
         LocalDate date = parseRequired(request == null ? null : request.getRecordDate(), "统计日期");
         String mealType = request == null ? null : normalizeMealType(request.getMealType());
         List<MealPlan> plans = mealPlanMapper.selectList(new LambdaQueryWrapper<MealPlan>()
@@ -146,6 +147,9 @@ public class AgentOperationQueryServiceImpl implements AgentOperationQueryServic
     /** {@inheritDoc} */
     @Override
     public AgentOperationCountDto activeCustomers() {
+        if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND) {
+            return count("ACTIVE_CUSTOMER_COUNT", "AGENT_ACTIVE_CUSTOMER_V1", 0);
+        }
         Set<Long> scopedCustomerIds = AgentCustomerDataScopeContext.customerIds();
         if (scopedCustomerIds != null && scopedCustomerIds.isEmpty()) return count("ACTIVE_CUSTOMER_COUNT", "AGENT_ACTIVE_CUSTOMER_V1", 0);
         List<CustomerOrder> orders = customerOrderMapper.selectList(new LambdaQueryWrapper<CustomerOrder>()
@@ -184,6 +188,11 @@ public class AgentOperationQueryServiceImpl implements AgentOperationQueryServic
         int page = request == null || request.getPage() == null ? 1 : Math.max(request.getPage(), 1);
         int size = request == null || request.getSize() == null ? 50 : request.getSize();
         if (size < 1 || size > 50) throw new IllegalArgumentException("每页活跃客户余额明细必须在 1 至 50 条之间");
+        if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND) {
+            AgentActiveCustomerBalanceResponse empty = new AgentActiveCustomerBalanceResponse();
+            empty.setPage(page); empty.setSize(size); empty.setQueriedAt(java.time.ZonedDateTime.now(ZoneId.of("Asia/Shanghai")).toOffsetDateTime().toString());
+            return empty;
+        }
         Set<Long> scopedCustomerIds = AgentCustomerDataScopeContext.customerIds();
         List<CustomerOrder> orders = scopedCustomerIds != null && scopedCustomerIds.isEmpty() ? List.of()
             : customerOrderMapper.selectList(new LambdaQueryWrapper<CustomerOrder>().eq(CustomerOrder::getStatus, 1)
@@ -230,6 +239,9 @@ public class AgentOperationQueryServiceImpl implements AgentOperationQueryServic
     /** {@inheritDoc} */
     @Override
     public AgentOperationCountDto customerProfileCount() {
+        if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND) {
+            return count("CUSTOMER_PROFILE_COUNT", "AGENT_CUSTOMER_PROFILE_COUNT_V1", 0);
+        }
         Set<Long> scopedCustomerIds = AgentCustomerDataScopeContext.customerIds();
         if (scopedCustomerIds != null && scopedCustomerIds.isEmpty()) {
             return count("CUSTOMER_PROFILE_COUNT", "AGENT_CUSTOMER_PROFILE_COUNT_V1", 0);
@@ -261,6 +273,9 @@ public class AgentOperationQueryServiceImpl implements AgentOperationQueryServic
     /** {@inheritDoc} */
     @Override
     public AgentOperationCountDto expiringOrders(AgentOperationOrderRequest request) {
+        if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND) {
+            return count("EXPIRING_ORDER_COUNT", "AGENT_EXPIRING_ORDER_V1", 0);
+        }
         LocalDate start = request == null || request.getStartDate() == null ? LocalDate.now(ZoneId.of("Asia/Shanghai")) : parseRequired(request.getStartDate(), "开始日期");
         LocalDate end = request == null || request.getEndDate() == null ? start.plusDays(7) : parseRequired(request.getEndDate(), "结束日期");
         if (end.isBefore(start) || end.isAfter(start.plusDays(31))) throw new IllegalArgumentException("订单到期日期范围必须在 0 至 31 天内");
@@ -272,16 +287,27 @@ public class AgentOperationQueryServiceImpl implements AgentOperationQueryServic
         return count("EXPIRING_ORDER_COUNT", "AGENT_EXPIRING_ORDER_V1", total);
     }
 
+    /** 构造带指标代码和口径定义的运营计数结果。 */
     private AgentOperationCountDto count(String code, String definitionId, long total) {
         AgentOperationCountDto result = new AgentOperationCountDto();
         result.setMetricCode(code); result.setMetricDefinitionId(definitionId); result.setTotal(total);
         result.setQueriedAt(java.time.ZonedDateTime.now(ZoneId.of("Asia/Shanghai")).toOffsetDateTime().toString());
         return result;
     }
+
+    /** 构造未绑定客服范围时的空日报结果，避免任何数据库访问。 */
+    private AgentDailyCustomerStatsDto emptyDailyResult(AgentOperationDailyRequest request) {
+        AgentDailyCustomerStatsDto result = new AgentDailyCustomerStatsDto();
+        if (request != null) { result.setRecordDate(request.getRecordDate()); result.setMealType(request.getMealType()); }
+        result.setQueriedAt(java.time.ZonedDateTime.now(ZoneId.of("Asia/Shanghai")).toOffsetDateTime().toString());
+        return result;
+    }
+    /** 解析运营指标必填日期，并转换为稳定业务异常。 */
     private LocalDate parseRequired(String value, String field) {
         try { return LocalDate.parse(value); }
         catch (DateTimeParseException exception) { throw new IllegalArgumentException(field + "必须使用 yyyy-MM-dd 格式", exception); }
     }
+    /** 将餐次参数归一化为受控大写枚举。 */
     private String normalizeMealType(String value) {
         if (value == null || value.trim().isEmpty()) return null;
         String result = value.trim().toUpperCase();
@@ -434,7 +460,9 @@ public class AgentOperationQueryServiceImpl implements AgentOperationQueryServic
     private static final class PlanCustomerRow {
         private final MealPlan plan;
         private final MealPlanCustomer customer;
+        /** 保存排餐主单与客户排餐记录的关联行。 */
         private PlanCustomerRow(MealPlan plan, MealPlanCustomer customer) { this.plan = plan; this.customer = customer; }
     }
+    /** 构造客户与餐次的稳定聚合键。 */
     private String customerMealKey(Long customerId, String mealType) { return customerId + "|" + mealType; }
 }

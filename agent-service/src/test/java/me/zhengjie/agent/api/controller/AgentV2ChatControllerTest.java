@@ -2,8 +2,9 @@ package me.zhengjie.agent.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.api.error.AgentApiExceptionHandler;
-import me.zhengjie.agent.chat.MealPlanChatService;
+import me.zhengjie.agent.application.BusinessAgentRunner;
 import me.zhengjie.agent.domain.chat.ChatStatus;
+import me.zhengjie.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.agent.domain.dto.AgentChatResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -15,28 +16,24 @@ import java.util.Map;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 class AgentV2ChatControllerTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
     void shouldReturnContractVersionAndClientMessageId() throws Exception {
-        MealPlanChatService service = request -> {
-            AgentChatResponse response = new AgentChatResponse();
-            response.setSessionId(request.getSessionId());
-            response.setStatus(ChatStatus.ANSWERED);
-            response.setAssistantMessage("已完成查询");
-            response.setConversationStage("ANSWERED");
-            return response;
-        };
-        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(service))
+        AgentChatResponse response = new AgentChatResponse();
+        response.setSessionId("session-v2");
+        response.setStatus(ChatStatus.ANSWERED);
+        response.setAssistantMessage("已完成查询");
+        response.setConversationStage("ANSWERED");
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(runnerReturning(response)))
             .setControllerAdvice(new AgentApiExceptionHandler()).build();
 
         Map<String, Object> envelope = Map.of(
             "contractVersion", "v2",
             "messageRequest", Map.of("sessionId", "session-v2", "clientMessageId", "message-v2", "message", "查询客户订单"),
-            "availableTools", java.util.List.of("listCustomerOrders"),
+            "availableTools", java.util.List.of("searchServiceCustomers"),
             "sessionVersion", 7
         );
 
@@ -54,7 +51,7 @@ class AgentV2ChatControllerTest {
 
     @Test
     void shouldReturnStableValidationError() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(request -> new AgentChatResponse()))
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(runnerReturning(null)))
             .setControllerAdvice(new AgentApiExceptionHandler()).build();
 
         mockMvc.perform(post("/api/agent/v2/chat").header("X-Request-Id", "invalid-v2")
@@ -69,7 +66,7 @@ class AgentV2ChatControllerTest {
 
     @Test
     void shouldRejectUnsupportedContractVersionWithoutInternalDetails() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(request -> new AgentChatResponse()))
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(runnerReturning(null)))
             .setControllerAdvice(new AgentApiExceptionHandler()).build();
 
         mockMvc.perform(post("/api/agent/v2/chat").header("X-Request-Id", "unsupported-v3")
@@ -84,7 +81,7 @@ class AgentV2ChatControllerTest {
 
     @Test
     void shouldRejectMissingTrustedMessageEnvelopeAsValidationError() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(request -> new AgentChatResponse()))
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(runnerReturning(null)))
             .setControllerAdvice(new AgentApiExceptionHandler()).build();
 
         mockMvc.perform(post("/api/agent/v2/chat").header("X-Request-Id", "missing-message")
@@ -97,7 +94,7 @@ class AgentV2ChatControllerTest {
 
     @Test
     void shouldRejectMissingTrustedAccessContextHeader() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(request -> new AgentChatResponse()))
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(runnerReturning(null)))
             .setControllerAdvice(new AgentApiExceptionHandler()).build();
 
         mockMvc.perform(post("/api/agent/v2/chat").header("X-Request-Id", "missing-access")
@@ -113,9 +110,10 @@ class AgentV2ChatControllerTest {
         String body = "{\"contractVersion\":\"v2\",\"messageRequest\":{\"sessionId\":\"session-v2\","
             + "\"clientMessageId\":\"message-v2\",\"message\":\"查询订单\"},\"availableTools\":[],\"sessionVersion\":0}";
 
-        MockMvc missingCapability = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(request -> {
-            throw new IllegalArgumentException("CAPABILITY_NOT_AVAILABLE: TEST");
-        })).setControllerAdvice(new AgentApiExceptionHandler()).build();
+        BusinessAgentRunner missingCapabilityRunner = runnerThrowing(
+            new IllegalArgumentException("CAPABILITY_NOT_AVAILABLE: TEST"));
+        MockMvc missingCapability = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(missingCapabilityRunner))
+            .setControllerAdvice(new AgentApiExceptionHandler()).build();
         missingCapability.perform(post("/api/agent/v2/chat")
                 .header("X-Request-Id", "missing-capability")
                 .header("X-Agent-Access-Context", "signed-context")
@@ -124,9 +122,9 @@ class AgentV2ChatControllerTest {
             .andExpect(jsonPath("$.code").value("CAPABILITY_NOT_AVAILABLE"))
             .andExpect(jsonPath("$.retryable").value(false));
 
-        MockMvc versionConflict = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(request -> {
-            throw new IllegalStateException("SESSION_VERSION_CONFLICT");
-        })).setControllerAdvice(new AgentApiExceptionHandler()).build();
+        BusinessAgentRunner versionConflictRunner = runnerThrowing(new IllegalStateException("SESSION_VERSION_CONFLICT"));
+        MockMvc versionConflict = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(versionConflictRunner))
+            .setControllerAdvice(new AgentApiExceptionHandler()).build();
         versionConflict.perform(post("/api/agent/v2/chat")
                 .header("X-Request-Id", "session-conflict")
                 .header("X-Agent-Access-Context", "signed-context")
@@ -134,5 +132,33 @@ class AgentV2ChatControllerTest {
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.code").value("SESSION_VERSION_CONFLICT"))
             .andExpect(jsonPath("$.retryable").value(true));
+    }
+
+    private BusinessAgentRunner runnerReturning(AgentChatResponse response) {
+        return new StubBusinessAgentRunner(response, null);
+    }
+
+    private BusinessAgentRunner runnerThrowing(RuntimeException failure) {
+        return new StubBusinessAgentRunner(null, failure);
+    }
+
+    private static final class StubBusinessAgentRunner extends BusinessAgentRunner {
+        private final AgentChatResponse response;
+        private final RuntimeException failure;
+
+        private StubBusinessAgentRunner(AgentChatResponse response, RuntimeException failure) {
+            super(null, null, null, null, null, new ObjectMapper(), null);
+            this.response = response;
+            this.failure = failure;
+        }
+
+        /** 返回测试预设结果或抛出测试预设异常。 */
+        @Override
+        public AgentChatResponse run(AgentChatRequest request) {
+            if (failure != null) {
+                throw failure;
+            }
+            return response;
+        }
     }
 }

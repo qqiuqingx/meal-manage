@@ -7,18 +7,16 @@
   triggerConditions:
     - 订单排餐模式不覆盖目标日期或餐次
   requiredTools:
-    - listCustomerOrders
+    - searchServiceCustomers
   requiredData:
-    - orders.scheduleMode
-    - orders.deliveryDates
-    - recordDate
-    - mealType
+    - items[].scheduleMode
+    - items[].deliveryDates
   decisionHints:
     - 如果 scheduleMode 为 WEEKDAY 且目标日期为周末，则不应配送。
     - 如果 scheduleMode 为 SCHEDULE，需要判断 deliveryDates 是否包含目标日期和餐次。
   evidenceFields:
-    - orders.scheduleMode
-    - orders.deliveryDates
+    - items[].scheduleMode
+    - items[].deliveryDates
   nextActions:
     - 核对订单排餐模式
     - 核对排餐任务配置

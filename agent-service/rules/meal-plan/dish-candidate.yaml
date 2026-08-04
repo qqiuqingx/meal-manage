@@ -7,16 +7,16 @@
   triggerConditions:
     - 候选菜池可用数量为0
   requiredTools:
-    - getDishCandidateDetail
+    - previewDishCandidates
   requiredData:
-    - mealPlan.candidateDishStats
+    - data.totalCandidateCount
     - recordDate
     - mealType
   decisionHints:
     - 如果候选菜数量为 0，提示核对菜单计划和父套餐配置。
   evidenceFields:
-    - mealPlan.candidateDishStats
-    - candidateDishStats.availableCount
+    - data.totalCandidateCount
+    - data.availableCandidateCount
   nextActions:
     - 核对套餐规格配置
     - 核对菜品排期
@@ -31,19 +31,20 @@
   triggerConditions:
     - 候选菜过滤前有数据且过滤后为0
   requiredTools:
-    - getCustomerProfile
-    - getDishCandidateDetail
+    - getServiceCustomerDetail
+    - previewDishCandidates
   requiredData:
-    - mealPlan.candidateDishStats.beforeFilterCount
-    - mealPlan.candidateDishStats.afterFilterCount
-    - customerProfile.allergyTags
-    - customerProfile.excludedDishIds
+    - data.totalCandidateCount
+    - data.availableCandidateCount
+    - data.filteredCandidateCount
+    - data.items
   decisionHints:
     - 如果过滤前有菜、过滤后为 0，提示重点核对过敏和忌口配置。
   evidenceFields:
-    - mealPlan.candidateDishStats
-    - customerProfile.allergyTags
-    - customerProfile.excludedDishIds
+    - data.totalCandidateCount
+    - data.availableCandidateCount
+    - data.filteredCandidateCount
+    - data.items[].filterReasons
   nextActions:
     - 核对客户忌口配置
     - 核对过敏过滤规则

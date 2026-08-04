@@ -9,6 +9,7 @@ import me.zhengjie.modules.customer.pkg.domain.SubPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import org.springframework.stereotype.Service;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -29,5 +30,15 @@ public class AgentPackageQueryServiceImpl implements AgentPackageQueryService {
         dto.setSubPackages(children.stream().map(this::sub).collect(Collectors.toList()));
         return dto;
     }
+
+    /** {@inheritDoc} */
+    @Override
+    public AgentPackageSpecDto getDetailByCode(String packageCode) {
+        if (packageCode == null || packageCode.trim().isEmpty()) return new AgentPackageSpecDto();
+        ParentPackage parent = parentPackageMapper.selectOne(new LambdaQueryWrapper<ParentPackage>()
+            .eq(ParentPackage::getPackageCode, packageCode.trim()).last("LIMIT 1"));
+        return parent == null ? new AgentPackageSpecDto() : getDetail(parent.getId());
+    }
+    /** 将子套餐实体转换为仅包含规格和启用状态的 Agent 摘要。 */
     private AgentSubPackageSpecDto sub(SubPackage source) { AgentSubPackageSpecDto dto = new AgentSubPackageSpecDto(); dto.setSubPackageId(source.getId()); dto.setSubPackageCode(source.getSubPackageCode()); dto.setSubPackageName(source.getSubPackageName()); dto.setMeatCount(source.getMeatCount()); dto.setVegCount(source.getVegCount()); dto.setIncludeSoup(source.getIncludeSoup()); dto.setIncludeRice(source.getIncludeRice()); dto.setEnabled(source.getStatus()); return dto; }
 }

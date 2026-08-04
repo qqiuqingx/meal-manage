@@ -183,7 +183,7 @@ class AgentChatSessionConcurrencyIntegrationTest {
         response.setSessionId(request.getSessionId());
         response.setExpectedSessionVersion(request.getSessionVersion());
         response.setStatus("ANSWERED");
-        response.setConversationStage("COLLECTING_SLOTS");
+        response.setConversationStage("READY");
         response.setAssistantMessage("测试响应");
         response.setSlots(slots);
         return response;

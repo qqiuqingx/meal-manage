@@ -50,6 +50,7 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
      * @param startDate 起始日期，可为空
      * @param endDate 结束日期，可为空
      * @param mealType 餐次，可为空
+     * @param orderId 订单 ID，可为空
      * @param scopedCustomerIds 当前客服受限客户集合；全量授权时为空
      * @param page 受控分页参数
      * @return 按排餐日期倒序排列的客户排餐分页
@@ -59,8 +60,27 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
                                            @Param("startDate") LocalDate startDate,
                                            @Param("endDate") LocalDate endDate,
                                            @Param("mealType") String mealType,
+                                           @Param("orderId") Long orderId,
                                            @Param("scopedCustomerIds") Set<Long> scopedCustomerIds,
                                            Page<MealPlanCustomer> page);
+
+    /**
+     * 兼容旧 Agent 查询服务的排餐分页方法；不带订单过滤时委托到统一签名。
+     *
+     * @param customerId 客户 ID
+     * @param recordDate 单日日期
+     * @param startDate 起始日期
+     * @param endDate 结束日期
+     * @param mealType 餐次
+     * @param scopedCustomerIds 客户数据范围
+     * @param page 分页参数
+     * @return 排餐客户分页
+     */
+    default Page<MealPlanCustomer> selectAgentPage(Long customerId, LocalDate recordDate, LocalDate startDate,
+                                                    LocalDate endDate, String mealType, Set<Long> scopedCustomerIds,
+                                                    Page<MealPlanCustomer> page) {
+        return selectAgentPage(customerId, recordDate, startDate, endDate, mealType, null, scopedCustomerIds, page);
+    }
 
     /**
      * 根据ID查询客户计划

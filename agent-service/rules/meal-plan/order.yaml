@@ -7,16 +7,14 @@
   triggerConditions:
     - 客户订单列表为空或无有效订单
   requiredTools:
-    - getOrderMealBalance
+    - getServiceCustomerDetail
   requiredData:
-    - orders
-    - recordDate
-    - mealType
+    - data.orders
   decisionHints:
     - 如果订单列表为空或没有有效订单，提示先核对订单状态。
   evidenceFields:
-    - orders.orderId
-    - orders.status
+    - data.orders
+    - data.orders[].status
   nextActions:
     - 核对客户有效订单
     - 核对订单录入状态
@@ -32,24 +30,20 @@
     - 诊断日期不在订单起止日期内
     - 诊断日期等于开始日期但首餐次晚于目标餐次
   requiredTools:
-    - getOrderMealBalance
+    - getServiceCustomerDetail
   requiredData:
-    - orders.startDate
-    - orders.endDate
-    - orders.mealType
-    - orders.startMealType
-    - recordDate
-    - mealType
+    - data.orders[].startDate
+    - data.orders[].endDate
+    - data.orders[].mealType
+    - data.orders[].startMealType
   decisionHints:
     - 如果 recordDate 不在订单起止日期内，则订单未生效。
     - 如果 recordDate 等于 startDate，需要继续判断 startMealType。
   evidenceFields:
-    - orders.orderId
-    - orders.startDate
-    - orders.endDate
-    - orders.startMealType
-    - order.startDate
-    - order.endDate
+    - data.orders[].orderId
+    - data.orders[].startDate
+    - data.orders[].endDate
+    - data.orders[].startMealType
   nextActions:
     - 核对订单生效时间
     - 核对订单当前状态
@@ -64,17 +58,15 @@
   triggerConditions:
     - 诊断日期晚于订单结束日期
   requiredTools:
-    - listCustomerOrders
+    - searchServiceCustomers
   requiredData:
-    - orders.orderId
-    - orders.endDate
-    - recordDate
+    - items[].orderId
+    - items[].endDate
   decisionHints:
     - 如果 recordDate 晚于 endDate，优先判断订单已过期。
   evidenceFields:
-    - orders.orderId
-    - orders.endDate
-    - order.endDate
+    - items[].orderId
+    - items[].endDate
   nextActions:
     - 核对订单结束日期
     - 确认是否需要续单或新建订单
@@ -89,17 +81,15 @@
   triggerConditions:
     - 订单 mealType 不包含目标 mealType
   requiredTools:
-    - listCustomerOrders
+    - searchServiceCustomers
   requiredData:
-    - orders.orderId
-    - orders.mealType
-    - mealType
+    - items[].orderId
+    - items[].mealType
   decisionHints:
     - 如果订单只购买早餐，则午餐或晚餐不应参与排餐。
   evidenceFields:
-    - orders.orderId
-    - orders.mealType
-    - mealType
+    - items[].orderId
+    - items[].mealType
   nextActions:
     - 核对订单餐次类型
     - 核对客户购买套餐内容
@@ -114,17 +104,16 @@
   triggerConditions:
     - 目标餐次对应餐数池剩余数为0
   requiredTools:
-    - listCustomerOrders
+    - searchServiceCustomers
   requiredData:
-    - orders.remainingCount
-    - orders.usedCount
-    - mealType
+    - items[].orderId
+    - items[].mealBalance
   decisionHints:
     - 如果 remainingCount 为 0，提示核对订单剩余餐数。
   evidenceFields:
-    - orders.orderId
-    - orders.remainingCount
-    - order.remainingCount
+    - items[].orderId
+    - items[].mealBalance.remainingBreakfast
+    - items[].mealBalance.remainingLunchDinner
   nextActions:
     - 核对订单剩余餐数
     - 核对核销记录

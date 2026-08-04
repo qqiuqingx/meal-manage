@@ -1,131 +1,70 @@
 package me.zhengjie.agent.validator;
 
-import me.zhengjie.agent.domain.dto.DiagnosisContextDto;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.domain.dto.DiagnosisEvidenceDto;
 import me.zhengjie.agent.domain.dto.DiagnosisReasonDto;
 import me.zhengjie.agent.domain.dto.DiagnosisResponse;
-import me.zhengjie.agent.rule.FileSystemRuleRegistryLoader;
+import me.zhengjie.agent.guardrail.ToolExecutionContext;
+import me.zhengjie.agent.rule.DiagnosisRule;
 import me.zhengjie.agent.rule.RuleRegistry;
 import org.junit.jupiter.api.Test;
 
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** 结构化诊断结果必须引用当前规则和本轮成功工具事实。 */
 class DiagnosisResultValidatorTest {
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /** 规则版本、必需工具和证据路径均满足时允许展示。 */
     @Test
-    void shouldAcceptValidStructuredResult() {
-        DiagnosisResultValidator validator = new DiagnosisResultValidator();
-        DiagnosisResponse response = new DiagnosisResponse();
-        response.setSummary("最可能原因是命中客户排除日期。");
-        response.setConfidence("HIGH");
-        response.setNextActions(List.of("核对客户档案停送配置"));
-        response.setReasons(List.of(reason("HIGH")));
+    void shouldAcceptRuleBackedDiagnosis() {
+        RuleRegistry registry = registry("digest-1", "getServiceCustomerDetail", "data.profile");
+        DiagnosisResultValidator validator = new DiagnosisResultValidator(objectMapper);
 
-        DiagnosisResponse validated = validator.validateOrFallback(response, context(), registry());
+        DiagnosisResponse response = response("digest-1", "CUSTOMER_NOT_FOUND", "CUSTOMER_NOT_FOUND", "data.profile");
+        ToolExecutionContext.ToolFact fact = fact("getServiceCustomerDetail", "{\"data\":{\"profile\":null}}");
 
-        assertEquals("最可能原因是命中客户排除日期。", validated.getSummary());
-        assertFalse(validated.isFallback());
+        assertTrue(validator.validate(response, registry, List.of(fact)).isEmpty());
+        assertEquals("AI_SUGGESTION", response.getReasons().get(0).getSuggestionType());
     }
 
+    /** 未成功调用规则要求的工具时必须拒绝诊断结果。 */
     @Test
-    void shouldFallbackWhenResultClaimsWriteOperation() {
-        DiagnosisResultValidator validator = new DiagnosisResultValidator();
-        DiagnosisResponse response = new DiagnosisResponse();
-        response.setSummary("已修改数据库并修复排餐。");
-        response.setConfidence("HIGH");
-        response.setNextActions(List.of("核对客户档案停送配置"));
-        response.setReasons(List.of(reason("HIGH")));
+    void shouldRejectDiagnosisWithoutRequiredTool() {
+        RuleRegistry registry = registry("digest-1", "getServiceCustomerDetail", "data.profile");
+        DiagnosisResultValidator validator = new DiagnosisResultValidator(objectMapper);
 
-        DiagnosisResponse validated = validator.validateOrFallback(response, context(), registry());
+        List<DiagnosisValidationError> errors = validator.validate(
+            response("digest-1", "CUSTOMER_NOT_FOUND", "CUSTOMER_NOT_FOUND", "data.profile"), registry, List.of());
 
-        assertTrue(validated.isFallback());
-        assertEquals("AI 诊断结果不可用，建议按固定清单人工核对。", validated.getSummary());
-        assertEquals("AI 诊断结果校验失败，需人工核对。", validated.getFallbackReason());
-    }
-
-    @Test
-    void shouldReportValidationErrorsForMissingRuleIdsEvidenceAndNextActions() {
-        DiagnosisResultValidator validator = new DiagnosisResultValidator();
-        DiagnosisResponse response = new DiagnosisResponse();
-        response.setSummary("命中客户排除日期。");
-        response.setConfidence("HIGH");
-        response.setNextActions(List.of("核对客户档案"));
-        DiagnosisReasonDto reason = new DiagnosisReasonDto();
-        reason.setCode("CUSTOMER_EXCLUDE_DATE_HIT");
-        reason.setTitle("命中客户排除日期");
-        reason.setLevel("HIGH");
-        reason.setConfidence("HIGH");
-        response.setReasons(List.of(reason));
-
-        List<DiagnosisValidationError> errors = validator.validate(response);
-
-        assertTrue(errors.stream().anyMatch(error -> "RULE_IDS_EMPTY".equals(error.getCode())));
-        assertTrue(errors.stream().anyMatch(error -> "EVIDENCE_EMPTY".equals(error.getCode())));
-        assertTrue(errors.stream().anyMatch(error -> "NEXT_ACTIONS_EMPTY".equals(error.getCode())));
-    }
-
-    @Test
-    void shouldRejectFallbackWithoutFallbackReason() {
-        DiagnosisResultValidator validator = new DiagnosisResultValidator();
-        DiagnosisResponse response = new DiagnosisResponse();
-        response.setSummary("诊断数据不完整，需人工核对。");
-        response.setConfidence("LOW");
-        response.setFallback(true);
-        response.setNextActions(List.of("核对客户档案"));
-        response.setReasons(List.of(reason("LOW")));
-
-        List<DiagnosisValidationError> errors = validator.validate(response);
-
-        assertTrue(errors.stream().anyMatch(error -> "FALLBACK_REASON_BLANK".equals(error.getCode())));
-    }
-
-    @Test
-    void shouldRejectUnknownRuleIdAndEvidenceOutsideRuleFields() {
-        DiagnosisResultValidator validator = new DiagnosisResultValidator();
-        DiagnosisResponse response = new DiagnosisResponse();
-        response.setSummary("最可能原因是命中客户排除日期。");
-        response.setConfidence("HIGH");
-        response.setNextActions(List.of("核对客户档案停送配置"));
-        DiagnosisReasonDto reason = reason("HIGH");
-        reason.setRuleIds(List.of("UNKNOWN_RULE"));
-        reason.setEvidence(List.of(new DiagnosisEvidenceDto("ruleId", "UNKNOWN_RULE")));
-        response.setReasons(List.of(reason));
-
-        List<DiagnosisValidationError> errors = validator.validate(response, registry());
-
-        assertTrue(errors.stream().anyMatch(error -> "RULE_ID_UNKNOWN".equals(error.getCode())));
-        assertTrue(errors.stream().anyMatch(error -> "EVIDENCE_LABEL_NOT_ALLOWED".equals(error.getCode())));
+        assertTrue(errors.stream().anyMatch(error -> "REQUIRED_TOOL_NOT_CALLED".equals(error.getCode())));
         assertTrue(errors.stream().anyMatch(error -> "BUSINESS_EVIDENCE_EMPTY".equals(error.getCode())));
     }
 
-    private DiagnosisReasonDto reason(String level) {
+    private RuleRegistry registry(String digest, String requiredTool, String evidenceField) {
+        DiagnosisRule rule = new DiagnosisRule();
+        rule.setRuleId("CUSTOMER_NOT_FOUND"); rule.setReasonCode("CUSTOMER_NOT_FOUND"); rule.setVersion(1);
+        rule.setRequiredTools(List.of(requiredTool)); rule.setEvidenceFields(List.of(evidenceField));
+        rule.setNextActions(List.of("核对客户档案")); rule.setOwner("test");
+        RuleRegistry registry = new RuleRegistry(); registry.setVersionDigest(digest); registry.setRules(List.of(rule));
+        return registry;
+    }
+
+    private DiagnosisResponse response(String digest, String code, String ruleId, String evidenceField) {
         DiagnosisReasonDto reason = new DiagnosisReasonDto();
-        reason.setCode("CUSTOMER_EXCLUDE_DATE_HIT");
-        reason.setTitle("命中客户排除日期");
-        reason.setLevel(level);
-        reason.setConfidence(level);
-        reason.setRuleIds(List.of("CUSTOMER_EXCLUDE_DATE_HIT"));
-        reason.setSuggestion("请先核对客户停送登记。");
-        reason.setNextActions(List.of("核对客户档案停送配置"));
-        reason.setEvidence(List.of(new DiagnosisEvidenceDto("customerProfile.excludeDates", "2026-05-17:LUNCH")));
-        return reason;
+        reason.setCode(code); reason.setTitle("客户不存在"); reason.setLevel("HIGH"); reason.setConfidence("HIGH");
+        reason.setRuleIds(List.of(ruleId)); reason.setSuggestion("核对客户档案"); reason.setNextActions(List.of("核对客户档案"));
+        reason.setEvidence(List.of(new DiagnosisEvidenceDto(evidenceField, "未命中")));
+        DiagnosisResponse response = new DiagnosisResponse(); response.setSummary("客户档案未命中"); response.setConfidence("HIGH");
+        response.setRuleVersionDigest(digest); response.setReasons(List.of(reason)); response.setNextActions(List.of("核对客户档案"));
+        return response;
     }
 
-    private RuleRegistry registry() {
-        return new FileSystemRuleRegistryLoader(Path.of("rules")).load("MEAL_PLAN_NOT_GENERATED");
-    }
-
-    private DiagnosisContextDto context() {
-        DiagnosisContextDto context = new DiagnosisContextDto();
-        context.setCustomerId(1001L);
-        context.setCustomerName("张三");
-        context.setRecordDate("2026-05-17");
-        context.setMealType("LUNCH");
-        return context;
+    private ToolExecutionContext.ToolFact fact(String name, String output) {
+        return new ToolExecutionContext.ToolFact("call-1", name, "SERVICE_CUSTOMER_DETAIL", output, true, 1);
     }
 }

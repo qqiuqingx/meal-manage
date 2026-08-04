@@ -19,6 +19,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -28,9 +29,6 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAuditService {
-    private static final int MAX_SEMANTIC_FALLBACK_REASON_LENGTH = 32;
-    private static final String LEGACY_RULE_GUARDRAIL_CONFLICT = "MODEL_CONFLICTS_WITH_RULE_GUARDRAIL";
-    private static final String RULE_GUARDRAIL_CONFLICT = "MODEL_RULE_GUARDRAIL_CONFLICT";
     private final AgentBusinessQueryAuditMapper auditMapper;
 
     /** {@inheritDoc} */
@@ -39,59 +37,24 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
         if (response == null || !isAuditable(response)) return;
         AgentBusinessQueryAudit audit = new AgentBusinessQueryAudit();
         audit.setOperator(operator); audit.setSessionId(response.getSessionId()); audit.setRequestId(response.getRequestId());
-        Map<String, Object> plan = response.getQueryPlan() == null ? Collections.emptyMap() : response.getQueryPlan();
-        audit.setQueryDomain(queryDomain(response, plan)); audit.setQueryAction(queryAction(response, plan));
+        audit.setQueryDomain(queryDomain(response)); audit.setQueryAction(queryAction(response));
         DiagnosisSlots slots = response.getSlots();
         if (slots != null) { audit.setCustomerId(slots.getCustomerId()); audit.setCustomerCode(slots.getCustomerCode()); }
-        Map<String, Object> entities = plan.get("entities") instanceof Map ? (Map<String, Object>) plan.get("entities") : Collections.emptyMap();
-        audit.setOrderId(longValue(entities.get("orderId"))); audit.setOrderCode(string(entities.get("orderCode")));
-        Object tools = plan.get("toolNames"); audit.setToolNames(JSON.toJSONString(tools instanceof List ? tools : Collections.emptyList()));
-        audit.setResultCount(resultCount(response.getInsightResult())); audit.setCached(response.isCached()); audit.setPartial(response.isPartial());
+        audit.setOrderId(slots == null ? null : slots.getOrderId());
+        audit.setOrderCode(slots == null ? null : slots.getOrderCode());
+        audit.setToolNames(JSON.toJSONString(toolNames(response)));
+        audit.setResultCount(resultCount(response)); audit.setCached(response.isCached()); audit.setPartial(response.isPartial());
         audit.setFailureType(resolveFailureType(response));
-        Map<String, Object> semanticTrace = response.getSemanticTraceSummary() == null
-            ? Collections.emptyMap() : response.getSemanticTraceSummary();
-        audit.setAnalysisSource(firstNonBlank(string(semanticTrace.get("semanticSource")), string(plan.get("analysisSource"))));
-        audit.setAnalysisConfidence(semanticTrace.get("semanticConfidence") == null
-            ? doubleValue(plan.get("analysisConfidence")) : doubleValue(semanticTrace.get("semanticConfidence")));
-        audit.setSemanticFallbackReason(normalizeSemanticFallbackReason(semanticTrace.get("fallbackReason")));
-        audit.setSemanticCatalogVersion(string(semanticTrace.get("semanticCatalogVersion")));
-        audit.setTemporalExpression(string(semanticTrace.get("temporalExpression")));
-        audit.setResolvedRecordDate(string(semanticTrace.get("resolvedRecordDate")));
-        audit.setResolvedStartDate(string(semanticTrace.get("resolvedStartDate")));
-        audit.setResolvedEndDate(string(semanticTrace.get("resolvedEndDate")));
-        audit.setPendingContextReused(Boolean.TRUE.equals(semanticTrace.get("pendingContextReused")));
+        audit.setAnalysisSource(hasToolFacts(response) ? "LLM_TOOL_CALLING" : null);
+        audit.setResolvedRecordDate(slots == null ? null : slots.getRecordDate());
+        audit.setResolvedStartDate(slots == null ? null : slots.getStartDate());
+        audit.setResolvedEndDate(slots == null ? null : slots.getEndDate());
         audit.setClarificationRequired("NEED_MORE_INFO".equals(response.getStatus()));
-        audit.setMetricCodes(JSON.toJSONString(list(plan.get("metrics")))); audit.setDimensionCodes(JSON.toJSONString(list(plan.get("dimensions"))));
+        audit.setMetricCodes(JSON.toJSONString(extractCodes(response, "metric")));
+        audit.setDimensionCodes(JSON.toJSONString(extractCodes(response, "dimension")));
         audit.setUnsupportedReason(unsupportedReason(response)); audit.setAnswerValidationResult(answerValidationResult(response));
-        audit.setUnderstandingSchemaVersion("1.0"); audit.setInteractionMode(string(semanticTrace.get("interactionMode")));
-        audit.setSemanticFrameCount(response.getActiveTaskStack() == null ? 0 : 1);
-        audit.setReferenceResolution(string(semanticTrace.get("referenceResolution")));
-        audit.setConfidenceBucket(string(semanticTrace.get("confidenceBucket")));
-        audit.setClarificationCode("NEED_MORE_INFO".equals(response.getStatus()) ? response.getResponseType() : null);
         audit.setCostMs(Math.max(0, costMs)); audit.setCreateTime(new Timestamp(System.currentTimeMillis()));
         auditMapper.insert(audit);
-    }
-
-    /** 返回首个非空追踪值，兼容升级前仅在 QueryPlan 中记录来源的响应。 */
-    private String firstNonBlank(String first, String second) {
-        return first == null || first.trim().isEmpty() ? second : first;
-    }
-
-    /**
-     * 将语义降级原因收敛为数据库允许的稳定码，并兼容已发布 Agent 返回的旧冲突码。
-     *
-     * @param value Agent 返回的降级原因
-     * @return 最长 32 位的稳定原因码；非法值统一记为 MODEL_INVALID
-     */
-    private String normalizeSemanticFallbackReason(Object value) {
-        String reason = string(value);
-        if (reason == null || reason.trim().isEmpty()) return null;
-        reason = reason.trim();
-        if (LEGACY_RULE_GUARDRAIL_CONFLICT.equals(reason)) return RULE_GUARDRAIL_CONFLICT;
-        if (reason.length() > MAX_SEMANTIC_FALLBACK_REASON_LENGTH || !reason.matches("[A-Z][A-Z0-9_]*")) {
-            return "MODEL_INVALID";
-        }
-        return reason;
     }
 
     /**
@@ -126,8 +89,6 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
         long clarificationRequiredCount = audits.stream().filter(item -> Boolean.TRUE.equals(item.getClarificationRequired())).count();
         long answerValidationRejectedCount = audits.stream().filter(item -> "REJECTED".equals(item.getAnswerValidationResult())).count();
         long directAnswerCount = audits.stream().filter(this::isDirectAnswer).count();
-        long semanticFallbackCount = audits.stream().filter(item -> "RULE_FALLBACK".equals(item.getAnalysisSource())).count();
-        long pendingContextReuseCount = audits.stream().filter(item -> Boolean.TRUE.equals(item.getPendingContextReused())).count();
         stats.setQueryCount(queryCount);
         stats.setPartialCount(partialCount);
         stats.setPartialRate(rate(partialCount, queryCount));
@@ -143,10 +104,6 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
         stats.setDirectAnswerCount(directAnswerCount);
         stats.setDirectAnswerRate(rate(directAnswerCount, queryCount));
         stats.setClarificationSuccessRate(clarificationSuccessRate(audits));
-        stats.setSemanticFallbackCount(semanticFallbackCount);
-        stats.setSemanticFallbackRate(rate(semanticFallbackCount, queryCount));
-        stats.setPendingContextReuseCount(pendingContextReuseCount);
-        stats.setPendingContextReuseRate(rate(pendingContextReuseCount, queryCount));
         List<Long> costs = audits.stream().map(AgentBusinessQueryAudit::getCostMs)
             .filter(Objects::nonNull).collect(Collectors.toList());
         stats.setAverageCostMs(costs.stream().mapToLong(Long::longValue).average().orElse(0D));
@@ -157,8 +114,6 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
         stats.setMetricDistribution(metricDistribution(audits));
         stats.setFailureTypeDistribution(distribution(audits.stream().map(AgentBusinessQueryAudit::getFailureType).collect(Collectors.toList())));
         stats.setUnsupportedReasonDistribution(distribution(audits.stream().map(AgentBusinessQueryAudit::getUnsupportedReason).collect(Collectors.toList())));
-        stats.setSemanticSourceDistribution(distribution(audits.stream().map(AgentBusinessQueryAudit::getAnalysisSource).collect(Collectors.toList())));
-        stats.setSemanticFallbackReasonDistribution(distribution(audits.stream().map(AgentBusinessQueryAudit::getSemanticFallbackReason).collect(Collectors.toList())));
         return stats;
     }
 
@@ -184,13 +139,75 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
             .orderByDesc(AgentBusinessQueryAudit::getCreateTime);
     }
 
-    private int resultCount(Map<String, Object> result) { Object total = result == null ? null : result.get("total"); return total instanceof Number ? ((Number) total).intValue() : 0; }
-    private String string(Object value) { return value == null ? null : String.valueOf(value); }
-    private Long longValue(Object value) { return value instanceof Number ? ((Number) value).longValue() : null; }
-    private Double doubleValue(Object value) { return value instanceof Number ? ((Number) value).doubleValue() : null; }
-    private List<?> list(Object value) { return value instanceof List ? (List<?>) value : Collections.emptyList(); }
+    /** 从工具追踪或事实摘要计算本轮结果数量，不读取模型自然语言答案。 */
+    private int resultCount(AgentChatResponse response) {
+        int total = 0;
+        if (response.getToolTraceSummary() != null) {
+            for (Map<String, Object> trace : response.getToolTraceSummary()) {
+                Object count = trace == null ? null : trace.get("resultCount");
+                if (count instanceof Number) total += Math.max(0, ((Number) count).intValue());
+            }
+        }
+        if (total > 0 || response.getToolFacts() == null) return total;
+        for (Map<String, Object> fact : response.getToolFacts()) {
+            Object data = fact == null ? null : fact.get("data");
+            total += resultCountFromData(data);
+        }
+        return total;
+    }
+
+    /** 解析受控事实中的 total/items，单对象结果按一条计数。 */
+    @SuppressWarnings("unchecked")
+    private int resultCountFromData(Object data) {
+        if (!(data instanceof Map)) return data == null ? 0 : 1;
+        Map<String, Object> values = (Map<String, Object>) data;
+        Object total = values.get("total");
+        if (total instanceof Number) return Math.max(0, ((Number) total).intValue());
+        Object items = values.get("items");
+        return items instanceof List ? ((List<?>) items).size() : 1;
+    }
+
+    /** 提取工具追踪中的唯一工具名称，作为审计摘要而非路由依据。 */
+    private List<String> toolNames(AgentChatResponse response) {
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        if (response.getToolTraceSummary() != null) {
+            for (Map<String, Object> trace : response.getToolTraceSummary()) {
+                if (trace != null && trace.get("toolName") != null) names.add(String.valueOf(trace.get("toolName")));
+            }
+        }
+        return new ArrayList<>(names);
+    }
+
+    /** 判断响应是否包含统一工具事实。 */
+    private boolean hasToolFacts(AgentChatResponse response) {
+        return response.getCards() != null && !response.getCards().isEmpty()
+            || response.getToolFacts() != null && !response.getToolFacts().isEmpty()
+            || response.getToolTraceSummary() != null && !response.getToolTraceSummary().isEmpty();
+    }
+
+    /** 从工具事实提取受控指标或维度代码，避免把自由文本写入运营审计。 */
+    @SuppressWarnings("unchecked")
+    private List<String> extractCodes(AgentChatResponse response, String fieldName) {
+        LinkedHashSet<String> codes = new LinkedHashSet<>();
+        if (response.getToolFacts() == null) return new ArrayList<>();
+        for (Map<String, Object> fact : response.getToolFacts()) {
+            Object data = fact == null ? null : fact.get("data");
+            if (!(data instanceof Map)) continue;
+            Object value = ((Map<String, Object>) data).get(fieldName);
+            if (value instanceof String && ((String) value).matches("[A-Z][A-Z0-9_]{1,63}")) codes.add((String) value);
+            if (value instanceof List) {
+                for (Object item : (List<?>) value) {
+                    if (item != null && String.valueOf(item).matches("[A-Z][A-Z0-9_]{1,63}")) codes.add(String.valueOf(item));
+                }
+            }
+        }
+        return new ArrayList<>(codes);
+    }
+    /** 将审计分页页码归一化为非负值。 */
     private int normalizePage(Integer page) { return page == null || page < 0 ? 0 : page; }
+    /** 将审计分页大小归一化到 1 到 100。 */
     private int normalizeSize(Integer size) { return size == null || size < 1 ? 10 : Math.min(size, 100); }
+    /** 计算统计比例，分母为空时返回零。 */
     private double rate(long numerator, long denominator) { return denominator == 0 ? 0D : numerator * 1D / denominator; }
     /** 判断一轮是否无需澄清且未以失败/部分结果降级的完整业务回答。 */
     private boolean isDirectAnswer(AgentBusinessQueryAudit audit) {
@@ -216,33 +233,46 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
     }
     private boolean isBlank(String value) { return value == null || value.trim().isEmpty(); }
 
-    /**
-     * 为尚未生成 QueryPlan 的受控澄清或拒绝响应写入可聚合的稳定领域值。
-     * 这类响应不执行业务工具，但仍须审计，不能因数据库非空约束中断客服会话。
-     */
-    private String queryDomain(AgentChatResponse response, Map<String, Object> plan) {
-        String domain = string(plan.get("domain"));
-        if (!isBlank(domain)) return domain;
+    /** 根据成功工具输出的卡片类型写入稳定审计领域，不参与工具选择。 */
+    private String queryDomain(AgentChatResponse response) {
         if ("OUT_OF_SCOPE".equals(response.getStatus())) return "OUT_OF_SCOPE";
-        String responseType = response.getResponseType();
-        if (responseType != null && responseType.contains("OPERATION")) return "OPERATION_STATISTICS";
+        String type = firstCardType(response);
+        if (type.startsWith("METRIC")) return "OPERATION_STATISTICS";
+        if (type.startsWith("CUSTOMER") || type.startsWith("SERVICE_CUSTOMER")) return "CUSTOMER";
+        if (type.startsWith("MEAL_PLAN")) return "MEAL_PLAN";
+        if (type.startsWith("VERIFICATION")) return "VERIFICATION";
+        if (type.startsWith("REFUND")) return "REFUND";
+        if (type.startsWith("DISH")) return "DISH";
+        if (type.startsWith("PACKAGE")) return "PACKAGE";
+        if (type.startsWith("DIAGNOSIS")) return "MEAL_PLAN_DIAGNOSIS";
         return "BUSINESS_QUERY";
     }
 
-    /** 为尚未生成 QueryPlan 的受控澄清或拒绝响应写入稳定动作值。 */
-    private String queryAction(AgentChatResponse response, Map<String, Object> plan) {
-        String action = string(plan.get("action"));
-        if (!isBlank(action)) return action;
+    /** 根据状态和卡片类型写入稳定审计动作，不保留模型查询计划。 */
+    private String queryAction(AgentChatResponse response) {
         if ("OUT_OF_SCOPE".equals(response.getStatus())) return "REJECT";
-        if (response.getResponseType() != null && response.getResponseType().contains("CLARIFICATION")) return "CLARIFY";
+        if ("NEED_MORE_INFO".equals(response.getStatus())) return "CLARIFY";
+        if (firstCardType(response).contains("DETAIL")) return "DETAIL";
+        if (firstCardType(response).contains("LIST")) return "LIST";
         return "SUMMARY";
+    }
+
+    /** 返回首张卡片类型；无卡片的澄清和失败响应返回空串。 */
+    private String firstCardType(AgentChatResponse response) {
+        if (response.getCards() == null || response.getCards().isEmpty()) return "";
+        Object type = response.getCards().get(0).get("type");
+        return type == null ? "" : String.valueOf(type).toUpperCase(java.util.Locale.ROOT);
     }
 
     /** 优先记录工具返回的稳定失败码，避免部分回答被 ANSWERED 状态掩盖。 */
     private String resolveFailureType(AgentChatResponse response) {
         if (response.getWarnings() != null) for (String warning : response.getWarnings()) {
             if (!isBlank(warning) && (warning.startsWith("TOOL_") || warning.startsWith("AGENT_QUERY_")
-                || warning.startsWith("PLAN_") || warning.startsWith("BUSINESS_QUERY_"))) return warning;
+                || warning.startsWith("BUSINESS_QUERY_"))) return warning;
+            if (!isBlank(warning) && warning.contains(":")) {
+                String suffix = warning.substring(warning.lastIndexOf(':') + 1);
+                if (suffix.matches("[A-Z][A-Z0-9_]{2,63}")) return suffix;
+            }
         }
         return response.getStatus() != null && !"ANSWERED".equals(response.getStatus()) ? response.getStatus() : null;
     }
@@ -250,32 +280,37 @@ public class AgentBusinessQueryAuditServiceImpl implements AgentBusinessQueryAud
     /** 统计工具白名单拒绝和主系统权限拒绝，供运营看板展示。 */
     private boolean isPermissionDenied(String failureType) {
         return "TOOL_PERMISSION_DENIED".equals(failureType) || "AGENT_QUERY_ACCESS_DENIED".equals(failureType)
-            || "AGENT_QUERY_UNAUTHORIZED".equals(failureType);
+            || "AGENT_QUERY_UNAUTHORIZED".equals(failureType) || "TOOL_ACCESS_DENIED".equals(failureType);
     }
 
-    /** 仅记录业务查询、澄清和拒绝，排餐诊断仍使用原有诊断审计表。 */
+    /** 仅记录统一工具事实、澄清、部分结果和拒绝，避免把闲聊写入业务审计。 */
     private boolean isAuditable(AgentChatResponse response) {
-        if (response.getResponseType() != null && response.getResponseType().startsWith("BUSINESS_QUERY")) return true;
-        return "OUT_OF_SCOPE".equals(response.getStatus());
+        return hasToolFacts(response) || response.isPartial() || "OUT_OF_SCOPE".equals(response.getStatus())
+            || "NEED_MORE_INFO".equals(response.getStatus()) || "ERROR".equals(response.getStatus());
     }
 
+    /** 从响应告警中提取稳定的不可用或澄清原因。 */
     private String unsupportedReason(AgentChatResponse response) {
-        if (response.getResponseType() != null && response.getResponseType().contains("CLARIFICATION")) return "CLARIFICATION_REQUIRED";
+        if ("NEED_MORE_INFO".equals(response.getStatus())) return "CLARIFICATION_REQUIRED";
         return "OUT_OF_SCOPE".equals(response.getStatus()) ? "OUT_OF_SCOPE" : null;
     }
 
+    /** 根据回答护栏告警计算审计中的回答校验状态。 */
     private String answerValidationResult(AgentChatResponse response) {
-        if (response.getWarnings() != null && response.getWarnings().stream().anyMatch(value -> "PLAN_RESULT_MISMATCH".equals(value)
-            || value != null && value.contains("回答安全校验"))) return "REJECTED";
+        if (response.getWarnings() != null && response.getWarnings().stream().anyMatch(value -> value != null
+            && (value.contains("SENSITIVE_DATA_REJECTED") || value.contains("UNTRUSTED_TEXT_REJECTED")
+            || value.contains("WRITE_OPERATION_CLAIM_REJECTED") || value.contains("ANSWER_")))) return "REJECTED";
         return response.isPartial() ? "PARTIAL" : "VALID";
     }
 
+    /** 对非空业务代码执行稳定频次聚合。 */
     private Map<String, Long> distribution(List<String> values) {
         Map<String, Long> result = new LinkedHashMap<>();
         values.stream().filter(value -> !isBlank(value)).forEach(value -> result.put(value, result.getOrDefault(value, 0L) + 1));
         return result;
     }
 
+    /** 统计审计记录中的工具调用频次。 */
     private Map<String, Long> toolDistribution(List<AgentBusinessQueryAudit> audits) {
         List<String> tools = new ArrayList<>();
         for (AgentBusinessQueryAudit audit : audits) {

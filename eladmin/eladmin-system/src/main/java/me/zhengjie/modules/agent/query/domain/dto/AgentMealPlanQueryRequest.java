@@ -2,15 +2,23 @@ package me.zhengjie.modules.agent.query.domain.dto;
 
 import lombok.Data;
 
+import javax.validation.constraints.Max;
+import javax.validation.constraints.Min;
+import javax.validation.constraints.Pattern;
+import javax.validation.constraints.Size;
+
 /** Agent 客户排餐受控查询请求。 */
 @Data
 public class AgentMealPlanQueryRequest {
-    /** 客户 ID；范围查询不允许携带该字段。 */ private Long customerId;
-    /** 排餐日期（yyyy-MM-dd），为空时不限制单日。 */ private String recordDate;
-    /** 排餐起始日期（yyyy-MM-dd），可单独使用；为空时不限制下界。 */ private String startDate;
-    /** 排餐结束日期（yyyy-MM-dd），可单独使用；为空时不限制上界。 */ private String endDate;
-    /** 餐次（BREAKFAST/LUNCH/DINNER），为空时查询全部餐次。 */ private String mealType;
-    /** 客户排餐记录 ID，提供时优先精确查询。 */ private Long customerMealPlanId;
-    /** 页码，从 1 开始；为空时默认为 1。 */ private Integer page;
-    /** 单页条数，范围查询最大 50。 */ private Integer size;
+    /** 客户 ID；范围查询不允许携带该字段。 */ @Min(1) private Long customerId;
+    /** 客户编号；统一 Agent 接口在主系统内解析为客户 ID。 */ @Size(max = 64) private String customerCode;
+    /** 订单 ID；用于以服务客户为根过滤排餐。 */ @Min(1) private Long orderId;
+    /** 订单编号；统一 Agent 接口在主系统内解析为订单 ID。 */ @Size(max = 64) private String orderCode;
+    /** 排餐日期（yyyy-MM-dd），为空时不限制单日。 */ @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}") private String recordDate;
+    /** 排餐起始日期（yyyy-MM-dd），可单独使用；为空时不限制下界。 */ @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}") private String startDate;
+    /** 排餐结束日期（yyyy-MM-dd），可单独使用；为空时不限制上界。 */ @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}") private String endDate;
+    /** 餐次（BREAKFAST/LUNCH/DINNER），为空时查询全部餐次。 */ @Pattern(regexp = "BREAKFAST|LUNCH|DINNER") private String mealType;
+    /** 客户排餐记录 ID，提供时优先精确查询。 */ @Min(1) private Long customerMealPlanId;
+    /** 页码，从 1 开始；为空时默认为 1。 */ @Min(1) private Integer page;
+    /** 单页条数，范围查询最大 50。 */ @Min(1) @Max(50) private Integer size;
 }

@@ -4,8 +4,6 @@ import lombok.RequiredArgsConstructor;
 import me.zhengjie.modules.agent.client.AgentServiceClient;
 import me.zhengjie.modules.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
-import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisRequest;
-import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
 import me.zhengjie.modules.agent.service.AgentDiagnosisFacadeService;
 import me.zhengjie.modules.agent.service.AgentOperationStatsService;
 import me.zhengjie.modules.agent.security.AgentAccessContext;
@@ -24,14 +22,6 @@ public class AgentDiagnosisFacadeServiceImpl implements AgentDiagnosisFacadeServ
     private final AgentOperationStatsService operationStatsService;
     private final AgentAccessContextService accessContextService;
     private final AgentQueryPermissionService queryPermissionService;
-
-    @Override
-    public AgentDiagnosisResponse diagnoseMealPlan(AgentDiagnosisRequest request) {
-        long start = System.currentTimeMillis();
-        AgentDiagnosisResponse response = agentServiceClient.diagnoseMealPlan(request);
-        operationStatsService.recordDiagnosis(response, null, System.currentTimeMillis() - start);
-        return response;
-    }
 
     /** {@inheritDoc} */
     @Override

@@ -6,18 +6,36 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
- * Agent 工具权限校验实现；入口权限和工具业务权限必须同时满足。
+ * Agent 工具权限校验实现。
+ *
+ * <p>入口权限、业务权限和工具白名单分别校验；模型只会收到当前上下文实际允许的
+ * 12 个统一只读工具名称，不保留旧工具别名或旧权限组合兼容分支。</p>
  */
 @Service
 public class DefaultAgentQueryPermissionService implements AgentQueryPermissionService {
 
     private static final String AGENT_ENTRY_PERMISSION = "agentDiagnosis:list";
     private static final String ADMIN_PERMISSION = "admin";
+    private static final List<ToolDefinition> TOOL_DEFINITIONS = Collections.unmodifiableList(Arrays.asList(
+        new ToolDefinition("searchCustomerProfiles", "customerProfile:list"),
+        new ToolDefinition("searchServiceCustomers", "customerOrder:list"),
+        new ToolDefinition("getServiceCustomerDetail", "customerProfile:list", "customerOrder:list"),
+        new ToolDefinition("listMealPlans", "mealPlan:list"),
+        new ToolDefinition("listVerifications", "mealVerification:list"),
+        new ToolDefinition("listRefunds", "mealRefund:list"),
+        new ToolDefinition("previewDishCandidates", "customerProfile:list", "customerOrder:list", "package:list", "dish:list"),
+        new ToolDefinition("listScheduledDishes", "mealPlan:list", "dish:list"),
+        new ToolDefinition("searchDishes", "dish:list"),
+        new ToolDefinition("getPackageDetail", "package:list"),
+        new ToolDefinition("queryBusinessMetrics"),
+        new ToolDefinition("explainBusinessRule", AGENT_ENTRY_PERMISSION)
+    ));
 
     /** {@inheritDoc} */
     @Override
@@ -25,93 +43,74 @@ public class DefaultAgentQueryPermissionService implements AgentQueryPermissionS
         if (isAdministrator(context)) {
             return;
         }
-        if (context == null || context.getPermissions() == null || !context.getPermissions().contains(AGENT_ENTRY_PERMISSION)) {
+        if (!has(context, AGENT_ENTRY_PERMISSION)) {
             throw denied();
         }
-        if (requiredPermissions != null && Arrays.stream(requiredPermissions)
-                .anyMatch(permission -> permission != null && !context.getPermissions().contains(permission))) {
-            throw denied();
+        if (requiredPermissions != null) {
+            for (String permission : requiredPermissions) {
+                if (permission != null && !has(context, permission)) {
+                    throw denied();
+                }
+            }
         }
     }
 
     /** {@inheritDoc} */
     @Override
     public List<String> availableToolNames(AgentAccessContext context) {
-        if (isAdministrator(context)) {
-            return List.of("resolveCustomer", "customerOverview", "listOrders", "orderDetail", "listMealPlans",
-                "listVerifications", "listRefunds", "packageDetail", "listDishes", "listScheduledDishes", "previewDishCandidates", "explainRule",
-                "getDailyCustomerWorkload", "getCustomerProfileCount", "getActiveCustomerSummary", "getActiveOrderSummary",
-                "listActiveCustomerMealBalances", "getExpiringOrderSummary", "getMealPlanFailureSummary");
+        if (context == null || !isAdministrator(context) && !has(context, AGENT_ENTRY_PERMISSION)) {
+            return Collections.emptyList();
         }
-        if (context == null || context.getPermissions() == null || !context.getPermissions().contains(AGENT_ENTRY_PERMISSION)) {
-            return List.of();
+        List<String> result = new ArrayList<>();
+        for (ToolDefinition definition : TOOL_DEFINITIONS) {
+            if (isAdministrator(context) || canUse(context, definition)) {
+                result.add(definition.name);
+            }
         }
-        List<String> tools = new ArrayList<>();
-        if (has(context, "customerProfile:list")) {
-            tools.add("resolveCustomer");
-        }
-        if (has(context, "customerProfile:list") && has(context, "customerOrder:list")) {
-            tools.add("customerOverview");
-        }
-        if (has(context, "customerOrder:list")) {
-            tools.add("listOrders");
-            tools.add("orderDetail");
-        }
-        if (has(context, "customerProfile:list")) {
-            tools.add("getCustomerProfileCount");
-        }
-        if (has(context, "mealPlan:list")) {
-            tools.add("listMealPlans");
-            tools.add("listVerifications");
-        }
-        if (has(context, "customerOrder:list") && has(context, "mealPlan:list")) {
-            tools.add("listRefunds");
-        }
-        if (has(context, "package:list")) {
-            tools.add("packageDetail");
-        }
-        if (has(context, "dish:list")) {
-            tools.add("listDishes");
-        }
-        if (has(context, "mealPlan:list") && has(context, "dish:list")) {
-            tools.add("listScheduledDishes");
-        }
-        if (has(context, "mealPlan:list")) {
-            tools.add("getDailyCustomerWorkload");
-            tools.add("getMealPlanFailureSummary");
-        }
-        if (has(context, "customerOrder:list")) {
-            tools.add("getActiveCustomerSummary");
-            tools.add("getActiveOrderSummary");
-            tools.add("listActiveCustomerMealBalances");
-            tools.add("getExpiringOrderSummary");
-        }
-        if (has(context, "customerProfile:list") && has(context, "customerOrder:list") && has(context, "package:list") && has(context, "dish:list")) {
-            tools.add("previewDishCandidates");
-        }
-        tools.add("explainRule");
-        return tools;
+        return result;
     }
 
-    /** 判断上下文是否具备单项业务权限。 */
+    /** 判断一个统一工具的全部业务权限是否满足。 */
+    private boolean canUse(AgentAccessContext context, ToolDefinition definition) {
+        if ("queryBusinessMetrics".equals(definition.name)) {
+            return has(context, "customerProfile:list")
+                || has(context, "customerOrder:list")
+                || has(context, "mealPlan:list");
+        }
+        for (String permission : definition.permissions) {
+            if (!has(context, permission)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** 判断权限集合是否包含指定权限；权限别名不参与授权。 */
     private boolean has(AgentAccessContext context, String permission) {
-        return context.getPermissions().contains(permission);
+        return context != null && context.getPermissions() != null
+            && context.getPermissions().contains(permission);
     }
 
-    /**
-     * 判断是否为系统管理员。
-     *
-     * 管理员登录态只会携带 {@code admin} 权限，不会展开角色菜单权限；因此 Agent 内部只读查询
-     * 需要在这里显式识别管理员，避免被工具白名单预过滤或内部接口鉴权拒绝。
-     *
-     * @param context 已签名的客服访问上下文
-     * @return 当前上下文包含管理员权限时返回 {@code true}
-     */
+    /** 判断是否为系统管理员。 */
     private boolean isAdministrator(AgentAccessContext context) {
-        return context != null && context.getPermissions() != null && context.getPermissions().contains(ADMIN_PERMISSION);
+        return context != null && context.getPermissions() != null
+            && context.getPermissions().contains(ADMIN_PERMISSION);
     }
 
+    /** 生成不暴露内部权限细节的拒绝异常。 */
     private ResponseStatusException denied() {
         return new ResponseStatusException(HttpStatus.FORBIDDEN, "Agent business query permission denied");
+    }
+
+    /** 工具名和所需业务权限的不可变登记项。 */
+    private static final class ToolDefinition {
+        private final String name;
+        private final List<String> permissions;
+
+        /** 创建工具与主系统业务权限的固定映射定义。 */
+        private ToolDefinition(String name, String... permissions) {
+            this.name = name;
+            this.permissions = Arrays.asList(permissions);
+        }
     }
 }

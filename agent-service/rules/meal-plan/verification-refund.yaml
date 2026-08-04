@@ -7,17 +7,17 @@
   triggerConditions:
     - mealRefunds 存在目标订单或客户相关记录
   requiredTools:
-    - listMealRefunds
+    - listRefunds
   requiredData:
-    - mealRefunds.orderId
-    - mealRefunds.refundReason
+    - items[].orderId
+    - items[].reason
   decisionHints:
     - 如果退餐日志覆盖目标订单，提示核对退餐原因和退餐数量。
   evidenceFields:
-    - mealRefunds.orderId
-    - mealRefunds.refundReason
-    - mealRefunds.refundBreakfastCount
-    - mealRefunds.refundLunchDinnerCount
+    - items[].orderId
+    - items[].reason
+    - items[].breakfastCount
+    - items[].lunchDinnerCount
   nextActions:
     - 核对退餐或停餐记录
     - 核对订单剩余餐数是否已扣减
@@ -32,19 +32,19 @@
   triggerConditions:
     - verificationLogs 统计数量导致对应餐数池剩余为0
   requiredTools:
-    - listVerificationLogs
-    - getOrderMealBalance
+    - listVerifications
+    - getServiceCustomerDetail
   requiredData:
-    - verificationLogs.orderId
-    - verificationLogs.mealType
-    - order.remainingCount
+    - items[].orderId
+    - items[].mealType
+    - data.orders[].mealBalance
   decisionHints:
     - 如果午餐和晚餐共享餐数池被核销耗尽，提示核对核销日志和剩余餐数。
   evidenceFields:
-    - verificationLogs.orderId
-    - verificationLogs.mealType
-    - verificationLogs.verificationCount
-    - order.remainingCount
+    - items[].orderId
+    - items[].mealType
+    - items[].count
+    - data.orders[].mealBalance.remainingLunchDinner
   nextActions:
     - 核对核销记录
     - 核对订单餐数池余额

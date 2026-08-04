@@ -1,11 +1,13 @@
 package me.zhengjie.modules.agent.query.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerAddressDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerCandidateDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerOverviewDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerProfileDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerPackageDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentListResultDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentOrderMealBalanceDto;
@@ -52,6 +54,7 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
     @Override
     public AgentListResultDto<AgentCustomerCandidateDto> resolve(Long customerId, String customerCode, String customerName) {
         AgentListResultDto<AgentCustomerCandidateDto> result = new AgentListResultDto<>();
+        if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND) return result;
         LambdaQueryWrapper<CustomerProfile> wrapper = new LambdaQueryWrapper<>();
         if (customerId != null && customerId > 0) wrapper.eq(CustomerProfile::getId, customerId);
         else if (hasText(customerCode)) wrapper.eq(CustomerProfile::getCustomerCode, customerCode.trim());
@@ -72,6 +75,55 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
         log.info("Agent客户解析完成 candidateCount={} scopeStatus={} scopeSize={}",
             result.getTotal(), AgentCustomerDataScopeContext.status(), scopedCustomerIds == null ? -1 : scopedCustomerIds.size());
         return result;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public AgentListResultDto<AgentCustomerProfileDto> searchProfiles(Long customerId, String customerCode,
+                                                                       String customerName, Boolean hasOrder,
+                                                                       int page, int size) {
+        AgentListResultDto<AgentCustomerProfileDto> result = new AgentListResultDto<>();
+        if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND) {
+            return result;
+        }
+        Set<Long> scopedCustomerIds = AgentCustomerDataScopeContext.customerIds();
+        if (scopedCustomerIds != null && scopedCustomerIds.isEmpty()) return result;
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 20);
+        LambdaQueryWrapper<CustomerProfile> wrapper = new LambdaQueryWrapper<CustomerProfile>()
+            .eq(customerId != null, CustomerProfile::getId, customerId)
+            .eq(hasText(customerCode), CustomerProfile::getCustomerCode, trim(customerCode))
+            .like(hasText(customerName), CustomerProfile::getCustomerName, trim(customerName))
+            .in(scopedCustomerIds != null, CustomerProfile::getId, scopedCustomerIds)
+            .orderByDesc(CustomerProfile::getId);
+        if (Boolean.TRUE.equals(hasOrder)) {
+            wrapper.apply("EXISTS (SELECT 1 FROM customer_order co WHERE co.customer_id = customer_profile.id)");
+        } else if (Boolean.FALSE.equals(hasOrder)) {
+            wrapper.apply("NOT EXISTS (SELECT 1 FROM customer_order co WHERE co.customer_id = customer_profile.id)");
+        }
+        Page<CustomerProfile> profilePage = customerProfileMapper.selectPage(new Page<>(safePage, safeSize), wrapper);
+        List<CustomerProfile> profiles = profilePage == null || profilePage.getRecords() == null
+            ? Collections.emptyList() : profilePage.getRecords();
+        result.setTotal(profilePage == null ? 0L : profilePage.getTotal());
+        result.setPage(safePage);
+        result.setSize(safeSize);
+        result.setTruncated((long) safePage * safeSize < result.getTotal());
+        result.setItems(profiles.stream().map(this::profileSummary).collect(Collectors.toList()));
+        result.setQueriedAt(java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Shanghai")).toOffsetDateTime().toString());
+        return result;
+    }
+
+    /** 将客户档案实体裁剪为不含原始个人信息的统一搜索摘要。 */
+    private AgentCustomerProfileDto profileSummary(CustomerProfile profile) {
+        AgentCustomerProfileDto dto = new AgentCustomerProfileDto();
+        dto.setCustomerId(profile.getId());
+        dto.setCustomerCode(profile.getCustomerCode());
+        dto.setMaskedName(maskName(profile.getCustomerName()));
+        dto.setMaskedPhone(maskPhone(profile.getPhone()));
+        dto.setCreateTime(profile.getCreateTime());
+        dto.setHasOrder(customerOrderMapper.selectCount(new LambdaQueryWrapper<CustomerOrder>()
+            .eq(CustomerOrder::getCustomerId, profile.getId())) > 0);
+        return dto;
     }
 
     /**
@@ -163,6 +215,7 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
         if (refunds != null && !refunds.isEmpty()) overview.setLatestRefund(refunds.get(0));
     }
 
+    /** 填充客户订单总数、进行中餐数余额及每笔订单套餐摘要。 */
     private void fillOrderSummary(AgentCustomerOverviewDto overview) {
         AgentListResultDto<AgentOrderSummaryDto> orders = agentOrderQueryService.listForOverview(overview.getCustomerId());
         overview.setTotalOrderCount((int) Math.min(orders.getTotal(), Integer.MAX_VALUE));
@@ -201,6 +254,7 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
         return dto;
     }
 
+    /** 查询指定客户地址并转换为脱敏地址 DTO。 */
     private List<AgentCustomerAddressDto> loadAddresses(Long customerId) {
         return customerProfileAddressMapper.selectList(new LambdaQueryWrapper<CustomerProfileAddress>()
                         .eq(CustomerProfileAddress::getCustomerId, customerId)
@@ -208,6 +262,7 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
                 .stream().map(this::address).collect(Collectors.toList());
     }
 
+    /** 将客户档案转换为搜索结果候选，并隐藏手机号原文。 */
     private AgentCustomerCandidateDto candidate(CustomerProfile profile) {
         AgentCustomerCandidateDto dto = new AgentCustomerCandidateDto();
         dto.setCustomerId(profile.getId());
@@ -217,6 +272,7 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
         return dto;
     }
 
+    /** 将地址实体转换为类型、脱敏地址和脱敏联系人摘要。 */
     private AgentCustomerAddressDto address(CustomerProfileAddress source) {
         AgentCustomerAddressDto dto = new AgentCustomerAddressDto();
         dto.setAddressTypeCode(source.getAddressType());
@@ -227,31 +283,39 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
         return dto;
     }
 
+    /** 对手机号保留首尾少量字符，满足客服关联展示需要。 */
     private String maskPhone(String value) {
         if (!hasText(value)) return null;
         String text = value.trim();
         return text.length() <= 4 ? "****" : text.substring(0, Math.min(3, text.length())) + "****" + text.substring(text.length() - 4);
     }
 
+    /** 对地址只保留有限前缀，避免完整住址进入 Agent 上下文。 */
     private String maskAddress(String value) {
         if (!hasText(value)) return null;
         String text = value.trim();
         return text.length() <= 6 ? "***" : text.substring(0, Math.min(6, text.length())) + "***";
     }
 
+    /** 对客户姓名只保留首字符，生成稳定展示摘要。 */
     private String maskName(String value) {
         if (!hasText(value)) return null;
         String text = value.trim();
         return text.length() == 1 ? "*" : text.substring(0, 1) + "*";
     }
 
+    /** 限制客户特殊要求长度，并保留省略标记。 */
     private String truncate(String value) {
         if (!hasText(value)) return null;
         String text = value.trim();
         return text.length() <= MAX_SPECIAL_REQUIREMENT_LENGTH ? text : text.substring(0, MAX_SPECIAL_REQUIREMENT_LENGTH) + "…";
     }
 
+    /** 判断字符串是否包含非空文本。 */
     private boolean hasText(String value) { return value != null && !value.trim().isEmpty(); }
+    /** 去除查询参数首尾空白，空引用保持为空。 */
+    private String trim(String value) { return value == null ? null : value.trim(); }
+    /** 将地址类型代码转换为固定展示名称。 */
     private String addressTypeName(String code) {
         if ("DEFAULT".equals(code)) return "默认地址";
         if ("WORKDAY".equals(code)) return "工作日地址";

@@ -1,6 +1,6 @@
 package me.zhengjie.agent.controller;
 
-import me.zhengjie.agent.client.HttpDiagnosisToolDataClient;
+import me.zhengjie.agent.client.MainSystemQueryClient;
 import me.zhengjie.agent.config.AgentProperties;
 import me.zhengjie.agent.domain.dto.AgentHealthResponse;
 import me.zhengjie.agent.infrastructure.llm.AgentModelGateway;
@@ -21,12 +21,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class AgentHealthController {
 
     private final RuleRegistryLoader ruleRegistryLoader;
-    private final HttpDiagnosisToolDataClient toolDataClient;
+    private final MainSystemQueryClient toolDataClient;
     private final AgentModelGateway modelGateway;
     private final AgentProperties properties;
 
     public AgentHealthController(RuleRegistryLoader ruleRegistryLoader,
-                                 HttpDiagnosisToolDataClient toolDataClient,
+                                 MainSystemQueryClient toolDataClient,
                                  AgentModelGateway modelGateway, AgentProperties properties) {
         this.ruleRegistryLoader = ruleRegistryLoader;
         this.toolDataClient = toolDataClient;

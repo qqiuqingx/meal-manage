@@ -1,13 +1,5 @@
 import axios from '@/utils/request'
 
-export function diagnoseMealPlan(data) {
-  return axios({
-    url: '/api/agent/meal-plan/diagnose',
-    method: 'post',
-    data
-  })
-}
-
 export function chatMealPlan(data) {
   return axios({
     url: '/api/agent/meal-plan/chat',
@@ -120,7 +112,6 @@ export function updateAgentRuleGapStatus(id, data) {
 }
 
 export default {
-  diagnoseMealPlan,
   chatMealPlan,
   queryChatSessions,
   createChatSession,

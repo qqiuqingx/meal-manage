@@ -14,6 +14,7 @@ import me.zhengjie.modules.agent.query.domain.dto.AgentPackageSpecDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentRefundLogDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentSubPackageSpecDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentVerificationLogDto;
+import me.zhengjie.modules.agent.query.domain.unified.AgentUnifiedQueryDto;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -34,7 +35,13 @@ class AgentQueryDtoAmountIsolationTest {
             AgentCustomerOverviewDto.class, AgentCustomerPackageDto.class, AgentDishSummaryDto.class,
             AgentMealPlanDishItemDto.class, AgentMealPlanSummaryDto.class, AgentOrderMealBalanceDto.class,
             AgentOrderSummaryDto.class, AgentPackageSpecDto.class, AgentRefundLogDto.class,
-            AgentSubPackageSpecDto.class, AgentVerificationLogDto.class
+            AgentSubPackageSpecDto.class, AgentVerificationLogDto.class,
+            AgentUnifiedQueryDto.ProfileItem.class, AgentUnifiedQueryDto.MealBalanceItem.class,
+            AgentUnifiedQueryDto.ServiceCustomerItem.class, AgentUnifiedQueryDto.ServiceCustomerDetailItem.class,
+            AgentUnifiedQueryDto.MealPlanItem.class, AgentUnifiedQueryDto.VerificationItem.class,
+            AgentUnifiedQueryDto.RefundItem.class, AgentUnifiedQueryDto.DishItem.class,
+            AgentUnifiedQueryDto.PackageDetailItem.class, AgentUnifiedQueryDto.MetricItem.class,
+            AgentUnifiedQueryDto.RuleItem.class
         );
         for (Class<?> type : types) {
             for (Field field : type.getDeclaredFields()) {

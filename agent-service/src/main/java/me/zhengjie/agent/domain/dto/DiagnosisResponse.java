@@ -1,9 +1,8 @@
 package me.zhengjie.agent.domain.dto;
 
-import me.zhengjie.agent.observability.DiagnosisTraceEvent;
-
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 智能排查的标准输出，包含摘要、原因列表和基础上下文。
@@ -22,8 +21,8 @@ public class DiagnosisResponse {
     private boolean fallback;
     private String fallbackReason;
     private List<String> nextActions = new ArrayList<>();
-    private List<DiagnosisTraceEvent> diagnosisTrace = new ArrayList<>();
-    private List<DiagnosisTraceEvent> toolCallSummary = new ArrayList<>();
+    private List<Map<String, Object>> diagnosisTrace = new ArrayList<>();
+    private List<Map<String, Object>> toolCallSummary = new ArrayList<>();
     private List<DiagnosisReasonDto> reasons = new ArrayList<>();
     private List<DiagnosisActionDraftDto> actionDrafts = new ArrayList<>();
 
@@ -123,19 +122,19 @@ public class DiagnosisResponse {
         this.nextActions = nextActions;
     }
 
-    public List<DiagnosisTraceEvent> getDiagnosisTrace() {
+    public List<Map<String, Object>> getDiagnosisTrace() {
         return diagnosisTrace;
     }
 
-    public void setDiagnosisTrace(List<DiagnosisTraceEvent> diagnosisTrace) {
+    public void setDiagnosisTrace(List<Map<String, Object>> diagnosisTrace) {
         this.diagnosisTrace = diagnosisTrace;
     }
 
-    public List<DiagnosisTraceEvent> getToolCallSummary() {
+    public List<Map<String, Object>> getToolCallSummary() {
         return toolCallSummary;
     }
 
-    public void setToolCallSummary(List<DiagnosisTraceEvent> toolCallSummary) {
+    public void setToolCallSummary(List<Map<String, Object>> toolCallSummary) {
         this.toolCallSummary = toolCallSummary;
     }
 

@@ -12,11 +12,8 @@ forbiddenClaims:
   - 已修改数据库
   - 已创建客户
 toolPolicy:
-  maxToolCalls: 8
-  requiredBeforeConclusion:
-    - getCustomerProfile
-    - listCustomerOrders
-    - getMealPlan
+  maxToolCalls: 6
+  requiredBeforeConclusion: []
 evidencePolicy:
   minEvidencePerReason: 1
   requireRuleIds: true

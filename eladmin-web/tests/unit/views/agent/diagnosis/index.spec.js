@@ -3,7 +3,6 @@ jest.mock('@/api/agentDiagnosis', () => ({
   archiveChatSession: jest.fn(),
   chatMealPlan: jest.fn(),
   createChatSession: jest.fn(),
-  diagnoseMealPlan: jest.fn(),
   getChatSession: jest.fn(),
   queryChatSessions: jest.fn(),
   submitDiagnosisFeedback: jest.fn(),
@@ -84,7 +83,7 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(ctx.messages).toHaveLength(1)
     expect(ctx.messages[0].role).toBe('assistant')
     expect(ctx.messages[0].content).toContain('你可以查询客户、订单、排餐、核销、退餐或运营统计')
-    expect(ctx.conversationStage).toBe('COLLECTING_SLOTS')
+    expect(ctx.conversationStage).toBe('READY')
     expect(ctx.sessionId).toBe(null)
   })
 
@@ -96,7 +95,7 @@ describe('AgentDiagnosis chat page logic', () => {
       slots: { customerCode: 'C10001', recordDate: '2026-05-22' },
       slotConfidence: { customer: 'HIGH', recordDate: 'HIGH' },
       missingSlots: ['MEAL_TYPE'],
-      conversationStage: 'COLLECTING_SLOTS'
+      conversationStage: 'NEED_MORE_INFO'
     })
     const ctx = createCtx()
     ctx.inputMessage = '查 C10001 今天'
@@ -113,7 +112,7 @@ describe('AgentDiagnosis chat page logic', () => {
       role: 'assistant',
       content: '请补充餐次：早餐、午餐还是晚餐？',
       status: 'NEED_MORE_INFO',
-      stage: 'COLLECTING_SLOTS',
+      stage: 'NEED_MORE_INFO',
       missingSlots: ['MEAL_TYPE']
     })
     expect(ctx.slotConfidence.customer).toBe('HIGH')
@@ -125,7 +124,7 @@ describe('AgentDiagnosis chat page logic', () => {
       sessionId: 'session-1',
       status: 'ANSWERED',
       assistantMessage: '已完成诊断，发现 2 个可能原因，请结合证据人工确认。',
-      conversationStage: 'DIAGNOSED',
+      conversationStage: 'ANSWERED',
       slots: { customerCode: 'C10001', recordDate: '2026-05-22', mealType: 'LUNCH' },
       slotConfidence: { customer: 'HIGH', recordDate: 'HIGH', mealType: 'HIGH' },
       diagnosisResult: {
@@ -146,7 +145,7 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(assistant.result.summary).toBe('命中客户排除日期')
     expect(ctx.currentDiagnosis.summary).toBe('命中客户排除日期')
     expect(ctx.currentDiagnosis.nextActions).toEqual(['核对客户档案停送配置'])
-    expect(ctx.conversationStage).toBe('DIAGNOSED')
+    expect(ctx.conversationStage).toBe('ANSWERED')
   })
 
   test('shows fallback reason and trace data in state', async() => {
@@ -154,7 +153,7 @@ describe('AgentDiagnosis chat page logic', () => {
       sessionId: 'session-1',
       status: 'ANSWERED',
       assistantMessage: '诊断数据不完整，需人工核对。',
-      conversationStage: 'DIAGNOSED',
+      conversationStage: 'ANSWERED',
       diagnosisResult: {
         summary: '诊断数据不完整，需人工核对。',
         confidence: 'LOW',
@@ -182,7 +181,7 @@ describe('AgentDiagnosis chat page logic', () => {
       sessionId: 'session-1',
       status: 'ANSWERED',
       assistantMessage: '已完成诊断，生成动作草稿。',
-      conversationStage: 'DIAGNOSED',
+      conversationStage: 'ANSWERED',
       diagnosisResult: {
         summary: '命中客户排除日期',
         confidence: 'HIGH',
@@ -324,12 +323,12 @@ describe('AgentDiagnosis chat page logic', () => {
   test('loads session detail and maps persisted messages back into page state', async() => {
     api.getChatSession.mockResolvedValue({
       sessionId: 'session-2',
-      stage: 'DIAGNOSED',
+      stage: 'ANSWERED',
       currentSlots: { customerCode: 'C10002', recordDate: '2026-07-08', mealType: 'DINNER', slotConfidence: { customer: 'HIGH' }},
       latestDiagnosisResult: { summary: '命中客户排除日期', confidence: 'HIGH' },
       messages: [
-        { role: 'USER', content: '查 C10002 晚餐', conversationStage: 'COLLECTING_SLOTS' },
-        { role: 'ASSISTANT', content: '已完成诊断', conversationStage: 'DIAGNOSED', diagnosisResult: { summary: '命中客户排除日期' }, slots: { customerCode: 'C10002' }}
+        { role: 'USER', content: '查 C10002 晚餐', conversationStage: 'READY' },
+        { role: 'ASSISTANT', content: '已完成诊断', conversationStage: 'ANSWERED', diagnosisResult: { summary: '命中客户排除日期' }, slots: { customerCode: 'C10002' }}
       ]
     })
     const ctx = createCtx()
@@ -348,7 +347,7 @@ describe('AgentDiagnosis chat page logic', () => {
 
     AgentDiagnosis.methods.applySessionDetail.call(ctx, {
       sessionId: 'session-3',
-      stage: 'DIAGNOSED',
+      stage: 'ANSWERED',
       currentSlots: { customerCode: 'C10003', recordDate: '2026-07-09', mealType: 'LUNCH' },
       latestDiagnosisResult: {
         requestId: 'req-3',
@@ -357,8 +356,8 @@ describe('AgentDiagnosis chat page logic', () => {
         mealType: 'LUNCH'
       },
       messages: [
-        { role: 'USER', requestId: 'req-3', content: '查 C10003 明天午餐', conversationStage: 'COLLECTING_SLOTS' },
-        { role: 'ASSISTANT', requestId: 'req-3', content: '已完成诊断', conversationStage: 'DIAGNOSED' }
+        { role: 'USER', requestId: 'req-3', content: '查 C10003 明天午餐', conversationStage: 'READY' },
+        { role: 'ASSISTANT', requestId: 'req-3', content: '已完成诊断', conversationStage: 'ANSWERED' }
       ]
     })
 
@@ -372,7 +371,7 @@ describe('AgentDiagnosis chat page logic', () => {
 
     AgentDiagnosis.methods.applySessionDetail.call(ctx, {
       sessionId: 'session-4',
-      stage: 'DIAGNOSED',
+      stage: 'ANSWERED',
       currentSlots: { customerCode: 'C10004', recordDate: '2026-07-09', mealType: 'DINNER' },
       latestDiagnosisResult: {
         requestId: 'req-4',
@@ -381,7 +380,7 @@ describe('AgentDiagnosis chat page logic', () => {
         mealType: 'DINNER'
       },
       messages: [
-        { role: 'USER', requestId: 'req-4', content: '查 C10004 明天晚餐', conversationStage: 'COLLECTING_SLOTS' }
+        { role: 'USER', requestId: 'req-4', content: '查 C10004 明天晚餐', conversationStage: 'READY' }
       ]
     })
 

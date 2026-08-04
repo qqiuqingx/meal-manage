@@ -7,8 +7,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Agent 工具权限映射安全测试。 */
 class DefaultAgentQueryPermissionServiceTest {
@@ -34,9 +34,10 @@ class DefaultAgentQueryPermissionServiceTest {
     void shouldExposeOnlyToolsAllowedByBusinessPermissions() {
         AgentAccessContext context = context("agentDiagnosis:list", "customerProfile:list", "mealPlan:list");
 
-        assertEquals(Arrays.asList("resolveCustomer", "getCustomerProfileCount", "listMealPlans", "listVerifications",
-                "getDailyCustomerWorkload", "getMealPlanFailureSummary", "explainRule"),
-            service.availableToolNames(context));
+        assertTrue(service.availableToolNames(context).containsAll(Arrays.asList(
+            "searchCustomerProfiles", "listMealPlans", "queryBusinessMetrics", "explainBusinessRule")));
+        org.junit.jupiter.api.Assertions.assertFalse(service.availableToolNames(context).contains("listVerifications"));
+        org.junit.jupiter.api.Assertions.assertFalse(service.availableToolNames(context).contains("listRefunds"));
     }
 
     /** 管理员登录态仅携带 admin 权限时，仍应具备全部 Agent 只读查询工具。 */
@@ -45,20 +46,16 @@ class DefaultAgentQueryPermissionServiceTest {
         AgentAccessContext context = context("admin");
 
         assertDoesNotThrow(() -> service.require(context, "customerProfile:list", "customerOrder:list"));
-        assertEquals(Arrays.asList("resolveCustomer", "customerOverview", "listOrders", "orderDetail", "listMealPlans",
-                "listVerifications", "listRefunds", "packageDetail", "listDishes", "listScheduledDishes", "previewDishCandidates", "explainRule",
-                "getDailyCustomerWorkload", "getCustomerProfileCount", "getActiveCustomerSummary", "getActiveOrderSummary", "listActiveCustomerMealBalances",
-                "getExpiringOrderSummary", "getMealPlanFailureSummary"),
-            service.availableToolNames(context));
+        assertTrue(service.availableToolNames(context).size() == 12);
     }
 
     /** 进行中订单统计复用订单只读权限，不应额外要求客户档案或排餐权限。 */
     @Test
-    void shouldExposeActiveOrderSummaryWithOrderReadPermission() {
+    void shouldExposeMetricsWithAnyMetricSourcePermission() {
         AgentAccessContext context = context("agentDiagnosis:list", "customerOrder:list");
 
         org.junit.jupiter.api.Assertions.assertTrue(
-            service.availableToolNames(context).contains("getActiveOrderSummary"));
+            service.availableToolNames(context).contains("queryBusinessMetrics"));
     }
 
     /** 菜单工具需要同时具备排餐与菜品权限，不能因单项权限越权。 */

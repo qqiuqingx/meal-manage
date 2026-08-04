@@ -1,0 +1,9 @@
+feature: agent-service-llm-tool-calling-refactor
+status: complete
+phases:
+  - id: comment-audit
+    file: 01-comment-audit.md
+    status: completed
+  - id: verify-and-commit
+    file: 02-verify-and-commit.md
+    status: completed

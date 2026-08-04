@@ -1,15 +1,9 @@
 package me.zhengjie.agent.architecture;
 
-import me.zhengjie.agent.application.conversation.ConversationCoordinator;
-import me.zhengjie.agent.chat.DefaultConversationHandler;
-import me.zhengjie.agent.chat.MealPlanChatServiceImpl;
-import me.zhengjie.agent.query.BusinessAnswerComposer;
-import me.zhengjie.agent.query.BusinessQueryResponseFactory;
-import me.zhengjie.agent.query.BusinessResultValidator;
-import me.zhengjie.agent.query.presentation.BusinessPresentationResult;
+import me.zhengjie.agent.application.BusinessAgentRunner;
+import me.zhengjie.agent.tool.ToolRegistry;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -19,121 +13,81 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 固定中心入口的包边界，防止业务分支和工具字符串重新回流到 Facade/Coordinator。 */
+/**
+ * 统一工具调用架构边界测试，防止旧 Planner、Capability 和关键词路由回流。
+ */
 class ArchitectureBoundaryTest {
 
+    /**
+     * 生产入口必须收敛为一个业务 Agent Runner，工具名称必须来自唯一登记表。
+     */
     @Test
-    void chatFacadeMustOnlyDependOnCoordinator() {
-        Field[] fields = MealPlanChatServiceImpl.class.getDeclaredFields();
-        assertEquals(2, fields.length);
-        assertTrue(java.util.Arrays.stream(fields)
-            .anyMatch(field -> field.getType() == ConversationCoordinator.class));
-        assertEquals(1, MealPlanChatServiceImpl.class.getDeclaredConstructors().length);
-    }
-
-    @Test
-    void centralRoutingClassesMustNotContainBusinessBranchesOrToolNames() throws Exception {
-        String facade = Files.readString(Path.of(
-            "src/main/java/me/zhengjie/agent/chat/MealPlanChatServiceImpl.java"));
-        String coordinator = Files.readString(Path.of(
-            "src/main/java/me/zhengjie/agent/application/conversation/ConversationCoordinator.java"));
-
-        for (String forbidden : java.util.List.of("ChatIntent", "listOrders", "listMealPlans",
-            "customerOverview", "BUSINESS_QUERY")) {
-            assertFalse(facade.contains(forbidden), forbidden);
-            assertFalse(coordinator.contains(forbidden), forbidden);
-        }
-    }
-
-    @Test
-    void defaultHandlerMustDelegateStateIntentAndBusinessPipelines() throws Exception {
-        String handler = Files.readString(Path.of(
-            "src/main/java/me/zhengjie/agent/chat/DefaultConversationHandler.java"));
-
-        assertEquals(1, DefaultConversationHandler.class.getDeclaredConstructors().length);
-        assertEquals(1, java.util.Arrays.stream(DefaultConversationHandler.class.getDeclaredConstructors())
-            .filter(constructor -> java.lang.reflect.Modifier.isPublic(constructor.getModifiers()))
-            .count());
-        assertTrue(handler.contains("ConversationStateSupport conversationStateSupport"));
-        assertTrue(handler.contains("BusinessQueryIntentPolicy businessQueryIntentPolicy"));
-        assertFalse(handler.contains("LegacyCustomerInsightAdapter"));
-        assertTrue(handler.contains("BusinessQueryChatService businessQueryChatService"));
-        assertTrue(handler.contains(
-            "BusinessConversationUnderstandingPipeline understandingPipeline"));
-        assertTrue(handler.contains(
-            "BusinessConversationResultPipeline resultPipeline"));
-        assertFalse(handler.contains(
-            "this.businessQueryChatService = new BusinessQueryChatService"));
-        assertFalse(handler.contains("new ContextReferenceResolver()"));
-        for (String forbidden : java.util.List.of(
-            "dataClient.getCustomerMealSummary",
-            "dataClient.getCustomerVerificationSummary",
-            "dataClient.getCustomerOrderSummary",
-            "private DiagnosisSlots copy(",
-            "private ChatIntent compatibilityIntent(",
-            "private String buildMealBalanceMessage(")) {
-            assertFalse(handler.contains(forbidden), forbidden);
-        }
-    }
-
-    @Test
-    void presenterAndResultValidationMustConsumeControlledDto() {
-        assertTrue(java.util.Arrays.stream(BusinessAnswerComposer.class.getDeclaredMethods())
-            .flatMap(method -> java.util.Arrays.stream(method.getParameterTypes()))
-            .noneMatch(java.util.Map.class::equals));
-        assertTrue(java.util.Arrays.stream(BusinessQueryResponseFactory.class.getDeclaredMethods())
-            .filter(method -> "create".equals(method.getName()))
-            .allMatch(method -> java.util.Arrays.asList(method.getParameterTypes())
-                .contains(BusinessPresentationResult.class)));
-        assertTrue(java.util.Arrays.stream(BusinessResultValidator.class.getDeclaredMethods())
-            .filter(method -> "validate".equals(method.getName()))
-            .allMatch(method -> method.getParameterTypes()[2]
-                == BusinessPresentationResult.class));
-    }
-
-    @Test
-    void businessToolExecutionMustUseCatalogInvokersInsteadOfBranchChain() throws Exception {
-        String catalog = Files.readString(Path.of(
-            "src/main/java/me/zhengjie/agent/tool/ToolCatalog.java"));
-
-        assertTrue(catalog.contains("BUSINESS_TOOL_INVOKERS.get(toolName)"));
-        assertTrue(catalog.contains("BUSINESS_TOOLS.keySet().equals(BUSINESS_TOOL_INVOKERS.keySet())"));
-        assertFalse(catalog.contains("if (\"resolveCustomer\".equals(toolName))"));
-        assertFalse(catalog.contains("if (\"listOrders\".equals(toolName))"));
+    void shouldExposeSingleToolCallingEntryAndTwelveTools() {
+        assertTrue(BusinessAgentRunner.class.isAnnotationPresent(
+            org.springframework.stereotype.Component.class));
+        assertEquals(12, new ToolRegistry().all().size());
     }
 
     /**
-     * 生产源码不得重新引入 DTO 的旧 Map 反向适配；历史 Map 测试数据只能在测试夹具中转换。
+     * 旧业务查询编排和重复工具目录不得重新出现在 Agent 生产源码中。
      */
     @Test
-    void productionSourcesMustNotContainLegacyMapToDtoAdapters() throws Exception {
+    void productionSourcesMustNotContainRemovedFixedRoutingTypes() throws Exception {
         assertSourcesDoNotContain(Path.of("src/main/java"), List.of(
-            "fromLegacyMap",
-            "LEGACY_MAPPER"));
+            "BusinessQuery" + "PlanningService",
+            "BusinessQuery" + "Planner",
+            "AgentQuery" + "Plan",
+            "Capability" + "Handler",
+            "RuleBasedBusinessQuestion" + "Analyzer",
+            "LegacyBusinessQuestionAnalysis" + "Factory",
+            "AgentBusinessTool" + "Executor",
+            "AgentBusinessTool" + "Registry",
+            "Tool" + "Catalog",
+            "Chat" + "Intent",
+            "CUSTOMER_" + "ORDER_QUERY",
+            "BUSINESS_QUERY_OPERATION" + "_",
+            "capability-" + "catalog.yaml"));
     }
 
+    /**
+     * Agent 服务只依赖主系统只读 HTTP 端口，不得引入数据库、Mapper 或 JDBC 依赖。
+     */
     @Test
-    void packageDependenciesMustPointTowardDomainPorts() throws Exception {
-        assertSourcesDoNotContain(Path.of("src/main/java/me/zhengjie/agent/domain"), List.of(
-            "import me.zhengjie.agent.controller.",
-            "import me.zhengjie.agent.api.controller.",
-            "import org.springframework.web.",
-            "import org.springframework.http.",
-            "RestTemplate",
-            "WebClient"));
-        assertSourcesDoNotContain(Path.of("src/main/java/me/zhengjie/agent/capability"), List.of(
-            "import me.zhengjie.agent.controller.",
-            "import me.zhengjie.agent.api.controller.",
-            "import me.zhengjie.agent.api.contract."));
-        assertSourcesDoNotContain(
-            Path.of("src/main/java/me/zhengjie/agent/application/conversation"),
-            List.of("import me.zhengjie.agent.client.Http", "import me.zhengjie.agent.query.client.Http"));
+    void agentServiceMustNotDeclareDatabaseDependencies() throws Exception {
+        String pom = Files.readString(Path.of("pom.xml")).toLowerCase();
+        for (String forbidden : List.of("mybatis", "jdbc", "mysql", "postgresql", "druid")) {
+            assertFalse(pom.contains(forbidden), forbidden);
+        }
+        assertTrue(Files.readString(Path.of(
+            "src/main/java/me/zhengjie/agent/client/HttpMainSystemQueryClient.java"))
+            .contains("/api/internal/agent/query/"));
     }
 
-    /** 检查指定生产包中的 Java 源码不包含反向依赖标识。 */
+    /**
+     * 规则资源只能引用统一 ToolRegistry 中的名称。
+     */
+    @Test
+    void ruleResourcesMustNotContainLegacyToolNames() throws Exception {
+        assertSourcesDoNotContain(Path.of("rules"), List.of(
+            "getCustomerProfile",
+            "getCustomerExcludeDates",
+            "getOrderMealBalance",
+            "getMealPlanGenerationSnapshot",
+            "getDishCandidateDetail",
+            "getPackageSpec",
+            "listVerificationLogs",
+            "listMealRefunds"));
+    }
+
+    /** 检查指定目录中的文本文件是否包含禁止回流的标识。 */
     private void assertSourcesDoNotContain(Path root, List<String> forbiddenTokens) throws Exception {
+        if (!Files.exists(root)) {
+            return;
+        }
         try (Stream<Path> sources = Files.walk(root)) {
-            for (Path source : sources.filter(path -> path.toString().endsWith(".java")).toList()) {
+            for (Path source : sources.filter(Files::isRegularFile)
+                .filter(path -> path.toString().matches(".*\\\\.(java|yaml|yml|json|xml|properties|md)$"))
+                .toList()) {
                 String content = Files.readString(source);
                 for (String forbidden : forbiddenTokens) {
                     assertFalse(content.contains(forbidden), source + " -> " + forbidden);

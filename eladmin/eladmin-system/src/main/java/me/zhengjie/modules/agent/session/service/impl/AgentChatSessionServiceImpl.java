@@ -49,7 +49,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AgentChatSessionServiceImpl implements AgentChatSessionService {
 
-    private static final String DEFAULT_STAGE = "COLLECTING_SLOTS";
+    private static final String DEFAULT_STAGE = "READY";
     private static final String ROLE_USER = "USER";
     private static final String ROLE_ASSISTANT = "ASSISTANT";
 
@@ -171,9 +171,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         downstreamRequest.setClientMessageId(clientMessageId);
         downstreamRequest.setMessage(safeRequest.getMessage());
         downstreamRequest.setContextSlots(toPersistedSlots(session));
-        downstreamRequest.setPendingBusinessQueryContext(parseMap(session.getPendingBusinessQueryJson()));
         downstreamRequest.setLastBusinessQueryContext(parseMap(session.getLastBusinessQueryContextJson()));
-        downstreamRequest.setActiveTaskStack(parseMap(session.getActiveTaskStackJson()));
         downstreamRequest.setSessionVersion(session.getVersion() == null ? 0L : session.getVersion().longValue());
         String accessContext = accessContextService.issue(session.getSessionId(), resolvedRequestId);
         long queryStart = System.currentTimeMillis();
@@ -267,9 +265,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         dto.setArchived(session.getArchived());
         dto.setCreateTime(session.getCreateTime());
         dto.setUpdateTime(session.getUpdateTime());
-        dto.setPendingBusinessQueryContext(parseMap(session.getPendingBusinessQueryJson()));
         dto.setLastBusinessQueryContext(parseMap(session.getLastBusinessQueryContextJson()));
-        dto.setActiveTaskStack(parseMap(session.getActiveTaskStackJson()));
         List<AgentChatMessageDto> messageDtos = messages.stream().map(this::toMessageDto).collect(Collectors.toList());
         dto.setMessages(messageDtos);
         for (int i = messageDtos.size() - 1; i >= 0; i--) {
@@ -304,6 +300,15 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         dto.setDiagnosisResult(parseObject(message.getDiagnosisResultJson(), AgentDiagnosisResponse.class));
         dto.setToolSummary(parseObjectList(message.getToolSummaryJson()));
         dto.setBusinessResult(parseMap(message.getBusinessResultJson()));
+        Map<String, Object> businessResult = dto.getBusinessResult();
+        if (businessResult != null) {
+            dto.setCards(businessResult.get("cards") instanceof List
+                ? (List<Map<String, Object>>) businessResult.get("cards") : Collections.emptyList());
+            dto.setToolFacts(businessResult.get("toolFacts") instanceof List
+                ? (List<Map<String, Object>>) businessResult.get("toolFacts") : Collections.emptyList());
+            dto.setToolTraceSummary(businessResult.get("toolTraceSummary") instanceof List
+                ? (List<Map<String, Object>>) businessResult.get("toolTraceSummary") : dto.getToolSummary());
+        }
         dto.setCreateBy(message.getCreateBy());
         dto.setCreateTime(message.getCreateTime());
         return dto;
@@ -478,7 +483,9 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         message.setConversationStage(response.getConversationStage());
         message.setSlotsJson(toJson(response.getSlots()));
         message.setDiagnosisResultJson(toJson(response.getDiagnosisResult()));
-        message.setToolSummaryJson(toJson(response.getDiagnosisResult() == null ? Collections.emptyList() : response.getDiagnosisResult().getToolCallSummary()));
+        message.setToolSummaryJson(toJson(response.getToolTraceSummary() == null || response.getToolTraceSummary().isEmpty()
+            ? (response.getDiagnosisResult() == null ? Collections.emptyList() : response.getDiagnosisResult().getToolCallSummary())
+            : response.getToolTraceSummary()));
         message.setBusinessResultJson(toJson(buildBusinessSnapshot(response)));
         message.setCreateBy(currentUsername());
         message.setUpdateBy(currentUsername());
@@ -501,9 +508,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         if ("RESET".equalsIgnoreCase(response.getStatus())) {
             clearBusinessFocus(session);
         }
-        session.setPendingBusinessQueryJson(toJson(response.getPendingBusinessQueryContext()));
         session.setLastBusinessQueryContextJson(toJson(response.getLastBusinessQueryContext()));
-        session.setActiveTaskStackJson(toJson(response.getActiveTaskStack()));
         if (slots != null) {
             boolean customerFocusChanged = customerFocusChanged(session, slots);
             session.setCustomerId(slots.getCustomerId());
@@ -648,25 +653,26 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
      * @return 无业务查询时返回空值，否则返回受控展示字段
      */
     private Map<String, Object> buildBusinessSnapshot(AgentChatResponse response) {
-        if (response == null || StringUtils.isBlank(response.getResponseType())
-            || !response.getResponseType().startsWith("BUSINESS_QUERY")) {
+        if (response == null) {
+            return null;
+        }
+        boolean hasCards = response.getCards() != null && !response.getCards().isEmpty();
+        boolean hasToolFacts = response.getToolFacts() != null && !response.getToolFacts().isEmpty();
+        boolean hasToolTrace = response.getToolTraceSummary() != null && !response.getToolTraceSummary().isEmpty();
+        if (!hasCards && !hasToolFacts && !hasToolTrace && !response.isPartial()) {
             return null;
         }
         Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
-        snapshot.put("responseType", response.getResponseType());
-        snapshot.put("insightResult", response.getInsightResult());
         snapshot.put("facts", response.getFacts());
+        snapshot.put("cards", response.getCards());
+        snapshot.put("toolFacts", response.getToolFacts());
+        snapshot.put("toolTraceSummary", response.getToolTraceSummary());
         snapshot.put("warnings", response.getWarnings());
         snapshot.put("cached", response.isCached());
         snapshot.put("partial", response.isPartial());
         snapshot.put("queriedAt", response.getQueriedAt());
-        snapshot.put("queryPlan", response.getQueryPlan());
-        snapshot.put("pendingBusinessQueryContext", response.getPendingBusinessQueryContext());
         snapshot.put("lastBusinessQueryContext", response.getLastBusinessQueryContext());
-        snapshot.put("activeTaskStack", response.getActiveTaskStack());
         snapshot.put("conversationPatch", response.getConversationPatch());
-        snapshot.put("resultBlocks", response.getResultBlocks());
-        snapshot.put("semanticTraceSummary", response.getSemanticTraceSummary());
         return snapshot;
     }
 
@@ -681,26 +687,19 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         if (response == null || snapshot == null) {
             return;
         }
-        response.setResponseType((String) snapshot.get("responseType"));
-        response.setInsightResult(snapshot.get("insightResult") instanceof Map ? (Map<String, Object>) snapshot.get("insightResult") : Collections.emptyMap());
         response.setFacts(snapshot.get("facts") instanceof List ? (List<Map<String, Object>>) snapshot.get("facts") : Collections.emptyList());
+        response.setCards(snapshot.get("cards") instanceof List ? (List<Map<String, Object>>) snapshot.get("cards") : Collections.emptyList());
+        response.setToolFacts(snapshot.get("toolFacts") instanceof List ? (List<Map<String, Object>>) snapshot.get("toolFacts") : Collections.emptyList());
+        response.setToolTraceSummary(snapshot.get("toolTraceSummary") instanceof List
+            ? (List<Map<String, Object>>) snapshot.get("toolTraceSummary") : Collections.emptyList());
         response.setWarnings(snapshot.get("warnings") instanceof List ? (List<String>) snapshot.get("warnings") : Collections.emptyList());
         response.setCached(Boolean.TRUE.equals(snapshot.get("cached")));
         response.setPartial(Boolean.TRUE.equals(snapshot.get("partial")));
         response.setQueriedAt((String) snapshot.get("queriedAt"));
-        response.setQueryPlan(snapshot.get("queryPlan") instanceof Map ? (Map<String, Object>) snapshot.get("queryPlan") : Collections.emptyMap());
-        response.setPendingBusinessQueryContext(snapshot.get("pendingBusinessQueryContext") instanceof Map
-            ? (Map<String, Object>) snapshot.get("pendingBusinessQueryContext") : null);
         response.setLastBusinessQueryContext(snapshot.get("lastBusinessQueryContext") instanceof Map
             ? (Map<String, Object>) snapshot.get("lastBusinessQueryContext") : null);
-        response.setActiveTaskStack(snapshot.get("activeTaskStack") instanceof Map
-            ? (Map<String, Object>) snapshot.get("activeTaskStack") : null);
         response.setConversationPatch(snapshot.get("conversationPatch") instanceof Map
             ? (Map<String, Object>) snapshot.get("conversationPatch") : null);
-        response.setResultBlocks(snapshot.get("resultBlocks") instanceof List
-            ? (List<Map<String, Object>>) snapshot.get("resultBlocks") : Collections.emptyList());
-        response.setSemanticTraceSummary(snapshot.get("semanticTraceSummary") instanceof Map
-            ? (Map<String, Object>) snapshot.get("semanticTraceSummary") : null);
     }
 
     /**
@@ -714,10 +713,12 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         return "null".equals(json) ? null : json;
     }
 
+    /** 复用请求 ID 或生成会话操作所需的关联 ID。 */
     private String resolveRequestId(String requestId) {
         return StringUtils.isBlank(requestId) ? UUID.randomUUID().toString() : requestId.trim();
     }
 
+    /** 获取当前操作人名称，认证上下文不可用时使用系统账号。 */
     private String currentUsername() {
         try {
             return SecurityUtils.getCurrentUsername();
@@ -726,18 +727,22 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         }
     }
 
+    /** 返回会话持久化使用的当前时间。 */
     private Timestamp now() {
         return new Timestamp(System.currentTimeMillis());
     }
 
+    /** 将空白字符串归一化为空引用。 */
     private String trimToNull(String value) {
         return StringUtils.isBlank(value) ? null : value.trim();
     }
 
+    /** 将会话枚举文本归一化为大写。 */
     private String normalize(String value) {
         return trimToNull(value) == null ? null : value.trim().toUpperCase();
     }
 
+    /** 返回两个候选文本中的第一个非空值。 */
     private String firstNonBlank(String first, String second) {
         return StringUtils.isNotBlank(first) ? first : second;
     }
@@ -775,11 +780,10 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         session.setQueryStartDate(null);
         session.setQueryEndDate(null);
         session.setMealType(null);
-        session.setPendingBusinessQueryJson(null);
         session.setLastBusinessQueryContextJson(null);
-        session.setActiveTaskStackJson(null);
     }
 
+    /** 限制会话标题长度，避免持久化超长用户输入。 */
     private String limitTitle(String value) {
         String normalized = trimToNull(value);
         if (normalized == null) {
@@ -788,6 +792,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         return normalized.length() <= 120 ? normalized : normalized.substring(0, 120);
     }
 
+    /** 限制会话摘要长度，避免持久化未裁剪自由文本。 */
     private String limitSummary(String value) {
         String normalized = trimToNull(value);
         if (normalized == null) {
@@ -796,10 +801,12 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         return normalized.length() <= 500 ? normalized : normalized.substring(0, 500);
     }
 
+    /** 将会话历史页码归一化为非负值。 */
     private int normalizePage(Integer page) {
         return page == null || page < 0 ? 0 : page;
     }
 
+    /** 将会话历史单页大小归一化到安全范围。 */
     private int normalizeSize(Integer size) {
         if (size == null || size <= 0) {
             return 10;

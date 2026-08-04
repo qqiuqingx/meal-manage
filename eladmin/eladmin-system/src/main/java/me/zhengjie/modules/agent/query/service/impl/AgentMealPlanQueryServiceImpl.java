@@ -69,8 +69,11 @@ public class AgentMealPlanQueryServiceImpl implements AgentMealPlanQueryService 
             validateMealType(request.getMealType());
             Set<Long> scopedIds = AgentCustomerDataScopeContext.customerIds();
             if (scopedIds != null && scopedIds.isEmpty()) return emptyResult(request);
-            Page<MealPlanCustomer> customerPage = mealPlanCustomerMapper.selectAgentPage(request.getCustomerId(),
-                range[0], range[1], range[2], request.getMealType(), scopedIds, new Page<>(page, size));
+            Page<MealPlanCustomer> customerPage = request.getOrderId() == null
+                ? mealPlanCustomerMapper.selectAgentPage(request.getCustomerId(), range[0], range[1], range[2],
+                    request.getMealType(), scopedIds, new Page<>(page, size))
+                : mealPlanCustomerMapper.selectAgentPage(request.getCustomerId(), range[0], range[1], range[2],
+                    request.getMealType(), request.getOrderId(), scopedIds, new Page<>(page, size));
             customers = customerPage == null || customerPage.getRecords() == null ? Collections.emptyList() : customerPage.getRecords();
             total = customerPage == null ? 0L : customerPage.getTotal();
             List<Long> planIds = customers.stream().map(MealPlanCustomer::getMealPlanId).filter(java.util.Objects::nonNull)
@@ -215,6 +218,7 @@ public class AgentMealPlanQueryServiceImpl implements AgentMealPlanQueryService 
         dto.setOriginalDishId(item.getOriginalDishId()); dto.setOriginalDishName(item.getOriginalDishName());
         return dto;
     }
+    /** 限制排餐失败原因长度，避免下游自由文本进入模型上下文。 */
     private String truncate(String value) { return value == null ? null : value.length() <= 200 ? value : value.substring(0, 200) + "…"; }
     /** 对配送地址保留前六位摘要，禁止将完整地址发送到 Agent。 */
     private String maskAddress(String value) { return !hasText(value) ? null : value.trim().length() <= 6 ? "***" : value.trim().substring(0, 6) + "***"; }

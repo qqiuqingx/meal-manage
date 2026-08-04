@@ -2,12 +2,8 @@ package me.zhengjie.modules.agent.client;
 
 import me.zhengjie.modules.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
-import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisRequest;
-import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
 
 public interface AgentServiceClient {
-
-    AgentDiagnosisResponse diagnoseMealPlan(AgentDiagnosisRequest request);
 
     /**
      * 使用 v2 可信信封和短期客服访问上下文调用 Agent 聊天接口。

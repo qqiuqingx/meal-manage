@@ -4,6 +4,8 @@ import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Agent 专用订单摘要，仅包含客服只读查询需要的非金额字段。
@@ -37,6 +39,8 @@ public class AgentOrderSummaryDto {
     private String mealTypeCode;
     /** 订单排餐模式代码。 */
     private String scheduleModeCode;
+    /** 受控配送日期列表，仅用于排餐规则证据。 */
+    private List<String> deliveryDates = new ArrayList<>();
     /** 父套餐 ID。 */
     private Long parentPackageId;
     /** 父套餐名称。 */
