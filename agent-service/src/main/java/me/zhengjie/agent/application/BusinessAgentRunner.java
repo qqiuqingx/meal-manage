@@ -25,6 +25,8 @@ import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.ToolCallAdvisor;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
@@ -43,6 +45,7 @@ import java.util.Set;
  */
 @Component
 public class BusinessAgentRunner {
+    private static final Logger log = LoggerFactory.getLogger(BusinessAgentRunner.class);
     private final FallbackModelExecutor modelExecutor;
     private final BusinessAgentTools tools;
     private final ToolRegistry registry;
@@ -129,21 +132,51 @@ public class BusinessAgentRunner {
         throw lastValidation == null ? new IllegalStateException("ANSWER_VALIDATION_FAILED") : lastValidation;
     }
 
-    /** 调用模型并挂载当前可见工具回调，模型回合预算由上下文统一控制。 */
+    /** 调用模型并挂载当前可见工具回调，记录完整 LLM 调试入参、反参和耗时。 */
     private String invokeModel(String prompt, List<ToolRegistry.ToolSpec<?>> visibleSpecs,
                                ToolExecutionContext context) {
         context.beforeModelRound(properties.getChat().getToolLoop().getMaxModelRounds());
-        return modelExecutor.execute("default", client -> {
-            List<org.springframework.ai.tool.ToolCallback> callbacks = tools.callbacksFor(
-                visibleSpecs.stream().map(ToolRegistry.ToolSpec::name).collect(java.util.stream.Collectors.toSet()), context);
-            ChatClient.ChatClientRequestSpec requestSpec = client.prompt().system(prompt);
-            if (!callbacks.isEmpty()) {
-                requestSpec = requestSpec.advisors(ToolCallAdvisor.builder().build())
-                    .toolCallbacks(callbacks);
-            }
-            ChatClientResponse response = requestSpec.user(prompt.substring(prompt.lastIndexOf("用户问题：") + 6)).call().chatClientResponse();
-            return extractContent(response == null ? null : response.chatResponse());
-        });
+        int modelRound = context.modelRounds();
+        String userPrompt = prompt.substring(prompt.lastIndexOf("用户问题：") + 6);
+        long startedAt = System.nanoTime();
+        log.info("AGENT_DEBUG_LLM_REQUEST requestId={} modelRound={} systemPrompt={} userPrompt={}",
+            MDC.get("requestId"), modelRound, prompt, userPrompt);
+        try {
+            return modelExecutor.execute("default", client -> {
+                List<org.springframework.ai.tool.ToolCallback> callbacks = tools.callbacksFor(
+                    visibleSpecs.stream().map(ToolRegistry.ToolSpec::name).collect(java.util.stream.Collectors.toSet()), context);
+                ChatClient.ChatClientRequestSpec requestSpec = client.prompt().system(prompt);
+                if (!callbacks.isEmpty()) {
+                    requestSpec = requestSpec.advisors(ToolCallAdvisor.builder().build())
+                        .toolCallbacks(callbacks);
+                }
+                ChatClientResponse response = requestSpec.user(userPrompt).call().chatClientResponse();
+                ChatResponse chatResponse = response == null ? null : response.chatResponse();
+                String answer = extractContent(chatResponse);
+                log.info("AGENT_DEBUG_LLM_RESPONSE requestId={} modelRound={} status=SUCCESS costMs={} rawResponse={} content={}",
+                    MDC.get("requestId"), modelRound, elapsedMs(startedAt), debugPayload(chatResponse), answer);
+                return answer;
+            });
+        } catch (RuntimeException exception) {
+            log.warn("AGENT_DEBUG_LLM_RESPONSE requestId={} modelRound={} status=FAILED costMs={} exceptionType={}",
+                MDC.get("requestId"), modelRound, elapsedMs(startedAt), exception.getClass().getSimpleName());
+            throw exception;
+        }
+    }
+
+    /** 将 LLM 调试对象序列化为可读文本，序列化失败时不影响模型调用。 */
+    private String debugPayload(Object value) {
+        if (value == null) return "null";
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception ignored) {
+            return String.valueOf(value);
+        }
+    }
+
+    /** 计算从指定纳秒时间点到当前的毫秒耗时。 */
+    private long elapsedMs(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000L;
     }
 
     /**

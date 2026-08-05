@@ -21,6 +21,8 @@ import me.zhengjie.agent.tool.output.ToolOutputs;
 import org.slf4j.MDC;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.web.client.ResourceAccessException;
@@ -41,6 +43,7 @@ import java.util.Map;
  */
 @Component
 public class HttpMainSystemQueryClient implements MainSystemQueryClient {
+    private static final Logger log = LoggerFactory.getLogger(HttpMainSystemQueryClient.class);
     private static final String REQUEST_ID_HEADER = "X-Request-Id";
     private static final String SESSION_ID_HEADER = "X-Agent-Session-Id";
     private static final String ACCESS_CONTEXT_HEADER = "X-Agent-Access-Context";
@@ -116,10 +119,16 @@ public class HttpMainSystemQueryClient implements MainSystemQueryClient {
         return convert(path, body, Object.class, false);
     }
 
-    /** 统一添加内部认证上下文、执行响应护栏并转换主系统响应信封。 */
+    /** 统一添加内部认证上下文、执行响应护栏、记录调试链路并转换主系统响应信封。 */
     private <T> ToolOutputs.ToolResult<T> convert(String path, Object body, Class<T> itemType, boolean single) {
+        long startedAt = System.nanoTime();
+        String requestId = requestId();
+        log.info("AGENT_DEBUG_QUERY_REQUEST requestId={} path={} body={}",
+            requestId, path, debugPayload(body));
         if (AgentAccessContextHolder.accessContext() == null || AgentAccessContextHolder.sessionId() == null) {
-            throw new MainSystemQueryException("AGENT_QUERY_UNAUTHORIZED");
+            MainSystemQueryException exception = new MainSystemQueryException("AGENT_QUERY_UNAUTHORIZED");
+            logQueryResponse(requestId, path, "FAILED", null, exception.getCode(), exception.getCode(), startedAt);
+            throw exception;
         }
         try {
             JsonNode node = restClient.post().uri(path).contentType(MediaType.APPLICATION_JSON)
@@ -129,16 +138,57 @@ public class HttpMainSystemQueryClient implements MainSystemQueryClient {
                 .header(ACCESS_CONTEXT_HEADER, AgentAccessContextHolder.accessContext())
                 .body(body).retrieve().body(JsonNode.class);
             sensitiveDataPolicy.assertSafe(node);
-            return mapResult(node, itemType, single);
+            ToolOutputs.ToolResult<T> result = mapResult(node, itemType, single);
+            logQueryResponse(requestId, path, "SUCCESS", null, null, result, startedAt);
+            return result;
         } catch (RestClientResponseException exception) {
-            throw new MainSystemQueryException(resolveFailure(exception), exception);
+            String code = resolveFailure(exception);
+            logQueryResponse(requestId, path, "FAILED", exception.getStatusCode().value(), code,
+                exception.getResponseBodyAsString(), startedAt);
+            throw new MainSystemQueryException(code, exception);
         } catch (ResourceAccessException exception) {
-            throw new MainSystemQueryException(isTimeout(exception) ? "TOOL_TIMEOUT" : "TOOL_UNAVAILABLE", exception);
+            String code = isTimeout(exception) ? "TOOL_TIMEOUT" : "TOOL_UNAVAILABLE";
+            logQueryResponse(requestId, path, "FAILED", null, code, exception.getClass().getSimpleName(), startedAt);
+            throw new MainSystemQueryException(code, exception);
         } catch (MainSystemQueryException exception) {
+            logQueryResponse(requestId, path, "FAILED", null, exception.getCode(), exception.getCode(), startedAt);
             throw exception;
         } catch (RuntimeException exception) {
+            logQueryResponse(requestId, path, "FAILED", null, "TOOL_OUTPUT_INVALID",
+                exception.getClass().getSimpleName(), startedAt);
             throw new MainSystemQueryException("TOOL_OUTPUT_INVALID", exception);
         }
+    }
+
+    /** 输出主系统查询响应调试日志；日志异常不得影响查询结果。 */
+    private void logQueryResponse(String requestId, String path, String status, Integer httpStatus,
+                                  String errorCode, Object response, long startedAt) {
+        try {
+            if ("FAILED".equals(status)) {
+                log.warn("AGENT_DEBUG_QUERY_RESPONSE requestId={} path={} status={} httpStatus={} errorCode={} costMs={} response={}",
+                    requestId, path, status, httpStatus, errorCode, elapsedMs(startedAt), debugPayload(response));
+            } else {
+                log.info("AGENT_DEBUG_QUERY_RESPONSE requestId={} path={} status={} costMs={} response={}",
+                    requestId, path, status, elapsedMs(startedAt), debugPayload(response));
+            }
+        } catch (RuntimeException ignored) {
+            // 调试日志失败不能改变主系统查询结果。
+        }
+    }
+
+    /** 将查询调试对象序列化为可读文本，序列化失败时不影响下游调用。 */
+    private String debugPayload(Object value) {
+        if (value == null) return "null";
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception ignored) {
+            return String.valueOf(value);
+        }
+    }
+
+    /** 计算从查询开始到当前的毫秒耗时。 */
+    private long elapsedMs(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000L;
     }
 
     /** 将主系统统一响应映射为 Agent 内部工具结果，丢弃未登记的字段。 */

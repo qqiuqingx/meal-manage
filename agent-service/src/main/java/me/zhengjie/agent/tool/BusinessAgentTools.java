@@ -10,6 +10,9 @@ import me.zhengjie.agent.guardrail.ToolOutputGuardrail;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.tool.function.FunctionToolCallback;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -39,6 +42,7 @@ import me.zhengjie.agent.tool.input.SearchServiceCustomersInput;
  */
 @Component
 public class BusinessAgentTools {
+    private static final Logger log = LoggerFactory.getLogger(BusinessAgentTools.class);
     private final ToolRegistry registry;
     private final MainSystemQueryClient queryClient;
     private final ToolInputGuardrail inputGuardrail;
@@ -114,33 +118,64 @@ public class BusinessAgentTools {
 
         @Override public ToolDefinition getToolDefinition() { return definition.getToolDefinition(); }
 
+        /** 执行一次工具回调并记录输入、输出、稳定错误码、缓存状态和耗时。 */
         @Override public String call(String rawInput) {
+            long startedAt = System.nanoTime();
+            log.info("AGENT_DEBUG_TOOL_REQUEST requestId={} toolName={} rawInput={}",
+                MDC.get("requestId"), spec.name(), rawInput);
             try {
                 Object input = inputGuardrail.validate((ToolRegistry.ToolSpec<Object>) spec, rawInput);
                 String key = context.cacheKey(spec.name(), rawInput);
                 String cached = context.cached(key);
                 if (cached != null) {
-                    context.recordCached(spec.name(), spec.cardType(), cached);
+                    String callId = context.recordCached(spec.name(), spec.cardType(), cached);
+                    logToolResponse(spec.name(), callId, "CACHED", null, cached, startedAt);
                     return cached;
                 }
                 context.beforeCall(spec.name());
                 Object output = executors.get(spec.name()).apply(input);
                 String json = objectMapper.writeValueAsString(output);
                 outputGuardrail.validate(spec, json);
-                context.record(spec.name(), spec.cardType(), rawInput, json, true);
+                String callId = context.record(spec.name(), spec.cardType(), rawInput, json, true);
+                logToolResponse(spec.name(), callId, "SUCCESS", null, json, startedAt);
                 return json;
             } catch (RuntimeException exception) {
                 String code = stableCode(exception);
                 String json = errorJson(code);
-                try { context.record(spec.name(), spec.cardType(), rawInput, json, false); }
+                String callId = null;
+                try { callId = context.record(spec.name(), spec.cardType(), rawInput, json, false); }
                 catch (RuntimeException ignored) { /* 预算错误本身不应覆盖稳定工具错误。 */ }
+                logToolResponse(spec.name(), callId, "FAILED", code, json, startedAt);
                 return json;
             } catch (Exception exception) {
                 String json = errorJson("TOOL_OUTPUT_INVALID");
-                try { context.record(spec.name(), spec.cardType(), rawInput, json, false); }
+                String callId = null;
+                try { callId = context.record(spec.name(), spec.cardType(), rawInput, json, false); }
                 catch (RuntimeException ignored) { }
+                logToolResponse(spec.name(), callId, "FAILED", "TOOL_OUTPUT_INVALID", json, startedAt);
                 return json;
             }
+        }
+
+        /** 输出工具响应调试日志；日志异常不得影响工具返回值。 */
+        private void logToolResponse(String toolName, String callId, String status, String errorCode,
+                                     String outputJson, long startedAt) {
+            try {
+                if ("FAILED".equals(status)) {
+                    log.warn("AGENT_DEBUG_TOOL_RESPONSE requestId={} toolName={} callId={} status={} errorCode={} costMs={} output={}",
+                        MDC.get("requestId"), toolName, callId, status, errorCode, elapsedMs(startedAt), outputJson);
+                } else {
+                    log.info("AGENT_DEBUG_TOOL_RESPONSE requestId={} toolName={} callId={} status={} costMs={} output={}",
+                        MDC.get("requestId"), toolName, callId, status, elapsedMs(startedAt), outputJson);
+                }
+            } catch (RuntimeException ignored) {
+                // 调试日志失败不能改变工具业务结果。
+            }
+        }
+
+        /** 计算从工具调用开始到当前的毫秒耗时。 */
+        private long elapsedMs(long startedAt) {
+            return (System.nanoTime() - startedAt) / 1_000_000L;
         }
 
         /** 将工具异常归一化为可交给模型处理的稳定错误码。 */
