@@ -6,12 +6,12 @@
 
 ## 智能客服 Agent
 
-当前 Agent 已从单一“排餐未生成诊断”扩展为内部客服工作台，包含两条受控链路：
+当前 Agent 是面向内部客服的只读工作台，包含两类能力，并由同一个 LLM Tool Calling 循环驱动：
 
 - **排餐原因诊断**：回答“B3303 今天午餐为什么没排上”等问题，结合版本化规则、业务证据和大模型给出原因、置信度、证据与建议动作。
 - **全业务只读查询**：查询客户、订单、剩余餐数、排餐、公共菜单、实际过敏过滤、核销、退餐、套餐、菜品、业务规则和已登记运营指标。
 
-`eladmin-system` 始终是业务数据和权限的唯一真相源；`agent-service` 只负责语义理解、受控规划、工具编排和结果校验，不直连业务数据库。功能仅面向已登录的内部客服，不作为外部客户机器人开放。
+`eladmin-system` 是业务数据、身份权限和数据范围的唯一真相源；`agent-service` 只通过主系统统一只读 API 获取数据，不连接数据库。模型负责理解问题、选择和组合工具、澄清与生成回答，Java 负责工具供给、鉴权上下文、参数约束、预算、脱敏、审计、事实校验和安全降级。功能仅面向已登录的内部客服，不作为外部客户机器人开放。
 
 ### 当前架构
 
@@ -21,39 +21,33 @@ flowchart TB
     W -->|"JWT + agentDiagnosis:list"| G["eladmin-system Agent 网关\n:8000"]
 
     subgraph MAIN["eladmin-system：身份、数据与审计边界"]
-        G --> S["会话服务\n消息持久化 / Pending + Last Context"]
-        S --> H["签发短期 HMAC 访问上下文\n计算本轮工具白名单"]
-        IQ["内部 Agent 查询接口"] --> P["内部 Token + HMAC 验签\n业务权限 + 客户数据范围"]
+        G --> S["会话服务\n消息摘要 / Last Context / sessionVersion"]
+        S --> H["签发短期 HMAC 访问上下文\n计算本轮可见工具"]
+        IQ["统一内部只读查询 API"] --> P["内部 Token + HMAC 验签\n业务权限 + 客户数据范围"]
         P --> BS["客户 / 订单 / 排餐 / 核销 / 套餐等业务服务"]
         BS --> DB[("MySQL / Redis")]
-        S --> AU[("会话 / 查询 / 反馈 / 动作审计")]
+        S --> AU[("会话 / 工具 / 查询 / 反馈审计")]
     end
 
-    H -->|"sessionId + requestId + signed context"| C["agent-service /chat\n:18081"]
+    H -->|"v2 信封 + signed context"| C["agent-service /api/agent/v2/chat\n:18081"]
 
-    subgraph AGENT["agent-service：理解与编排边界"]
-        C --> DG["Deterministic Guard\n控制指令 + 确定性槽位"]
-        DG --> PQ["Pending Query Resolver\n纯槽位回复续接原语义"]
-        PQ --> BA["HybridBusinessQuestionAnalyzer\nLLM 统一语义 + 规则兜底"]
-        MC["指标语义目录\n定义 / 维度 / 默认时间"] --> BA
-        BA --> TR["BusinessTemporalResolver\nAsia/Shanghai + Clock"]
-        TR --> RT{"受控目标"}
-        RT -->|"业务查询"| QP["BusinessQueryPlanningService\n生成白名单 QueryPlan"]
-        QP --> QV["AgentQueryPlanValidator\n对象 / 日期 / 指标 / 工具 / 预算"]
-        QV --> BO["BusinessQueryOrchestrator\n受控只读工具"]
-        RT -->|"排餐原因诊断"| DO["MealPlanDiagnosisOrchestrator\n规则 + Tool Calling + AI"]
-        BO --> RV["Result / Answer Validator\n事实、对象、日期、餐次、敏感字段"]
-        DO --> DV["DiagnosisResultValidator\n规则证据与结构校验"]
+    subgraph AGENT["agent-service：LLM 与工具安全边界"]
+        C --> R["BusinessAgentRunner\n唯一 LLM + Tool loop 入口"]
+        R --> REG["ToolRegistry\n12 个只读工具 / 动态白名单"]
+        REG --> IN["ToolInputGuardrail\nSchema / enum / 分页 / 预算"]
+        IN --> BT["BusinessAgentTools\nMainSystemQueryClient"]
+        BT --> OUT["ToolOutputGuardrail\n类型 / 脱敏 / 注入检测"]
+        OUT --> R
+        R --> FA["FinalAnswerGuardrail\nfacts / 数字 / 日期 / 写操作声称"]
+        R --> DV["DiagnosisResultValidator\n规则证据与结构校验"]
     end
 
-    BO -->|"固定内部路径"| IQ
-    DO -->|"固定诊断工具"| IQ
-    RV --> OUT["文本回答 + facts + 卡片 + warnings"]
-    DV --> OUT
-    OUT --> S
+    BT -->|"内部 Token + access context"| IQ
+    FA --> RESP["文本回答 + facts + cards + warnings"]
+    DV --> RESP
+    RESP --> S
     S --> W
-    L["DeepSeek / OpenAI 兼容模型"] <--> BA
-    L <--> DO
+    L["DeepSeek / OpenAI 兼容模型"] <--> R
 ```
 
 ### 组件职责
@@ -61,48 +55,65 @@ flowchart TB
 | 组件 | 核心职责 |
 | --- | --- |
 | `eladmin-web` | 会话列表、追问与澄清、诊断证据、事实引用、业务卡片、部分失败提示、反馈和动作确认交互 |
-| `eladmin-system` | 登录鉴权、Pending/Last Context 持久化、HMAC 上下文签发、工具权限映射、客户数据范围、真实业务查询和审计 |
-| `agent-service` | 确定性槽位、Pending 续接、业务时间落地、QueryPlan 编译与校验、只读工具编排、事实和回答校验 |
-| 大模型 | 选择业务领域、登记指标、时间语义、交互模式和歧义；不能生成 SQL、URL、任意工具名、结果字段或直接修改业务数据 |
+| `eladmin-system` | 登录鉴权、会话摘要、HMAC 上下文签发、本轮工具白名单、客户数据范围、统一只读查询、审计和人工动作确认 |
+| `agent-service` | `BusinessAgentRunner`、动态工具注册、强类型输入输出、三层护栏、工具预算、事实/卡片组装和安全降级 |
+| `ToolRegistry` | 维护工具名、描述、输入输出类型、所需权限、结果上限、超时和卡片类型的唯一登记 |
+| 大模型 | 理解问题、选择和组合当前可见工具、决定澄清或回答；不能生成 SQL、URL、权限字段、任意工具名或直接修改业务数据 |
 
 ### 请求处理流程
 
-1. 客服从前端调用主系统统一聊天接口，主系统校验 `agentDiagnosis:list`，保存用户消息并生成 `requestId`。
-2. 主系统根据当前用户权限和部门数据范围计算本轮可用工具，签发绑定 `sessionId`、`requestId`、客服身份和过期时间的 HMAC 访问上下文。
-3. `agent-service` 先处理控制指令并提取确定性槽位。若主系统下发 Pending Context 且本轮只是日期、餐次或编号，则只补槽并恢复原指标，不重新猜测业务领域。
-4. 其他业务问题由 LLM 结合版本化指标目录输出领域、指标和时间枚举；规则仅在模型不可用、非法或低置信度时兜底。`BusinessTemporalResolver` 再按 `Asia/Shanghai` 和可注入 `Clock` 将相对时间落为日期。
-5. 受控语义被编译为 QueryPlan；服务端校验领域、动作、指标、维度、过滤条件、工具白名单、日期范围和调用预算。指标的响应类型、标签、结果字段和工具均来自目录，不读取原始中文二次路由。
-6. Agent 仅调用登记过的内部只读工具。主系统内部接口再次校验身份、业务权限和客户数据范围，然后复用真实业务 Service 计算结果。
-7. 工具结果转换为 facts 并校验对象、日期、餐次、数字和敏感字段。成功、重置、目标切换或超时会清除 Pending；Last Context 与脱敏语义追踪写回主系统。
+1. 客服从前端调用主系统统一聊天入口，主系统校验 `agentDiagnosis:list`，保存用户消息并生成 `requestId`。
+2. 主系统根据当前用户权限和部门数据范围计算本轮 `availableTools`，生成包含消息、会话摘要、工具白名单和 `sessionVersion` 的 v2 信封，并签发短期 `X-Agent-Access-Context`。
+3. `BusinessAgentRunner` 只向模型暴露本轮白名单工具、业务上下文和安全提示；问候、澄清等场景可以不调用工具，涉及实时业务事实时必须调用成功工具。
+4. 模型通过 Spring AI `ToolCallAdvisor` 自主选择和组合工具。Java 不再根据中文关键词、领域枚举、`ChatIntent` 或 `QueryPlan` 固定选择业务工具。
+5. 每次调用先经过输入护栏，再由主系统统一只读 API 执行；主系统重新校验内部关联 ID、业务权限、部门数据范围和对象关系，并在 SQL 查询前完成分页与数据裁剪。
+6. 工具结果经过输出护栏后返回模型。模型可继续调用、请求澄清或生成回答；相同工具和规范化参数在当前请求内命中缓存，调用次数、模型轮次和记录数受硬预算限制。
+7. 最终回答经过事实、敏感数据和写操作声称校验，确定性生成 `facts`、业务 `cards`、`warnings` 和 `toolTraceSummary`，再通过 `conversationPatch` 回写主系统会话。
 
-排餐原因诊断沿用独立诊断编排器：模型可在规则约束下按需调用客户档案、订单余额、停送日期、排餐快照、套餐规格、候选菜、核销和退餐等诊断工具，最终输出经过规则证据校验的结构化原因。
+排餐原因诊断复用同一套领域工具。`rules/{scene}/` 仍是规则真相源，规则只声明原因、证据字段和 `requiredTools`；最终结果必须通过规则 ID/版本、工具事实、原因码、置信度和建议动作校验。
 
-### 受控查询能力
+### 统一只读工具
 
-| 领域 | 当前能力 | 主要只读工具 |
-| --- | --- | --- |
-| 客户 | 客户候选、综合概览、地址摘要、过敏标签、剩余餐数 | `resolveCustomer`、`customerOverview` |
-| 订单 | 客户订单列表、授权范围内进行中订单数量与分页明细、下单时间、订单详情、有效状态和餐数余额 | `getActiveOrderSummary`、`listOrders`、`orderDetail` |
-| 排餐 | 客户实际排餐、跨客户单日排餐、实际过敏过滤、排餐失败 | `listMealPlans`、`getMealPlanFailureSummary` |
-| 菜单与菜品 | 午晚餐公共排期、客户候选菜、菜品与配料摘要 | `listScheduledDishes`、`previewDishCandidates`、`listDishes` |
-| 核销与退餐 | 客户或订单核销记录、退餐记录 | `listVerifications`、`listRefunds` |
-| 套餐与规则 | 父子套餐规格、版本化业务规则解释 | `packageDetail`、`explainRule` |
-| 运营统计 | 客户档案总数、当日应服务/已排餐/待排餐/已核销/待核销客户、活跃客户、到期订单 | `getCustomerProfileCount`、`getDailyCustomerWorkload`、`getActiveCustomerSummary`、`getExpiringOrderSummary` |
+第一期固定为 12 个工具，工具名、Schema、权限和结果上限只在 `agent-service/src/main/java/me/zhengjie/agent/tool/ToolRegistry.java` 登记一次：
 
-复杂组合问答、更多统计维度、真实模型旁路评测和灰度上线仍需持续收敛；Pending/Last Context 已由主系统持久化，Agent 重启或实例切换后可继续纯槽位补充。
+| 工具 | 能力 |
+| --- | --- |
+| `searchCustomerProfiles` | 客户档案和未下单客户分页查询 |
+| `searchServiceCustomers` | 以订单为根的服务客户分页查询；同一客户多笔订单逐笔返回 |
+| `getServiceCustomerDetail` | 单个客户或订单的档案、订单、套餐、餐数池和最近记录快照 |
+| `listMealPlans` | 客户/订单排餐和菜品明细查询 |
+| `listVerifications` | 客户/订单核销记录查询 |
+| `listRefunds` | 客户/订单退餐记录查询 |
+| `previewDishCandidates` | 指定日期餐次的候选菜和过敏/忌口过滤原因 |
+| `listScheduledDishes` | 指定日期午餐/晚餐公共排期菜单 |
+| `searchDishes` | 菜品与配料摘要的受控分页搜索 |
+| `getPackageDetail` | 父套餐、子套餐和餐次规格查询，不返回金额 |
+| `queryBusinessMetrics` | 已登记运营指标和受控维度查询 |
+| `explainBusinessRule` | 版本化业务规则解释 |
+
+查询以服务客户为业务语义：同一客户存在多笔订单时按订单展示，不能由 Agent 任意合并或挑选订单。客户/订单内部关联 ID 可以进入工具上下文用于关联，但不构成授权依据，默认不在客服卡片中展示。
+
+### 响应与安全边界
+
+- v2 响应包含 `assistantMessage`、`cards`、`facts`、`warnings`、`partial`、`toolFacts`、`toolTraceSummary`、`queriedAt` 和 `conversationPatch`；卡片由成功工具输出确定性映射，不由模型自由构造。
+- 所有工具均为白名单只读能力。Agent 不直连数据库、不执行自由 SQL，不接受权限、Token、数据范围、URL、表名、字段选择和任意排序参数。
+- 主系统在 SQL 前校验登录身份、业务权限、部门数据范围和客户/订单关系；跨范围对象按无权限处理，不暴露对象是否存在。
+- 工具结果和最终回答禁止金额、价格、完整手机号、完整地址、内部 Token、权限集合和写操作声称。业务自由文本按不可信数据处理，并进行提示注入检测。
+- 每轮最多 6 次工具调用、4 个模型回合、100 条业务记录；单工具默认超时 3 秒，最终回答最多修复 1 次。超限、权限不足、失败或截断会返回稳定 warning，不能把部分结果表述为完整结论。
+- 排餐诊断可返回动作建议草稿，但模型不能直接执行；人工确认仍需独立权限、幂等键、数据过期检查和高风险二次确认。
 
 ### Agent 能力路线图
 
-基于 2026-07-29 与市面客服 Agent 的差距分析，结合本系统"内部运营增强型"定位，确认以下 4 项待建设能力：
+LLM 主导的统一工具调用重构已完成。结合本系统“内部运营增强型”定位，后续重点为：
 
 | 阶段 | 能力 | 当前状态 | 目标 |
 |------|------|---------|------|
-| 阶段 1 | 多模型韧性 | 仅 DeepSeek 单一 provider | DeepSeek（主）+ Claude（备），故障自动切换 + 熔断 + 规则兜底 |
-| 阶段 2 | RAG 知识检索 | 只能回答"查数据"类问题 | 从受评审 manifest 选择的业务文档构建知识库，支持"怎么做""规则是什么"类问答 |
-| 阶段 3 | 幻觉检测 | LLM 生成直接返回，无验证 | 数据断言 API 反向校验 + 规则断言 YAML 匹配 + AI 建议标注 |
+| 阶段 1 | 多模型韧性 | 已有 provider/profile/fallback 抽象，备用 provider 默认关闭 | 完成真实模型评测、熔断策略和生产 provider 配置 |
+| 阶段 2 | RAG 知识检索 | 当前聚焦受控业务数据查询和规则解释 | 从受评审 manifest 选择的业务文档构建知识库，支持“怎么做”“规则是什么”类问答 |
+| 阶段 3 | 幻觉检测 | 已有输入/输出/最终回答护栏、facts 引用和诊断证据校验 | 扩展数据断言 API、规则断言和 AI 建议标注 |
 | 阶段 4 | 客户健康度评分 | 无 | 排餐失败/退款/核销异常/餐数紧张/过敏复杂度 五维度风险评分 |
 
-详细方案：`docs/superpowers/plans/2026-07-29-agent-service-多模型韧性与RAG知识检索实施方案.md`
+详细资料：[Agent 服务架构基线](agent-service/docs/architecture-baseline.md)、[LLM 主导工具调用重构实施方案](docs/superpowers/plans/2026-08-04-agent-service-LLM主导工具调用重构实施方案.md)。
 
 不纳入本轮的能力及原因：
 
@@ -114,17 +125,9 @@ flowchart TB
 | 主动服务/推送 | 后续独立规划 |
 | 多 Agent 编排 | 当前单 Agent 够用，后续扩展时再拆分 |
 
-### 安全与写操作边界
-
-- 业务查询工具全部标记为 `INTERNAL_READ_ONLY`，Agent 不直连数据库、不执行自由 SQL，订单金额及相关金额字段默认不进入 DTO、模型上下文、回答或审计。
-- 页面入口权限、业务工具权限和部门数据范围分别校验；仅有 Agent 菜单权限不等于拥有客户、订单、排餐或菜品数据权限。
-- 通用业务查询单轮最多调用 6 个工具、预留最多 100 条数据；排餐诊断默认最多调用 8 次工具。同参结果仅在当前请求内缓存。
-- 工具失败、权限不足、结果截断或 QueryPlan 与结果不一致时返回受控 warning，不能把部分结果表述为完整结论。
-- 排餐诊断可以根据固定原因码生成动作草稿，但模型不能直接执行。动作必须由人工调用确认接口，并经过独立权限、幂等键、业务数据过期检查和高风险二次确认；业务只读问答链路不生成可执行动作。
-
 ### 本地启动
 
-当前主系统 `pom.xml` 和 `agent-service` 均使用 Java 17，但两者保持独立 Maven 工程和 Spring Boot 依赖基线。先启动主系统，再启动 Agent 服务和前端。
+主系统和 `agent-service` 均使用 Java 17，但保持独立 Maven 工程和 Spring Boot 依赖基线。先启动主系统，再启动 Agent 服务和前端。
 
 ```bash
 # 终端 1：主系统（JDK 17）
@@ -153,7 +156,7 @@ NODE_OPTIONS=--openssl-legacy-provider BROWSER=none ./node_modules/.bin/vue-cli-
 
 默认地址：前端 `http://localhost:8013`，主系统 `http://localhost:8000`，Agent 服务 `http://localhost:18081`，Agent 健康检查 `http://localhost:18081/api/agent/health`。
 
-模型配置优先读取 `AGENT_DEEPSEEK_API_KEY`、`AGENT_DEEPSEEK_BASE_URL`、`AGENT_DEEPSEEK_MODEL`。统一语义配置包括 `AGENT_CHAT_BUSINESS_SEMANTIC_MODE`、`AGENT_CHAT_BUSINESS_SEMANTIC_CONFIDENCE_THRESHOLD`、`AGENT_CHAT_PENDING_CONTEXT_ENABLED`、`AGENT_CHAT_PENDING_CONTEXT_TTL_MINUTES` 和 `AGENT_BUSINESS_TIME_ZONE_ID`，默认业务时区为 `Asia/Shanghai`。
+模型配置优先读取 `AGENT_DEEPSEEK_API_KEY`、`AGENT_DEEPSEEK_BASE_URL`、`AGENT_DEEPSEEK_MODEL`；备用 OpenAI 兼容 provider 使用 `AGENT_FALLBACK_OPENAI_*`。工具循环边界可通过 `AGENT_CHAT_MAX_TOOL_CALLS`、`AGENT_CHAT_MAX_MODEL_ROUNDS`、`AGENT_CHAT_MAX_TOOL_RECORDS`、`AGENT_CHAT_TOOL_TIMEOUT_MS` 和 `AGENT_CHAT_MAX_ANSWER_REPAIRS` 调整。规则目录使用 `AGENT_RULES_BASE_PATH`，主系统地址使用 `AGENT_CONTEXT_BASE_URL`。
 
 ## 系统定位
 
@@ -189,13 +192,12 @@ NODE_OPTIONS=--openssl-legacy-provider BROWSER=none ./node_modules/.bin/vue-cli-
 - 排餐日历：支持客户维度查看、人工新增/取消餐次、取消未核销排餐、调整日志单独落盘。
 - 排餐生成：支持人工新增餐次、开始餐次控制、订单预计剩余餐数、米饭类型和编号明细展示规则。
 - 智能客服 Agent：从排餐原因诊断扩展到客户、订单、排餐、核销、退餐、套餐、菜品和运营统计的受控只读查询。
-- Agent 语义架构：引入模型优先、规则兜底的业务问题分析器，服务端将受控语义编译为 QueryPlan，并支持追问、局部改查和结果纠错重新规划。
-- Agent 安全链路：新增 HMAC 客服访问上下文、工具权限白名单、部门数据范围、调用与数据预算、facts 引用、结果一致性校验和查询审计。
-- Agent 结果校验：QueryPlan 与工具结果按客户、订单、业务日期和餐次核对；业务日期兼容 `yyyy-MM-dd` 与主系统的零点日期时间格式，避免同日结果被误判为不一致。
-- Agent 统一语义：指标知识目录集中维护业务定义、默认时间、展示名、结果字段和工具映射；相对时间由模型输出枚举、服务端按固定时区解析。
-- Agent 跨实例续接：主系统持久化 Pending/Last Business Context，纯槽位回复恢复原 QueryPlan 语义，避免补”今天”后漂移到公共菜单。
+- Agent 统一工具调用：`BusinessAgentRunner` 使用 Spring AI `ToolCallAdvisor` 驱动模型自主选择和组合 12 个强类型只读工具，已删除旧 QueryPlan、Capability、业务 Analyzer、关键词路由和重复工具目录。
+- Agent 安全链路：主系统签发 HMAC 访问上下文并裁剪本轮工具白名单，统一 API 在 SQL 前执行权限、数据范围和对象关系校验。
+- Agent 三层护栏：工具输入、工具输出和最终回答分别校验 Schema、分页预算、敏感数据、提示注入、事实引用、数字日期和写操作声称。
+- Agent 响应契约：统一返回 `facts`、确定性业务卡片、`warnings`、`partial`、工具 trace 和 `conversationPatch`，并通过 `sessionVersion` 处理并发会话提交。
 - 业务文档：补充剩余餐数计算、排餐首次标记、排餐日历调整等说明。
-- Agent 能力规划：完成与市面客服 Agent 的差距分析，确认多模型韧性、RAG 知识检索、幻觉检测、客户健康度评分四项待建设能力，制定分阶段实施方案。
+- Agent 能力规划：保留 provider fallback、RAG、断言增强和客户健康度评分作为后续演进方向。
 
 ## 技术栈
 
@@ -216,8 +218,8 @@ NODE_OPTIONS=--openssl-legacy-provider BROWSER=none ./node_modules/.bin/vue-cli-
 - Java 17
 - Spring Boot 3.5.14
 - Spring AI 1.1.6
-- DeepSeek / OpenAI 兼容 Chat API（规划中：多 provider 韧性 + Claude 备用）
-- 受控 QueryPlan、Tool Calling、规则注册表、结构化输出与回答校验
+- DeepSeek / OpenAI 兼容 Chat API，支持 profile、provider fallback 和能力检查
+- Spring AI `ToolCallAdvisor`、统一 `ToolRegistry`、强类型工具、三层护栏、结构化输出与回答校验
 - 独立 Maven 工程，与主系统依赖和发布节奏隔离
 
 ### 前端
@@ -255,13 +257,20 @@ eladmin-mp/
 │   │   └── apidoc/                  # 接口 Markdown 文档
 │   └── sql/                         # 业务表结构和数据脚本
 ├── agent-service/                   # 独立智能客服编排服务（JDK 17）
-│   ├── rules/                       # 诊断规则、提示词策略和建议模板
+│   ├── rules/                       # 诊断规则、证据字段和建议模板
 │   └── src/main/java/me/zhengjie/agent/
-│       ├── analysis/                # 语义目录、LLM/规则分析、业务时间解析
-│       ├── chat/                    # 会话状态、槽位和顶层路由
-│       ├── orchestrator/            # 排餐诊断编排
-│       ├── query/                   # QueryPlan、工具编排、facts 和回答校验
-│       ├── tool/                    # 排餐诊断工具注册
+│       ├── api/                     # v2 请求/响应契约、Controller 和错误协议
+│       ├── application/             # BusinessAgentRunner 和 conversation patch
+│       ├── client/                  # 主系统统一只读查询客户端
+│       ├── config/                  # 模型、规则和工具循环配置
+│       ├── controller/              # 健康检查
+│       ├── domain/                  # 聊天、诊断和健康检查 DTO
+│       ├── guardrail/               # 工具输入、输出和最终回答护栏
+│       ├── infrastructure/          # LLM provider、fallback 和可观测性
+│       ├── memory/                  # 模型记忆相关配置
+│       ├── rule/                    # 诊断规则加载与注册
+│       ├── security/                # Agent 访问上下文
+│       ├── tool/                    # 统一 ToolRegistry、输入和输出类型
 │       └── validator/               # 诊断结构与规则证据校验
 ├── eladmin-web/                     # Vue 前端工程
 │   └── src/views/
@@ -380,8 +389,8 @@ cd agent-service
 source ~/.zshrc && jenv shell 17 && mvn399
 mvn -q test
 
-# Agent 查询响应定向测试
-mvn -q -Dtest=BusinessQueryResponseFactoryTest test
+# Agent v2、工具契约和架构边界定向测试
+mvn -q -Dtest=AgentV2ChatControllerTest,UnifiedToolContractTest,ArchitectureBoundaryTest test
 ```
 
 前端：
@@ -410,6 +419,8 @@ npm run test:unit
 - [智能客服 Agent 全业务问答剩余任务实施计划](eladmin/doc/智能客服Agent全业务问答剩余任务实施计划.md)
 - [智能客服 Agent 自然语言理解与查询纠错优化实施方案](eladmin/doc/智能客服Agent自然语言理解与查询纠错优化实施方案.md)
 - [智能客服 Agent 统一语义分析与时间口径实施计划](eladmin/doc/智能客服Agent统一语义分析与时间口径实施计划.md)
+- [Agent 服务架构基线](agent-service/docs/architecture-baseline.md)
+- [LLM 主导工具调用重构实施方案](docs/superpowers/plans/2026-08-04-agent-service-LLM主导工具调用重构实施方案.md)
 - [Agent 多模型韧性与 RAG 知识检索实施方案](docs/superpowers/plans/2026-07-29-agent-service-多模型韧性与RAG知识检索实施方案.md)
 
 ## 接口文档索引
@@ -427,6 +438,7 @@ npm run test:unit
 - [核销管理接口文档](eladmin/doc/apidoc/核销管理接口文档.md)
 - [退餐管理接口](eladmin/doc/apidoc/退餐管理接口.md)
 - [智能客服 Agent 内部业务查询接口](eladmin/doc/apidoc/智能客服Agent内部业务查询接口文档.md)
+- [Agent v2 跨服务聊天契约](agent-service/src/main/resources/openapi/agent-service-v2.yaml)
 
 ## 关键规则
 
@@ -448,9 +460,10 @@ npm run test:unit
 | Agent 服务启动类 | `agent-service/src/main/java/me/zhengjie/agent/AgentServiceApplication.java` |
 | Agent 服务配置 | `agent-service/src/main/resources/application.yml` |
 | Agent 工作台 | `eladmin-web/src/views/agent/diagnosis/index.vue` |
-| Agent 统一聊天接口 | `POST /api/agent/meal-plan/chat` |
+| Agent 前端聊天入口 | `POST /api/agent/meal-plan/chat` |
+| Agent v2 内部聊天契约 | `POST /api/agent/v2/chat`（仅主系统调用） |
 | Agent 会话接口 | `/api/agent/chat-sessions` |
-| Agent 内部只读查询 | `/api/internal/agent/query/*`、`/api/internal/agent/operations/*` |
+| Agent 内部统一只读查询 | `/api/internal/agent/query/**` |
 | 前端配置 | `eladmin-web/vue.config.js`、`eladmin-web/.env.*` |
 | API 在线文档 | `http://localhost:8000/doc.html` |
 | Agent 健康检查 | `http://localhost:18081/api/agent/health` |
