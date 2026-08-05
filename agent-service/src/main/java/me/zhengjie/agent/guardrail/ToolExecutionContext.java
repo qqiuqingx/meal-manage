@@ -52,7 +52,8 @@ public class ToolExecutionContext {
             throw new ToolGuardrailException("TOOL_RECORD_BUDGET_EXCEEDED", "business record budget exceeded");
         }
         if (success) records += count;
-        cache.put(cacheKey(toolName, inputJson), outputJson);
+        // 失败结果不能进入同参缓存，否则后续修复会被旧错误短路。
+        if (success) cache.put(cacheKey(toolName, inputJson), outputJson);
         facts.add(new ToolFact(callId, toolName, cardType, outputJson, success, count));
         return callId;
     }

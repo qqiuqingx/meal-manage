@@ -51,11 +51,11 @@ public class ToolRegistry {
     public ToolRegistry() {
         Map<String, ToolSpec<?>> values = new LinkedHashMap<>();
         register(values, new ToolSpec<>(SEARCH_CUSTOMER_PROFILES,
-            "查询客户档案，包括尚未下单客户。按客户编号、内部关联 ID、脱敏姓名条件或是否已下单筛选；不要用它查询订单状态或实时排餐。",
+            "查询客户档案，包括尚未下单客户；只返回档案摘要，不包含订单成交/创建时间。按客户编号、内部关联 ID、脱敏姓名或是否已下单筛选；不要用它回答客户什么时候下单。可选字段未使用时省略或传 null，ID 禁止传 0；page 从 1 开始，size 只能为 1-20。",
             SearchCustomerProfilesInput.class, ToolOutputs.ToolResult.class,
             List.of("customerProfile:list"), 20, 3000, "CUSTOMER_PROFILE_LIST"));
         register(values, new ToolSpec<>(SEARCH_SERVICE_CUSTOMERS,
-            "查询以订单为根的服务客户。每笔订单单独返回，不要把同一客户的多笔订单合并；可按状态、下单日期、客户或订单编号筛选。",
+            "查询以订单为根的服务客户，一笔订单返回一行。用户询问‘现在/当前/服务中的客户’或‘分别什么时候下单’时必须使用本工具并设置 status=ACTIVE，不要使用 searchCustomerProfiles。下单时间优先使用 dealTime，缺失时使用 createTime。可选字段未使用时省略或传 null，ID 禁止传 0，日期只能为 yyyy-MM-dd 且不能传空字符串；page 从 1 开始，size 只能为 1-20，truncated=true 时继续查询下一页。",
             SearchServiceCustomersInput.class, ToolOutputs.ToolResult.class,
             List.of("customerOrder:list"), 20, 3000, "SERVICE_CUSTOMER_LIST"));
         register(values, new ToolSpec<>(GET_SERVICE_CUSTOMER_DETAIL,

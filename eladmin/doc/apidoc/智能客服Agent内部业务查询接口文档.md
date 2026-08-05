@@ -65,13 +65,13 @@
 
 路径：`POST /api/internal/agent/query/customer-profiles/search`。
 
-请求字段：`customerId`、`customerCode`、`customerName`、`hasOrder`、`page`、`size`。可查询尚未下单客户；姓名和联系方式只返回脱敏摘要。
+请求字段：`customerId`、`customerCode`、`customerName`、`hasOrder`、`page`、`size`。可查询尚未下单客户；姓名和联系方式只返回脱敏摘要。本接口只返回客户档案摘要，不包含订单成交/创建时间，不用于回答客户下单时间。可选字段未使用时省略或传 `null`，ID 不得传 `0`，`page` 从 1 开始，`size` 范围为 1-20。
 
 ### 5.2 服务客户：`searchServiceCustomers`
 
 路径：`POST /api/internal/agent/query/service-customers/search`。
 
-请求字段：`customerId`、`customerCode`、`orderId`、`orderCode`、`status`、`dealTimeFrom`、`dealTimeTo`、`packageCode`、`page`、`size`。一笔订单一行，不合并同一客户的多笔订单；状态为 `ALL`、`ACTIVE`、`CANCELLED`、`COMPLETED` 或 `REFUNDED`。下单时间优先使用成交时间，缺失时回退创建时间。
+请求字段：`customerId`、`customerCode`、`orderId`、`orderCode`、`status`、`dealTimeFrom`、`dealTimeTo`、`packageCode`、`page`、`size`。一笔订单一行，不合并同一客户的多笔订单；状态为 `ALL`、`ACTIVE`、`CANCELLED`、`COMPLETED` 或 `REFUNDED`。用户询问“现在/当前/服务中的客户”或“分别什么时候下单”时使用 `status=ACTIVE`。下单时间优先使用成交时间，缺失时回退创建时间。可选字段未使用时省略或传 `null`，ID 不得传 `0`，日期只能使用 `yyyy-MM-dd`，`page` 从 1 开始，`size` 范围为 1-20；`truncated=true` 时继续查询下一页。
 
 ### 5.3 服务客户详情：`getServiceCustomerDetail`
 

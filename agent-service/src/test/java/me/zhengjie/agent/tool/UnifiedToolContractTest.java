@@ -1,22 +1,27 @@
 package me.zhengjie.agent.tool;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.guardrail.SensitiveDataPolicy;
 import me.zhengjie.agent.guardrail.ToolExecutionContext;
 import me.zhengjie.agent.guardrail.ToolGuardrailException;
 import me.zhengjie.agent.guardrail.ToolInputGuardrail;
 import me.zhengjie.agent.guardrail.ToolOutputGuardrail;
+import me.zhengjie.agent.tool.input.SearchServiceCustomersInput;
 import me.zhengjie.agent.tool.output.ToolOutputs;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.tool.function.FunctionToolCallback;
 
 import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -57,6 +62,45 @@ class UnifiedToolContractTest {
             registry.require(ToolRegistry.LIST_VERIFICATIONS), "{\"page\":1,\"size\":20}"));
         assertTrue(guardrail.validate(registry.require(ToolRegistry.LIST_VERIFICATIONS),
             "{\"customerCode\":\"C1001\",\"mealType\":\"LUNCH\",\"page\":1,\"size\":20}") != null);
+    }
+
+    /** 搜索工具应把模型占位符归一化，并提前拦截负数 ID 和非法日期。 */
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldNormalizeSearchPlaceholdersBeforeValidation() {
+        ToolRegistry registry = new ToolRegistry();
+        ToolInputGuardrail guardrail = new ToolInputGuardrail(objectMapper, sensitiveDataPolicy);
+        ToolRegistry.ToolSpec<SearchServiceCustomersInput> spec =
+            (ToolRegistry.ToolSpec<SearchServiceCustomersInput>) (ToolRegistry.ToolSpec<?>)
+                registry.require(ToolRegistry.SEARCH_SERVICE_CUSTOMERS);
+
+        SearchServiceCustomersInput input = guardrail.validate(
+            spec,
+            "{\"customerId\":0,\"orderId\":0,\"dealTimeFrom\":\"\",\"dealTimeTo\":\"\",\"status\":\"ACTIVE\",\"page\":1,\"size\":20}");
+
+        assertNull(input.getCustomerId());
+        assertNull(input.getOrderId());
+        assertNull(input.getDealTimeFrom());
+        assertNull(input.getDealTimeTo());
+        assertThrows(ToolGuardrailException.class, () -> guardrail.validate(
+            spec, "{\"customerId\":-1,\"page\":1,\"size\":20}"));
+        assertThrows(ToolGuardrailException.class, () -> guardrail.validate(
+            spec, "{\"dealTimeFrom\":\"2026/08/05\",\"page\":1,\"size\":20}"));
+    }
+
+    /** 工具 Schema 应向模型展示服务客户查询的关键字段约束。 */
+    @Test
+    void shouldExposeSearchServiceCustomerFieldDescriptions() throws Exception {
+        Function<SearchServiceCustomersInput, Object> function = input -> null;
+        String schema = FunctionToolCallback.builder("searchServiceCustomers",
+                function)
+            .inputType(SearchServiceCustomersInput.class)
+            .build().getToolDefinition().inputSchema();
+        JsonNode root = objectMapper.readTree(schema);
+
+        assertTrue(root.path("properties").path("status").path("description").asText().contains("ACTIVE"));
+        assertTrue(root.path("properties").path("size").path("description").asText().contains("1-20"));
+        assertFalse(root.path("required").toString().contains("customerId"));
     }
 
     /** 工具输出必须阻断金额字段和超过登记上限的结果集。 */
@@ -107,6 +151,17 @@ class UnifiedToolContractTest {
         assertEquals(1, context.records());
         assertEquals(1, context.cacheHits());
         assertEquals(2, context.facts().size());
+    }
+
+    /** 失败工具事实不得被同参缓存，避免后续修复调用复用旧错误。 */
+    @Test
+    void shouldNotCacheFailedToolResult() {
+        ToolExecutionContext context = new ToolExecutionContext(objectMapper, 6, 100);
+        String input = "{\"page\":1,\"size\":20}";
+        context.record(ToolRegistry.SEARCH_SERVICE_CUSTOMERS, "SERVICE_CUSTOMER_LIST", input,
+            "{\"errorCode\":\"TOOL_INPUT_INVALID\"}", false);
+
+        assertNull(context.cached(context.cacheKey(ToolRegistry.SEARCH_SERVICE_CUSTOMERS, input)));
     }
 
     /** 同一工具的等价 JSON 参数即使字段顺序不同，也必须命中同轮缓存键。 */

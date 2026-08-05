@@ -36,7 +36,8 @@ public class ToolInputGuardrail {
             I value = objectMapper.readerFor(spec.inputType())
                 .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .readValue(rawJson);
-            validateCommon(spec, node);
+            // 以 setter 归一化后的对象重新生成校验节点，避免模型的 0/空字符串占位符穿透到主系统。
+            validateCommon(spec, objectMapper.valueToTree(value));
             return value;
         } catch (ToolGuardrailException exception) {
             throw exception;
@@ -65,6 +66,7 @@ public class ToolInputGuardrail {
         String toolName = spec.name();
         sensitiveDataPolicy.assertSafe(node);
         validatePage(node, spec.maxResults());
+        validateQueryFields(spec.name(), node);
         validateDates(node);
         validateRequiredFields(toolName, node);
         if ((ToolRegistry.LIST_VERIFICATIONS.equals(toolName) || ToolRegistry.LIST_REFUNDS.equals(toolName))
@@ -94,6 +96,38 @@ public class ToolInputGuardrail {
                 throw rejected("TOOL_PAGINATION_INVALID", "pagination is outside the allowed range");
             }
         }
+    }
+
+    /** 校验搜索工具的可选 ID 和日期字段，提前阻断主系统 Bean Validation 错误。 */
+    private void validateQueryFields(String toolName, JsonNode node) {
+        if (ToolRegistry.SEARCH_CUSTOMER_PROFILES.equals(toolName)
+            || ToolRegistry.SEARCH_SERVICE_CUSTOMERS.equals(toolName)) {
+            validatePositiveOptionalId(node, "customerId");
+        }
+        if (ToolRegistry.SEARCH_SERVICE_CUSTOMERS.equals(toolName)) {
+            validatePositiveOptionalId(node, "orderId");
+            validateOptionalDate(node, "dealTimeFrom");
+            validateOptionalDate(node, "dealTimeTo");
+        }
+    }
+
+    /** 校验可选稳定 ID 为正整数；缺失字段不参与过滤。 */
+    private void validatePositiveOptionalId(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) return;
+        if (!value.isIntegralNumber() || value.asLong() < 1) {
+            throw rejected("TOOL_INPUT_INVALID", field + " must be a positive integer");
+        }
+    }
+
+    /** 校验可选业务日期必须为非空 yyyy-MM-dd 文本。 */
+    private void validateOptionalDate(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) return;
+        if (!value.isTextual() || value.asText().isBlank() || !value.asText().matches("\\d{4}-\\d{2}-\\d{2}")) {
+            throw rejected("TOOL_DATE_INVALID", field + " must use yyyy-MM-dd");
+        }
+        parseDate(value.asText());
     }
 
     /** 校验工具 Schema 无法仅靠 JavaBean 类型表达的必填业务条件。 */
