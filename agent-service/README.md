@@ -38,6 +38,7 @@ mvn -q spring-boot:run
 | `AGENT_DEEPSEEK_API_KEY` | 空 | DeepSeek API Key |
 | `AGENT_DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek API 地址 |
 | `AGENT_DEEPSEEK_MODEL` | `deepseek-chat` | DeepSeek 模型名 |
+| `AGENT_CHAT_LOG_CONTENT` | `true` | 是否记录脱敏后的 LLM 提示/回答、工具入参/出参和主系统查询正文；设为 `false` 仅保留摘要 |
 
 生产 profile 下内部令牌为空会在启动期失败。模型不可用时返回稳定 fallback；不会绕过工具白名单、主系统权限或数据护栏。
 
@@ -61,7 +62,7 @@ mvn -q spring-boot:run
 - 主系统在 SQL 前执行权限、客户数据范围和对象关系校验；模型提交的关联 ID 不构成授权依据。
 - 工具结果和最终回答禁止金额、价格、完整手机号、完整地址、内部 Token、权限集合和写操作声称。
 - 工具自由文本按不可信数据处理，命中提示注入或敏感数据时拒绝该工具事实。
-- 日志只保留请求 ID、工具名、状态、计数、耗时和稳定错误码，不记录原始问题、Prompt、完整模型输出或工具原始响应。
+- 日志按 `requestId` 串联 LLM 回合、工具调用和主系统查询；默认记录经过手机号/地址/令牌脱敏、单行化并限长的正文，便于定位具体参数和回答。设置 `AGENT_CHAT_LOG_CONTENT=false` 后只保留请求 ID、工具名、状态、计数、耗时和稳定错误码。
 
 ## 验证
 

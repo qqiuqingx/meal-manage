@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.config.AgentProperties;
 import me.zhengjie.agent.guardrail.SensitiveDataPolicy;
+import me.zhengjie.agent.infrastructure.observability.AgentDebugLogFormatter;
 import me.zhengjie.agent.security.AgentAccessContextHolder;
 import me.zhengjie.agent.tool.input.ExplainBusinessRuleInput;
 import me.zhengjie.agent.tool.input.GetPackageDetailInput;
@@ -52,6 +53,7 @@ public class HttpMainSystemQueryClient implements MainSystemQueryClient {
     private final String internalToken;
     private final ObjectMapper objectMapper;
     private final SensitiveDataPolicy sensitiveDataPolicy;
+    private final boolean logContent;
 
     public HttpMainSystemQueryClient(RestClient.Builder builder, AgentProperties properties,
                                      ObjectMapper objectMapper, SensitiveDataPolicy sensitiveDataPolicy) {
@@ -65,6 +67,7 @@ public class HttpMainSystemQueryClient implements MainSystemQueryClient {
         this.internalToken = properties.getInternalToken();
         this.objectMapper = objectMapper;
         this.sensitiveDataPolicy = sensitiveDataPolicy;
+        this.logContent = properties.getChat().getToolLoop().isLogContent();
     }
 
     @Override public ToolOutputs.ToolResult<ToolOutputs.CustomerProfile> searchCustomerProfiles(SearchCustomerProfilesInput input) {
@@ -119,15 +122,17 @@ public class HttpMainSystemQueryClient implements MainSystemQueryClient {
         return convert(path, body, Object.class, false);
     }
 
-    /** 统一添加内部认证上下文、执行响应护栏、记录不含业务正文的调试摘要并转换主系统响应信封。 */
+    /** 统一添加内部认证上下文、执行响应护栏、记录脱敏请求响应并转换主系统响应信封。 */
     private <T> ToolOutputs.ToolResult<T> convert(String path, Object body, Class<T> itemType, boolean single) {
         long startedAt = System.nanoTime();
         String requestId = requestId();
-        log.info("AGENT_DEBUG_QUERY_REQUEST requestId={} path={} requestType={}",
-            requestId, path, typeName(body));
+        String requestBody = AgentDebugLogFormatter.json(body, objectMapper, logContent);
+        log.info("AGENT_DEBUG_QUERY_REQUEST requestId={} path={} requestType={} body={}",
+            requestId, path, typeName(body), requestBody);
         if (AgentAccessContextHolder.accessContext() == null || AgentAccessContextHolder.sessionId() == null) {
             MainSystemQueryException exception = new MainSystemQueryException("AGENT_QUERY_UNAUTHORIZED");
-            logQueryResponse(requestId, path, "FAILED", null, exception.getCode(), null, startedAt);
+            logQueryResponse(requestId, path, "FAILED", null, exception.getCode(), exception.getMessage(),
+                requestBody, null, null, startedAt);
             throw exception;
         }
         try {
@@ -139,28 +144,35 @@ public class HttpMainSystemQueryClient implements MainSystemQueryClient {
                 .body(body).retrieve().body(JsonNode.class);
             sensitiveDataPolicy.assertSafe(node);
             ToolOutputs.ToolResult<T> result = mapResult(node, itemType, single);
-            logQueryResponse(requestId, path, "SUCCESS", null, null, result, startedAt);
+            logQueryResponse(requestId, path, "SUCCESS", null, null, null,
+                requestBody, node == null ? null : node.toString(), result, startedAt);
             return result;
         } catch (RestClientResponseException exception) {
             String code = resolveFailure(exception);
-            logQueryResponse(requestId, path, "FAILED", exception.getStatusCode().value(), code, null, startedAt);
+            logQueryResponse(requestId, path, "FAILED", exception.getStatusCode().value(), code,
+                exception.getMessage(), requestBody,
+                exception.getResponseBodyAsString(), null, startedAt);
             throw new MainSystemQueryException(code, exception);
         } catch (ResourceAccessException exception) {
             String code = isTimeout(exception) ? "TOOL_TIMEOUT" : "TOOL_UNAVAILABLE";
-            logQueryResponse(requestId, path, "FAILED", null, code, null, startedAt);
+            logQueryResponse(requestId, path, "FAILED", null, code, exception.getMessage(),
+                requestBody, null, null, startedAt);
             throw new MainSystemQueryException(code, exception);
         } catch (MainSystemQueryException exception) {
-            logQueryResponse(requestId, path, "FAILED", null, exception.getCode(), null, startedAt);
+            logQueryResponse(requestId, path, "FAILED", null, exception.getCode(), exception.getMessage(),
+                requestBody, null, null, startedAt);
             throw exception;
         } catch (RuntimeException exception) {
-            logQueryResponse(requestId, path, "FAILED", null, "TOOL_OUTPUT_INVALID", null, startedAt);
+            logQueryResponse(requestId, path, "FAILED", null, "TOOL_OUTPUT_INVALID", exception.getMessage(),
+                requestBody, null, null, startedAt);
             throw new MainSystemQueryException("TOOL_OUTPUT_INVALID", exception);
         }
     }
 
-    /** 输出不含完整业务 JSON 的主系统查询响应摘要；日志异常不得影响查询结果。 */
+    /** 输出脱敏请求/响应正文和主系统查询摘要；日志异常不得影响查询结果。 */
     private void logQueryResponse(String requestId, String path, String status, Integer httpStatus,
-                                  String errorCode, ToolOutputs.ToolResult<?> response, long startedAt) {
+                                  String errorCode, String errorMessage, String requestBody,
+                                  String responseBody, ToolOutputs.ToolResult<?> response, long startedAt) {
         try {
             long total = response == null ? 0 : response.getTotal();
             int resultCount = response == null ? 0
@@ -168,18 +180,21 @@ public class HttpMainSystemQueryClient implements MainSystemQueryClient {
             boolean truncated = response != null && response.isTruncated();
             int warningCount = response == null ? 0 : response.getWarnings().size();
             if ("FAILED".equals(status)) {
-                log.warn("AGENT_DEBUG_QUERY_RESPONSE requestId={} path={} status={} httpStatus={} errorCode={} costMs={}",
-                    requestId, path, status, httpStatus, errorCode, elapsedMs(startedAt));
+                log.warn("AGENT_DEBUG_QUERY_RESPONSE requestId={} path={} status={} httpStatus={} errorCode={} errorMessage={} costMs={} requestBody={} responseBody={}",
+                    requestId, path, status, httpStatus, errorCode,
+                    AgentDebugLogFormatter.text(errorMessage, logContent), elapsedMs(startedAt), requestBody,
+                    AgentDebugLogFormatter.text(responseBody, logContent));
             } else {
-                log.info("AGENT_DEBUG_QUERY_RESPONSE requestId={} path={} status={} total={} resultCount={} truncated={} warningCount={} costMs={}",
-                    requestId, path, status, total, resultCount, truncated, warningCount, elapsedMs(startedAt));
+                log.info("AGENT_DEBUG_QUERY_RESPONSE requestId={} path={} status={} total={} resultCount={} truncated={} warningCount={} costMs={} requestBody={} responseBody={}",
+                    requestId, path, status, total, resultCount, truncated, warningCount, elapsedMs(startedAt),
+                    requestBody, AgentDebugLogFormatter.text(responseBody, logContent));
             }
         } catch (RuntimeException ignored) {
             // 调试日志失败不能改变主系统查询结果。
         }
     }
 
-    /** 返回请求 DTO 类型名称；调试日志不记录对象字段和值。 */
+    /** 返回请求 DTO 类型名称，便于和脱敏请求正文配对检索。 */
     private String typeName(Object value) { return value == null ? "null" : value.getClass().getSimpleName(); }
 
     /** 计算从查询开始到当前的毫秒耗时。 */

@@ -151,6 +151,8 @@ public class AgentProperties {
         @Min(0)
         @Max(1)
         private int maxAnswerRepairs = 1;
+        /** 是否在 Agent 服务调试日志中记录脱敏后的工具、请求和模型正文。 */
+        private boolean logContent = true;
 
         public int getMaxToolCalls() { return maxToolCalls; }
         public void setMaxToolCalls(int value) { maxToolCalls = value; }
@@ -162,6 +164,8 @@ public class AgentProperties {
         public void setToolTimeoutMs(long value) { toolTimeoutMs = value; }
         public int getMaxAnswerRepairs() { return maxAnswerRepairs; }
         public void setMaxAnswerRepairs(int value) { maxAnswerRepairs = value; }
+        public boolean isLogContent() { return logContent; }
+        public void setLogContent(boolean value) { logContent = value; }
     }
 
 }

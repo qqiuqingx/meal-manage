@@ -12,6 +12,7 @@ import me.zhengjie.agent.guardrail.SensitiveDataPolicy;
 import me.zhengjie.agent.guardrail.ToolExecutionContext;
 import me.zhengjie.agent.guardrail.ToolGuardrailException;
 import me.zhengjie.agent.infrastructure.llm.FallbackModelExecutor;
+import me.zhengjie.agent.infrastructure.observability.AgentDebugLogFormatter;
 import me.zhengjie.agent.presentation.PresentationDescriptor;
 import me.zhengjie.agent.presentation.PresentationService;
 import me.zhengjie.agent.rule.DiagnosisRule;
@@ -181,16 +182,18 @@ public class BusinessAgentRunner {
         return instruction.toString();
     }
 
-    /** 调用模型并挂载当前可见工具回调；调试日志只记录长度、状态和稳定标识，不记录回答原文或客户姓名。 */
+    /** 调用模型并挂载当前可见工具回调；调试日志记录脱敏提示、回答和稳定调用摘要。 */
     private String invokeModel(String prompt, List<ToolRegistry.ToolSpec<?>> visibleSpecs,
                                ToolExecutionContext context) {
         context.beforeModelRound(properties.getChat().getToolLoop().getMaxModelRounds());
         int modelRound = context.modelRounds();
         String userPrompt = prompt.substring(prompt.lastIndexOf("用户问题：") + 6);
         long startedAt = System.nanoTime();
-        log.info("AGENT_DEBUG_LLM_REQUEST requestId={} modelRound={} visibleTools={} userPromptLength={}",
+        boolean logContent = properties.getChat().getToolLoop().isLogContent();
+        log.info("AGENT_DEBUG_LLM_REQUEST requestId={} modelRound={} visibleTools={} toolLimits={} systemPromptLength={} userPromptLength={} systemPrompt={} userPrompt={}",
             MDC.get("requestId"), modelRound,
-            visibleSpecs.stream().map(ToolRegistry.ToolSpec::name).toList(), userPrompt.length());
+            visibleSpecs.stream().map(ToolRegistry.ToolSpec::name).toList(), toolLimits(), prompt.length(), userPrompt.length(),
+            AgentDebugLogFormatter.text(prompt, logContent), AgentDebugLogFormatter.text(userPrompt, logContent));
         try {
             return modelExecutor.execute("default", client -> {
                 List<org.springframework.ai.tool.ToolCallback> callbacks = tools.callbacksFor(
@@ -203,15 +206,27 @@ public class BusinessAgentRunner {
                 ChatClientResponse response = requestSpec.user(userPrompt).call().chatClientResponse();
                 ChatResponse chatResponse = response == null ? null : response.chatResponse();
                 String answer = extractContent(chatResponse);
-                log.info("AGENT_DEBUG_LLM_RESPONSE requestId={} modelRound={} status=SUCCESS costMs={} contentLength={}",
-                    MDC.get("requestId"), modelRound, elapsedMs(startedAt), answer == null ? 0 : answer.length());
+                log.info("AGENT_DEBUG_LLM_RESPONSE requestId={} modelRound={} status=SUCCESS costMs={} contentLength={} answer={}",
+                    MDC.get("requestId"), modelRound, elapsedMs(startedAt), answer == null ? 0 : answer.length(),
+                    AgentDebugLogFormatter.text(answer, logContent));
                 return answer;
             });
         } catch (RuntimeException exception) {
-            log.warn("AGENT_DEBUG_LLM_RESPONSE requestId={} modelRound={} status=FAILED costMs={} exceptionType={}",
-                MDC.get("requestId"), modelRound, elapsedMs(startedAt), exception.getClass().getSimpleName());
+            log.warn("AGENT_DEBUG_LLM_RESPONSE requestId={} modelRound={} status=FAILED costMs={} exceptionType={} errorMessage={}",
+                MDC.get("requestId"), modelRound, elapsedMs(startedAt), exception.getClass().getSimpleName(),
+                AgentDebugLogFormatter.text(exception.getMessage(), logContent));
             throw exception;
         }
+    }
+
+    /** 返回注入模型系统提示的工具循环限制，便于日志和提示中的边界保持一致。 */
+    private String toolLimits() {
+        AgentProperties.ToolLoop limits = properties.getChat().getToolLoop();
+        return "maxToolCalls=" + limits.getMaxToolCalls()
+            + ",maxModelRounds=" + limits.getMaxModelRounds()
+            + ",maxRecords=" + limits.getMaxRecords()
+            + ",toolTimeoutMs=" + limits.getToolTimeoutMs()
+            + ",maxAnswerRepairs=" + limits.getMaxAnswerRepairs();
     }
 
     /** 计算从指定纳秒时间点到当前的毫秒耗时。 */
@@ -389,7 +404,16 @@ public class BusinessAgentRunner {
             .append("查询‘现在/当前/服务中的客户’或‘分别什么时候下单’时，使用 searchServiceCustomers(status=ACTIVE)；不要用 searchCustomerProfiles 获取下单时间。可选字段未使用时省略或传 null，数字 ID 禁止用 0，日期只能使用 yyyy-MM-dd。\n")
             .append("每轮最多调用 ").append(properties.getChat().getToolLoop().getMaxToolCalls())
             .append(" 次工具、最多 ").append(properties.getChat().getToolLoop().getMaxModelRounds())
-            .append(" 个模型回合；返回结果可能截断，截断时必须明确说明范围有限。\n可用工具：\n");
+            .append(" 个模型回合，工具单次超时约 ").append(properties.getChat().getToolLoop().getToolTimeoutMs())
+            .append("ms，最多保留 ").append(properties.getChat().getToolLoop().getMaxRecords())
+            .append(" 条业务记录；返回结果可能截断，截断时必须明确说明范围有限。\n")
+            .append("工具使用规则：\n")
+            .append("1. 先选择与问题最匹配且范围最窄的只读工具；必须提供的身份、日期、餐次或主题缺失时先澄清，不要猜测或发送空字符串。\n")
+            .append("2. 工具入参只能使用工具 Schema 和枚举允许的字段；禁止权限、Token、SQL、URL、排序、任意字段。可选字段未使用时省略或传 null，正整数 ID 不得传 0。\n")
+            .append("3. listMealPlans 查询实际已生成排餐；客户/订单查询应带 customerCode/orderCode 或对应正整数 ID。recordDate 不能与 startDate/endDate 同时使用，mealType 只能是 BREAKFAST、LUNCH、DINNER，查询全部餐次时省略 mealType（不能传 ALL）；page 从 1 开始、size 不超过工具说明上限。\n")
+            .append("4. searchServiceCustomers 用于订单和服务状态，searchCustomerProfiles 只用于客户档案；listScheduledDishes 是公共菜单，不能当作客户实际餐单；previewDishCandidates 是候选菜，也不能当作已排餐。\n")
+            .append("5. 工具失败后不得重复提交相同无效参数；应根据错误修正入参或停止并明确说明。只有成功工具事实才能作为实时业务依据，部分失败或截断必须在回答中说明。\n")
+            .append("可用工具及各自用途、必填条件和结果上限如下：\n");
         for (ToolRegistry.ToolSpec<?> spec : visibleSpecs) {
             prompt.append("- ").append(spec.name()).append("：").append(spec.description()).append("\n");
         }

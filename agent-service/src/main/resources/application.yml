@@ -72,3 +72,5 @@ agent:
       max-records: ${AGENT_CHAT_MAX_TOOL_RECORDS:100}
       tool-timeout-ms: ${AGENT_CHAT_TOOL_TIMEOUT_MS:3000}
       max-answer-repairs: ${AGENT_CHAT_MAX_ANSWER_REPAIRS:1}
+      # 记录脱敏后的工具入参/出参和 LLM 请求/回答；生产环境可设为 false。
+      log-content: ${AGENT_CHAT_LOG_CONTENT:true}

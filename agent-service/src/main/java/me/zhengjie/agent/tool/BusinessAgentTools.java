@@ -3,10 +3,12 @@ package me.zhengjie.agent.tool;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.client.MainSystemQueryClient;
 import me.zhengjie.agent.client.MainSystemQueryException;
+import me.zhengjie.agent.config.AgentProperties;
 import me.zhengjie.agent.guardrail.ToolExecutionContext;
 import me.zhengjie.agent.guardrail.ToolGuardrailException;
 import me.zhengjie.agent.guardrail.ToolInputGuardrail;
 import me.zhengjie.agent.guardrail.ToolOutputGuardrail;
+import me.zhengjie.agent.infrastructure.observability.AgentDebugLogFormatter;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.tool.function.FunctionToolCallback;
@@ -48,16 +50,18 @@ public class BusinessAgentTools {
     private final ToolInputGuardrail inputGuardrail;
     private final ToolOutputGuardrail outputGuardrail;
     private final ObjectMapper objectMapper;
+    private final boolean logContent;
     private final Map<String, Function<Object, Object>> executors = new LinkedHashMap<>();
 
     public BusinessAgentTools(ToolRegistry registry, MainSystemQueryClient queryClient,
                               ToolInputGuardrail inputGuardrail, ToolOutputGuardrail outputGuardrail,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper, AgentProperties properties) {
         this.registry = registry;
         this.queryClient = queryClient;
         this.inputGuardrail = inputGuardrail;
         this.outputGuardrail = outputGuardrail;
         this.objectMapper = objectMapper;
+        this.logContent = properties.getChat().getToolLoop().isLogContent();
         registerExecutors();
     }
 
@@ -118,11 +122,13 @@ public class BusinessAgentTools {
 
         @Override public ToolDefinition getToolDefinition() { return definition.getToolDefinition(); }
 
-        /** 执行一次工具回调并记录不含业务正文的输入输出摘要、稳定错误码、缓存状态和耗时。 */
+        /** 执行一次工具回调并记录脱敏输入输出、稳定错误码、缓存状态和耗时。 */
         @Override public String call(String rawInput) {
             long startedAt = System.nanoTime();
-            log.info("AGENT_DEBUG_TOOL_REQUEST requestId={} toolName={} rawInputLength={}",
-                MDC.get("requestId"), spec.name(), textLength(rawInput));
+            int callSequence = context.facts().size() + 1;
+            log.info("AGENT_DEBUG_TOOL_REQUEST requestId={} callSequence={} toolName={} toolCallsUsed={} rawInputLength={} rawInput={}",
+                MDC.get("requestId"), callSequence, spec.name(), context.toolCalls(), textLength(rawInput),
+                AgentDebugLogFormatter.text(rawInput, logContent));
             try {
                 Object input = inputGuardrail.validate((ToolRegistry.ToolSpec<Object>) spec, rawInput);
                 String key = context.cacheKey(spec.name(), rawInput);
@@ -130,7 +136,7 @@ public class BusinessAgentTools {
                 if (cached != null) {
                     String callId = context.recordCached(spec.name(), spec.cardType(), cached);
                     logToolResponse(spec.name(), callId, "CACHED", null,
-                        resultCount(callId), textLength(cached), startedAt);
+                        null, cached, resultCount(callId), textLength(cached), startedAt);
                     return cached;
                 }
                 context.beforeCall(spec.name());
@@ -139,7 +145,7 @@ public class BusinessAgentTools {
                 outputGuardrail.validate(spec, json);
                 String callId = context.record(spec.name(), spec.cardType(), rawInput, json, true);
                 logToolResponse(spec.name(), callId, "SUCCESS", null,
-                    resultCount(callId), textLength(json), startedAt);
+                    null, json, resultCount(callId), textLength(json), startedAt);
                 return json;
             } catch (RuntimeException exception) {
                 String code = stableCode(exception);
@@ -148,7 +154,7 @@ public class BusinessAgentTools {
                 try { callId = context.record(spec.name(), spec.cardType(), rawInput, json, false); }
                 catch (RuntimeException ignored) { /* 预算错误本身不应覆盖稳定工具错误。 */ }
                 logToolResponse(spec.name(), callId, "FAILED", code,
-                    resultCount(callId), textLength(json), startedAt);
+                    exception.getMessage(), json, resultCount(callId), textLength(json), startedAt);
                 return json;
             } catch (Exception exception) {
                 String json = errorJson("TOOL_OUTPUT_INVALID");
@@ -156,23 +162,26 @@ public class BusinessAgentTools {
                 try { callId = context.record(spec.name(), spec.cardType(), rawInput, json, false); }
                 catch (RuntimeException ignored) { }
                 logToolResponse(spec.name(), callId, "FAILED", "TOOL_OUTPUT_INVALID",
-                    resultCount(callId), textLength(json), startedAt);
+                    exception.getMessage(), json, resultCount(callId), textLength(json), startedAt);
                 return json;
             }
         }
 
-        /** 输出不含完整业务 JSON 的工具响应摘要；日志异常不得影响工具返回值。 */
+        /** 输出脱敏工具响应正文和摘要；日志异常不得影响工具返回值。 */
         private void logToolResponse(String toolName, String callId, String status, String errorCode,
-                                     int resultCount, int outputLength, long startedAt) {
+                                     String errorMessage, String outputJson, int resultCount,
+                                     int outputLength, long startedAt) {
             try {
                 if ("FAILED".equals(status)) {
-                    log.warn("AGENT_DEBUG_TOOL_RESPONSE requestId={} toolName={} callId={} status={} errorCode={} resultCount={} outputLength={} costMs={}",
+                    log.warn("AGENT_DEBUG_TOOL_RESPONSE requestId={} toolName={} callId={} status={} errorCode={} errorMessage={} resultCount={} outputLength={} costMs={} output={}",
                         MDC.get("requestId"), toolName, callId, status, errorCode,
-                        resultCount, outputLength, elapsedMs(startedAt));
+                        AgentDebugLogFormatter.text(errorMessage, logContent), resultCount, outputLength,
+                        elapsedMs(startedAt), AgentDebugLogFormatter.text(outputJson, logContent));
                 } else {
-                    log.info("AGENT_DEBUG_TOOL_RESPONSE requestId={} toolName={} callId={} status={} resultCount={} outputLength={} costMs={}",
+                    log.info("AGENT_DEBUG_TOOL_RESPONSE requestId={} toolName={} callId={} status={} resultCount={} outputLength={} costMs={} output={}",
                         MDC.get("requestId"), toolName, callId, status,
-                        resultCount, outputLength, elapsedMs(startedAt));
+                        resultCount, outputLength, elapsedMs(startedAt),
+                        AgentDebugLogFormatter.text(outputJson, logContent));
                 }
             } catch (RuntimeException ignored) {
                 // 调试日志失败不能改变工具业务结果。
@@ -188,7 +197,7 @@ public class BusinessAgentTools {
                 .findFirst().orElse(0);
         }
 
-        /** 返回调试文本长度；日志仅记录大小，不记录原文。 */
+        /** 返回调试文本长度；正文是否记录由 Agent 配置控制。 */
         private int textLength(String value) { return value == null ? 0 : value.length(); }
 
         /** 计算从工具调用开始到当前的毫秒耗时。 */
