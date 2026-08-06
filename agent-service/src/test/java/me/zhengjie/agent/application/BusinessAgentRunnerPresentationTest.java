@@ -91,6 +91,19 @@ class BusinessAgentRunnerPresentationTest {
         assertEquals(0, calls[0]);
     }
 
+    /** 系统存在结构化展示时，提示词必须要求模型只总结且不得重复输出 Markdown 表格。 */
+    @Test
+    void shouldRequireSummaryOnlyForStructuredToolResults() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ToolRegistry registry = new ToolRegistry();
+        String prompt = runner(objectMapper, registry).systemPrompt(request("查询客户订单"), registry.all());
+
+        assertTrue(prompt.contains("只总结用户最关心的结论"));
+        assertTrue(prompt.contains("不逐行复述明细"));
+        assertTrue(prompt.contains("不输出 Markdown 表格"));
+        assertTrue(prompt.contains("详细数据交给结构化展示"));
+    }
+
     /** 创建使用真实系统注册表的最小 Runner，避免测试调用模型或远程工具。 */
     private BusinessAgentRunner runner(ObjectMapper objectMapper, ToolRegistry registry) {
         PresentationService presentationService = new PresentationService(new PresentationRegistry(registry));

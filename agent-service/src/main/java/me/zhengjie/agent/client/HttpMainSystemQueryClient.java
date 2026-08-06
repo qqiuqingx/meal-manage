@@ -119,15 +119,15 @@ public class HttpMainSystemQueryClient implements MainSystemQueryClient {
         return convert(path, body, Object.class, false);
     }
 
-    /** 统一添加内部认证上下文、执行响应护栏、记录调试链路并转换主系统响应信封。 */
+    /** 统一添加内部认证上下文、执行响应护栏、记录不含业务正文的调试摘要并转换主系统响应信封。 */
     private <T> ToolOutputs.ToolResult<T> convert(String path, Object body, Class<T> itemType, boolean single) {
         long startedAt = System.nanoTime();
         String requestId = requestId();
-        log.info("AGENT_DEBUG_QUERY_REQUEST requestId={} path={} body={}",
-            requestId, path, debugPayload(body));
+        log.info("AGENT_DEBUG_QUERY_REQUEST requestId={} path={} requestType={}",
+            requestId, path, typeName(body));
         if (AgentAccessContextHolder.accessContext() == null || AgentAccessContextHolder.sessionId() == null) {
             MainSystemQueryException exception = new MainSystemQueryException("AGENT_QUERY_UNAUTHORIZED");
-            logQueryResponse(requestId, path, "FAILED", null, exception.getCode(), exception.getCode(), startedAt);
+            logQueryResponse(requestId, path, "FAILED", null, exception.getCode(), null, startedAt);
             throw exception;
         }
         try {
@@ -143,48 +143,44 @@ public class HttpMainSystemQueryClient implements MainSystemQueryClient {
             return result;
         } catch (RestClientResponseException exception) {
             String code = resolveFailure(exception);
-            logQueryResponse(requestId, path, "FAILED", exception.getStatusCode().value(), code,
-                exception.getResponseBodyAsString(), startedAt);
+            logQueryResponse(requestId, path, "FAILED", exception.getStatusCode().value(), code, null, startedAt);
             throw new MainSystemQueryException(code, exception);
         } catch (ResourceAccessException exception) {
             String code = isTimeout(exception) ? "TOOL_TIMEOUT" : "TOOL_UNAVAILABLE";
-            logQueryResponse(requestId, path, "FAILED", null, code, exception.getClass().getSimpleName(), startedAt);
+            logQueryResponse(requestId, path, "FAILED", null, code, null, startedAt);
             throw new MainSystemQueryException(code, exception);
         } catch (MainSystemQueryException exception) {
-            logQueryResponse(requestId, path, "FAILED", null, exception.getCode(), exception.getCode(), startedAt);
+            logQueryResponse(requestId, path, "FAILED", null, exception.getCode(), null, startedAt);
             throw exception;
         } catch (RuntimeException exception) {
-            logQueryResponse(requestId, path, "FAILED", null, "TOOL_OUTPUT_INVALID",
-                exception.getClass().getSimpleName(), startedAt);
+            logQueryResponse(requestId, path, "FAILED", null, "TOOL_OUTPUT_INVALID", null, startedAt);
             throw new MainSystemQueryException("TOOL_OUTPUT_INVALID", exception);
         }
     }
 
-    /** 输出主系统查询响应调试日志；日志异常不得影响查询结果。 */
+    /** 输出不含完整业务 JSON 的主系统查询响应摘要；日志异常不得影响查询结果。 */
     private void logQueryResponse(String requestId, String path, String status, Integer httpStatus,
-                                  String errorCode, Object response, long startedAt) {
+                                  String errorCode, ToolOutputs.ToolResult<?> response, long startedAt) {
         try {
+            long total = response == null ? 0 : response.getTotal();
+            int resultCount = response == null ? 0
+                : response.getItems().size() + (response.getData() == null ? 0 : 1);
+            boolean truncated = response != null && response.isTruncated();
+            int warningCount = response == null ? 0 : response.getWarnings().size();
             if ("FAILED".equals(status)) {
-                log.warn("AGENT_DEBUG_QUERY_RESPONSE requestId={} path={} status={} httpStatus={} errorCode={} costMs={} response={}",
-                    requestId, path, status, httpStatus, errorCode, elapsedMs(startedAt), debugPayload(response));
+                log.warn("AGENT_DEBUG_QUERY_RESPONSE requestId={} path={} status={} httpStatus={} errorCode={} costMs={}",
+                    requestId, path, status, httpStatus, errorCode, elapsedMs(startedAt));
             } else {
-                log.info("AGENT_DEBUG_QUERY_RESPONSE requestId={} path={} status={} costMs={} response={}",
-                    requestId, path, status, elapsedMs(startedAt), debugPayload(response));
+                log.info("AGENT_DEBUG_QUERY_RESPONSE requestId={} path={} status={} total={} resultCount={} truncated={} warningCount={} costMs={}",
+                    requestId, path, status, total, resultCount, truncated, warningCount, elapsedMs(startedAt));
             }
         } catch (RuntimeException ignored) {
             // 调试日志失败不能改变主系统查询结果。
         }
     }
 
-    /** 将查询调试对象序列化为可读文本，序列化失败时不影响下游调用。 */
-    private String debugPayload(Object value) {
-        if (value == null) return "null";
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (Exception ignored) {
-            return String.valueOf(value);
-        }
-    }
+    /** 返回请求 DTO 类型名称；调试日志不记录对象字段和值。 */
+    private String typeName(Object value) { return value == null ? "null" : value.getClass().getSimpleName(); }
 
     /** 计算从查询开始到当前的毫秒耗时。 */
     private long elapsedMs(long startedAt) {

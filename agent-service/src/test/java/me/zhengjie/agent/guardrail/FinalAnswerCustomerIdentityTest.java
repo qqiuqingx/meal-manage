@@ -44,4 +44,14 @@ class FinalAnswerCustomerIdentityTest {
         assertThrows(ToolGuardrailException.class,
             () -> guardrail.validate("查询客户", "客户张三目前有订单。", 1, missingCode));
     }
+
+    /** 成功工具结果已有结构化展示时，不允许最终回答再输出重复的 Markdown 表格。 */
+    @Test
+    void shouldRejectMarkdownTableWhenToolResultWillBePresented() {
+        assertDoesNotThrow(() -> guardrail.validate("查询客户", "共 1 位客户，详细信息见下表。", 1));
+        ToolGuardrailException exception = assertThrows(ToolGuardrailException.class,
+            () -> guardrail.validate("查询客户", "| 客户编号 | 姓名 |\n|---|---|\n| C1001 | 张三 |", 1));
+
+        org.junit.jupiter.api.Assertions.assertEquals("ANSWER_STRUCTURED_DETAIL_REPEATED", exception.getCode());
+    }
 }

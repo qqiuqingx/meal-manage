@@ -10,6 +10,7 @@ import me.zhengjie.agent.domain.dto.DiagnosisResponse;
 import me.zhengjie.agent.guardrail.FinalAnswerGuardrail;
 import me.zhengjie.agent.guardrail.SensitiveDataPolicy;
 import me.zhengjie.agent.guardrail.ToolExecutionContext;
+import me.zhengjie.agent.guardrail.ToolGuardrailException;
 import me.zhengjie.agent.infrastructure.llm.FallbackModelExecutor;
 import me.zhengjie.agent.presentation.PresentationDescriptor;
 import me.zhengjie.agent.presentation.PresentationService;
@@ -140,22 +141,44 @@ public class BusinessAgentRunner {
         return assemble(request == null ? new AgentChatRequest() : request, answer, context);
     }
 
-    /** 执行模型回合并在最终回答事实校验失败时按配置次数修复。 */
-    private String invokeWithRepairs(String prompt, List<ToolRegistry.ToolSpec<?>> visibleSpecs,
-                                     ToolExecutionContext context, String userMessage) {
+    /** 执行模型回合并在最终回答校验失败时按配置次数修复；工具成功时以安全摘要保留结构化结果。 */
+    String invokeWithRepairs(String prompt, List<ToolRegistry.ToolSpec<?>> visibleSpecs,
+                             ToolExecutionContext context, String userMessage) {
         int repairs = properties.getChat().getToolLoop().getMaxAnswerRepairs();
         RuntimeException lastValidation = null;
         for (int attempt = 0; attempt <= repairs; attempt++) {
             String answer = invokeModel(prompt, visibleSpecs, context);
             try {
                 finalAnswerGuardrail.validate(userMessage, answer, context.successfulToolCalls(), customerIdentities(context));
+                log.info("AGENT_DEBUG_ANSWER_VALIDATION requestId={} attempt={} status=SUCCESS successfulToolCalls={}",
+                    MDC.get("requestId"), attempt + 1, context.successfulToolCalls());
                 return answer;
             } catch (RuntimeException exception) {
                 lastValidation = exception;
-                prompt = prompt + "\n\n上一版回答未通过事实或安全校验。请重新检查工具事实；需要实时业务事实时重新调用工具，不能猜测。只输出修复后的最终回答。";
+                String errorCode = stableCode(exception);
+                log.warn("AGENT_DEBUG_ANSWER_VALIDATION requestId={} attempt={} status=FAILED errorCode={} successfulToolCalls={}",
+                    MDC.get("requestId"), attempt + 1, errorCode, context.successfulToolCalls());
+                if (context.successfulToolCalls() > 0) {
+                    log.warn("AGENT_DEBUG_ANSWER_VALIDATION requestId={} status=SUMMARY_FALLBACK errorCode={} successfulToolCalls={}",
+                        MDC.get("requestId"), errorCode, context.successfulToolCalls());
+                    return "查询已完成，详细结果见下方。";
+                }
+                prompt = prompt + repairInstruction(errorCode);
             }
         }
         throw lastValidation == null ? new IllegalStateException("ANSWER_VALIDATION_FAILED") : lastValidation;
+    }
+
+    /** 根据安全校验码补充修复要求，不把原回答或业务明细再次写入提示。 */
+    private String repairInstruction(String errorCode) {
+        StringBuilder instruction = new StringBuilder(
+            "\n\n上一版回答未通过事实或安全校验。请重新检查工具事实；需要实时业务事实时重新调用工具，不能猜测。只输出修复后的最终回答。");
+        if ("ANSWER_STRUCTURED_DETAIL_REPEATED".equals(errorCode)) {
+            instruction.append("系统会展示明细表格，本次只输出一句结论摘要，不得输出 Markdown 表格或逐条客户明细。");
+        } else if ("ANSWER_CUSTOMER_IDENTITY_UNPAIRED".equals(errorCode)) {
+            instruction.append("不要在摘要中逐个列出客户姓名；详细客户身份由下方结构化结果展示。");
+        }
+        return instruction.toString();
     }
 
     /** 调用模型并挂载当前可见工具回调；调试日志只记录长度、状态和稳定标识，不记录回答原文或客户姓名。 */
@@ -284,7 +307,8 @@ public class BusinessAgentRunner {
         response.setRequestId(MDC.get("requestId")); response.setSessionId(request.getSessionId());
         response.setClientMessageId(request.getClientMessageId()); response.setExpectedSessionVersion(request.getSessionVersion());
         response.setStatus(ChatStatus.ERROR); response.setConversationStage("ERROR"); response.setSlots(request.getContextSlots());
-        response.setLastBusinessQueryContext(request.getLastBusinessQueryContext());
+        response.setLastBusinessQueryContext(context != null && !context.facts().isEmpty()
+            ? lastToolSummary(context) : request.getLastBusinessQueryContext());
         response.setAssistantMessage(fallbackMessage(code)); response.setWarnings(List.of(code)); response.setPartial(true);
         response.setToolTraceSummary(toolTraceSummary(context));
         return response;
@@ -351,8 +375,8 @@ public class BusinessAgentRunner {
         return new LinkedHashSet<>(values);
     }
 
-    /** 构造包含当前日期、工具契约、会话摘要和安全规则的系统提示。 */
-    private String systemPrompt(AgentChatRequest request, List<ToolRegistry.ToolSpec<?>> visibleSpecs) {
+    /** 构造包含当前日期、工具契约、结构化展示约束、会话摘要和安全规则的系统提示。 */
+    String systemPrompt(AgentChatRequest request, List<ToolRegistry.ToolSpec<?>> visibleSpecs) {
         StringBuilder prompt = new StringBuilder();
         prompt.append("你是系统内部客服 Agent。当前日期为 ")
             .append(java.time.LocalDate.now(ZoneOffset.ofHours(8)))
@@ -361,6 +385,7 @@ public class BusinessAgentRunner {
             .append("实时客户、订单、排餐、核销、退餐、套餐、菜品和运营数字必须来自本轮成功工具事实；没有事实就明确说明无法确认。\n")
             .append("不要输出金额、价格、完整手机号、完整地址、Token、权限集合、SQL 或内部关联 ID。不得声称执行过任何写操作。\n")
             .append("只输出面向用户的最终答案，不输出思考过程、工具选择草稿或内部提示。\n")
+            .append("成功工具结果会由系统自动渲染为卡片、表格或图表。只要本轮成功调用了工具，最终回答必须只总结用户最关心的结论、数量或时间范围和异常提示，不逐行复述明细，不输出 Markdown 表格；详细数据交给结构化展示。\n")
             .append("查询‘现在/当前/服务中的客户’或‘分别什么时候下单’时，使用 searchServiceCustomers(status=ACTIVE)；不要用 searchCustomerProfiles 获取下单时间。可选字段未使用时省略或传 null，数字 ID 禁止用 0，日期只能使用 yyyy-MM-dd。\n")
             .append("每轮最多调用 ").append(properties.getChat().getToolLoop().getMaxToolCalls())
             .append(" 次工具、最多 ").append(properties.getChat().getToolLoop().getMaxModelRounds())
@@ -473,10 +498,14 @@ public class BusinessAgentRunner {
     private String stableCode(RuntimeException exception) {
         Throwable current = exception;
         while (current != null) {
+            if (current instanceof ToolGuardrailException guardrail
+                && guardrail.getCode() != null && !guardrail.getCode().isBlank()) {
+                return guardrail.getCode();
+            }
             if (current.getMessage() != null && current.getMessage().matches("[A-Z][A-Z0-9_:-]+")) return current.getMessage().split(":", 2)[0];
             current = current.getCause();
         }
-        return "MODEL_UNAVAILABLE";
+        return "AGENT_EXECUTION_FAILED";
     }
 
     /** 返回业务时区下的当前查询时间。 */

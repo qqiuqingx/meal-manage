@@ -10,20 +10,21 @@
 
 在三个边界输出日志：
 
-1. `BusinessAgentRunner`：每个模型回合输出完整 system/user 入参、LLM 返回内容和耗时。
-2. `BusinessAgentTools.GuardedCallback`：每次工具调用输出工具名、原始 JSON 入参、缓存命中、成功/失败结果、稳定错误码和耗时。
-3. `HttpMainSystemQueryClient`：每次调用主系统统一查询接口输出路径、查询 DTO、成功/失败、HTTP 状态/稳定错误码和耗时。
+1. `BusinessAgentRunner`：每个模型回合输出可见工具、输入/输出长度、状态和耗时。
+2. `BusinessAgentTools.GuardedCallback`：每次工具调用输出工具名、输入/输出长度、结果数量、缓存命中、成功/失败、稳定错误码和耗时。
+3. `HttpMainSystemQueryClient`：每次调用主系统统一查询接口输出路径、请求 DTO 类型、成功/失败、结果数量、截断状态、HTTP 状态/稳定错误码和耗时。
 
 使用固定标识便于检索：
 
 - `AGENT_DEBUG_LLM_REQUEST`
 - `AGENT_DEBUG_LLM_RESPONSE`
+- `AGENT_DEBUG_ANSWER_VALIDATION`
 - `AGENT_DEBUG_TOOL_REQUEST`
 - `AGENT_DEBUG_TOOL_RESPONSE`
 - `AGENT_DEBUG_QUERY_REQUEST`
 - `AGENT_DEBUG_QUERY_RESPONSE`
 
-日志字段至少包含 `requestId`、会话 ID（必要时脱敏）、回合/调用序号、工具名、耗时和结果状态。LLM 的 system/user 文本、工具 JSON 入参和受控工具结果按当前调试授权完整打印。
+日志字段至少包含 `requestId`、回合/调用序号、工具名、耗时和结果状态。LLM 提示词和回答正文、工具 JSON 入参/返回以及主系统查询业务正文均不完整打印，只保留排障所需摘要。
 
 ## 3. 安全边界
 
@@ -38,7 +39,7 @@
 
 ## 4. 数据流与错误处理
 
-模型回合开始时记录 LLM 请求；模型返回或抛出异常时记录对应响应/错误并带耗时。工具回调在输入护栏之前记录请求，在缓存命中、执行成功、护栏失败、下游异常和预算异常等路径统一记录结果。主系统查询客户端在 HTTP 成功和各类异常分支分别记录结果。
+模型回合开始时记录 LLM 请求摘要；模型返回或抛出异常时记录对应响应摘要/错误并带耗时；最终回答校验只记录尝试次数、状态和稳定错误码。工具回调在输入护栏之前记录请求长度，在缓存命中、执行成功、护栏失败、下游异常和预算异常等路径统一记录结果摘要。主系统查询客户端在 HTTP 成功和各类异常分支分别记录不含业务正文的结果摘要。
 
 日志失败不能影响业务响应；记录日志本身的异常必须被隔离。原有 `ToolGuardrailException`、`MainSystemQueryException` 和最终回答流程保持不变。
 

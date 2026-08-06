@@ -79,6 +79,24 @@ class ArchitectureBoundaryTest {
             "listMealRefunds"));
     }
 
+    /** 调试日志只能保留链路摘要，不得重新打印工具和主系统查询的完整业务正文。 */
+    @Test
+    void debugLogsMustNotContainCompleteToolPayloads() throws Exception {
+        String toolSource = Files.readString(Path.of(
+            "src/main/java/me/zhengjie/agent/tool/BusinessAgentTools.java"));
+        String querySource = Files.readString(Path.of(
+            "src/main/java/me/zhengjie/agent/client/HttpMainSystemQueryClient.java"));
+
+        assertFalse(toolSource.contains("rawInput={}"));
+        assertFalse(toolSource.contains("output={}"));
+        assertTrue(toolSource.contains("rawInputLength={}"));
+        assertTrue(toolSource.contains("resultCount={}"));
+        assertFalse(querySource.contains("body={}"));
+        assertFalse(querySource.contains("response={}"));
+        assertTrue(querySource.contains("requestType={}"));
+        assertTrue(querySource.contains("truncated={}"));
+    }
+
     /** 检查指定目录中的文本文件是否包含禁止回流的标识。 */
     private void assertSourcesDoNotContain(Path root, List<String> forbiddenTokens) throws Exception {
         if (!Files.exists(root)) {

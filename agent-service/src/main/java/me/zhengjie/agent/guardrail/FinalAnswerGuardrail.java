@@ -2,10 +2,13 @@ package me.zhengjie.agent.guardrail;
 
 import java.util.Collections;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /** 最终回答事实引用、敏感数据和写操作声称护栏。 */
 public class FinalAnswerGuardrail {
     private static final Set<String> SMALL_TALK = Set.of("你好", "您好", "谢谢", "你是谁", "能做什么", "帮助", "功能");
+    private static final Pattern MARKDOWN_TABLE_SEPARATOR = Pattern.compile(
+        "(?m)^\\s*\\|(?:\\s*:?-{3,}:?\\s*\\|)+\\s*$");
     private final SensitiveDataPolicy sensitiveDataPolicy;
 
     /** 使用敏感数据策略构建最终回答护栏。 */
@@ -31,7 +34,16 @@ public class FinalAnswerGuardrail {
         if (requiresBusinessFact(userMessage) && successfulToolCalls == 0) {
             throw new ToolGuardrailException("ANSWER_FACT_WITHOUT_TOOL", "business answer requires a successful tool fact");
         }
+        validateStructuredAnswer(answer, successfulToolCalls);
         validateCustomerIdentities(answer, customerIdentities);
+    }
+
+    /** 成功工具结果会由前端结构化展示，模型回答不得再携带重复的 Markdown 表格。 */
+    private void validateStructuredAnswer(String answer, int successfulToolCalls) {
+        if (successfulToolCalls > 0 && MARKDOWN_TABLE_SEPARATOR.matcher(answer).find()) {
+            throw new ToolGuardrailException("ANSWER_STRUCTURED_DETAIL_REPEATED",
+                "structured tool result must be summarized without a markdown table");
+        }
     }
 
     /** 校验回答中的完整客户姓名必须同时出现同一事实对应的客户编号。 */
