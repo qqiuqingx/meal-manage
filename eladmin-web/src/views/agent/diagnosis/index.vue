@@ -50,7 +50,12 @@
               :class="message.role === 'user' ? 'message-row-user' : 'message-row-assistant'"
             >
               <div class="message-bubble" :class="message.role === 'user' ? 'user-bubble' : 'assistant-bubble'">
-                <div class="message-content">{{ message.content }}</div>
+                <div
+                  v-if="message.role === 'assistant'"
+                  class="message-content markdown-body"
+                  v-html="renderAssistantMessage(message.content)"
+                />
+                <div v-else class="message-content">{{ message.content }}</div>
                 <div v-if="message.stage || (message.missingSlots && message.missingSlots.length)" class="message-meta">
                   <el-tag v-if="message.stage" size="mini" type="info">阶段：{{ stageText(message.stage) }}</el-tag>
                   <el-tag
@@ -314,6 +319,7 @@ import {
 } from '@/api/agentDiagnosis'
 import AgentPresentationCard from './components/AgentPresentationCard.vue'
 import { mapLegacyCards } from './utils/agentPresentationCompatibility'
+import { renderAssistantMessage as renderAssistantMessageHtml } from './utils/assistantMessageRenderer'
 
 function welcomeMessage() {
   return {
@@ -756,6 +762,10 @@ export default {
     shortDigest(value) {
       return value ? value.slice(0, 12) : '-'
     },
+    /** 将助手返回的 Markdown 文本转换为安全 HTML，保留换行和列表展示。 */
+    renderAssistantMessage(content) {
+      return renderAssistantMessageHtml(content)
+    },
     openFeedbackDialog(result, accepted) {
       this.feedbackDiagnosisResult = result
       const reasonCodes = this.extractReasonCodes(result)
@@ -990,6 +1000,58 @@ export default {
   line-height: 1.7;
   font-size: 14px;
   word-break: break-word;
+}
+
+.message-content {
+  white-space: normal;
+}
+
+.markdown-body p {
+  margin: 0;
+}
+
+.markdown-body p + p {
+  margin-top: 10px;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 6px 0 0;
+  padding-left: 22px;
+}
+
+.markdown-body li + li {
+  margin-top: 4px;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.markdown-body blockquote {
+  margin: 8px 0;
+  padding-left: 10px;
+  border-left: 3px solid #dcdfe6;
+  color: #606266;
+}
+
+.markdown-body code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #f2f6fc;
+  color: #606266;
+  font-family: Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.markdown-body strong {
+  font-weight: 600;
 }
 
 .user-bubble {
