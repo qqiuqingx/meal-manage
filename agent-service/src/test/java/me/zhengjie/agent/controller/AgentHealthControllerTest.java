@@ -32,7 +32,9 @@ class AgentHealthControllerTest {
             .andExpect(jsonPath("$.ruleRegistryLoaded").value(true))
             .andExpect(jsonPath("$.ruleVersionDigest").value("a4f8c1e9d320"))
             .andExpect(jsonPath("$.modelConfigured").value(false))
-            .andExpect(jsonPath("$.toolClientConfigured").value(false));
+            .andExpect(jsonPath("$.toolClientConfigured").value(false))
+            .andExpect(jsonPath("$.presentationRuleCount").value(11))
+            .andExpect(jsonPath("$.presentationWarnings").isEmpty());
 
         mockMvc.perform(get("/api/agent/health/liveness"))
             .andExpect(status().isOk())

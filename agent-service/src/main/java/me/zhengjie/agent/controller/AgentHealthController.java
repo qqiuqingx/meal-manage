@@ -4,8 +4,12 @@ import me.zhengjie.agent.client.MainSystemQueryClient;
 import me.zhengjie.agent.config.AgentProperties;
 import me.zhengjie.agent.domain.dto.AgentHealthResponse;
 import me.zhengjie.agent.infrastructure.llm.AgentModelGateway;
+import me.zhengjie.agent.presentation.PresentationRegistry;
+import me.zhengjie.agent.presentation.PresentationService;
 import me.zhengjie.agent.rule.RuleRegistry;
 import me.zhengjie.agent.rule.RuleRegistryLoader;
+import me.zhengjie.agent.tool.ToolRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,14 +28,27 @@ public class AgentHealthController {
     private final MainSystemQueryClient toolDataClient;
     private final AgentModelGateway modelGateway;
     private final AgentProperties properties;
+    private final PresentationRegistry presentationRegistry;
 
+    /** Spring 构造入口，展示规则已在注册表创建时完成启动校验。 */
+    @Autowired
     public AgentHealthController(RuleRegistryLoader ruleRegistryLoader,
                                  MainSystemQueryClient toolDataClient,
-                                 AgentModelGateway modelGateway, AgentProperties properties) {
+                                 AgentModelGateway modelGateway, AgentProperties properties,
+                                 PresentationRegistry presentationRegistry) {
         this.ruleRegistryLoader = ruleRegistryLoader;
         this.toolDataClient = toolDataClient;
         this.modelGateway = modelGateway;
         this.properties = properties;
+        this.presentationRegistry = presentationRegistry;
+    }
+
+    /** 保留手工构造入口，兼容不加载 Spring 展示 Bean 的旧健康测试。 */
+    public AgentHealthController(RuleRegistryLoader ruleRegistryLoader,
+                                 MainSystemQueryClient toolDataClient,
+                                 AgentModelGateway modelGateway, AgentProperties properties) {
+        this(ruleRegistryLoader, toolDataClient, modelGateway, properties,
+            new PresentationRegistry(new ToolRegistry()));
     }
 
     /**
@@ -54,6 +71,9 @@ public class AgentHealthController {
         response.setToolClientConfigured(toolDataClient != null
             && StringUtils.hasText(properties.getContextBaseUrl())
             && StringUtils.hasText(properties.getInternalToken()));
+        response.setPresentationRuleCount(presentationRegistry == null ? 0 : presentationRegistry.ruleCount());
+        response.setPresentationWarnings(presentationRegistry == null ? java.util.List.of("PRESENTATION_REGISTRY_UNAVAILABLE")
+            : presentationRegistry.healthWarnings());
         response.setStatus(response.isRuleRegistryLoaded() ? "UP" : "DOWN");
         return response;
     }

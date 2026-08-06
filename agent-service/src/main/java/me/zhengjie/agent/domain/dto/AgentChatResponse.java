@@ -7,6 +7,7 @@ import java.util.Map;
 
 import me.zhengjie.agent.domain.chat.ChatStatus;
 import me.zhengjie.agent.application.conversation.ConversationPatch;
+import me.zhengjie.agent.presentation.PresentationDescriptor;
 
 /**
  * 智能排查聊天响应。
@@ -42,6 +43,8 @@ public class AgentChatResponse {
     private List<Map<String, Object>> toolFacts = new ArrayList<>();
     /** 工具调用名称、结果条数和失败/缓存状态摘要。 */
     private List<Map<String, Object>> toolTraceSummary = new ArrayList<>();
+    /** 与业务卡片一一对应的受控展示描述；默认为空，便于旧调用方兼容。 */
+    private List<PresentationDescriptor> presentations = new ArrayList<>();
 
     public List<Map<String, Object>> getFacts() { return facts; }
     public void setFacts(List<Map<String, Object>> facts) { this.facts = facts == null ? new ArrayList<>() : facts; }
@@ -61,6 +64,8 @@ public class AgentChatResponse {
     public void setToolFacts(List<Map<String, Object>> value) { toolFacts = value == null ? new ArrayList<>() : value; }
     public List<Map<String, Object>> getToolTraceSummary() { return toolTraceSummary; }
     public void setToolTraceSummary(List<Map<String, Object>> value) { toolTraceSummary = value == null ? new ArrayList<>() : value; }
+    public List<PresentationDescriptor> getPresentations() { return presentations; }
+    public void setPresentations(List<PresentationDescriptor> value) { presentations = value == null ? new ArrayList<>() : value; }
 
     public String getRequestId() {
         return requestId;

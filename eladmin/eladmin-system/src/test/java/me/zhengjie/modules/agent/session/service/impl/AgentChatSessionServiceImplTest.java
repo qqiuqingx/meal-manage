@@ -1,5 +1,6 @@
 package me.zhengjie.modules.agent.session.service.impl;
 
+import com.alibaba.fastjson2.JSON;
 import me.zhengjie.modules.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
@@ -21,6 +22,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.sql.Timestamp;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -61,6 +66,7 @@ class AgentChatSessionServiceImplTest {
     private AgentChatSessionServiceImpl service;
 
     @Test
+    /** 新消息快照必须无损保存 cards 与 presentations 的关联、来源和列顺序。 */
     void shouldCreateSessionAndPersistUserAssistantMessagesWhenSessionIdMissing() {
         when(sessionMapper.insert(any(AgentChatSession.class))).thenAnswer(invocation -> {
             AgentChatSession session = invocation.getArgument(0);
@@ -81,6 +87,23 @@ class AgentChatSessionServiceImplTest {
         facadeResponse.setStatus("ANSWERED");
         facadeResponse.setAssistantMessage("已完成诊断");
         facadeResponse.setConversationStage("ANSWERED");
+        Map<String, Object> presentation = new LinkedHashMap<>();
+        presentation.put("schemaVersion", "v1");
+        presentation.put("sourceToolCallId", "call-1");
+        presentation.put("cardType", "SERVICE_CUSTOMER_LIST");
+        presentation.put("decisionSource", "SYSTEM");
+        presentation.put("title", "服务客户下单明细");
+        presentation.put("layout", "TABS");
+        presentation.put("defaultView", "TABLE");
+        presentation.put("availableViews", Collections.singletonList("TABLE"));
+        presentation.put("table", Collections.singletonMap("columns", List.of(
+            Collections.singletonMap("field", "customerCode"),
+            Collections.singletonMap("field", "customerName"),
+            Collections.singletonMap("field", "orderCode"),
+            Collections.singletonMap("field", "orderTime"),
+            Collections.singletonMap("field", "status"),
+            Collections.singletonMap("field", "parentPackageName"))));
+        facadeResponse.setPresentations(Collections.singletonList(presentation));
         DiagnosisSlots slots = new DiagnosisSlots();
         slots.setCustomerCode("C10001");
         slots.setRecordDate("2026-07-08");
@@ -107,7 +130,22 @@ class AgentChatSessionServiceImplTest {
         ArgumentCaptor<AgentChatSession> sessionCaptor = ArgumentCaptor.forClass(AgentChatSession.class);
         verify(sessionMapper).insert(sessionCaptor.capture());
         verify(sessionMapper).updateById(any(AgentChatSession.class));
-        verify(messageMapper, times(2)).insert(any(AgentChatMessage.class));
+        ArgumentCaptor<AgentChatMessage> messageCaptor = ArgumentCaptor.forClass(AgentChatMessage.class);
+        verify(messageMapper, times(2)).insert(messageCaptor.capture());
+        AgentChatMessage persistedAssistant = messageCaptor.getAllValues().stream()
+            .filter(message -> "ASSISTANT".equals(message.getRole()))
+            .findFirst().orElseThrow(AssertionError::new);
+        Map<String, Object> businessSnapshot = JSON.parseObject(persistedAssistant.getBusinessResultJson(), Map.class);
+        Map<String, Object> persistedPresentation = ((List<Map<String, Object>>) businessSnapshot.get("presentations"))
+            .get(0);
+        assertEquals("v1", persistedPresentation.get("schemaVersion"));
+        assertEquals("call-1", persistedPresentation.get("sourceToolCallId"));
+        assertEquals("SYSTEM", persistedPresentation.get("decisionSource"));
+        assertEquals("TABLE", persistedPresentation.get("defaultView"));
+        List<Map<String, Object>> persistedColumns = (List<Map<String, Object>>)
+            ((Map<String, Object>) persistedPresentation.get("table")).get("columns");
+        assertEquals(List.of("customerCode", "customerName", "orderCode", "orderTime", "status", "parentPackageName"),
+            persistedColumns.stream().map(column -> (String) column.get("field")).collect(java.util.stream.Collectors.toList()));
         verify(diagnosisFacadeService).chatMealPlan(any(AgentChatRequest.class), any(), any());
     }
 
@@ -133,6 +171,7 @@ class AgentChatSessionServiceImplTest {
     }
 
     @Test
+    /** 命中旧消息快照时保留原展示决策，且不重新调用 Agent 或业务审计链路。 */
     void shouldReplayAssistantResponseWhenClientMessageIdAlreadyExists() {
         AgentChatSession session = new AgentChatSession();
         session.setId(1L);
@@ -158,7 +197,7 @@ class AgentChatSessionServiceImplTest {
         assistantMessage.setContent("已完成诊断");
         assistantMessage.setSlotsJson("{\"customerCode\":\"C10001\"}");
         assistantMessage.setDiagnosisResultJson("{\"summary\":\"命中客户排除日期\"}");
-        assistantMessage.setBusinessResultJson("{\"cards\":[{\"type\":\"SERVICE_CUSTOMER_LIST\",\"sourceToolCallId\":\"call-1\",\"data\":{\"total\":2}}],\"toolFacts\":[{\"callId\":\"call-1\",\"toolName\":\"searchServiceCustomers\"}],\"toolTraceSummary\":[{\"toolName\":\"searchServiceCustomers\",\"status\":\"SUCCESS\"}],\"warnings\":[],\"partial\":false,\"queriedAt\":\"2026-07-11T10:00:00+08:00\",\"lastBusinessQueryContext\":{\"toolName\":\"searchServiceCustomers\"}}");
+        assistantMessage.setBusinessResultJson("{\"cards\":[{\"type\":\"SERVICE_CUSTOMER_LIST\",\"sourceToolCallId\":\"call-1\",\"data\":{\"total\":2,\"maskedName\":\"历史掩码\"}}],\"presentations\":[{\"schemaVersion\":\"v1\",\"sourceToolCallId\":\"call-1\",\"cardType\":\"SERVICE_CUSTOMER_LIST\",\"decisionSource\":\"SYSTEM\",\"title\":\"客户订单\",\"layout\":\"TABS\",\"defaultView\":\"TABLE\",\"availableViews\":[\"TABLE\"],\"table\":{\"dataPath\":\"items\",\"columns\":[{\"field\":\"customerCode\",\"label\":\"客户编号\",\"format\":\"TEXT\"}]}}],\"toolFacts\":[{\"callId\":\"call-1\",\"toolName\":\"searchServiceCustomers\"}],\"toolTraceSummary\":[{\"toolName\":\"searchServiceCustomers\",\"status\":\"SUCCESS\"}],\"warnings\":[],\"partial\":false,\"queriedAt\":\"2026-07-11T10:00:00+08:00\",\"lastBusinessQueryContext\":{\"toolName\":\"searchServiceCustomers\"}}");
         assistantMessage.setCreateTime(new Timestamp(System.currentTimeMillis()));
 
         when(messageMapper.selectOne(any())).thenReturn(existingUserMessage, assistantMessage);
@@ -176,11 +215,18 @@ class AgentChatSessionServiceImplTest {
         assertEquals("已完成诊断", response.getAssistantMessage());
         assertNotNull(response.getDiagnosisResult());
         assertEquals("SERVICE_CUSTOMER_LIST", response.getCards().get(0).get("type"));
+        assertEquals("历史掩码", ((java.util.Map<String, Object>) response.getCards().get(0).get("data")).get("maskedName"));
+        assertEquals("v1", response.getPresentations().get(0).get("schemaVersion"));
+        assertEquals("customerCode", ((java.util.List<java.util.Map<String, Object>>)
+            ((java.util.Map<String, Object>) response.getPresentations().get(0).get("table")).get("columns"))
+            .get(0).get("field"));
         assertEquals("searchServiceCustomers", response.getToolFacts().get(0).get("toolName"));
         assertEquals("searchServiceCustomers", response.getLastBusinessQueryContext().get("toolName"));
         verify(sessionMapper).selectBySessionIdForUpdate("session-1");
         verify(diagnosisFacadeService, never()).chatMealPlan(
             any(AgentChatRequest.class), any(), any());
+        verify(accessContextService, never()).issue(any(), any());
+        verify(businessQueryAuditService, never()).record(any(), any(), org.mockito.ArgumentMatchers.anyLong());
         verify(messageMapper, never()).insert(any(AgentChatMessage.class));
     }
 

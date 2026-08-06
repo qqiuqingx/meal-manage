@@ -1,7 +1,6 @@
 package me.zhengjie.agent.guardrail;
 
-import me.zhengjie.agent.tool.ToolRegistry;
-
+import java.util.Collections;
 import java.util.Set;
 
 /** 最终回答事实引用、敏感数据和写操作声称护栏。 */
@@ -12,14 +11,47 @@ public class FinalAnswerGuardrail {
     /** 使用敏感数据策略构建最终回答护栏。 */
     public FinalAnswerGuardrail(SensitiveDataPolicy sensitiveDataPolicy) { this.sensitiveDataPolicy = sensitiveDataPolicy; }
 
-    /** 校验回答；涉及实时业务事实时必须有成功工具事实。 */
+    /** 校验回答；涉及实时业务事实时必须有成功工具事实，客户姓名必须和同一事实中的客户编号配对。 */
     public void validate(String userMessage, String answer, int successfulToolCalls) {
+        validate(userMessage, answer, successfulToolCalls, Collections.emptySet());
+    }
+
+    /**
+     * 校验回答及其客户身份引用，禁止模型只凭姓名或历史上下文生成客户身份结论。
+     *
+     * @param userMessage 客服原始问题，仅用于判断是否需要实时事实
+     * @param answer 模型待返回的最终回答
+     * @param successfulToolCalls 本轮成功工具调用数量
+     * @param customerIdentities 本轮成功工具事实中提取的客户编号—姓名配对
+     */
+    public void validate(String userMessage, String answer, int successfulToolCalls,
+                         Set<CustomerIdentity> customerIdentities) {
         if (answer == null || answer.isBlank()) throw new ToolGuardrailException("ANSWER_EMPTY", "answer is empty");
         sensitiveDataPolicy.assertSafeAnswer(answer);
         if (requiresBusinessFact(userMessage) && successfulToolCalls == 0) {
             throw new ToolGuardrailException("ANSWER_FACT_WITHOUT_TOOL", "business answer requires a successful tool fact");
         }
+        validateCustomerIdentities(answer, customerIdentities);
     }
+
+    /** 校验回答中的完整客户姓名必须同时出现同一事实对应的客户编号。 */
+    private void validateCustomerIdentities(String answer, Set<CustomerIdentity> customerIdentities) {
+        if (customerIdentities == null || customerIdentities.isEmpty()) return;
+        for (CustomerIdentity identity : customerIdentities) {
+            if (identity == null || !hasText(identity.customerName())) continue;
+            if (answer.contains(identity.customerName())
+                && (!hasText(identity.customerCode()) || !answer.contains(identity.customerCode()))) {
+                throw new ToolGuardrailException("ANSWER_CUSTOMER_IDENTITY_UNPAIRED",
+                    "customer name must be paired with its customer code");
+            }
+        }
+    }
+
+    /** 判断客户身份字段是否为有效文本。 */
+    private boolean hasText(String value) { return value != null && !value.trim().isEmpty(); }
+
+    /** 本轮工具事实中可验证的客户编号—完整姓名配对。 */
+    public record CustomerIdentity(String customerCode, String customerName) { }
 
     /** 判断是否涉及不能依靠历史上下文回答的实时业务事实。 */
     public boolean requiresBusinessFact(String message) {

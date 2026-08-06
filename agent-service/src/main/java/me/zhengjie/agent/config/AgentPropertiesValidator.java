@@ -37,5 +37,20 @@ public class AgentPropertiesValidator implements SmartInitializingSingleton {
                 throw new IllegalStateException("enabled OPENAI_COMPATIBLE provider requires base-url, api-key and model");
             }
         });
+        AgentProperties.ModelProfile presentation = properties.getModels().getProfiles().get("presentation");
+        if (presentation != null) {
+            if (!presentation.isStructuredOutput()) {
+                throw new IllegalStateException("presentation profile requires structured-output");
+            }
+            if (presentation.isToolCalling()) {
+                throw new IllegalStateException("presentation profile must disable tool-calling");
+            }
+            if (presentation.getTimeoutMs() > 3000) {
+                throw new IllegalStateException("presentation profile timeout must be <= 3000ms");
+            }
+            if (presentation.getMaxRetries() > 1) {
+                throw new IllegalStateException("presentation profile max-retries must be <= 1");
+            }
+        }
     }
 }

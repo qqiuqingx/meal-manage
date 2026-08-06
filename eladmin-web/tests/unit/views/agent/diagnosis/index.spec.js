@@ -148,6 +148,30 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(ctx.conversationStage).toBe('ANSWERED')
   })
 
+  test('stores presentations and associates each card by sourceToolCallId', () => {
+    const ctx = createCtx()
+    const presentation = {
+      schemaVersion: 'v1',
+      sourceToolCallId: 'call-service-customers',
+      cardType: 'SERVICE_CUSTOMER_LIST',
+      title: '服务客户订单',
+      defaultView: 'TABLE',
+      availableViews: ['TABLE'],
+      table: { dataPath: 'items', columns: [{ field: 'customerCode', label: '客户编号', format: 'TEXT' }] }
+    }
+    AgentDiagnosis.methods.addAssistantResponse.call(ctx, {
+      sessionId: 'session-1',
+      assistantMessage: '已查询到服务客户。',
+      cards: [{ sourceToolCallId: 'call-service-customers', type: 'SERVICE_CUSTOMER_LIST', data: { items: [] }}],
+      presentations: [presentation]
+    })
+
+    expect(ctx.messages[1].presentations).toEqual([presentation])
+    expect(AgentDiagnosis.methods.presentationForCard.call(ctx, ctx.messages[1].cards[0], ctx.messages[1].presentations))
+      .toBe(presentation)
+    expect(AgentDiagnosis.methods.presentationForCard.call(ctx, ctx.messages[1].cards[0], [])).toBe(null)
+  })
+
   test('shows fallback reason and trace data in state', async() => {
     api.chatMealPlan.mockResolvedValue({
       sessionId: 'session-1',
@@ -340,6 +364,30 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(ctx.messages).toHaveLength(2)
     expect(ctx.messages[0].role).toBe('user')
     expect(ctx.messages[1].result.summary).toBe('命中客户排除日期')
+  })
+
+  test('restores persisted presentations without recalculating the descriptor', () => {
+    const ctx = createCtx()
+    const presentation = {
+      sourceToolCallId: 'call-restore',
+      cardType: 'METRIC_RESULT',
+      title: '运营指标',
+      defaultView: 'BAR',
+      availableViews: ['TABLE', 'BAR']
+    }
+    const mapped = AgentDiagnosis.methods.mapSessionMessages.call(ctx, [{
+      role: 'ASSISTANT',
+      content: '已恢复业务查询',
+      businessResult: {
+        cards: [{ sourceToolCallId: 'call-restore', type: 'METRIC_RESULT', data: {} }],
+        presentations: [presentation],
+        warnings: ['PRESENTATION_RULE_MISSING']
+      }
+    }])
+
+    expect(mapped[0].presentations).toEqual([presentation])
+    expect(mapped[0].cards[0].sourceToolCallId).toBe('call-restore')
+    expect(mapped[0].warnings).toEqual(['PRESENTATION_RULE_MISSING'])
   })
 
   test('restores latest diagnosis result onto matching assistant message after refresh', () => {

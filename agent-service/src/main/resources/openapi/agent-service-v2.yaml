@@ -112,12 +112,106 @@ components:
         cards:
           type: array
           items: { type: object, additionalProperties: true }
+        presentations:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/PresentationDescriptor' }
         toolFacts:
           type: array
           items: { type: object, additionalProperties: true }
         toolTraceSummary:
           type: array
           items: { type: object, additionalProperties: true }
+    PresentationDescriptor:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, sourceToolCallId, cardType, decisionSource, title, layout, defaultView, availableViews]
+      properties:
+        schemaVersion: { type: string, enum: [v1] }
+        sourceToolCallId: { type: string, minLength: 1, maxLength: 128 }
+        cardType: { type: string, minLength: 1, maxLength: 80 }
+        decisionSource: { type: string, enum: [SYSTEM, LLM] }
+        title: { type: string, minLength: 1, maxLength: 100, pattern: '^[^<>{}]*$' }
+        layout: { type: string, enum: [TABS] }
+        defaultView: { $ref: '#/components/schemas/PresentationView' }
+        availableViews:
+          type: array
+          minItems: 1
+          maxItems: 5
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/PresentationView' }
+        summary: { $ref: '#/components/schemas/PresentationSummary' }
+        table: { $ref: '#/components/schemas/PresentationTable' }
+        chart: { $ref: '#/components/schemas/PresentationChart' }
+    PresentationView:
+      type: string
+      enum: [TEXT, TABLE, BAR, LINE, PIE]
+    PresentationFormat:
+      type: string
+      enum: [TEXT, DATE, DATE_TIME, STATUS, MEAL_TYPE, NUMBER, BOOLEAN]
+    PresentationField:
+      type: object
+      additionalProperties: false
+      required: [field, label, format]
+      properties:
+        field: { type: string, pattern: '^[A-Za-z][A-Za-z0-9_]*(\[\])?(\.[A-Za-z][A-Za-z0-9_]*(\[\])?)*$' }
+        label: { type: string, minLength: 1, maxLength: 30, pattern: '^[^<>{}]*$' }
+        format: { $ref: '#/components/schemas/PresentationFormat' }
+    PresentationSummary:
+      type: object
+      additionalProperties: false
+      required: [dataPath, fields]
+      properties:
+        dataPath: { type: string, minLength: 1, maxLength: 200 }
+        fields:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/PresentationField' }
+    PresentationTable:
+      type: object
+      additionalProperties: false
+      required: [dataPath, columns, sections]
+      properties:
+        dataPath: { type: string, minLength: 1, maxLength: 200 }
+        columns:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/PresentationField' }
+        sections:
+          type: array
+          maxItems: 8
+          items: { $ref: '#/components/schemas/PresentationSection' }
+    PresentationSection:
+      type: object
+      additionalProperties: false
+      required: [id, title, dataPath, columns]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 80 }
+        title: { type: string, minLength: 1, maxLength: 100, pattern: '^[^<>{}]*$' }
+        dataPath: { type: string, minLength: 1, maxLength: 200 }
+        columns:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/PresentationField' }
+    PresentationChart:
+      type: object
+      additionalProperties: false
+      required: [type, dataPath, dimensionField, metricFields, dimensionLabel, metricLabels]
+      properties:
+        type: { type: string, enum: [BAR, LINE, PIE] }
+        dataPath: { type: string, minLength: 1, maxLength: 200 }
+        dimensionField: { type: string, minLength: 1, maxLength: 80, pattern: '^[A-Za-z][A-Za-z0-9_]*(\[\])?(\.[A-Za-z][A-Za-z0-9_]*(\[\])?)*$' }
+        metricFields:
+          type: array
+          minItems: 1
+          maxItems: 4
+          items: { type: string, minLength: 1, maxLength: 80, pattern: '^[A-Za-z][A-Za-z0-9_]*(\[\])?(\.[A-Za-z][A-Za-z0-9_]*(\[\])?)*$' }
+        dimensionLabel: { type: string, minLength: 1, maxLength: 30, pattern: '^[^<>{}]*$' }
+        metricLabels:
+          type: array
+          minItems: 1
+          maxItems: 4
+          items: { type: string, minLength: 1, maxLength: 30, pattern: '^[^<>{}]*$' }
     ConversationPatch:
       type: object
       additionalProperties: false

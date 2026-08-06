@@ -1,0 +1,48 @@
+feature: agent-structured-visualization
+title: Agent 结构化表格与图表展示
+source_design: docs/superpowers/specs/2026-08-05-agent-structured-visualization-design.md
+
+current_phase: phase-07
+
+phases:
+  - id: phase-01
+    name: 内部 Agent 事实与身份契约
+    file: 01-agent-fact-contract.md
+    status: completed
+    depends_on: []
+
+  - id: phase-02
+    name: 系统展示契约与已知卡片规则
+    file: 02-system-presentation-registry.md
+    status: completed
+    depends_on: [phase-01]
+
+  - id: phase-03
+    name: 未知卡片 LLM 规划与安全降级
+    file: 03-llm-presentation-fallback.md
+    status: completed
+    depends_on: [phase-02]
+
+  - id: phase-04
+    name: 主系统透传与会话持久化
+    file: 04-main-system-session-persistence.md
+    status: completed
+    depends_on: [phase-02]
+
+  - id: phase-05
+    name: 新消息固定组件渲染
+    file: 05-frontend-presentation-components.md
+    status: completed
+    depends_on: [phase-04]
+
+  - id: phase-06
+    name: 历史兼容与前端异常回退
+    file: 06-history-and-render-fallback.md
+    status: completed
+    depends_on: [phase-05]
+
+  - id: phase-07
+    name: 跨模块验收、文档与发布准备
+    file: 07-integration-docs-release.md
+    status: completed
+    depends_on: [phase-01, phase-02, phase-03, phase-04, phase-05, phase-06]

@@ -40,6 +40,9 @@ public class AgentChatMessageDto {
     /** 工具事实生成的业务卡片。 */
     private List<Map<String, Object>> cards = new ArrayList<>();
 
+    /** 会话详情顶层展示描述便利字段，内容同时保留在 businessResult 中。 */
+    private List<Map<String, Object>> presentations = new ArrayList<>();
+
     /** 新统一工具事实摘要。 */
     private List<Map<String, Object>> toolFacts = new ArrayList<>();
 
@@ -143,6 +146,17 @@ public class AgentChatMessageDto {
 
     public List<Map<String, Object>> getCards() { return cards; }
     public void setCards(List<Map<String, Object>> cards) { this.cards = cards == null ? new ArrayList<>() : cards; }
+    /** 返回会话消息的展示描述；历史消息缺失该字段时返回空列表。 */
+    public List<Map<String, Object>> getPresentations() {
+        if (presentations == null) {
+            presentations = new ArrayList<>();
+        }
+        return presentations;
+    }
+    /** 设置会话消息的展示描述；null 按空列表处理。 */
+    public void setPresentations(List<Map<String, Object>> presentations) {
+        this.presentations = presentations == null ? new ArrayList<>() : presentations;
+    }
     public List<Map<String, Object>> getToolFacts() { return toolFacts; }
     public void setToolFacts(List<Map<String, Object>> toolFacts) { this.toolFacts = toolFacts == null ? new ArrayList<>() : toolFacts; }
     public List<Map<String, Object>> getToolTraceSummary() { return toolTraceSummary; }

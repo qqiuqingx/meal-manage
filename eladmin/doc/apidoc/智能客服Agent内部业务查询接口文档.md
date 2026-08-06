@@ -8,7 +8,7 @@
 - `X-Agent-Access-Context` 由主系统按当前客服签发并绑定会话/请求，Agent 不得自行构造。
 - 除入口权限 `agentDiagnosis:list` 外，工具还必须满足表中的业务权限；权限矩阵不由模型决定。
 - 主系统在 SQL 查询前应用部门数据范围和对象关系过滤，不能先查全量再在响应层过滤。
-- DTO 和响应不提供订单金额、价格、优惠、退款金额、完整手机号或完整地址。
+- DTO 和响应不提供订单金额、价格、优惠、退款金额、原始/完整手机号或原始/完整地址；允许出现的手机号/地址摘要必须已经由主系统脱敏。
 - 内部关联 ID 只用于工具间关联和主系统二次校验；返回 Agent 前端的卡片会隐藏这些 ID。
 
 ## 2. 公共请求头
@@ -65,13 +65,37 @@
 
 路径：`POST /api/internal/agent/query/customer-profiles/search`。
 
-请求字段：`customerId`、`customerCode`、`customerName`、`hasOrder`、`page`、`size`。可查询尚未下单客户；姓名和联系方式只返回脱敏摘要。本接口只返回客户档案摘要，不包含订单成交/创建时间，不用于回答客户下单时间。可选字段未使用时省略或传 `null`，ID 不得传 `0`，`page` 从 1 开始，`size` 范围为 1-20。
+请求字段：`customerId`、`customerCode`、`customerName`、`hasOrder`、`page`、`size`。可查询尚未下单客户；在已认证并完成权限/数据范围校验的内部 Agent 链路中，响应使用 `customerCode + customerName`，手机号仅以 `maskedPhone` 等脱敏摘要出现。本接口只返回客户档案摘要，不包含订单成交/创建时间，不用于回答客户下单时间；新响应不使用 `maskedName`。可选字段未使用时省略或传 `null`，ID 不得传 `0`，`page` 从 1 开始，`size` 范围为 1-20。
 
 ### 5.2 服务客户：`searchServiceCustomers`
 
 路径：`POST /api/internal/agent/query/service-customers/search`。
 
-请求字段：`customerId`、`customerCode`、`orderId`、`orderCode`、`status`、`dealTimeFrom`、`dealTimeTo`、`packageCode`、`page`、`size`。一笔订单一行，不合并同一客户的多笔订单；状态为 `ALL`、`ACTIVE`、`CANCELLED`、`COMPLETED` 或 `REFUNDED`。用户询问“现在/当前/服务中的客户”或“分别什么时候下单”时使用 `status=ACTIVE`。下单时间优先使用成交时间，缺失时回退创建时间。可选字段未使用时省略或传 `null`，ID 不得传 `0`，日期只能使用 `yyyy-MM-dd`，`page` 从 1 开始，`size` 范围为 1-20；`truncated=true` 时继续查询下一页。
+请求字段：`customerId`、`customerCode`、`orderId`、`orderCode`、`status`、`dealTimeFrom`、`dealTimeTo`、`packageCode`、`page`、`size`。一笔订单一行，不合并同一客户的多笔订单；状态为 `ALL`、`ACTIVE`、`CANCELLED`、`COMPLETED` 或 `REFUNDED`。用户询问“现在/当前/服务中的客户”或“分别什么时候下单”时使用 `status=ACTIVE`。在授权和数据范围过滤完成后，每行可受控返回 `customerCode`、完整 `customerName`、`orderCode`、`dealTime`、`createTime`、`orderTime`、状态和套餐摘要。`orderTime` 优先使用成交时间，缺失时回退创建时间，不由模型或前端选择。可选字段未使用时省略或传 `null`，ID 不得传 `0`，日期只能使用 `yyyy-MM-dd`，`page` 从 1 开始，`size` 范围为 1-20；`truncated=true` 时继续查询下一页。
+
+服务客户结果的安全示例（字段顺序也是结构化展示的固定列顺序）：
+
+```json
+{
+  "items": [
+    {
+      "customerCode": "C10001",
+      "customerName": "示例客户",
+      "orderCode": "ORD20260805001",
+      "dealTime": "2026-08-05T09:00:00+08:00",
+      "createTime": "2026-08-05T08:55:00+08:00",
+      "orderTime": "2026-08-05T09:00:00+08:00",
+      "status": "进行中",
+      "parentPackageName": "示例套餐"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "size": 20,
+  "truncated": false,
+  "warnings": []
+}
+```
 
 ### 5.3 服务客户详情：`getServiceCustomerDetail`
 
@@ -118,7 +142,9 @@
 
 `metric` 只能使用：`CUSTOMER_PROFILE_COUNT`、`ACTIVE_SERVICE_CUSTOMER_COUNT`、`ACTIVE_ORDER_COUNT`、`DAILY_SCHEDULED_CUSTOMER_COUNT`、`DAILY_VERIFIED_CUSTOMER_COUNT`、`DAILY_UNVERIFIED_CUSTOMER_COUNT`、`DAILY_UNSCHEDULED_CUSTOMER_COUNT`、`MEAL_PLAN_FAILURE_COUNT`、`EXPIRING_ORDER_COUNT`。`dimensions` 最多两个，只能使用 `MEAL_TYPE`、`PACKAGE`、`CUSTOMER_SOURCE`。日期使用 `recordDate` 或 `startDate/endDate`，不能提交任意字段或排序。
 
-主系统按指标选择最小业务权限；只返回计数和受控维度聚合，不返回客户明细、订单明细或金额。具体口径见 `eladmin/doc/business/智能客服Agent指标口径字典.md`。
+主系统按指标选择最小业务权限；只返回计数和受控维度聚合，不返回客户明细、订单明细或金额。`data.breakdown` 是主系统从受控 `dimensions` 按原顺序确定性生成的 `[{"label":"分组","value":数量}]`，仅用于展示，不改变指标总数和维度口径。具体口径见 `eladmin/doc/business/智能客服Agent指标口径字典.md`。
+
+当 `truncated=true`、结果告警非空或聚合结构不完整时，Agent 不从当前页重新聚合；前端不显示图表，只显示已有摘要/表格和告警。完整且有非空 `breakdown` 的当前指标卡使用摘要、表格和柱状图视图。
 
 ### 5.10 规则：`explainBusinessRule`
 
@@ -128,9 +154,13 @@
 
 ## 6. Agent 聊天与会话恢复
 
-服务间聊天唯一入口为 `POST /api/agent/v2/chat`，契约文件为 `agent-service/src/main/resources/openapi/agent-service-v2.yaml`。主系统向 Agent 下发会话范围摘要、最近工具摘要、可用工具和 `sessionVersion`；Agent 回传文本、`cards`、`facts`、`warnings`、`partial`、`toolTraceSummary` 和 `conversationPatch`。主系统以版本条件提交会话 Patch。
+服务间聊天唯一入口为 `POST /api/agent/v2/chat`，契约文件为 `agent-service/src/main/resources/openapi/agent-service-v2.yaml`。主系统向 Agent 下发会话范围摘要、最近工具摘要、可用工具和 `sessionVersion`；Agent 回传文本、`cards`、`presentations`、`facts`、`warnings`、`partial`、`toolTraceSummary` 和 `conversationPatch`。主系统以版本条件提交会话 Patch。
 
-聊天响应不再使用固定业务 `responseType`、Java 查询计划或关键词路由。业务卡片类型由成功工具的 `ToolRegistry.cardType` 确定；工具结果是事实来源，模型无法自行构造业务数字。
+聊天响应不再使用固定业务 `responseType`、Java 查询计划或关键词路由。业务卡片类型由成功工具的 `ToolRegistry.cardType` 确定；工具结果是事实来源，模型无法自行构造业务数字。Agent 服务再按 `cardType` 生成 `presentations`：已知卡片优先使用 `SYSTEM` 规则，未知卡片才使用不含业务值的独立 LLM 规划，并经路径、字段、视图、数量和敏感字段校验；失败时返回通用安全降级和 `PRESENTATION_FALLBACK_APPLIED`，不影响 cards 或业务告警。
+
+`presentations` 只包含 `schemaVersion=v1`、`sourceToolCallId`、`cardType`、`decisionSource`、`title`、`layout=TABS`、固定视图、字段路径和格式。视图白名单为 `TEXT/TABLE/BAR/LINE/PIE`，表格每处最多 20 列、详情 sections 最多 8 个、图表最多 4 个指标；它不包含业务值、HTML、Markdown、表达式、组件名或 ECharts option。
+
+新会话将 `cards + presentations` 一起写入 `business_result_json` 并直接恢复；旧 cards-only 快照由前端只读兼容层处理，旧 `maskedName` 保持原值，不重新查询、不补全姓名、不调用 LLM。
 
 每轮最多 6 次工具调用、4 个模型回合、100 条业务记录，单个主系统请求默认超时 3 秒，最多自动修复最终回答 1 次。相同工具和规范化参数命中同轮缓存。
 
@@ -138,3 +168,4 @@
 
 - 2026-08-04：删除旧固定业务查询/诊断内部 Controller，统一为 12 工具和 `/api/internal/agent/query/**`。
 - 2026-08-04：核销、退餐改用独立 `mealVerification:list`、`mealRefund:list` 权限；需执行权限菜单补充脚本并为业务角色重新授权。
+- 2026-08-06：内部 Agent 客户结果使用受控 `customerName` 和统一 `orderTime`；聊天响应增加 `cards + presentations` 展示快照，并补充完整性告警、历史兼容和安全边界说明。

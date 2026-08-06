@@ -101,9 +101,9 @@ public class AgentUnifiedQueryServiceImpl implements AgentUnifiedQueryService {
         AgentListResultDto<AgentOrderSummaryDto> source = orderQueryService.searchServiceCustomers(
             safe.getCustomerId(), safe.getCustomerCode(), safe.getOrderId(), safe.getOrderCode(), safe.getStatus(),
             safe.getDealTimeFrom(), safe.getDealTimeTo(), safe.getPackageCode(), intValue(safe.getPage(), 1), intValue(safe.getSize(), 20));
-        Map<Long, String> maskedNames = maskedNames(source == null ? Collections.emptyList() : source.getItems());
+        Map<Long, String> customerNames = customerNames(source == null ? Collections.emptyList() : source.getItems());
         List<AgentUnifiedQueryDto.ServiceCustomerItem> items = source == null || source.getItems() == null
-            ? Collections.emptyList() : source.getItems().stream().map(order -> serviceCustomerItem(order, maskedNames)).collect(Collectors.toList());
+            ? Collections.emptyList() : source.getItems().stream().map(order -> serviceCustomerItem(order, customerNames)).collect(Collectors.toList());
         AgentUnifiedQueryResponse<AgentUnifiedQueryDto.ServiceCustomerItem> result = new AgentUnifiedQueryResponse<>();
         copyPage(source, result, items);
         return result;
@@ -142,7 +142,7 @@ public class AgentUnifiedQueryServiceImpl implements AgentUnifiedQueryService {
             : singleton(selectedOrder);
         List<AgentOrderSummaryDto> orderItems = orderSource == null || orderSource.getItems() == null
             ? Collections.emptyList() : orderSource.getItems();
-        Map<Long, String> maskedNames = maskedNames(orderItems);
+        Map<Long, String> customerNames = customerNames(orderItems);
         AgentUnifiedQueryDto.ServiceCustomerDetailItem detail = new AgentUnifiedQueryDto.ServiceCustomerDetailItem();
         detail.setProfile(profileItem(overview));
         detail.setAllergyTags(overview.getAllergyTags() == null ? Collections.emptyList() : overview.getAllergyTags());
@@ -151,7 +151,7 @@ public class AgentUnifiedQueryServiceImpl implements AgentUnifiedQueryService {
         detail.setSpecialRequirements(overview.getSpecialRequirements());
         detail.setAddresses(overview.getAddresses() == null ? Collections.emptyList() : overview.getAddresses().stream()
             .map(this::addressMap).collect(Collectors.toList()));
-        detail.setOrders(orderItems.stream().map(order -> serviceCustomerItem(order, maskedNames)).collect(Collectors.toList()));
+        detail.setOrders(orderItems.stream().map(order -> serviceCustomerItem(order, customerNames)).collect(Collectors.toList()));
         AgentMealPlanQueryRequest mealPlanRequest = new AgentMealPlanQueryRequest();
         mealPlanRequest.setCustomerId(customerId);
         if (selectedOrder != null) mealPlanRequest.setOrderId(selectedOrder.getOrderId());
@@ -304,6 +304,7 @@ public class AgentUnifiedQueryServiceImpl implements AgentUnifiedQueryService {
                 item.setTotal(dailyTotal(daily, metric));
                 item.setQueriedAt(daily.getQueriedAt());
                 item.setDimensions(metricDimensions(daily, metric, safe.getDimensions()));
+                item.setBreakdown(metricBreakdown(item.getDimensions()));
                 break;
             default:
                 throw new IllegalArgumentException("运营指标不在白名单内");
@@ -372,20 +373,21 @@ public class AgentUnifiedQueryServiceImpl implements AgentUnifiedQueryService {
             ? candidates.getItems().get(0).getCustomerId() : null;
     }
 
-    /** 从订单页批量加载脱敏姓名，避免把原始档案字段放入统一结果。 */
-    private Map<Long, String> maskedNames(List<AgentOrderSummaryDto> orders) {
+    /** 从已授权订单页批量加载完整姓名，避免 N+1 查询并避免把未授权档案带入统一结果。 */
+    private Map<Long, String> customerNames(List<AgentOrderSummaryDto> orders) {
         List<Long> ids = orders == null ? Collections.emptyList() : orders.stream().map(AgentOrderSummaryDto::getCustomerId)
             .filter(Objects::nonNull).distinct().collect(Collectors.toList());
         if (ids.isEmpty()) return Collections.emptyMap();
         List<CustomerProfile> profiles = customerProfileMapper.selectBatchIds(ids);
         if (profiles == null) return Collections.emptyMap();
-        return profiles.stream().collect(Collectors.toMap(CustomerProfile::getId, profile -> maskName(profile.getCustomerName()), (left, right) -> left, LinkedHashMap::new));
+        return profiles.stream().collect(Collectors.toMap(CustomerProfile::getId, CustomerProfile::getCustomerName,
+            (left, right) -> left, LinkedHashMap::new));
     }
 
     /** 将主系统客户档案分页项转换为统一工具字段。 */
     private AgentUnifiedQueryDto.ProfileItem profileItem(AgentCustomerProfileDto source) {
         AgentUnifiedQueryDto.ProfileItem item = new AgentUnifiedQueryDto.ProfileItem();
-        item.setCustomerId(source.getCustomerId()); item.setCustomerCode(source.getCustomerCode()); item.setMaskedName(source.getMaskedName());
+        item.setCustomerId(source.getCustomerId()); item.setCustomerCode(source.getCustomerCode()); item.setCustomerName(source.getCustomerName());
         item.setHasOrder(source.isHasOrder()); item.setCreateTime(source.getCreateTime()); item.setMaskedPhone(source.getMaskedPhone());
         return item;
     }
@@ -393,17 +395,18 @@ public class AgentUnifiedQueryServiceImpl implements AgentUnifiedQueryService {
     /** 将客户详情中的档案摘要转换为统一工具字段。 */
     private AgentUnifiedQueryDto.ProfileItem profileItem(AgentCustomerOverviewDto source) {
         AgentUnifiedQueryDto.ProfileItem item = new AgentUnifiedQueryDto.ProfileItem();
-        item.setCustomerId(source.getCustomerId()); item.setCustomerCode(source.getCustomerCode()); item.setMaskedName(maskName(source.getCustomerName()));
+        item.setCustomerId(source.getCustomerId()); item.setCustomerCode(source.getCustomerCode()); item.setCustomerName(source.getCustomerName());
         item.setHasOrder(source.getTotalOrderCount() > 0); item.setCreateTime(source.getCreateTime()); item.setMaskedPhone(source.getMaskedPhone());
         return item;
     }
 
     /** 将订单摘要转换为以订单为根的工具行。 */
-    private AgentUnifiedQueryDto.ServiceCustomerItem serviceCustomerItem(AgentOrderSummaryDto source, Map<Long, String> maskedNames) {
+    private AgentUnifiedQueryDto.ServiceCustomerItem serviceCustomerItem(AgentOrderSummaryDto source, Map<Long, String> customerNames) {
         AgentUnifiedQueryDto.ServiceCustomerItem item = new AgentUnifiedQueryDto.ServiceCustomerItem();
-        item.setCustomerId(source.getCustomerId()); item.setCustomerCode(source.getCustomerCode()); item.setMaskedName(maskedNames.get(source.getCustomerId()));
+        item.setCustomerId(source.getCustomerId()); item.setCustomerCode(source.getCustomerCode()); item.setCustomerName(customerNames.get(source.getCustomerId()));
         item.setOrderId(source.getOrderId()); item.setOrderCode(source.getOrderCode()); item.setStatus(source.getStatusName());
         item.setDealTime(stringValue(source.getDealTime())); item.setCreateTime(stringValue(source.getCreateTime()));
+        item.setOrderTime(orderTime(source));
         item.setStartDate(stringValue(source.getStartDate())); item.setEndDate(stringValue(source.getEndDate()));
         item.setStartMealType(source.getStartMealTypeCode()); item.setMealType(source.getMealTypeCode());
         item.setScheduleMode(source.getScheduleModeCode()); item.setDeliveryDates(source.getDeliveryDates());
@@ -553,6 +556,19 @@ public class AgentUnifiedQueryServiceImpl implements AgentUnifiedQueryService {
         item.setTotal(source.getTotal()); item.setQueriedAt(source.getQueriedAt());
     }
 
+    /** 将有序维度映射确定性转换为仅含 label/value 的展示分组，并保持 dimensions 兼容。 */
+    private List<AgentUnifiedQueryDto.MetricBreakdownItem> metricBreakdown(Map<String, Long> dimensions) {
+        if (dimensions == null || dimensions.isEmpty()) return new ArrayList<>();
+        return dimensions.entrySet().stream()
+            .map(entry -> new AgentUnifiedQueryDto.MetricBreakdownItem(entry.getKey(), entry.getValue() == null ? 0L : entry.getValue()))
+            .collect(Collectors.toList());
+    }
+
+    /** 统一服务客户下单时间口径：成交时间优先，缺失时回退订单创建时间。 */
+    private String orderTime(AgentOrderSummaryDto source) {
+        return source == null ? null : stringValue(source.getDealTime() == null ? source.getCreateTime() : source.getDealTime());
+    }
+
     /** 将列表源复制为统一分页信封。 */
     private <S, T> void copyPage(AgentListResultDto<S> source, AgentUnifiedQueryResponse<T> target, List<T> items) {
         target.setItems(items == null ? new ArrayList<>() : items);
@@ -588,11 +604,6 @@ public class AgentUnifiedQueryServiceImpl implements AgentUnifiedQueryService {
         return JSON.parseObject(JSON.toJSONString(value), Map.class);
     }
 
-    /** 将统一查询中的客户姓名转换为单字符脱敏摘要。 */
-    private String maskName(String value) {
-        if (!hasText(value)) return "***";
-        String text = value.trim(); return text.length() == 1 ? text + "*" : text.substring(0, 1) + "*";
-    }
     /** 判断统一查询参数是否包含非空文本。 */
     private boolean hasText(String value) { return value != null && !value.trim().isEmpty(); }
     /** 将指标和枚举参数归一化为大写。 */

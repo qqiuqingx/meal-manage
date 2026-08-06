@@ -1,5 +1,8 @@
 package me.zhengjie.agent.domain.dto;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * agent-service 轻量健康检查结果。
  */
@@ -12,6 +15,10 @@ public class AgentHealthResponse {
     /** 是否启用至少一个模型备用 provider；false 不影响单 provider 可用性。 */
     private boolean fallbackModelConfigured;
     private boolean toolClientConfigured;
+    /** 当前系统展示规则数量，不包含字段目录详情。 */
+    private int presentationRuleCount;
+    /** 展示规则健康告警码，不包含字段详情或业务值。 */
+    private List<String> presentationWarnings = new ArrayList<>();
 
     public String getStatus() {
         return status;
@@ -53,5 +60,12 @@ public class AgentHealthResponse {
 
     public void setToolClientConfigured(boolean toolClientConfigured) {
         this.toolClientConfigured = toolClientConfigured;
+    }
+
+    public int getPresentationRuleCount() { return presentationRuleCount; }
+    public void setPresentationRuleCount(int value) { presentationRuleCount = value; }
+    public List<String> getPresentationWarnings() { return presentationWarnings; }
+    public void setPresentationWarnings(List<String> value) {
+        presentationWarnings = value == null ? new ArrayList<>() : value;
     }
 }

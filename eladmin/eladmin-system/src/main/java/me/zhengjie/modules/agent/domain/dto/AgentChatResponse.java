@@ -44,6 +44,9 @@ public class AgentChatResponse {
     /** 由成功工具事实确定性生成的业务卡片。 */
     private List<Map<String, Object>> cards = new ArrayList<>();
 
+    /** 与业务卡片关联的受控展示描述；主系统只透传和持久化，不解释展示业务。 */
+    private List<Map<String, Object>> presentations = new ArrayList<>();
+
     /** 新统一工具事实摘要。 */
     private List<Map<String, Object>> toolFacts = new ArrayList<>();
 
@@ -153,6 +156,17 @@ public class AgentChatResponse {
     public void setFacts(List<Map<String, Object>> facts) { this.facts = facts; }
     public List<Map<String, Object>> getCards() { return cards; }
     public void setCards(List<Map<String, Object>> cards) { this.cards = cards == null ? new ArrayList<>() : cards; }
+    /** 返回受控展示描述列表；旧 Agent 响应缺失该字段时返回空列表。 */
+    public List<Map<String, Object>> getPresentations() {
+        if (presentations == null) {
+            presentations = new ArrayList<>();
+        }
+        return presentations;
+    }
+    /** 设置受控展示描述列表；null 按空列表处理以兼容旧响应。 */
+    public void setPresentations(List<Map<String, Object>> presentations) {
+        this.presentations = presentations == null ? new ArrayList<>() : presentations;
+    }
     public List<Map<String, Object>> getToolFacts() { return toolFacts; }
     public void setToolFacts(List<Map<String, Object>> toolFacts) { this.toolFacts = toolFacts == null ? new ArrayList<>() : toolFacts; }
     public List<Map<String, Object>> getToolTraceSummary() { return toolTraceSummary; }

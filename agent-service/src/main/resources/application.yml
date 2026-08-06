@@ -50,6 +50,14 @@ agent:
         max-retries: ${AGENT_MODEL_DEFAULT_MAX_RETRIES:1}
         provider: deepseek
         fallback-providers: [openai-compatible]
+      presentation:
+        model: ${AGENT_MODEL_PRESENTATION:${AGENT_MODEL_DEFAULT:${AGENT_DEEPSEEK_MODEL:${AGENT_OPENAI_MODEL:deepseek-chat}}}}
+        timeout-ms: ${AGENT_MODEL_PRESENTATION_TIMEOUT_MS:1500}
+        structured-output: true
+        tool-calling: false
+        max-retries: ${AGENT_MODEL_PRESENTATION_MAX_RETRIES:0}
+        provider: deepseek
+        fallback-providers: [openai-compatible]
   rules:
     # 外部目录存在时完整覆盖 classpath 同场景资源，避免规则来源混杂。
     base-path: ${AGENT_RULES_BASE_PATH:rules}

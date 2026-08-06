@@ -202,7 +202,7 @@
                     </el-table>
                   </div>
                 </div>
-                <div v-if="(message.cards && message.cards.length) || (message.toolTraceSummary && message.toolTraceSummary.length) || message.partial || (message.warnings && message.warnings.length)" class="insight-section business-query-card">
+                <div v-if="(message.cards && message.cards.length) || (message.presentations && message.presentations.length) || (message.toolTraceSummary && message.toolTraceSummary.length) || message.partial || (message.warnings && message.warnings.length)" class="insight-section business-query-card">
                   <div class="block-title">业务查询结果</div>
                   <el-alert
                     v-if="message.partial || (message.warnings && message.warnings.length)"
@@ -213,10 +213,15 @@
                   />
                   <div v-if="message.queriedAt" class="query-time">查询时间：{{ message.queriedAt }}</div>
                   <div v-if="message.cards && message.cards.length" class="unified-tool-cards">
-                    <div v-for="(card, cardIndex) in message.cards" :key="card.sourceToolCallId || cardIndex" class="unified-tool-card">
-                      <div class="block-title">{{ unifiedCardTitle(card.type) }}</div>
-                      <pre class="unified-tool-card-data">{{ unifiedCardText(card.data) }}</pre>
-                    </div>
+                    <AgentPresentationCard
+                      v-for="(card, cardIndex) in message.cards"
+                      :key="card.sourceToolCallId || cardIndex"
+                      :card="card"
+                      :presentation="presentationForCard(card, message.presentations)"
+                      :warnings="message.warnings"
+                      :partial="message.partial"
+                      :queried-at="message.queriedAt"
+                    />
                   </div>
                   <el-table v-if="message.toolTraceSummary && message.toolTraceSummary.length" :data="message.toolTraceSummary" size="mini" border>
                     <el-table-column prop="toolName" label="工具" width="190" />
@@ -307,6 +312,8 @@ import {
   submitDiagnosisFeedback,
   updateChatSessionTitle
 } from '@/api/agentDiagnosis'
+import AgentPresentationCard from './components/AgentPresentationCard.vue'
+import { mapLegacyCards } from './utils/agentPresentationCompatibility'
 
 function welcomeMessage() {
   return {
@@ -320,6 +327,9 @@ function welcomeMessage() {
 
 export default {
   name: 'AgentDiagnosis',
+  components: {
+    AgentPresentationCard
+  },
   data() {
     return {
       loading: false,
@@ -531,6 +541,7 @@ export default {
       }
       return warnings.join('；')
     },
+    /** 保存助手响应中的卡片和展示描述，供本条消息按调用 ID 关联渲染。 */
     addAssistantResponse(response) {
       this.activeSessionId = response.sessionId || this.activeSessionId
       this.sessionId = this.activeSessionId
@@ -550,6 +561,7 @@ export default {
         result: response.diagnosisResult,
         facts: response.facts || [],
         cards: response.cards || [],
+        presentations: response.presentations || [],
         toolFacts: response.toolFacts || [],
         toolTraceSummary: response.toolTraceSummary || [],
         warnings: response.warnings || [],
@@ -632,12 +644,18 @@ export default {
       }
       return null
     },
+    /** 将持久化消息映射为前端只读状态；只有缺少 presentations 的旧消息才使用本地兼容层。 */
     mapSessionMessages(messages) {
       if (!messages || !messages.length) {
         return [welcomeMessage()]
       }
       return messages.map(message => {
         const business = message.businessResult || {}
+        const cards = Array.isArray(business.cards) ? business.cards : []
+        const businessPresentations = Array.isArray(business.presentations) ? business.presentations : []
+        const messagePresentations = Array.isArray(message.presentations) ? message.presentations : []
+        const storedPresentations = businessPresentations.length ? businessPresentations : messagePresentations
+        const legacyState = storedPresentations.length ? null : mapLegacyCards(cards)
         return {
           requestId: message.requestId,
           role: (message.role || '').toLowerCase() === 'user' ? 'user' : 'assistant',
@@ -649,7 +667,8 @@ export default {
           slots: message.slots,
           result: message.diagnosisResult,
           facts: business.facts || [],
-          cards: business.cards || [],
+          cards: legacyState ? legacyState.cards : cards,
+          presentations: storedPresentations.length ? storedPresentations : legacyState.presentations,
           toolFacts: business.toolFacts || [],
           toolTraceSummary: business.toolTraceSummary || message.toolSummary || [],
           warnings: business.warnings || [],
@@ -691,29 +710,12 @@ export default {
       }
       return map[value] || value || '-'
     },
-    unifiedCardTitle(type) {
-      const map = {
-        CUSTOMER_PROFILE_LIST: '客户档案',
-        SERVICE_CUSTOMER_LIST: '服务客户',
-        SERVICE_CUSTOMER_DETAIL: '服务客户详情',
-        MEAL_PLAN_LIST: '排餐记录',
-        VERIFICATION_LIST: '核销记录',
-        REFUND_LIST: '退餐记录',
-        DISH_LIST: '菜品摘要',
-        DISH_CANDIDATE_LIST: '候选菜预览',
-        PACKAGE_DETAIL: '套餐详情',
-        METRIC_RESULT: '运营指标',
-        BUSINESS_RULE: '业务规则'
+    /** 通过 sourceToolCallId 关联同一响应中的事实卡片和展示描述。 */
+    presentationForCard(card, presentations) {
+      if (!card || !card.sourceToolCallId || !Array.isArray(presentations)) {
+        return null
       }
-      return map[type] || type || '业务结果'
-    },
-    unifiedCardText(data) {
-      if (data === undefined || data === null) return '暂无结果'
-      try {
-        return JSON.stringify(data, null, 2)
-      } catch (e) {
-        return String(data)
-      }
+      return presentations.find(item => item && item.sourceToolCallId === card.sourceToolCallId) || null
     },
     missingSlotText(value) {
       const map = {

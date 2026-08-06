@@ -2,6 +2,7 @@ package me.zhengjie.agent.config;
 
 import org.junit.jupiter.api.Test;
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -29,5 +30,23 @@ class AgentPropertiesTest {
 
         assertThrows(IllegalStateException.class,
             () -> new AgentPropertiesValidator(properties).afterSingletonsInstantiated());
+    }
+
+    @Test
+    void presentationProfileMustBeStructuredAndToolFree() {
+        AgentProperties properties = new AgentProperties();
+        AgentProperties.ModelProfile profile = new AgentProperties.ModelProfile();
+        profile.setStructuredOutput(false);
+        properties.getModels().setProfiles(new LinkedHashMap<>(Map.of("presentation", profile)));
+
+        assertThrows(IllegalStateException.class,
+            () -> new AgentPropertiesValidator(properties).afterSingletonsInstantiated());
+    }
+
+    @Test
+    void missingPresentationProfileLeavesUnknownCardsOnDirectFallback() {
+        AgentProperties properties = new AgentProperties();
+
+        assertTrue(!properties.getModels().getProfiles().containsKey("presentation"));
     }
 }

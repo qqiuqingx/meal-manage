@@ -284,7 +284,10 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
     }
 
     /**
-     * 将消息实体转换为接口对象，并反序列化槽位和诊断结果。
+     * 将消息实体转换为接口对象，并反序列化槽位、诊断结果和结构化业务展示快照。
+     *
+     * @param message 持久化消息实体
+     * @return 会话详情消息对象，展示描述同时位于 businessResult 和顶层便利字段
      */
     private AgentChatMessageDto toMessageDto(AgentChatMessage message) {
         AgentChatMessageDto dto = new AgentChatMessageDto();
@@ -309,6 +312,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
             dto.setToolTraceSummary(businessResult.get("toolTraceSummary") instanceof List
                 ? (List<Map<String, Object>>) businessResult.get("toolTraceSummary") : dto.getToolSummary());
         }
+        dto.setPresentations(readPresentationList(businessResult == null ? null : businessResult.get("presentations")));
         dto.setCreateBy(message.getCreateBy());
         dto.setCreateTime(message.getCreateTime());
         return dto;
@@ -647,7 +651,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
     }
 
     /**
-     * 构造可持久化的业务查询展示快照，只保留前端恢复卡片所需字段。
+     * 构造可持久化的业务查询展示快照，只保留前端恢复卡片和展示描述所需字段。
      *
      * @param response 当前助手响应
      * @return 无业务查询时返回空值，否则返回受控展示字段
@@ -657,14 +661,16 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
             return null;
         }
         boolean hasCards = response.getCards() != null && !response.getCards().isEmpty();
+        boolean hasPresentations = response.getPresentations() != null && !response.getPresentations().isEmpty();
         boolean hasToolFacts = response.getToolFacts() != null && !response.getToolFacts().isEmpty();
         boolean hasToolTrace = response.getToolTraceSummary() != null && !response.getToolTraceSummary().isEmpty();
-        if (!hasCards && !hasToolFacts && !hasToolTrace && !response.isPartial()) {
+        if (!hasCards && !hasPresentations && !hasToolFacts && !hasToolTrace && !response.isPartial()) {
             return null;
         }
         Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
         snapshot.put("facts", response.getFacts());
         snapshot.put("cards", response.getCards());
+        snapshot.put("presentations", response.getPresentations());
         snapshot.put("toolFacts", response.getToolFacts());
         snapshot.put("toolTraceSummary", response.getToolTraceSummary());
         snapshot.put("warnings", response.getWarnings());
@@ -677,7 +683,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
     }
 
     /**
-     * 将历史业务查询卡片快照回填到聊天响应，用于幂等重放和会话刷新。
+     * 将历史业务查询快照回填到聊天响应，用于幂等重放和会话刷新，不触发实时查询。
      *
      * @param response 待回填响应
      * @param snapshot 持久化卡片快照
@@ -689,6 +695,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         }
         response.setFacts(snapshot.get("facts") instanceof List ? (List<Map<String, Object>>) snapshot.get("facts") : Collections.emptyList());
         response.setCards(snapshot.get("cards") instanceof List ? (List<Map<String, Object>>) snapshot.get("cards") : Collections.emptyList());
+        response.setPresentations(readPresentationList(snapshot.get("presentations")));
         response.setToolFacts(snapshot.get("toolFacts") instanceof List ? (List<Map<String, Object>>) snapshot.get("toolFacts") : Collections.emptyList());
         response.setToolTraceSummary(snapshot.get("toolTraceSummary") instanceof List
             ? (List<Map<String, Object>>) snapshot.get("toolTraceSummary") : Collections.emptyList());
@@ -700,6 +707,32 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
             ? (Map<String, Object>) snapshot.get("lastBusinessQueryContext") : null);
         response.setConversationPatch(snapshot.get("conversationPatch") instanceof Map
             ? (Map<String, Object>) snapshot.get("conversationPatch") : null);
+    }
+
+    /**
+     * 读取持久化展示描述，并拒绝非 Map 元素，避免异常历史 JSON 影响其他业务快照恢复。
+     *
+     * @param value 快照中的 presentations 原始值
+     * @return 合法的受控 Map 列表；字段缺失、类型错误或元素异常时返回空列表
+     */
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> readPresentationList(Object value) {
+        if (!(value instanceof List)) {
+            return new ArrayList<>();
+        }
+        List<?> rawList = (List<?>) value;
+        List<Map<String, Object>> result = new ArrayList<>(rawList.size());
+        try {
+            for (Object element : rawList) {
+                if (!(element instanceof Map)) {
+                    return new ArrayList<>();
+                }
+                result.add((Map<String, Object>) element);
+            }
+            return result;
+        } catch (Exception ex) {
+            return new ArrayList<>();
+        }
     }
 
     /**

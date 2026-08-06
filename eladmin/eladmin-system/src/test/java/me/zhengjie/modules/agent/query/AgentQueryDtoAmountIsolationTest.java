@@ -1,6 +1,7 @@
 package me.zhengjie.modules.agent.query;
 
 import me.zhengjie.modules.agent.query.domain.dto.AgentBusinessRuleDto;
+import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerProfileDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerAddressDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerCandidateDto;
 import me.zhengjie.modules.agent.query.domain.dto.AgentCustomerOverviewDto;
@@ -32,6 +33,7 @@ class AgentQueryDtoAmountIsolationTest {
     void shouldNotExposeAmountSemanticFieldsInAgentQueryDtos() {
         List<Class<?>> types = List.of(
             AgentBusinessRuleDto.class, AgentCustomerAddressDto.class, AgentCustomerCandidateDto.class,
+            AgentCustomerProfileDto.class,
             AgentCustomerOverviewDto.class, AgentCustomerPackageDto.class, AgentDishSummaryDto.class,
             AgentMealPlanDishItemDto.class, AgentMealPlanSummaryDto.class, AgentOrderMealBalanceDto.class,
             AgentOrderSummaryDto.class, AgentPackageSpecDto.class, AgentRefundLogDto.class,

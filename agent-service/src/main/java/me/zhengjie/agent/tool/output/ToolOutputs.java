@@ -45,8 +45,8 @@ public final class ToolOutputs {
         public void setWarnings(List<String> value) { warnings = value == null ? new ArrayList<>() : value; }
     }
 
-    /** 客户档案摘要；姓名、手机号和地址均由主系统脱敏。 */
-    public record CustomerProfile(Long customerId, String customerCode, String maskedName,
+    /** 客户档案摘要；完整姓名仅由已授权的内部 Agent 查询链路返回，手机号仍由主系统脱敏。 */
+    public record CustomerProfile(Long customerId, String customerCode, String customerName,
                                   boolean hasOrder, String createTime, String maskedPhone) { }
 
     /** 早餐和午晚餐独立餐数池。 */
@@ -54,10 +54,10 @@ public final class ToolOutputs {
                               int verifiedLunch, int verifiedDinner, int remainingBreakfast,
                               int remainingLunchDinner) { }
 
-    /** 订单根服务客户行；内部 ID 只供模型跨工具关联。 */
-    public record ServiceCustomer(Long customerId, String customerCode, String maskedName,
+    /** 订单根服务客户行；姓名用于编号辅助确认，内部 ID 只供模型跨工具关联。 */
+    public record ServiceCustomer(Long customerId, String customerCode, String customerName,
                                   Long orderId, String orderCode, String status, String dealTime,
-                                  String createTime, String startDate, String endDate, String startMealType,
+                                  String createTime, String orderTime, String startDate, String endDate, String startMealType,
                                   String mealType, String scheduleMode, List<String> deliveryDates,
                                   String parentPackageName, String childPackageName,
                                   MealBalance mealBalance, int mealPlanCount, int verificationCount,
@@ -94,8 +94,12 @@ public final class ToolOutputs {
     public record PackageDetail(Long packageId, String packageCode, String packageName,
                                 List<Map<String, Object>> subPackages) { }
 
-    /** 运营指标结果；维度键由服务端枚举生成。 */
+    /** 指标展示分组；只含服务端生成的标签和值。 */
+    public record MetricBreakdown(String label, long value) { }
+
+    /** 运营指标结果；维度键和展示分组均由服务端枚举生成。 */
     public record Metric(String metric, long total, Map<String, Long> dimensions,
+                         List<MetricBreakdown> breakdown,
                          String queriedAt, List<String> warnings) { }
 
     /** 版本化业务规则。 */

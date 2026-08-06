@@ -6,11 +6,15 @@ import me.zhengjie.agent.api.contract.AgentExecutionEnvelope;
 import me.zhengjie.agent.api.contract.ChatMessageRequest;
 import me.zhengjie.agent.application.conversation.ConversationPatch;
 import me.zhengjie.agent.domain.dto.AgentChatResponse;
+import me.zhengjie.agent.presentation.PresentationDescriptor;
+import me.zhengjie.agent.presentation.PresentationRegistry;
+import me.zhengjie.agent.tool.ToolRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -67,6 +71,40 @@ class AgentServiceContractTest {
         }
     }
 
+    /** 结构化展示契约必须声明严格对象、受控来源/视图枚举及服务客户固定列顺序。 */
+    @Test
+    void structuredPresentationContractMustRemainStrictAndStable() throws Exception {
+        try (InputStream input = getClass().getResourceAsStream("/openapi/agent-service-v2.yaml")) {
+            JsonNode schemas = new YAMLMapper().readTree(input).path("components").path("schemas");
+            JsonNode result = schemas.path("AgentChatResult");
+            JsonNode presentations = result.path("properties").path("presentations");
+            assertEquals("#/components/schemas/PresentationDescriptor",
+                presentations.path("items").path("$ref").asText());
+            assertEquals(100, presentations.path("maxItems").asInt());
+
+            JsonNode descriptor = schemas.path("PresentationDescriptor");
+            assertFalse(descriptor.path("additionalProperties").asBoolean(true));
+            assertEquals(Set.of("schemaVersion", "sourceToolCallId", "cardType", "decisionSource", "title",
+                "layout", "defaultView", "availableViews", "summary", "table", "chart"),
+                propertiesOf(descriptor));
+            assertEquals(Set.of("SYSTEM", "LLM"), enumValues(descriptor.path("properties").path("decisionSource")));
+            assertEquals(Set.of("TEXT", "TABLE", "BAR", "LINE", "PIE"),
+                enumValues(schemas.path("PresentationView")));
+
+            assertFalse(schemas.path("PresentationField").path("additionalProperties").asBoolean(true));
+            assertFalse(schemas.path("PresentationTable").path("additionalProperties").asBoolean(true));
+            assertFalse(schemas.path("PresentationChart").path("additionalProperties").asBoolean(true));
+            assertEquals(Set.of("type", "dataPath", "dimensionField", "metricFields", "dimensionLabel", "metricLabels"),
+                propertiesOf(schemas.path("PresentationChart")));
+        }
+
+        List<String> serviceCustomerColumns = new PresentationRegistry(new ToolRegistry())
+            .require("SERVICE_CUSTOMER_LIST").template().table().columns().stream()
+            .map(PresentationDescriptor.Field::field).collect(Collectors.toList());
+        assertEquals(List.of("customerCode", "customerName", "orderCode", "orderTime", "status", "parentPackageName"),
+            serviceCustomerColumns);
+    }
+
     private Set<String> fieldsOf(Class<?> type) {
         return Arrays.stream(type.getDeclaredFields())
             .filter(field -> !java.lang.reflect.Modifier.isStatic(field.getModifiers()))
@@ -79,5 +117,11 @@ class AgentServiceContractTest {
             java.util.Spliterators.spliteratorUnknownSize(
                 schema.path("properties").fieldNames(), java.util.Spliterator.ORDERED), false)
             .collect(Collectors.toSet());
+    }
+
+    /** 读取 OpenAPI 枚举值，避免契约测试只检查字符串是否出现。 */
+    private Set<String> enumValues(JsonNode schema) {
+        return java.util.stream.StreamSupport.stream(schema.path("enum").spliterator(), false)
+            .map(JsonNode::asText).collect(Collectors.toSet());
     }
 }

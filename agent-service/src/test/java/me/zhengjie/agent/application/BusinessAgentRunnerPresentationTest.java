@@ -1,0 +1,110 @@
+package me.zhengjie.agent.application;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import me.zhengjie.agent.config.AgentProperties;
+import me.zhengjie.agent.domain.dto.AgentChatRequest;
+import me.zhengjie.agent.guardrail.FinalAnswerGuardrail;
+import me.zhengjie.agent.guardrail.SensitiveDataPolicy;
+import me.zhengjie.agent.guardrail.ToolExecutionContext;
+import me.zhengjie.agent.presentation.PresentationDescriptor;
+import me.zhengjie.agent.presentation.PresentationRegistry;
+import me.zhengjie.agent.presentation.PresentationService;
+import me.zhengjie.agent.presentation.PresentationSuggestionValidator;
+import me.zhengjie.agent.tool.ToolRegistry;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+/** BusinessAgentRunner 卡片与系统展示描述一对一接线契约测试。 */
+class BusinessAgentRunnerPresentationTest {
+
+    /** 成功工具事实只能产生同 callId 的 SYSTEM 展示描述，且展示不改变业务 partial。 */
+    @Test
+    void shouldAssemblePresentationForSuccessfulKnownCard() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ToolRegistry registry = new ToolRegistry();
+        BusinessAgentRunner runner = runner(objectMapper, registry);
+        ToolExecutionContext context = new ToolExecutionContext(objectMapper, 6, 100);
+        context.record(ToolRegistry.SEARCH_SERVICE_CUSTOMERS, "SERVICE_CUSTOMER_LIST", "{}",
+            "{\"items\":[{\"customerCode\":\"C1001\",\"customerName\":\"张三\",\"orderCode\":\"O1\",\"orderTime\":\"2026-08-05T10:00:00\",\"status\":\"ACTIVE\",\"parentPackageName\":\"套餐\"}],\"warnings\":[]}", true);
+        AgentChatRequest request = request("查询客户订单");
+
+        me.zhengjie.agent.domain.dto.AgentChatResponse response = runner.runWithAnswer(request, "已查询到客户订单。", context);
+
+        assertEquals(1, response.getCards().size());
+        assertEquals(1, response.getPresentations().size());
+        assertEquals("call-1", response.getPresentations().get(0).sourceToolCallId());
+        assertEquals(PresentationDescriptor.DecisionSource.SYSTEM, response.getPresentations().get(0).decisionSource());
+        assertTrue(!response.isPartial());
+    }
+
+    /** 失败工具事实不得生成卡片或展示描述，但仍保留工具追踪摘要。 */
+    @Test
+    void shouldNotAssemblePresentationForFailedTool() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ToolRegistry registry = new ToolRegistry();
+        BusinessAgentRunner runner = runner(objectMapper, registry);
+        ToolExecutionContext context = new ToolExecutionContext(objectMapper, 6, 100);
+        context.record(ToolRegistry.SEARCH_SERVICE_CUSTOMERS, "SERVICE_CUSTOMER_LIST", "{}",
+            "{\"errorCode\":\"DEPENDENCY_UNAVAILABLE\"}", false);
+
+        me.zhengjie.agent.domain.dto.AgentChatResponse response = runner.runWithAnswer(
+            request("你好"), "暂时无法完成查询。", context);
+
+        assertTrue(response.getCards().isEmpty());
+        assertTrue(response.getPresentations().isEmpty());
+        assertEquals(1, response.getToolTraceSummary().size());
+    }
+
+    /** 未知卡片没有 presentation profile 时生成 SYSTEM 通用降级和稳定告警。 */
+    @Test
+    void shouldFallbackUnknownCardWithoutChangingBusinessPartial() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ToolRegistry registry = new ToolRegistry();
+        PresentationService.PresentationResult result = new PresentationService(new PresentationRegistry(registry)).present(
+            "call-1", "futureTool", "UNKNOWN_CARD", objectMapper.readTree(
+                "{\"items\":[{\"label\":\"A\",\"value\":1}],\"warnings\":[]}"));
+
+        assertEquals(PresentationDescriptor.DecisionSource.SYSTEM, result.descriptor().decisionSource());
+        assertTrue(result.warnings().contains("PRESENTATION_FALLBACK_APPLIED"));
+        assertFalse(result.warnings().contains("BUSINESS_PARTIAL"));
+    }
+
+    /** 已知卡片即使提供 planner 也必须只走系统规则，模型规划调用次数保持为零。 */
+    @Test
+    void shouldNotCallPlannerForKnownCard() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ToolRegistry registry = new ToolRegistry();
+        int[] calls = {0};
+        PresentationSuggestionValidator validator = new PresentationSuggestionValidator();
+        PresentationService service = new PresentationService(new PresentationRegistry(registry),
+            (cardType, schema) -> { calls[0]++; throw new IllegalStateException("MUST_NOT_CALL"); },
+            new me.zhengjie.agent.presentation.CardSchemaInspector(), validator,
+            new me.zhengjie.agent.presentation.GenericPresentationFactory(validator));
+
+        PresentationService.PresentationResult result = service.present("call-1",
+            ToolRegistry.SEARCH_SERVICE_CUSTOMERS, "SERVICE_CUSTOMER_LIST", objectMapper.createObjectNode());
+
+        assertEquals(PresentationDescriptor.DecisionSource.SYSTEM, result.descriptor().decisionSource());
+        assertEquals(0, calls[0]);
+    }
+
+    /** 创建使用真实系统注册表的最小 Runner，避免测试调用模型或远程工具。 */
+    private BusinessAgentRunner runner(ObjectMapper objectMapper, ToolRegistry registry) {
+        PresentationService presentationService = new PresentationService(new PresentationRegistry(registry));
+        return new BusinessAgentRunner(null, null, registry,
+            new FinalAnswerGuardrail(new SensitiveDataPolicy()), new SensitiveDataPolicy(), objectMapper,
+            new AgentProperties(), null, presentationService);
+    }
+
+    /** 构造最小内部 Agent 请求。 */
+    private AgentChatRequest request(String message) {
+        AgentChatRequest request = new AgentChatRequest();
+        request.setMessage(message);
+        request.setSessionId("session-1");
+        request.setClientMessageId("message-1");
+        return request;
+    }
+}

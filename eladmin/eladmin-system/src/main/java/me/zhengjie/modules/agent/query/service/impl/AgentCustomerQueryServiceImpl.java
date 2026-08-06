@@ -113,12 +113,12 @@ public class AgentCustomerQueryServiceImpl implements AgentCustomerQueryService 
         return result;
     }
 
-    /** 将客户档案实体裁剪为不含原始个人信息的统一搜索摘要。 */
+    /** 将已完成权限和数据范围校验的客户档案转换为内部 Agent 搜索摘要；姓名完整返回，手机号继续脱敏。 */
     private AgentCustomerProfileDto profileSummary(CustomerProfile profile) {
         AgentCustomerProfileDto dto = new AgentCustomerProfileDto();
         dto.setCustomerId(profile.getId());
         dto.setCustomerCode(profile.getCustomerCode());
-        dto.setMaskedName(maskName(profile.getCustomerName()));
+        dto.setCustomerName(profile.getCustomerName());
         dto.setMaskedPhone(maskPhone(profile.getPhone()));
         dto.setCreateTime(profile.getCreateTime());
         dto.setHasOrder(customerOrderMapper.selectCount(new LambdaQueryWrapper<CustomerOrder>()

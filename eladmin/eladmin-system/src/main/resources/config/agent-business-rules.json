@@ -9,7 +9,7 @@
     "ownerModule": "customer-order / meal-verification",
     "evidenceDocument": "doc/business/订单管理业务说明.md",
     "evidenceAnchor": "#餐数体系",
-    "evidenceHash": "sha256:ad0f878fdb98f5dac20203132619c6a48426cf10671647b979a5460844c5156c",
+    "evidenceHash": "sha256:99de00e526c401ae08bc9bc7dc3374ae138c526a6d7eac1203f328500e8e2f2e",
     "effectiveFrom": "2026-07-30T00:00:00+08:00",
     "updatedAt": "2026-07-30T00:00:00+08:00",
     "supersedes": "ORDER_MEAL_BALANCE@1.0"
@@ -24,7 +24,7 @@
     "ownerModule": "customer-order / meal-plan",
     "evidenceDocument": "doc/business/订单管理业务说明.md",
     "evidenceAnchor": "#订单生命周期",
-    "evidenceHash": "sha256:ad0f878fdb98f5dac20203132619c6a48426cf10671647b979a5460844c5156c",
+    "evidenceHash": "sha256:99de00e526c401ae08bc9bc7dc3374ae138c526a6d7eac1203f328500e8e2f2e",
     "effectiveFrom": "2026-07-30T00:00:00+08:00",
     "updatedAt": "2026-07-30T00:00:00+08:00",
     "supersedes": "ORDER_EFFECTIVE@1.0"

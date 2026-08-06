@@ -3,6 +3,7 @@ package me.zhengjie.agent.domain.dto;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.application.conversation.ConversationPatch;
 import me.zhengjie.agent.domain.chat.ChatStatus;
+import me.zhengjie.agent.presentation.PresentationDescriptor;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -49,6 +50,28 @@ class AgentChatDtoTest {
         assertEquals("searchServiceCustomers", parsed.getToolFacts().get(0).get("toolName"));
         assertEquals("SUCCESS", parsed.getToolTraceSummary().get(0).get("status"));
         assertEquals(List.of("结果可能已截断"), parsed.getWarnings());
+    }
+
+    /** 展示描述必须可以和卡片一起序列化往返，且保持系统来源和字段引用。 */
+    @Test
+    void shouldSerializePresentationDescriptor() throws Exception {
+        AgentChatResponse response = new AgentChatResponse();
+        response.setPresentations(List.of(new PresentationDescriptor(
+            "v1", "call-1", "SERVICE_CUSTOMER_LIST", PresentationDescriptor.DecisionSource.SYSTEM,
+            "服务客户订单", PresentationDescriptor.Layout.TABS, PresentationDescriptor.View.TABLE,
+            List.of(PresentationDescriptor.View.TABLE), null,
+            new PresentationDescriptor.Table("items", List.of(
+                new PresentationDescriptor.Field("customerCode", "客户编号", PresentationDescriptor.Format.TEXT)), List.of()),
+            null)));
+
+        AgentChatResponse parsed = objectMapper.readValue(
+            objectMapper.writeValueAsString(response), AgentChatResponse.class);
+
+        assertEquals(1, parsed.getPresentations().size());
+        assertEquals("call-1", parsed.getPresentations().get(0).sourceToolCallId());
+        assertEquals(PresentationDescriptor.DecisionSource.SYSTEM,
+            parsed.getPresentations().get(0).decisionSource());
+        assertEquals("customerCode", parsed.getPresentations().get(0).table().columns().get(0).field());
     }
 
     /**

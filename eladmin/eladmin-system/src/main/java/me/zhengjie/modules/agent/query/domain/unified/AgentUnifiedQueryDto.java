@@ -17,7 +17,7 @@ public final class AgentUnifiedQueryDto {
     public static class ProfileItem {
         /** 客户稳定关联 ID。 */ private Long customerId;
         /** 客户编号。 */ private String customerCode;
-        /** 脱敏姓名。 */ private String maskedName;
+        /** 客户完整姓名，仅供已授权的内部 Agent 链路辅助确认客户编号。 */ private String customerName;
         /** 是否存在订单。 */ private boolean hasOrder;
         /** 档案创建时间。 */ private LocalDateTime createTime;
         /** 脱敏手机号。 */ private String maskedPhone;
@@ -40,12 +40,13 @@ public final class AgentUnifiedQueryDto {
     public static class ServiceCustomerItem {
         /** 客户稳定关联 ID。 */ private Long customerId;
         /** 客户编号。 */ private String customerCode;
-        /** 脱敏姓名。 */ private String maskedName;
+        /** 客户完整姓名，仅供已授权的内部 Agent 链路辅助确认客户编号。 */ private String customerName;
         /** 订单稳定关联 ID。 */ private Long orderId;
         /** 订单编号。 */ private String orderCode;
         /** 订单状态。 */ private String status;
         /** 成交时间。 */ private String dealTime;
         /** 创建时间。 */ private String createTime;
+        /** 统一下单时间，成交时间优先、创建时间回退。 */ private String orderTime;
         /** 服务开始日期。 */ private String startDate;
         /** 服务结束日期。 */ private String endDate;
         /** 订单开始生效餐次。 */ private String startMealType;
@@ -140,8 +141,25 @@ public final class AgentUnifiedQueryDto {
         /** 指标枚举。 */ private String metric;
         /** 指标总数。 */ private long total;
         /** 受控维度聚合。 */ private Map<String, Long> dimensions = new LinkedHashMap<>();
+        /** 由受控维度按原有顺序转换的展示分组。 */ private List<MetricBreakdownItem> breakdown = new ArrayList<>();
         /** 查询时间。 */ private String queriedAt;
         /** 指标告警。 */ private List<String> warnings = new ArrayList<>();
+    }
+
+    /** 指标展示分组；只允许使用确定性的标签和值，不携带动态表达式或业务明细。 */
+    @Data
+    public static class MetricBreakdownItem {
+        /** 受控维度标签。 */ private String label;
+        /** 该维度对应的指标值。 */ private long value;
+
+        /** 创建指标分组项。 */
+        public MetricBreakdownItem() { }
+
+        /** 使用标签和值创建指标分组项。 */
+        public MetricBreakdownItem(String label, long value) {
+            this.label = label;
+            this.value = value;
+        }
     }
 
     /** 版本化规则项。 */

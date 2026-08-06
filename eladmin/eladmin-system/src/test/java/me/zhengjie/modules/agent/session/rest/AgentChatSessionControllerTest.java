@@ -2,6 +2,7 @@ package me.zhengjie.modules.agent.session.rest;
 
 import me.zhengjie.modules.agent.session.domain.dto.AgentChatSessionCreateRequest;
 import me.zhengjie.modules.agent.session.domain.dto.AgentChatSessionDetailDto;
+import me.zhengjie.modules.agent.session.domain.dto.AgentChatMessageDto;
 import me.zhengjie.modules.agent.session.domain.dto.AgentChatSessionQueryCriteria;
 import me.zhengjie.modules.agent.session.domain.dto.AgentChatSessionSummaryDto;
 import me.zhengjie.modules.agent.session.domain.dto.AgentChatSessionTitleUpdateRequest;
@@ -15,6 +16,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -66,12 +70,23 @@ class AgentChatSessionControllerTest {
     void shouldGetSessionDetail() {
         AgentChatSessionDetailDto detail = new AgentChatSessionDetailDto();
         detail.setSessionId("session-3");
+        AgentChatMessageDto message = new AgentChatMessageDto();
+        Map<String, Object> presentation = new LinkedHashMap<>();
+        presentation.put("schemaVersion", "v1");
+        message.setPresentations(Collections.singletonList(presentation));
+        Map<String, Object> businessResult = new LinkedHashMap<>();
+        businessResult.put("presentations", message.getPresentations());
+        message.setBusinessResult(businessResult);
+        detail.setMessages(Collections.singletonList(message));
         when(chatSessionService.getSession("session-3")).thenReturn(detail);
 
         ResponseEntity<AgentChatSessionDetailDto> response = controller.get("session-3");
 
         assertNotNull(response.getBody());
         assertEquals("session-3", response.getBody().getSessionId());
+        assertEquals("v1", response.getBody().getMessages().get(0).getPresentations().get(0).get("schemaVersion"));
+        assertEquals("v1", ((List<Map<String, Object>>) response.getBody().getMessages().get(0)
+            .getBusinessResult().get("presentations")).get(0).get("schemaVersion"));
     }
 
     @Test

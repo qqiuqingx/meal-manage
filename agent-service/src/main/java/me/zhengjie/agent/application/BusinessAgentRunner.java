@@ -11,6 +11,8 @@ import me.zhengjie.agent.guardrail.FinalAnswerGuardrail;
 import me.zhengjie.agent.guardrail.SensitiveDataPolicy;
 import me.zhengjie.agent.guardrail.ToolExecutionContext;
 import me.zhengjie.agent.infrastructure.llm.FallbackModelExecutor;
+import me.zhengjie.agent.presentation.PresentationDescriptor;
+import me.zhengjie.agent.presentation.PresentationService;
 import me.zhengjie.agent.rule.DiagnosisRule;
 import me.zhengjie.agent.rule.RuleRegistry;
 import me.zhengjie.agent.rule.RuleRegistryLoader;
@@ -32,6 +34,7 @@ import org.springframework.stereotype.Component;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -54,13 +57,15 @@ public class BusinessAgentRunner {
     private final ObjectMapper objectMapper;
     private final AgentProperties properties;
     private final RuleRegistryLoader ruleRegistryLoader;
+    private final PresentationService presentationService;
     private final DiagnosisResultValidator diagnosisResultValidator;
 
     @Autowired
     public BusinessAgentRunner(FallbackModelExecutor modelExecutor, BusinessAgentTools tools,
                                ToolRegistry registry, FinalAnswerGuardrail finalAnswerGuardrail,
                                SensitiveDataPolicy sensitiveDataPolicy, ObjectMapper objectMapper,
-                               AgentProperties properties, RuleRegistryLoader ruleRegistryLoader) {
+                               AgentProperties properties, RuleRegistryLoader ruleRegistryLoader,
+                               PresentationService presentationService) {
         this.modelExecutor = modelExecutor;
         this.tools = tools;
         this.registry = registry;
@@ -69,6 +74,7 @@ public class BusinessAgentRunner {
         this.objectMapper = objectMapper;
         this.properties = properties;
         this.ruleRegistryLoader = ruleRegistryLoader;
+        this.presentationService = presentationService;
         this.diagnosisResultValidator = new DiagnosisResultValidator(objectMapper);
     }
 
@@ -88,7 +94,27 @@ public class BusinessAgentRunner {
                                SensitiveDataPolicy sensitiveDataPolicy, ObjectMapper objectMapper,
                                AgentProperties properties) {
         this(modelExecutor, tools, registry, finalAnswerGuardrail, sensitiveDataPolicy, objectMapper,
-            properties, null);
+            properties, null, null);
+    }
+
+    /**
+     * 保留带规则加载器的测试构造入口，并允许旧测试不提供展示服务。
+     *
+     * @param modelExecutor 模型执行器
+     * @param tools 工具适配器
+     * @param registry 工具注册表
+     * @param finalAnswerGuardrail 最终回答护栏
+     * @param sensitiveDataPolicy 敏感数据策略
+     * @param objectMapper JSON 映射器
+     * @param properties Agent 配置
+     * @param ruleRegistryLoader 诊断规则加载器
+     */
+    public BusinessAgentRunner(FallbackModelExecutor modelExecutor, BusinessAgentTools tools,
+                               ToolRegistry registry, FinalAnswerGuardrail finalAnswerGuardrail,
+                               SensitiveDataPolicy sensitiveDataPolicy, ObjectMapper objectMapper,
+                               AgentProperties properties, RuleRegistryLoader ruleRegistryLoader) {
+        this(modelExecutor, tools, registry, finalAnswerGuardrail, sensitiveDataPolicy, objectMapper,
+            properties, ruleRegistryLoader, null);
     }
 
     /** 执行一轮受控 LLM + Tool Calling，并返回文本、卡片、事实和告警。 */
@@ -101,7 +127,7 @@ public class BusinessAgentRunner {
         try {
             String prompt = systemPrompt(safeRequest, visibleSpecs) + "\n\n用户问题：\n" + safeRequest.getMessage();
             String answer = invokeWithRepairs(prompt, visibleSpecs, executionContext, safeRequest.getMessage());
-            finalAnswerGuardrail.validate(safeRequest.getMessage(), answer, executionContext.successfulToolCalls());
+            finalAnswerGuardrail.validate(safeRequest.getMessage(), answer, executionContext.successfulToolCalls(), customerIdentities(executionContext));
             return assemble(safeRequest, answer, executionContext);
         } catch (RuntimeException exception) {
             return fallback(safeRequest, stableCode(exception), executionContext);
@@ -110,7 +136,7 @@ public class BusinessAgentRunner {
 
     /** 暴露给测试的无模型执行入口，验证工具白名单和护栏时不需要真实 provider。 */
     AgentChatResponse runWithAnswer(AgentChatRequest request, String answer, ToolExecutionContext context) {
-        finalAnswerGuardrail.validate(request == null ? null : request.getMessage(), answer, context.successfulToolCalls());
+        finalAnswerGuardrail.validate(request == null ? null : request.getMessage(), answer, context.successfulToolCalls(), customerIdentities(context));
         return assemble(request == null ? new AgentChatRequest() : request, answer, context);
     }
 
@@ -122,7 +148,7 @@ public class BusinessAgentRunner {
         for (int attempt = 0; attempt <= repairs; attempt++) {
             String answer = invokeModel(prompt, visibleSpecs, context);
             try {
-                finalAnswerGuardrail.validate(userMessage, answer, context.successfulToolCalls());
+                finalAnswerGuardrail.validate(userMessage, answer, context.successfulToolCalls(), customerIdentities(context));
                 return answer;
             } catch (RuntimeException exception) {
                 lastValidation = exception;
@@ -132,7 +158,7 @@ public class BusinessAgentRunner {
         throw lastValidation == null ? new IllegalStateException("ANSWER_VALIDATION_FAILED") : lastValidation;
     }
 
-    /** 调用模型并挂载当前可见工具回调，记录完整 LLM 调试入参、反参和耗时。 */
+    /** 调用模型并挂载当前可见工具回调；调试日志只记录长度、状态和稳定标识，不记录回答原文或客户姓名。 */
     private String invokeModel(String prompt, List<ToolRegistry.ToolSpec<?>> visibleSpecs,
                                ToolExecutionContext context) {
         context.beforeModelRound(properties.getChat().getToolLoop().getMaxModelRounds());
@@ -190,9 +216,11 @@ public class BusinessAgentRunner {
         response.setSlots(request.getContextSlots());
         response.setQueriedAt(now());
         List<Map<String, Object>> cards = new ArrayList<>();
+        List<PresentationDescriptor> presentations = new ArrayList<>();
         List<Map<String, Object>> facts = new ArrayList<>();
         List<Map<String, Object>> traces = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
+        List<String> presentationWarnings = new ArrayList<>();
         for (ToolExecutionContext.ToolFact fact : context.facts()) {
             Map<String, Object> trace = new LinkedHashMap<>();
             trace.put("callId", fact.callId()); trace.put("toolName", fact.toolName());
@@ -215,15 +243,29 @@ public class BusinessAgentRunner {
                 card.put("type", spec.cardType()); card.put("sourceToolCallId", fact.callId());
                 card.put("data", objectMapper.convertValue(safe, Object.class));
                 cards.add(card);
+                if (presentationService != null) {
+                    try {
+                        PresentationService.PresentationResult presentation = presentationService.present(
+                            fact.callId(), fact.toolName(), spec.cardType(), safe);
+                        if (presentation.descriptor() != null) presentations.add(presentation.descriptor());
+                        presentationWarnings.addAll(presentation.warnings());
+                    } catch (RuntimeException presentationException) {
+                        presentationWarnings.add("PRESENTATION_GENERATION_FAILED");
+                        log.warn("Agent展示生成失败 requestId={} cardType={} reasonCode={}",
+                            MDC.get("requestId"), spec.cardType(), stableCode(presentationException));
+                    }
+                }
                 if (raw.path("truncated").asBoolean(false)) warnings.add(fact.toolName() + ":RESULT_TRUNCATED");
                 if (raw.has("warnings") && raw.get("warnings").isArray()) raw.get("warnings").forEach(item -> warnings.add(item.asText()));
             } catch (Exception exception) {
                 warnings.add(fact.toolName() + ":TOOL_OUTPUT_INVALID");
             }
         }
-        response.setCards(cards); response.setToolFacts(facts); response.setToolTraceSummary(traces);
+        response.setCards(cards); response.setPresentations(presentations); response.setToolFacts(facts); response.setToolTraceSummary(traces);
         applyStructuredDiagnosis(response, answer, context, warnings);
-        response.setWarnings(warnings); response.setPartial(!warnings.isEmpty());
+        List<String> responseWarnings = new ArrayList<>(warnings);
+        responseWarnings.addAll(presentationWarnings);
+        response.setWarnings(responseWarnings); response.setPartial(!warnings.isEmpty());
         response.setCached(context.cacheHits() > 0);
         response.setLastBusinessQueryContext(lastToolSummary(context));
         return response;
@@ -244,8 +286,21 @@ public class BusinessAgentRunner {
         response.setStatus(ChatStatus.ERROR); response.setConversationStage("ERROR"); response.setSlots(request.getContextSlots());
         response.setLastBusinessQueryContext(request.getLastBusinessQueryContext());
         response.setAssistantMessage(fallbackMessage(code)); response.setWarnings(List.of(code)); response.setPartial(true);
-        response.setToolTraceSummary(assemble(request, "", context).getToolTraceSummary());
+        response.setToolTraceSummary(toolTraceSummary(context));
         return response;
+    }
+
+    /** 将工具事实转换为不含业务值的追踪摘要；错误响应只调用此方法，避免重复组装展示描述。 */
+    private List<Map<String, Object>> toolTraceSummary(ToolExecutionContext context) {
+        List<Map<String, Object>> traces = new ArrayList<>();
+        if (context == null) return traces;
+        for (ToolExecutionContext.ToolFact fact : context.facts()) {
+            Map<String, Object> trace = new LinkedHashMap<>();
+            trace.put("callId", fact.callId()); trace.put("toolName", fact.toolName());
+            trace.put("resultCount", fact.resultCount()); trace.put("status", fact.success() ? "SUCCESS" : "FAILED");
+            traces.add(trace);
+        }
+        return traces;
     }
 
     /** 根据稳定故障码生成面向客服的安全提示文案。 */
@@ -375,6 +430,43 @@ public class BusinessAgentRunner {
         if (generation != null && generation.getOutput() != null) return generation.getOutput().getText();
         List<Generation> results = response.getResults();
         return results == null || results.isEmpty() || results.get(0).getOutput() == null ? null : results.get(0).getOutput().getText();
+    }
+
+    /**
+     * 从本轮成功工具事实提取客户编号—姓名配对，供最终回答护栏校验身份引用。
+     *
+     * @param context 本轮工具执行上下文
+     * @return 去重后的客户身份配对；解析失败时返回空集合
+     */
+    private Set<FinalAnswerGuardrail.CustomerIdentity> customerIdentities(ToolExecutionContext context) {
+        if (context == null || context.facts().isEmpty()) return Collections.emptySet();
+        Set<FinalAnswerGuardrail.CustomerIdentity> identities = new LinkedHashSet<>();
+        for (ToolExecutionContext.ToolFact fact : context.facts()) {
+            if (!fact.success()) continue;
+            try {
+                collectCustomerIdentities(objectMapper.readTree(fact.outputJson()), identities);
+            } catch (Exception ignored) {
+                // 工具事实已在输出护栏校验；单个事实解析失败不能把原始内容写入日志。
+            }
+        }
+        return identities;
+    }
+
+    /** 递归读取同时具有 customerCode/customerName 的固定事实对象。 */
+    private void collectCustomerIdentities(JsonNode node, Set<FinalAnswerGuardrail.CustomerIdentity> identities) {
+        if (node == null || node.isNull()) return;
+        if (node.isArray()) {
+            node.forEach(value -> collectCustomerIdentities(value, identities));
+            return;
+        }
+        if (!node.isObject()) return;
+        JsonNode code = node.get("customerCode");
+        JsonNode name = node.get("customerName");
+        if (name != null && name.isTextual() && !name.asText().isBlank()) {
+            String customerCode = code != null && code.isTextual() ? code.asText() : null;
+            identities.add(new FinalAnswerGuardrail.CustomerIdentity(customerCode, name.asText()));
+        }
+        node.fields().forEachRemaining(entry -> collectCustomerIdentities(entry.getValue(), identities));
     }
 
     /** 将异常归一化为不包含堆栈、URL 或下游原文的稳定故障码。 */
