@@ -6,6 +6,7 @@ import me.zhengjie.modules.agent.rest.exception.AgentBusinessQueryNotFoundExcept
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -53,6 +54,7 @@ public class AgentBusinessQueryExceptionHandler {
 
     /** 构造统一业务查询错误响应，避免向 Agent 暴露堆栈和下游原文。 */
     private ResponseEntity<AgentBusinessQueryErrorDto> response(HttpStatus status, String code, String message) {
-        return ResponseEntity.status(status).body(new AgentBusinessQueryErrorDto(code, message));
+        return ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON)
+            .body(new AgentBusinessQueryErrorDto(code, message));
     }
 }

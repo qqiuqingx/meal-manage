@@ -35,6 +35,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 主系统统一查询 HTTP 适配器。
@@ -49,6 +50,9 @@ public class HttpMainSystemQueryClient implements MainSystemQueryClient {
     private static final String SESSION_ID_HEADER = "X-Agent-Session-Id";
     private static final String ACCESS_CONTEXT_HEADER = "X-Agent-Access-Context";
     private static final String INTERNAL_TOKEN_HEADER = "X-Agent-Internal-Token";
+    private static final Set<String> MAIN_SYSTEM_ERROR_CODES = Set.of(
+        "AGENT_QUERY_REQUEST_VALIDATION_FAILED", "AGENT_QUERY_INVALID_REQUEST", "AGENT_QUERY_NOT_FOUND",
+        "AGENT_QUERY_UNAUTHORIZED", "AGENT_QUERY_ACCESS_DENIED", "AGENT_QUERY_INTERNAL_ERROR");
     private final RestClient restClient;
     private final String internalToken;
     private final ObjectMapper objectMapper;
@@ -137,6 +141,7 @@ public class HttpMainSystemQueryClient implements MainSystemQueryClient {
         }
         try {
             JsonNode node = restClient.post().uri(path).contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
                 .header(INTERNAL_TOKEN_HEADER, internalToken)
                 .header(REQUEST_ID_HEADER, requestId())
                 .header(SESSION_ID_HEADER, AgentAccessContextHolder.sessionId())
@@ -235,8 +240,17 @@ public class HttpMainSystemQueryClient implements MainSystemQueryClient {
     /** 获取当前请求的审计 ID，不从模型输入中读取。 */
     private String requestId() { return MDC.get("requestId") == null ? "" : MDC.get("requestId"); }
 
-    /** 将 HTTP 状态映射为不泄露下游细节的稳定工具故障码。 */
+    /** 优先透传主系统稳定错误码，再将未登记响应按 HTTP 状态映射为安全故障码。 */
     private String resolveFailure(RestClientResponseException exception) {
+        String responseBody = exception.getResponseBodyAsString();
+        if (responseBody != null && !responseBody.isBlank()) {
+            try {
+                String code = objectMapper.readTree(responseBody).path("code").asText(null);
+                if (MAIN_SYSTEM_ERROR_CODES.contains(code)) return code;
+            } catch (Exception ignored) {
+                // 错误正文不是 JSON 时继续按 HTTP 状态兜底，不能影响稳定错误契约。
+            }
+        }
         int status = exception.getStatusCode().value();
         if (status == 401) return "AGENT_QUERY_UNAUTHORIZED";
         if (status == 403) return "AGENT_QUERY_ACCESS_DENIED";

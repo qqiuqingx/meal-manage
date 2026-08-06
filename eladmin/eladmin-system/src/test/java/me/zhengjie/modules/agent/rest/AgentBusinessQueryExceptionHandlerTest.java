@@ -4,6 +4,7 @@ import me.zhengjie.modules.agent.rest.dto.AgentBusinessQueryErrorDto;
 import me.zhengjie.modules.agent.rest.exception.AgentBusinessQueryNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -28,6 +29,7 @@ class AgentBusinessQueryExceptionHandlerTest {
     /** 统一断言状态和错误码，避免测试依赖内部异常文本。 */
     private void assertError(ResponseEntity<AgentBusinessQueryErrorDto> response, HttpStatus status, String code) {
         assertEquals(status, response.getStatusCode());
+        assertEquals(MediaType.APPLICATION_JSON, response.getHeaders().getContentType());
         assertEquals(code, response.getBody().getCode());
     }
 }

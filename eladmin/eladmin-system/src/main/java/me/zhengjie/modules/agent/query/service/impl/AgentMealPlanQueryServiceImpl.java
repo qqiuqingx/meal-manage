@@ -23,6 +23,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.DateTimeException;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Collections;
@@ -90,9 +92,15 @@ public class AgentMealPlanQueryServiceImpl implements AgentMealPlanQueryService 
         Map<Long, String> addressByCustomer = addressesByCustomer(plansById);
         Map<Long, String> customerCodes = customerCodes(customers);
         Map<Long, Integer> manualReplaceCounts = manualReplaceCounts(customers);
-        java.util.Set<String> manualAdditionKeys = manualAdditionKeys(plansById);
+        List<Long> customerPlanIds = customers.stream().map(MealPlanCustomer::getId)
+            .filter(java.util.Objects::nonNull).distinct().collect(Collectors.toList());
+        Set<Long> firstSuccessfulIds = firstSuccessfulCustomerPlanIds(customerPlanIds);
+        Map<Long, List<MealPlanCustomerItem>> itemsByCustomerPlan = itemsByCustomerPlan(customerPlanIds);
+        java.util.Set<String> manualAdditionKeys = manualAdditionKeys(customers, plansById);
         result.setItems(customers.stream().map(customer -> summary(plansById.get(customer.getMealPlanId()), customer,
-            customerCodes.get(customer.getCustomerId()), addressByCustomer.get(customer.getCustomerId()), manualReplaceCounts.getOrDefault(customer.getId(), 0), manualAdditionKeys)).collect(Collectors.toList()));
+            customerCodes.get(customer.getCustomerId()), addressByCustomer.get(customer.getCustomerId()),
+            manualReplaceCounts.getOrDefault(customer.getId(), 0), manualAdditionKeys, firstSuccessfulIds,
+            itemsByCustomerPlan)).collect(Collectors.toList()));
         return result;
     }
 
@@ -137,9 +145,10 @@ public class AgentMealPlanQueryServiceImpl implements AgentMealPlanQueryService 
         }
     }
 
-    /** 将真实排餐三层记录转换为脱敏 Agent 摘要。 */
+    /** 将批量装载的真实排餐三层记录转换为脱敏 Agent 摘要。 */
     private AgentMealPlanSummaryDto summary(MealPlan plan, MealPlanCustomer customer, String customerCode, String maskedAddress, int manualReplaceCount,
-                                            java.util.Set<String> manualAdditionKeys) {
+                                            java.util.Set<String> manualAdditionKeys, Set<Long> firstSuccessfulIds,
+                                            Map<Long, List<MealPlanCustomerItem>> itemsByCustomerPlan) {
         AgentMealPlanSummaryDto dto = new AgentMealPlanSummaryDto();
         dto.setMealPlanId(customer.getMealPlanId()); dto.setCustomerMealPlanId(customer.getId()); dto.setCustomerId(customer.getCustomerId()); dto.setOrderId(customer.getOrderId());
         dto.setCustomerCode(customerCode);
@@ -148,14 +157,32 @@ public class AgentMealPlanQueryServiceImpl implements AgentMealPlanQueryService 
         dto.setCustomerPlanStatus(customer.getStatus()); dto.setVerified(Integer.valueOf(1).equals(customer.getIsVerified()));
         dto.setMaskedDeliveryAddress(maskedAddress); dto.setManualReplaceCount(manualReplaceCount);
         dto.setManualAddition(plan != null && manualAdditionKeys.contains(additionKey(customer.getCustomerId(), customer.getOrderId(), plan.getRecordDate(), plan.getMealType())));
-        List<Long> firstSuccessfulIds = mealPlanCustomerMapper.selectFirstSuccessfulCustomerPlanIds(List.of(customer.getId()));
-        dto.setFirstSuccessful(firstSuccessfulIds != null && firstSuccessfulIds.contains(customer.getId()));
+        dto.setFirstSuccessful(firstSuccessfulIds.contains(customer.getId()));
         dto.setFailureReason(truncate(customer.getFailReason()));
-        List<MealPlanCustomerItem> items = mealPlanCustomerItemMapper.selectByCustomerPlanId(customer.getId());
-        if (items == null) items = Collections.emptyList();
+        List<MealPlanCustomerItem> items = itemsByCustomerPlan.getOrDefault(customer.getId(), Collections.emptyList());
         dto.setDishesTruncated(items.size() > MAX_DISHES);
         dto.setDishes(items.stream().filter(item -> !Boolean.TRUE.equals(item.getDeleted())).limit(MAX_DISHES).map(this::dish).collect(Collectors.toList()));
         return dto;
+    }
+
+    /** 批量查询当前页面哪些客户排餐记录属于订单当前餐次的首次成功排餐。 */
+    private Set<Long> firstSuccessfulCustomerPlanIds(List<Long> customerPlanIds) {
+        if (customerPlanIds.isEmpty()) return Collections.emptySet();
+        List<Long> ids = mealPlanCustomerMapper.selectFirstSuccessfulCustomerPlanIds(customerPlanIds);
+        return ids == null || ids.isEmpty() ? Collections.emptySet() : new HashSet<>(ids);
+    }
+
+    /** 批量查询并按客户排餐 ID 分组菜品，避免摘要组装阶段逐条访问数据库。 */
+    private Map<Long, List<MealPlanCustomerItem>> itemsByCustomerPlan(List<Long> customerPlanIds) {
+        if (customerPlanIds.isEmpty()) return Collections.emptyMap();
+        List<MealPlanCustomerItem> items = mealPlanCustomerItemMapper.selectByCustomerPlanIds(customerPlanIds);
+        if (items == null || items.isEmpty()) return Collections.emptyMap();
+        Map<Long, List<MealPlanCustomerItem>> grouped = items.stream()
+            .filter(item -> item != null && item.getCustomerPlanId() != null)
+            .collect(Collectors.groupingBy(MealPlanCustomerItem::getCustomerPlanId, LinkedHashMap::new, Collectors.toList()));
+        grouped.values().forEach(value -> value.sort(Comparator.comparing(MealPlanCustomerItem::getSeq,
+            Comparator.nullsLast(Comparator.naturalOrder()))));
+        return grouped;
     }
 
     /** 批量装载客户编号，禁止从排餐实体中的姓名或手机号推断客户身份。 */
@@ -167,16 +194,29 @@ public class AgentMealPlanQueryServiceImpl implements AgentMealPlanQueryService 
         return profiles.stream()
             .collect(Collectors.toMap(CustomerProfile::getId, CustomerProfile::getCustomerCode, (left, right) -> left, LinkedHashMap::new));
     }
-    /** 查询本轮排餐日期餐次的人工新增规则，并以客户/订单维度建立受控命中索引。 */
-    private java.util.Set<String> manualAdditionKeys(Map<Long, MealPlan> plansById) {
-        java.util.Set<String> result = new java.util.HashSet<>();
-        for (MealPlan plan : plansById.values()) {
-            if (plan == null || plan.getRecordDate() == null || !hasText(plan.getMealType())) continue;
-            List<CustomerMealScheduleAddition> additions = customerMealScheduleAdditionMapper.selectActiveByDateMeal(plan.getRecordDate(), plan.getMealType());
-            if (additions == null) continue;
-            for (CustomerMealScheduleAddition addition : additions) {
-                if (addition != null) result.add(additionKey(addition.getCustomerId(), addition.getOrderId(), plan.getRecordDate(), plan.getMealType()));
-            }
+    /** 批量查询本轮排餐日期范围内的人工新增规则，并以客户/订单维度建立受控命中索引。 */
+    private java.util.Set<String> manualAdditionKeys(List<MealPlanCustomer> customers, Map<Long, MealPlan> plansById) {
+        java.util.Set<String> expectedKeys = new HashSet<>();
+        Set<Long> customerIds = new HashSet<>();
+        LocalDate startDate = null;
+        LocalDate endDate = null;
+        for (MealPlanCustomer customer : customers) {
+            MealPlan plan = plansById.get(customer.getMealPlanId());
+            if (customer.getCustomerId() == null || plan == null || plan.getRecordDate() == null || !hasText(plan.getMealType())) continue;
+            customerIds.add(customer.getCustomerId());
+            expectedKeys.add(additionKey(customer.getCustomerId(), customer.getOrderId(), plan.getRecordDate(), plan.getMealType()));
+            startDate = startDate == null || plan.getRecordDate().isBefore(startDate) ? plan.getRecordDate() : startDate;
+            endDate = endDate == null || plan.getRecordDate().isAfter(endDate) ? plan.getRecordDate() : endDate;
+        }
+        if (customerIds.isEmpty()) return Collections.emptySet();
+        List<CustomerMealScheduleAddition> additions = customerMealScheduleAdditionMapper
+            .selectActiveByCustomerIdsAndDateRange(new java.util.ArrayList<>(customerIds), startDate, endDate);
+        if (additions == null || additions.isEmpty()) return Collections.emptySet();
+        java.util.Set<String> result = new HashSet<>();
+        for (CustomerMealScheduleAddition addition : additions) {
+            if (addition == null) continue;
+            String key = additionKey(addition.getCustomerId(), addition.getOrderId(), addition.getRecordDate(), addition.getMealType());
+            if (expectedKeys.contains(key)) result.add(key);
         }
         return result;
     }

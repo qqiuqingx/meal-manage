@@ -7,6 +7,7 @@ import me.zhengjie.agent.guardrail.ToolExecutionContext;
 import me.zhengjie.agent.guardrail.ToolGuardrailException;
 import me.zhengjie.agent.guardrail.ToolInputGuardrail;
 import me.zhengjie.agent.guardrail.ToolOutputGuardrail;
+import me.zhengjie.agent.tool.input.ListMealPlansInput;
 import me.zhengjie.agent.tool.input.SearchServiceCustomersInput;
 import me.zhengjie.agent.tool.output.ToolOutputs;
 import org.junit.jupiter.api.Test;
@@ -86,6 +87,36 @@ class UnifiedToolContractTest {
             spec, "{\"customerId\":-1,\"page\":1,\"size\":20}"));
         assertThrows(ToolGuardrailException.class, () -> guardrail.validate(
             spec, "{\"dealTimeFrom\":\"2026/08/05\",\"page\":1,\"size\":20}"));
+    }
+
+    /** 排餐工具必须拒绝未加引号的订单编号、缺失身份和互斥日期条件，并归一化占位参数。 */
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldValidateMealPlanIdentityDatesAndQuotedOrderCode() {
+        ToolRegistry registry = new ToolRegistry();
+        ToolInputGuardrail guardrail = new ToolInputGuardrail(objectMapper, sensitiveDataPolicy);
+        ToolRegistry.ToolSpec<ListMealPlansInput> spec =
+            (ToolRegistry.ToolSpec<ListMealPlansInput>) (ToolRegistry.ToolSpec<?>) registry.require(ToolRegistry.LIST_MEAL_PLANS);
+
+        ToolGuardrailException malformed = assertThrows(ToolGuardrailException.class, () -> guardrail.validate(
+            spec, "{\"orderCode\":ORD20260420001}"));
+        assertEquals("TOOL_INPUT_INVALID", malformed.getCode());
+        assertTrue(malformed.getMessage().contains("orderCode"));
+        assertTrue(malformed.getMessage().contains("quoted"));
+
+        ToolGuardrailException missingIdentity = assertThrows(ToolGuardrailException.class, () -> guardrail.validate(
+            spec, "{\"page\":1,\"size\":50}"));
+        assertEquals("TOOL_INPUT_INVALID", missingIdentity.getCode());
+
+        ToolGuardrailException conflictingDates = assertThrows(ToolGuardrailException.class, () -> guardrail.validate(
+            spec, "{\"customerCode\":\"C1001\",\"recordDate\":\"2026-08-05\",\"startDate\":\"2026-08-01\"}"));
+        assertEquals("TOOL_DATE_RANGE_INVALID", conflictingDates.getCode());
+
+        ListMealPlansInput input = guardrail.validate(spec,
+            "{\"customerId\":0,\"customerCode\":\"C1001\",\"orderId\":0,\"orderCode\":\"\",\"startDate\":\"2026-08-01\",\"endDate\":\"2026-08-05\",\"page\":1,\"size\":50}");
+        assertNull(input.getCustomerId());
+        assertNull(input.getOrderId());
+        assertNull(input.getOrderCode());
     }
 
     /** 工具 Schema 应向模型展示服务客户查询的关键字段约束。 */

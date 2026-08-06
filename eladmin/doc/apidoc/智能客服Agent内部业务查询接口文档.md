@@ -10,6 +10,7 @@
 - 主系统在 SQL 查询前应用部门数据范围和对象关系过滤，不能先查全量再在响应层过滤。
 - DTO 和响应不提供订单金额、价格、优惠、退款金额、原始/完整手机号或原始/完整地址；允许出现的手机号/地址摘要必须已经由主系统脱敏。
 - 内部关联 ID 只用于工具间关联和主系统二次校验；返回 Agent 前端的卡片会隐藏这些 ID。
+- 请求体使用 `Content-Type: application/json`，客户端必须声明 `Accept: application/json`；成功和错误响应均固定返回 JSON。
 
 ## 2. 公共请求头
 
@@ -59,6 +60,17 @@
 
 `items` 用于分页列表，`data` 用于详情或聚合结果。`truncated=true` 表示仍有结果未返回，不代表查询失败。错误使用稳定码：`AGENT_QUERY_REQUEST_VALIDATION_FAILED`、`AGENT_QUERY_INVALID_REQUEST`、`AGENT_QUERY_NOT_FOUND`、`AGENT_QUERY_UNAUTHORIZED`、`AGENT_QUERY_ACCESS_DENIED`、`AGENT_QUERY_INTERNAL_ERROR`。
 
+错误响应示例：
+
+```json
+{
+  "code": "AGENT_QUERY_INVALID_REQUEST",
+  "message": "查询参数不符合要求"
+}
+```
+
+错误响应的 `Content-Type` 也固定为 `application/json`；Agent 客户端应优先使用响应体中的 `code`，无法解析时再按 HTTP 状态码兜底。
+
 ## 5. 请求字段与业务口径
 
 ### 5.1 客户档案：`searchCustomerProfiles`
@@ -107,7 +119,7 @@
 
 路径：`POST /api/internal/agent/query/meal-plans/list`。
 
-请求字段：客户/订单编号或 ID、`recordDate`、`startDate`、`endDate`、`mealType`、`page`、`size`。支持 `BREAKFAST`、`LUNCH`、`DINNER`；日期和分页在主系统再次校验。排餐不消耗餐数，餐数只由有效核销实时扣减。
+请求字段：客户/订单编号或 ID、`recordDate`、`startDate`、`endDate`、`mealType`、`page`、`size`。客户/订单身份至少提供一项；`orderCode` 等字符串值必须是合法 JSON 字符串并带引号。`recordDate` 不能与 `startDate/endDate` 同时使用，范围结束日期不能早于开始日期。支持 `BREAKFAST`、`LUNCH`、`DINNER`；日期和分页在 Agent 护栏及主系统再次校验。排餐不消耗餐数，餐数只由有效核销实时扣减。
 
 ### 5.5 核销和退餐：`listVerifications`、`listRefunds`
 

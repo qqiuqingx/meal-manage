@@ -1,5 +1,7 @@
 package me.zhengjie.agent.guardrail;
 
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.tool.ToolRegistry;
@@ -9,10 +11,13 @@ import java.time.format.DateTimeParseException;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Locale;
+import java.util.regex.Pattern;
 import java.util.Set;
 
 /** 工具调用前的 Schema、枚举、日期、分页和查询范围护栏。 */
 public class ToolInputGuardrail {
+    private static final Pattern UNQUOTED_STRING_FIELD = Pattern.compile(
+        "\\\"(customerCode|orderCode|recordDate|startDate|endDate|mealType)\\\"\\s*:\\s*[A-Za-z][A-Za-z0-9_-]*");
     private static final Set<String> FORBIDDEN_FIELDS = Set.of(
         "permission", "permissions", "internaltoken", "token", "authorization", "datascope", "departmentids",
         "fields", "select", "sort", "orderby", "sql", "url", "endpoint", "table", "column");
@@ -41,6 +46,13 @@ public class ToolInputGuardrail {
             return value;
         } catch (ToolGuardrailException exception) {
             throw exception;
+        } catch (JsonParseException exception) {
+            String field = unquotedStringField(rawJson);
+            throw rejected("TOOL_INPUT_INVALID", field == null
+                ? "tool input must be valid JSON; string values must be quoted"
+                : field + " must be a quoted JSON string");
+        } catch (JsonProcessingException exception) {
+            throw rejected("TOOL_INPUT_INVALID", "tool input does not match schema; check field types and enum values");
         } catch (Exception exception) {
             throw rejected("TOOL_INPUT_INVALID", "tool input does not match schema");
         }
@@ -109,6 +121,21 @@ public class ToolInputGuardrail {
             validateOptionalDate(node, "dealTimeFrom");
             validateOptionalDate(node, "dealTimeTo");
         }
+        if (ToolRegistry.LIST_MEAL_PLANS.equals(toolName)) {
+            validatePositiveOptionalId(node, "customerId");
+            validatePositiveOptionalId(node, "orderId");
+            validateOptionalDate(node, "recordDate");
+            validateOptionalDate(node, "startDate");
+            validateOptionalDate(node, "endDate");
+            if (hasText(node, "recordDate") && (hasText(node, "startDate") || hasText(node, "endDate"))) {
+                throw rejected("TOOL_DATE_RANGE_INVALID", "recordDate cannot be combined with startDate or endDate");
+            }
+            if (hasText(node, "startDate") && hasText(node, "endDate")) {
+                LocalDate start = parseDate(node.get("startDate").asText());
+                LocalDate end = parseDate(node.get("endDate").asText());
+                if (end.isBefore(start)) throw rejected("TOOL_DATE_RANGE_INVALID", "endDate must not be before startDate");
+            }
+        }
     }
 
     /** 校验可选稳定 ID 为正整数；缺失字段不参与过滤。 */
@@ -134,6 +161,9 @@ public class ToolInputGuardrail {
     private void validateRequiredFields(String toolName, JsonNode node) {
         if (ToolRegistry.GET_SERVICE_CUSTOMER_DETAIL.equals(toolName)
             && !hasIdentity(node)) {
+            throw rejected("TOOL_INPUT_INVALID", "customer or order identity is required");
+        }
+        if (ToolRegistry.LIST_MEAL_PLANS.equals(toolName) && !hasIdentity(node)) {
             throw rejected("TOOL_INPUT_INVALID", "customer or order identity is required");
         }
         if (ToolRegistry.PREVIEW_DISH_CANDIDATES.equals(toolName)
@@ -190,6 +220,12 @@ public class ToolInputGuardrail {
     private LocalDate parseDate(String value) {
         try { return LocalDate.parse(value); }
         catch (DateTimeParseException exception) { throw rejected("TOOL_DATE_INVALID", "date must use yyyy-MM-dd"); }
+    }
+
+    /** 从 JSON 解析错误中识别最常见的未加引号字符串字段，帮助模型一次修正参数。 */
+    private String unquotedStringField(String rawJson) {
+        java.util.regex.Matcher matcher = UNQUOTED_STRING_FIELD.matcher(rawJson);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     /** 判断请求是否携带客户或订单关联身份。 */

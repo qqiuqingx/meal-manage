@@ -149,7 +149,7 @@ public class BusinessAgentTools {
                 return json;
             } catch (RuntimeException exception) {
                 String code = stableCode(exception);
-                String json = errorJson(code);
+                String json = errorJson(code, exception);
                 String callId = null;
                 try { callId = context.record(spec.name(), spec.cardType(), rawInput, json, false); }
                 catch (RuntimeException ignored) { /* 预算错误本身不应覆盖稳定工具错误。 */ }
@@ -157,7 +157,7 @@ public class BusinessAgentTools {
                     exception.getMessage(), json, resultCount(callId), textLength(json), startedAt);
                 return json;
             } catch (Exception exception) {
-                String json = errorJson("TOOL_OUTPUT_INVALID");
+                String json = errorJson("TOOL_OUTPUT_INVALID", exception);
                 String callId = null;
                 try { callId = context.record(spec.name(), spec.cardType(), rawInput, json, false); }
                 catch (RuntimeException ignored) { }
@@ -212,9 +212,38 @@ public class BusinessAgentTools {
             return "TOOL_EXECUTION_FAILED";
         }
 
-        /** 构造不含堆栈和下游原文的工具错误 JSON。 */
-        private String errorJson(String code) {
-            return "{\"schemaVersion\":\"v1\",\"errorCode\":\"" + code + "\",\"retryable\":false,\"items\":[]}";
+        /** 构造带安全可读原因的工具错误 JSON，不向模型暴露下游原文或堆栈。 */
+        private String errorJson(String code, Throwable exception) {
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("schemaVersion", "v1");
+            response.put("errorCode", code);
+            response.put("retryable", retryable(code));
+            response.put("message", safeErrorMessage(code, exception));
+            response.put("items", List.of());
+            try {
+                return objectMapper.writeValueAsString(response);
+            } catch (Exception ignored) {
+                return "{\"schemaVersion\":\"v1\",\"errorCode\":\"TOOL_OUTPUT_INVALID\",\"retryable\":false,\"items\":[]}";
+            }
+        }
+
+        /** 仅允许临时性基础设施错误提示模型重试，输入错误不得重复消耗工具预算。 */
+        private boolean retryable(String code) {
+            return Set.of("TOOL_TIMEOUT", "TOOL_UNAVAILABLE", "AGENT_QUERY_INTERNAL_ERROR").contains(code);
+        }
+
+        /** 将护栏字段错误透传给模型，其余异常统一为不含实现细节的固定文案。 */
+        private String safeErrorMessage(String code, Throwable exception) {
+            if (exception instanceof ToolGuardrailException && exception.getMessage() != null) {
+                return exception.getMessage();
+            }
+            if ("TOOL_TIMEOUT".equals(code)) return "main system query timed out; narrow the query or retry once";
+            if ("TOOL_UNAVAILABLE".equals(code)) return "main system query is temporarily unavailable";
+            if ("AGENT_QUERY_INVALID_REQUEST".equals(code) || "AGENT_QUERY_REQUEST_VALIDATION_FAILED".equals(code)) {
+                return "main system rejected the query parameters";
+            }
+            if (code != null && code.startsWith("AGENT_QUERY_")) return "main system query failed";
+            return "tool execution failed; use the structured error code";
         }
     }
 }

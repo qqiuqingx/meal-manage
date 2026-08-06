@@ -23,6 +23,7 @@ import me.zhengjie.modules.agent.security.AgentCustomerDataScopeResolver;
 import me.zhengjie.modules.agent.security.AgentQueryPermissionService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
@@ -44,7 +45,7 @@ import java.util.Map;
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/internal/agent/query")
+@RequestMapping(value = "/api/internal/agent/query", produces = MediaType.APPLICATION_JSON_VALUE)
 public class InternalAgentUnifiedQueryController {
     private static final String INTERNAL_TOKEN_HEADER = "X-Agent-Internal-Token";
     private static final String ACCESS_CONTEXT_HEADER = "X-Agent-Access-Context";
