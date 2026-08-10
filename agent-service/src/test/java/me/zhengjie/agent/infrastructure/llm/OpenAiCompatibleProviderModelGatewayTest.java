@@ -57,6 +57,7 @@ class OpenAiCompatibleProviderModelGatewayTest {
         assertEquals("https://example.test/v1", options.getBaseUrl());
         assertEquals(apiKey, options.getApiKey());
         assertEquals("compatible-model", options.getModel());
+        assertEquals(0, options.getMaxRetries());
         assertNotNull(gateway.chatClient(profile()));
         assertFalse(model.toString().contains(apiKey));
         assertFalse(gateway.toString().contains(apiKey));

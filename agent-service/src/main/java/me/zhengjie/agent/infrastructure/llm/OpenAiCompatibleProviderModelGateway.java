@@ -56,6 +56,7 @@ public class OpenAiCompatibleProviderModelGateway implements ProviderModelGatewa
             .baseUrl(provider.getBaseUrl())
             .apiKey(provider.getApiKey())
             .model(provider.getModel())
+            .maxRetries(0)
             .build();
         return OpenAiChatModel.builder()
             .options(options)
