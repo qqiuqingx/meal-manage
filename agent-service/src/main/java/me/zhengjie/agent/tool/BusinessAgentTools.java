@@ -134,7 +134,7 @@ public class BusinessAgentTools {
                 String key = context.cacheKey(spec.name(), rawInput);
                 String cached = context.cached(key);
                 if (cached != null) {
-                    String callId = context.recordCached(spec.name(), spec.cardType(), cached);
+                    String callId = context.recordCached(spec.name(), spec.cardType(), rawInput, cached);
                     logToolResponse(spec.name(), callId, "CACHED", null,
                         null, cached, resultCount(callId), textLength(cached), startedAt);
                     return cached;

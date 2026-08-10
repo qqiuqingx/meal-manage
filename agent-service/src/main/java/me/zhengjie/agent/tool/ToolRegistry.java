@@ -91,7 +91,7 @@ public class ToolRegistry {
             GetPackageDetailInput.class, ToolOutputs.ToolResult.class,
             List.of("package:list"), 5, 3000, "PACKAGE_DETAIL"));
         register(values, new ToolSpec<>(QUERY_BUSINESS_METRICS,
-            "用途：查询已登记的运营指标。metric 只能使用登记的枚举，dimensions 只能使用 MEAL_TYPE、PACKAGE、CUSTOMER_SOURCE，最多 2 个；日期只能为 yyyy-MM-dd。需要当前系统数字时必须调用本工具，不能凭历史结果或估算回答。只读，单次最多返回 100 条，约 3 秒超时。",
+            "用途：查询已登记的业务统计数字。询问‘系统有多少核销数据/核销记录’时使用 VERIFICATION_RECORD_COUNT，它统计当前授权范围内全部未删除核销记录条数且不要求日期；询问某日有多少已核销客户时才使用 DAILY_VERIFIED_CUSTOMER_COUNT 并提供 recordDate，两者禁止混用。metric 只能使用登记的枚举，dimensions 只能使用 MEAL_TYPE、PACKAGE、CUSTOMER_SOURCE，最多 2 个；日期只能为 yyyy-MM-dd。需要当前系统数字时必须调用本工具，不能凭历史结果或估算回答。只读，单次最多返回 100 条，约 3 秒超时。",
             QueryBusinessMetricsInput.class, ToolOutputs.ToolResult.class,
             List.of("agentDiagnosis:list"), 100, 3000, "METRIC_RESULT"));
         register(values, new ToolSpec<>(EXPLAIN_BUSINESS_RULE,

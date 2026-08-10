@@ -290,6 +290,9 @@ public class AgentUnifiedQueryServiceImpl implements AgentUnifiedQueryService {
             case "ACTIVE_ORDER_COUNT":
                 fillCount(item, operationQueryService.activeOrders());
                 break;
+            case "VERIFICATION_RECORD_COUNT":
+                item.setTotal(historyQueryService.countVerificationRecords());
+                break;
             case "EXPIRING_ORDER_COUNT":
                 AgentOperationOrderRequest orderRequest = new AgentOperationOrderRequest();
                 orderRequest.setStartDate(safe.getStartDate()); orderRequest.setEndDate(safe.getEndDate());

@@ -121,6 +121,71 @@ class BusinessAgentRunnerPresentationTest {
         assertTrue(prompt.contains("详细数据交给结构化展示"));
     }
 
+    /** 简单核销总数问题必须提示模型使用唯一总数指标，并在成功后停止额外工具调用。 */
+    @Test
+    void shouldRequireSingleVerificationRecordCountMetric() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ToolRegistry registry = new ToolRegistry();
+
+        String prompt = runner(objectMapper, registry).systemPrompt(
+            request("现在系统中有多少核销数据了"), registry.all());
+
+        assertTrue(prompt.contains("queryBusinessMetrics(metric=VERIFICATION_RECORD_COUNT)"));
+        assertTrue(prompt.contains("不传日期、餐次或维度"));
+        assertTrue(prompt.contains("不得用 listVerifications 分餐次拼总数"));
+        assertTrue(prompt.contains("成功取得完整结果后立即回答"));
+    }
+
+    /** 重复指标和额外规则不得重复占据业务区，但全部事实、追踪和失败告警必须保留。 */
+    @Test
+    void shouldConvergeDuplicateMetricsAndUnrequestedRuleCards() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ToolRegistry registry = new ToolRegistry();
+        ToolExecutionContext context = new ToolExecutionContext(objectMapper, 6, 100);
+        context.record(ToolRegistry.QUERY_BUSINESS_METRICS, "METRIC_RESULT", "{}",
+            metricOutput("2026-08-07T16:28:22+08:00"), true);
+        context.record(ToolRegistry.EXPLAIN_BUSINESS_RULE, "BUSINESS_RULE", "{}",
+            "{\"data\":{\"ruleId\":\"VERIFICATION_REFUND_EFFECT\",\"title\":\"核销规则\"},\"warnings\":[]}", true);
+        context.record(ToolRegistry.QUERY_BUSINESS_METRICS, "METRIC_RESULT", "{\"mealType\":\"LUNCH\"}",
+            metricOutput("2026-08-07T16:28:26+08:00"), true);
+        context.record(ToolRegistry.LIST_VERIFICATIONS, "VERIFICATION_LIST", "{}",
+            "{\"errorCode\":\"TOOL_BUDGET_EXCEEDED\",\"items\":[]}", false);
+
+        me.zhengjie.agent.domain.dto.AgentChatResponse response = runner(objectMapper, registry).runWithAnswer(
+            request("现在系统中有多少核销数据了"), "当前共有 27 条核销记录。", context);
+
+        assertEquals(1, response.getCards().size());
+        assertEquals("METRIC_RESULT", response.getCards().get(0).get("type"));
+        assertEquals(1, response.getPresentations().size());
+        assertEquals(3, response.getToolFacts().size());
+        assertEquals(4, response.getToolTraceSummary().size());
+        assertTrue(response.getWarnings().contains("listVerifications:TOOL_BUDGET_EXCEEDED"));
+    }
+
+    /** 非简单总数问题必须保留同指标的不同筛选条件，避免把跨日期对比误去重。 */
+    @Test
+    void shouldKeepSameMetricWithDifferentFiltersForComparisonQuestion() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ToolRegistry registry = new ToolRegistry();
+        ToolExecutionContext context = new ToolExecutionContext(objectMapper, 6, 100);
+        context.record(ToolRegistry.QUERY_BUSINESS_METRICS, "METRIC_RESULT", "{\"recordDate\":\"2026-08-06\"}",
+            metricOutput("2026-08-07T16:28:22+08:00"), true);
+        context.record(ToolRegistry.QUERY_BUSINESS_METRICS, "METRIC_RESULT", "{\"recordDate\":\"2026-08-07\"}",
+            metricOutput("2026-08-07T16:28:26+08:00"), true);
+
+        me.zhengjie.agent.domain.dto.AgentChatResponse response = runner(objectMapper, registry).runWithAnswer(
+            request("对比昨天和今天的核销客户"), "已完成两个日期的核销客户对比。", context);
+
+        assertEquals(2, response.getCards().size());
+        assertEquals(2, response.getPresentations().size());
+    }
+
+    /** 构造只有查询时间不同的同指标结果，验证展示语义去重。 */
+    private String metricOutput(String queriedAt) {
+        return "{\"data\":{\"metric\":\"VERIFICATION_RECORD_COUNT\",\"total\":27,\"breakdown\":[],\"queriedAt\":\""
+            + queriedAt + "\"},\"warnings\":[]}";
+    }
+
     /** 创建使用真实系统注册表的最小 Runner，避免测试调用模型或远程工具。 */
     private BusinessAgentRunner runner(ObjectMapper objectMapper, ToolRegistry registry) {
         PresentationService presentationService = new PresentationService(new PresentationRegistry(registry));

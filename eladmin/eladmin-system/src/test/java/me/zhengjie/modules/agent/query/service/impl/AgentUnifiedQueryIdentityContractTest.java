@@ -34,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -127,6 +128,20 @@ class AgentUnifiedQueryIdentityContractTest {
         assertEquals(2L, metric.getBreakdown().get(0).getValue());
         assertEquals("LUNCH", metric.getBreakdown().get(1).getLabel());
         assertEquals(3L, metric.getBreakdown().get(1).getValue());
+    }
+
+    /** 核销数据总数必须读取未删除核销记录条数，不能误用按日去重客户指标。 */
+    @Test
+    void shouldReturnVerificationRecordCountWithoutDailyDate() {
+        when(historyQueryService.countVerificationRecords()).thenReturn(27L);
+        AgentMetricQueryRequest request = new AgentMetricQueryRequest();
+        request.setMetric("VERIFICATION_RECORD_COUNT");
+
+        AgentUnifiedQueryDto.MetricItem metric = service.queryBusinessMetrics(request).getData();
+
+        assertEquals("VERIFICATION_RECORD_COUNT", metric.getMetric());
+        assertEquals(27L, metric.getTotal());
+        assertTrue(metric.getBreakdown().isEmpty());
     }
 
     /** 字段契约必须同时包含完整姓名和手机号脱敏字段，且移除旧姓名字段。 */

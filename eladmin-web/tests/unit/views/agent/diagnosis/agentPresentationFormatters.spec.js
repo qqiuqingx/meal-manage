@@ -51,4 +51,10 @@ describe('agentPresentationFormatters', () => {
       .toBe('2026-08-05 08:00:00')
     expect(formatFieldValue({}, 'orderTime', 'DATE_TIME')).toBe('-')
   })
+
+  test('formats current and historical metric codes as business labels', () => {
+    expect(formatFieldValue({ metric: 'VERIFICATION_RECORD_COUNT' }, 'metric', 'TEXT')).toBe('核销记录总数')
+    expect(formatFieldValue({ metric: 'DAILY_VERIFIED_CUSTOMER_COUNT' }, 'metric', 'TEXT')).toBe('当日已核销客户数')
+    expect(formatFieldValue({ metric: 'FUTURE_METRIC' }, 'metric', 'TEXT')).toBe('FUTURE_METRIC')
+  })
 })

@@ -302,6 +302,7 @@ public class BusinessAgentRunner {
         List<Map<String, Object>> traces = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         List<String> presentationWarnings = new ArrayList<>();
+        Set<String> displayedBusinessKeys = new LinkedHashSet<>();
         for (ToolExecutionContext.ToolFact fact : context.facts()) {
             Map<String, Object> trace = new LinkedHashMap<>();
             trace.put("callId", fact.callId()); trace.put("toolName", fact.toolName());
@@ -322,6 +323,11 @@ public class BusinessAgentRunner {
                 if (raw.path("truncated").asBoolean(false)) warnings.add(fact.toolName() + ":RESULT_TRUNCATED");
                 if (raw.has("warnings") && raw.get("warnings").isArray()) raw.get("warnings").forEach(item -> warnings.add(item.asText()));
                 ToolRegistry.ToolSpec<?> spec = registry.require(fact.toolName());
+                String businessKey = businessCardKey(request.getMessage(), context, fact, safe);
+                if (!shouldDisplayBusinessCard(request.getMessage(), spec.cardType())
+                    || !displayedBusinessKeys.add(businessKey)) {
+                    continue;
+                }
                 Map<String, Object> card = new LinkedHashMap<>();
                 card.put("type", spec.cardType()); card.put("sourceToolCallId", fact.callId());
                 card.put("data", objectMapper.convertValue(safe, Object.class));
@@ -357,6 +363,66 @@ public class BusinessAgentRunner {
     private List<String> distinctWarnings(List<String> warnings) {
         if (warnings == null || warnings.isEmpty()) return new ArrayList<>();
         return new ArrayList<>(new LinkedHashSet<>(warnings));
+    }
+
+    /**
+     * 判断成功事实是否需要进入面向业务用户的卡片区。
+     *
+     * <p>数量问题中的规则查询仍保留在内部事实和追踪中，但不把模型额外调用的规则内容
+     * 当成用户主动请求的展示结果。其他问题继续保留规则卡，避免影响规则解释和原因分析。</p>
+     */
+    private boolean shouldDisplayBusinessCard(String userMessage, String cardType) {
+        if (!"BUSINESS_RULE".equals(cardType)) return true;
+        String message = userMessage == null ? "" : userMessage.trim();
+        boolean ruleQuestion = message.matches(".*(规则|口径|含义|影响|为什么|为何|怎么|如何|说明|解释).*?");
+        return !isSimpleCountQuestion(message) || ruleQuestion;
+    }
+
+    /**
+     * 生成业务展示语义键，合并模型在同一轮重复取得的相同业务事实。
+     *
+     * <p>指标按指标枚举合并；规则按规则编号合并；空列表按卡片类型合并。其他卡片仅忽略
+     * 查询时间后比较安全输出，工具事实、追踪和告警始终保留原始调用次数。</p>
+     */
+    private String businessCardKey(String userMessage, ToolExecutionContext context,
+                                   ToolExecutionContext.ToolFact fact, JsonNode safeData) {
+        String cardType = fact.cardType();
+        if (!isSimpleCountQuestion(userMessage)) {
+            return cardType + "|" + context.cacheKey(fact.toolName(), fact.inputJson());
+        }
+        if ("METRIC_RESULT".equals(cardType)) {
+            return cardType + "|" + (safeData == null ? "UNKNOWN" : safeData.path("data").path("metric").asText("UNKNOWN"));
+        }
+        if ("BUSINESS_RULE".equals(cardType)) {
+            return cardType + "|" + (safeData == null ? "UNKNOWN" : safeData.path("data").path("ruleId").asText("UNKNOWN"));
+        }
+        JsonNode items = safeData == null ? null : safeData.path("items");
+        if (items != null && items.isArray() && items.isEmpty()) return cardType + "|EMPTY";
+        try {
+            JsonNode normalized = safeData == null ? objectMapper.nullNode() : safeData.deepCopy();
+            removeQueriedAt(normalized);
+            return cardType + "|" + objectMapper.writeValueAsString(normalized);
+        } catch (Exception ignored) {
+            return cardType + "|UNPARSEABLE";
+        }
+    }
+
+    /** 判断问题是否明确只索要一个数量或总数。 */
+    private boolean isSimpleCountQuestion(String userMessage) {
+        String message = userMessage == null ? "" : userMessage.trim();
+        return message.matches(".*(多少|几条|几笔|数量|总数|计数).*?");
+    }
+
+    /** 递归移除只表示执行时刻的 queriedAt，避免同一事实因毫秒差异重复展示。 */
+    private void removeQueriedAt(JsonNode node) {
+        if (node == null || node.isNull()) return;
+        if (node.isArray()) {
+            node.forEach(this::removeQueriedAt);
+            return;
+        }
+        if (!node.isObject()) return;
+        ((com.fasterxml.jackson.databind.node.ObjectNode) node).remove("queriedAt");
+        node.forEach(this::removeQueriedAt);
     }
 
     /**
@@ -464,11 +530,12 @@ public class BusinessAgentRunner {
             .append("ms，最多保留 ").append(properties.getChat().getToolLoop().getMaxRecords())
             .append(" 条业务记录；返回结果可能截断，截断时必须明确说明范围有限。\n")
             .append("工具使用规则：\n")
-            .append("1. 先选择与问题最匹配且范围最窄的只读工具；必须提供的身份、日期、餐次或主题缺失时先澄清，不要猜测或发送空字符串。\n")
+            .append("1. 先选择与问题最匹配且范围最窄的只读工具；简单数量问题只调用一个能够直接回答的工具，成功取得完整结果后立即回答，不得按餐次重复查询，不得附带用户未询问的业务规则。必须提供的身份、日期、餐次或主题缺失时先澄清，不要猜测或发送空字符串。\n")
             .append("2. 工具入参只能使用工具 Schema 和枚举允许的字段；禁止权限、Token、SQL、URL、排序、任意字段。可选字段未使用时省略或传 null，正整数 ID 不得传 0。\n")
             .append("3. listMealPlans 查询实际已生成排餐；客户/订单查询应带 customerCode/orderCode 或对应正整数 ID。recordDate 不能与 startDate/endDate 同时使用，mealType 只能是 BREAKFAST、LUNCH、DINNER，查询全部餐次时省略 mealType（不能传 ALL）；page 从 1 开始、size 不超过工具说明上限。\n")
             .append("4. searchServiceCustomers 用于订单和服务状态，searchCustomerProfiles 只用于客户档案；listScheduledDishes 是公共菜单，不能当作客户实际餐单；previewDishCandidates 是候选菜，也不能当作已排餐。\n")
             .append("5. 工具失败后不得重复提交相同无效参数；应根据错误修正入参或停止并明确说明。只有成功工具事实才能作为实时业务依据，部分失败或截断必须在回答中说明。\n")
+            .append("6. ‘系统中有多少核销数据/核销记录’表示全部未删除核销记录条数，只调用 queryBusinessMetrics(metric=VERIFICATION_RECORD_COUNT)，不传日期、餐次或维度；‘某日已核销多少客户’才使用 DAILY_VERIFIED_CUSTOMER_COUNT。不得用 listVerifications 分餐次拼总数。\n")
             .append("可用工具及各自用途、必填条件和结果上限如下：\n");
         for (ToolRegistry.ToolSpec<?> spec : visibleSpecs) {
             prompt.append("- ").append(spec.name()).append("：").append(spec.description()).append("\n");

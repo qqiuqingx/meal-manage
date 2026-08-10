@@ -8,6 +8,8 @@ import me.zhengjie.agent.guardrail.ToolGuardrailException;
 import me.zhengjie.agent.guardrail.ToolInputGuardrail;
 import me.zhengjie.agent.guardrail.ToolOutputGuardrail;
 import me.zhengjie.agent.tool.input.ListMealPlansInput;
+import me.zhengjie.agent.tool.input.MetricName;
+import me.zhengjie.agent.tool.input.QueryBusinessMetricsInput;
 import me.zhengjie.agent.tool.input.SearchServiceCustomersInput;
 import me.zhengjie.agent.tool.output.ToolOutputs;
 import org.junit.jupiter.api.Test;
@@ -132,6 +134,20 @@ class UnifiedToolContractTest {
         assertTrue(root.path("properties").path("status").path("description").asText().contains("ACTIVE"));
         assertTrue(root.path("properties").path("size").path("description").asText().contains("1-20"));
         assertFalse(root.path("required").toString().contains("customerId"));
+    }
+
+    /** 核销记录总数必须作为独立指标枚举进入强类型工具输入。 */
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldAcceptVerificationRecordCountMetricWithoutDate() {
+        ToolRegistry.ToolSpec<QueryBusinessMetricsInput> spec =
+            (ToolRegistry.ToolSpec<QueryBusinessMetricsInput>) (ToolRegistry.ToolSpec<?>)
+                new ToolRegistry().require(ToolRegistry.QUERY_BUSINESS_METRICS);
+
+        QueryBusinessMetricsInput input = new ToolInputGuardrail(objectMapper, sensitiveDataPolicy)
+            .validate(spec, "{\"metric\":\"VERIFICATION_RECORD_COUNT\"}");
+
+        assertEquals(MetricName.VERIFICATION_RECORD_COUNT, input.getMetric());
     }
 
     /** 工具输出必须阻断金额字段和超过登记上限的结果集。 */

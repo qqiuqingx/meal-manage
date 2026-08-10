@@ -92,6 +92,7 @@ class ServiceCustomerPresentationAcceptanceTest {
 
         assertEquals(PresentationDescriptor.View.TEXT, summary.defaultView());
         assertEquals(List.of(PresentationDescriptor.View.TEXT), summary.availableViews());
+        assertEquals("业务统计", summary.title());
         assertNotNull(summary.summary());
         assertNull(summary.table());
         assertNull(summary.chart());
@@ -108,6 +109,18 @@ class ServiceCustomerPresentationAcceptanceTest {
         assertEquals(PresentationDescriptor.View.BAR, chart.chart().type());
         assertEquals("data.breakdown", chart.chart().dataPath());
         assertEquals(List.of("value"), chart.chart().metricFields());
+    }
+
+    /** 已登记指标必须使用具体中文业务标题，不能把内部枚举作为页面标题。 */
+    @Test
+    void shouldUseBusinessTitleForRegisteredMetric() throws Exception {
+        PresentationDescriptor descriptor = new PresentationService(new PresentationRegistry(toolRegistry))
+            .present("call-verification-count", ToolRegistry.QUERY_BUSINESS_METRICS, "METRIC_RESULT",
+                objectMapper.readTree("{\"data\":{\"metric\":\"VERIFICATION_RECORD_COUNT\",\"total\":27,\"breakdown\":[]},\"warnings\":[]}"))
+            .descriptor();
+
+        assertEquals("核销记录总数", descriptor.title());
+        assertEquals("统计项", descriptor.summary().fields().get(0).label());
     }
 
     /** 截断或带完整性告警的指标保留摘要，不允许生成误导性的图表。 */

@@ -70,6 +70,11 @@ public final class PresentationRule {
         public Template withViews(View defaultView, List<View> views, Table table, Chart chart) {
             return new Template(title, layout, defaultView, views, summary, table, chart);
         }
+
+        /** 返回替换业务标题后的不可变模板，其他视图和字段规则保持不变。 */
+        public Template withTitle(String businessTitle) {
+            return new Template(businessTitle, layout, defaultView, availableViews, summary, table, chart);
+        }
     }
 
     /** 稳定复制列定义，避免规则构建过程中被外部列表修改。 */

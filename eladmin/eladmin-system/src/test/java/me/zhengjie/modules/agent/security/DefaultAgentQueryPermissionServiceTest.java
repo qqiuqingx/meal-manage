@@ -58,6 +58,15 @@ class DefaultAgentQueryPermissionServiceTest {
             service.availableToolNames(context).contains("queryBusinessMetrics"));
     }
 
+    /** 只有核销权限的客服也必须能使用统一指标工具查询核销记录总数。 */
+    @Test
+    void shouldExposeMetricsWithVerificationPermission() {
+        AgentAccessContext context = context("agentDiagnosis:list", "mealVerification:list");
+
+        assertTrue(service.availableToolNames(context).contains("queryBusinessMetrics"));
+        assertTrue(service.availableToolNames(context).contains("listVerifications"));
+    }
+
     /** 菜单工具需要同时具备排餐与菜品权限，不能因单项权限越权。 */
     @Test
     void shouldNotExposeScheduledMenuWithoutDishPermission() {

@@ -182,6 +182,7 @@ public class InternalAgentUnifiedQueryController {
         String metric = request == null || request.getMetric() == null ? "" : request.getMetric().trim().toUpperCase(java.util.Locale.ROOT);
         if ("CUSTOMER_PROFILE_COUNT".equals(metric)) return "customerProfile:list";
         if ("ACTIVE_SERVICE_CUSTOMER_COUNT".equals(metric) || "ACTIVE_ORDER_COUNT".equals(metric) || "EXPIRING_ORDER_COUNT".equals(metric)) return "customerOrder:list";
+        if ("VERIFICATION_RECORD_COUNT".equals(metric)) return "mealVerification:list";
         return "mealPlan:list";
     }
 

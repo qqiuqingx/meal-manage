@@ -168,7 +168,7 @@ public class PresentationRegistry {
         Template metric = new Template("运营指标", me.zhengjie.agent.presentation.PresentationDescriptor.Layout.TABS,
             View.TEXT, List.of(View.TEXT, View.TABLE, View.BAR),
             new me.zhengjie.agent.presentation.PresentationDescriptor.Summary("data", fields(
-                field("metric", "指标", Format.TEXT), field("total", "总数", Format.NUMBER),
+                field("metric", "统计项", Format.TEXT), field("total", "总数", Format.NUMBER),
                 field("queriedAt", "查询时间", Format.DATE_TIME))),
             new me.zhengjie.agent.presentation.PresentationDescriptor.Table("data.breakdown", fields(
                 field("label", "分组", Format.TEXT), field("value", "数值", Format.NUMBER)), List.of()),

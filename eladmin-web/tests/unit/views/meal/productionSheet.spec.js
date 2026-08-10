@@ -4,8 +4,12 @@ import ProductionSheet from '@/views/meal/productionSheet/index.vue'
 
 jest.mock('@/api/mealPlan', () => ({
   getMealPlanList: jest.fn(),
-  getMealPlanFullDetail: jest.fn()
+  getMealPlanFullDetail: jest.fn(),
+  getManualReplaces: jest.fn(),
+  saveManualReplaces: jest.fn()
 }))
+
+jest.mock('@/api/dish', () => ({ queryDishes: jest.fn() }))
 
 jest.mock('@/utils/calendar', () => ({
   MealTypeName: { BREAKFAST: '早餐', LUNCH: '午餐', DINNER: '晚餐' }
@@ -15,7 +19,7 @@ function buildWrapper() {
   return shallowMount(ProductionSheet, {
     mocks: { $route: { query: {} }},
     directives: { loading: {}},
-    stubs: { 'el-date-picker': true, 'el-select': true, 'el-option': true, 'el-button': true, 'el-divider': true, 'el-tag': true }
+    stubs: { 'el-date-picker': true, 'el-select': true, 'el-option': true, 'el-button': true, 'el-divider': true, 'el-tag': true, 'el-dialog': true }
   })
 }
 

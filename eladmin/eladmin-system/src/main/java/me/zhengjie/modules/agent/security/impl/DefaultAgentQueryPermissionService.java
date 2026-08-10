@@ -75,7 +75,8 @@ public class DefaultAgentQueryPermissionService implements AgentQueryPermissionS
         if ("queryBusinessMetrics".equals(definition.name)) {
             return has(context, "customerProfile:list")
                 || has(context, "customerOrder:list")
-                || has(context, "mealPlan:list");
+                || has(context, "mealPlan:list")
+                || has(context, "mealVerification:list");
         }
         for (String permission : definition.permissions) {
             if (!has(context, permission)) {

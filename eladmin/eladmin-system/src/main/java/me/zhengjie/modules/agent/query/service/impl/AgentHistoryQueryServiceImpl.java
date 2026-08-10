@@ -67,6 +67,18 @@ public class AgentHistoryQueryServiceImpl implements AgentHistoryQueryService {
 
     /** {@inheritDoc} */
     @Override
+    public long countVerificationRecords() {
+        if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND) return 0L;
+        Set<Long> scopedCustomerIds = scopedCustomerIds();
+        if (scopedCustomerIds != null && scopedCustomerIds.isEmpty()) return 0L;
+        Long total = verificationLogMapper.selectCount(new LambdaQueryWrapper<MealVerificationLog>()
+            .eq(MealVerificationLog::getDeleted, 0)
+            .in(scopedCustomerIds != null, MealVerificationLog::getCustomerId, scopedCustomerIds));
+        return total == null ? 0L : total;
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public AgentListResultDto<AgentRefundLogDto> listRefunds(AgentHistoryQueryRequest request) {
         AgentHistoryQueryRequest safe = request == null ? new AgentHistoryQueryRequest() : request;
         if (AgentCustomerDataScopeContext.status() == AgentCustomerDataScopeContext.ScopeStatus.UNBOUND) return new AgentListResultDto<>();

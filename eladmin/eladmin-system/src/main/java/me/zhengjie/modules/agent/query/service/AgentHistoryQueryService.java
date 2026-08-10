@@ -9,6 +9,8 @@ import me.zhengjie.modules.agent.query.domain.dto.AgentVerificationLogDto;
 public interface AgentHistoryQueryService {
     /** 查询未删除核销日志。 */
     AgentListResultDto<AgentVerificationLogDto> listVerifications(AgentHistoryQueryRequest request);
+    /** 统计当前客服数据范围内全部未删除核销日志条数，不加载核销明细。 */
+    long countVerificationRecords();
     /** 查询退餐记录，绝不返回退款金额。 */
     AgentListResultDto<AgentRefundLogDto> listRefunds(AgentHistoryQueryRequest request);
 }

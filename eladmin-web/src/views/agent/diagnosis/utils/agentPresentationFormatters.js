@@ -41,6 +41,19 @@ const MEAL_TYPE_LABELS = {
   DINNER: '晚餐'
 }
 
+const METRIC_LABELS = {
+  CUSTOMER_PROFILE_COUNT: '客户档案总数',
+  ACTIVE_SERVICE_CUSTOMER_COUNT: '服务中客户数',
+  ACTIVE_ORDER_COUNT: '进行中订单数',
+  VERIFICATION_RECORD_COUNT: '核销记录总数',
+  DAILY_SCHEDULED_CUSTOMER_COUNT: '当日已排餐客户数',
+  DAILY_VERIFIED_CUSTOMER_COUNT: '当日已核销客户数',
+  DAILY_UNVERIFIED_CUSTOMER_COUNT: '当日待核销客户数',
+  DAILY_UNSCHEDULED_CUSTOMER_COUNT: '当日待排餐客户数',
+  MEAL_PLAN_FAILURE_COUNT: '排餐失败数',
+  EXPIRING_ORDER_COUNT: '即将到期订单数'
+}
+
 /** 判断展示描述中的格式类型是否属于前端固定白名单。 */
 export function isSupportedFormat(format) {
   return SUPPORTED_FORMATS.indexOf(String(format || '').toUpperCase()) >= 0
@@ -238,6 +251,9 @@ export function formatValue(value, format) {
 /** 读取字段并格式化；orderTime 缺失时按 dealTime、createTime 顺序回退。 */
 export function formatFieldValue(row, field, format) {
   let value = readPath(row, field)
+  if (field === 'metric') {
+    return enumValue(value, METRIC_LABELS)
+  }
   if (field === 'orderTime' && isEmptyValue(value) && row && Object.prototype.toString.call(row) === '[object Object]') {
     value = !isEmptyValue(row.dealTime) ? row.dealTime : row.createTime
   }

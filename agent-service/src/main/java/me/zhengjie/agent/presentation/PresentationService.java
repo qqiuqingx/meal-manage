@@ -3,7 +3,9 @@ package me.zhengjie.agent.presentation;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.MDC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +19,7 @@ import org.slf4j.LoggerFactory;
 public class PresentationService {
     public static final String FALLBACK_WARNING = "PRESENTATION_FALLBACK_APPLIED";
     private static final Logger log = LoggerFactory.getLogger(PresentationService.class);
+    private static final Map<String, String> METRIC_TITLES = metricTitles();
     private final PresentationRegistry registry;
     private final CardSchemaInspector schemaInspector;
     private final PresentationPlanner planner;
@@ -63,7 +66,10 @@ public class PresentationService {
         if (rule == null) return presentUnknown(sourceToolCallId, cardType, safeCardData);
         PresentationRule.Template template = rule.templateFor(toolName);
         if (template == null) return presentUnknown(sourceToolCallId, cardType, safeCardData);
-        if ("METRIC_RESULT".equals(cardType)) template = metricTemplate(template, safeCardData);
+        if ("METRIC_RESULT".equals(cardType)) {
+            template = metricTemplate(template, safeCardData)
+                .withTitle(metricTitle(safeCardData));
+        }
         PresentationDescriptor descriptor = new PresentationDescriptor(
             "v1", sourceToolCallId, cardType, PresentationDescriptor.DecisionSource.SYSTEM,
             template.title(), template.layout(), template.defaultView(), template.availableViews(),
@@ -160,6 +166,28 @@ public class PresentationService {
     private boolean hasWarnings(JsonNode node) {
         return node != null && node.has("warnings") && node.path("warnings").isArray()
             && !node.path("warnings").isEmpty();
+    }
+
+    /** 将内部指标枚举转换为客服可理解的固定中文标题，未知枚举使用安全通用标题。 */
+    private String metricTitle(JsonNode cardData) {
+        String metric = cardData == null ? "" : cardData.path("data").path("metric").asText("");
+        return METRIC_TITLES.getOrDefault(metric, "业务统计");
+    }
+
+    /** 构建当前登记指标的唯一展示标题目录。 */
+    private static Map<String, String> metricTitles() {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("CUSTOMER_PROFILE_COUNT", "客户档案总数");
+        values.put("ACTIVE_SERVICE_CUSTOMER_COUNT", "服务中客户数");
+        values.put("ACTIVE_ORDER_COUNT", "进行中订单数");
+        values.put("VERIFICATION_RECORD_COUNT", "核销记录总数");
+        values.put("DAILY_SCHEDULED_CUSTOMER_COUNT", "当日已排餐客户数");
+        values.put("DAILY_VERIFIED_CUSTOMER_COUNT", "当日已核销客户数");
+        values.put("DAILY_UNVERIFIED_CUSTOMER_COUNT", "当日待核销客户数");
+        values.put("DAILY_UNSCHEDULED_CUSTOMER_COUNT", "当日待排餐客户数");
+        values.put("MEAL_PLAN_FAILURE_COUNT", "排餐失败数");
+        values.put("EXPIRING_ORDER_COUNT", "即将到期订单数");
+        return Map.copyOf(values);
     }
 
     /** 展示结果和展示告警分离，调用方不得用展示告警覆盖业务 partial。 */
