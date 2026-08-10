@@ -18,11 +18,19 @@ function createCtx() {
     ...data,
     $message: { success: jest.fn(), warning: jest.fn(), error: jest.fn() },
     $prompt: jest.fn(),
+    $router: { push: jest.fn() },
     $nextTick: fn => fn && fn(),
     $refs: { messageList: { scrollTop: 0, scrollHeight: 100 }},
     extractPageContent: AgentDiagnosis.methods.extractPageContent,
     scrollToBottom: AgentDiagnosis.methods.scrollToBottom,
     loadSessions: AgentDiagnosis.methods.loadSessions,
+    mergeSessionSummaries: AgentDiagnosis.methods.mergeSessionSummaries,
+    extractPageTotal: AgentDiagnosis.methods.extractPageTotal,
+    handleSessionKeywordInput: AgentDiagnosis.methods.handleSessionKeywordInput,
+    searchSessionsNow: AgentDiagnosis.methods.searchSessionsNow,
+    handleSessionViewChange: AgentDiagnosis.methods.handleSessionViewChange,
+    loadMoreSessions: AgentDiagnosis.methods.loadMoreSessions,
+    formatSessionTime: AgentDiagnosis.methods.formatSessionTime,
     handleSessionChange: AgentDiagnosis.methods.handleSessionChange,
     createSession: AgentDiagnosis.methods.createSession,
     archiveCurrentSession: AgentDiagnosis.methods.archiveCurrentSession,
@@ -30,8 +38,18 @@ function createCtx() {
     addAssistantResponse: AgentDiagnosis.methods.addAssistantResponse,
     sendMessage: AgentDiagnosis.methods.sendMessage,
     sendQuickReply: AgentDiagnosis.methods.sendQuickReply,
+    retryMessage: AgentDiagnosis.methods.retryMessage,
+    isSessionUnavailableError: AgentDiagnosis.methods.isSessionUnavailableError,
+    normalizeAssistantMessage: AgentDiagnosis.methods.normalizeAssistantMessage,
     selectCustomerCandidate: AgentDiagnosis.methods.selectCustomerCandidate,
+    isLatestAssistant: AgentDiagnosis.methods.isLatestAssistant,
+    isCandidateCard: AgentDiagnosis.methods.isCandidateCard,
+    navigationTargets: AgentDiagnosis.methods.navigationTargets,
+    firstBusinessRow: AgentDiagnosis.methods.firstBusinessRow,
+    copyAssistantMessage: AgentDiagnosis.methods.copyAssistantMessage,
+    navigateTarget: AgentDiagnosis.methods.navigateTarget,
     queryWarningText: AgentDiagnosis.methods.queryWarningText,
+    hasBusinessQueryResult: AgentDiagnosis.methods.hasBusinessQueryResult,
     clearSession: AgentDiagnosis.methods.clearSession,
     resetSessionState: AgentDiagnosis.methods.resetSessionState,
     applySessionDetail: AgentDiagnosis.methods.applySessionDetail,
@@ -40,14 +58,12 @@ function createCtx() {
     mapSessionMessages: AgentDiagnosis.methods.mapSessionMessages,
     sessionOptionLabel: AgentDiagnosis.methods.sessionOptionLabel,
     generateClientMessageId: AgentDiagnosis.methods.generateClientMessageId,
-    togglePanel: AgentDiagnosis.methods.togglePanel,
     mealTypeText: AgentDiagnosis.methods.mealTypeText,
     missingSlotText: AgentDiagnosis.methods.missingSlotText,
     stageText: AgentDiagnosis.methods.stageText,
     slotLabel: AgentDiagnosis.methods.slotLabel,
     levelTag: AgentDiagnosis.methods.levelTag,
     confidenceTag: AgentDiagnosis.methods.confidenceTag,
-    shortDigest: AgentDiagnosis.methods.shortDigest,
     openFeedbackDialog: AgentDiagnosis.methods.openFeedbackDialog,
     submitFeedback: AgentDiagnosis.methods.submitFeedback,
     extractReasonCodes: AgentDiagnosis.methods.extractReasonCodes
@@ -95,6 +111,7 @@ describe('AgentDiagnosis chat page logic', () => {
       slots: { customerCode: 'C10001', recordDate: '2026-05-22' },
       slotConfidence: { customer: 'HIGH', recordDate: 'HIGH' },
       missingSlots: ['MEAL_TYPE'],
+      quickReplies: ['早餐', '午餐', '晚餐'],
       conversationStage: 'NEED_MORE_INFO'
     })
     const ctx = createCtx()
@@ -102,21 +119,24 @@ describe('AgentDiagnosis chat page logic', () => {
 
     await AgentDiagnosis.methods.sendMessage.call(ctx)
 
-    expect(api.createChatSession).toHaveBeenCalledWith({})
-    expect(api.chatMealPlan.mock.calls[0][0].sessionId).toBe('session-1')
+    expect(api.createChatSession).not.toHaveBeenCalled()
+    expect(api.chatMealPlan.mock.calls[0][0].sessionId).toBe(null)
     expect(api.chatMealPlan.mock.calls[0][0].message).toBe('查 C10001 今天')
     expect(api.chatMealPlan.mock.calls[0][0].clientMessageId).toContain('msg-')
     expect(ctx.sessionId).toBe('session-1')
     expect(ctx.messages[1]).toMatchObject({ role: 'user', content: '查 C10001 今天' })
+    expect(ctx.messages[1].clientMessageId).toContain('msg-')
     expect(ctx.messages[2]).toMatchObject({
       role: 'assistant',
       content: '请补充餐次：早餐、午餐还是晚餐？',
       status: 'NEED_MORE_INFO',
       stage: 'NEED_MORE_INFO',
-      missingSlots: ['MEAL_TYPE']
+      missingSlots: ['MEAL_TYPE'],
+      quickReplies: ['早餐', '午餐', '晚餐']
     })
     expect(ctx.slotConfidence.customer).toBe('HIGH')
     expect(ctx.missingSlots).toEqual(['MEAL_TYPE'])
+    expect(ctx.messages[2].clientMessageId).toContain('msg-')
   })
 
   test('appends diagnosis result and keeps latest diagnosis context', async() => {
@@ -229,7 +249,6 @@ describe('AgentDiagnosis chat page logic', () => {
 
     expect(ctx.currentDiagnosis.actionDrafts).toHaveLength(1)
     expect(AgentDiagnosis.methods.openActionConfirm).toBeUndefined()
-    expect(api.confirmActionDraft).toBeUndefined()
     expect(api.chatMealPlan).toHaveBeenCalledTimes(1)
   })
 
@@ -267,14 +286,6 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(ctx.$message.success).toHaveBeenCalledWith('诊断反馈已记录')
   })
 
-  test('togglePanel expands tool summary section', () => {
-    const ctx = createCtx()
-
-    AgentDiagnosis.methods.togglePanel.call(ctx, 'toolSummaryExpanded')
-
-    expect(ctx.toolSummaryExpanded).toBe(true)
-  })
-
   test('clearSession creates a new session and resets workbench state', async() => {
     const ctx = createCtx()
     ctx.sessionId = 'session-1'
@@ -287,9 +298,9 @@ describe('AgentDiagnosis chat page logic', () => {
 
     await AgentDiagnosis.methods.clearSession.call(ctx)
 
-    expect(api.createChatSession).toHaveBeenCalledWith({})
-    expect(ctx.sessionId).toBe('session-1')
-    expect(ctx.activeSessionId).toBe('session-1')
+    expect(api.createChatSession).not.toHaveBeenCalled()
+    expect(ctx.sessionId).toBe(null)
+    expect(ctx.activeSessionId).toBe(null)
     expect(ctx.inputMessage).toBe('')
     expect(ctx.slots).toEqual({})
     expect(ctx.slotConfidence).toEqual({})
@@ -309,8 +320,192 @@ describe('AgentDiagnosis chat page logic', () => {
 
     await AgentDiagnosis.methods.sendQuickReply.call(ctx, '午餐')
 
-    expect(api.chatMealPlan.mock.calls[0][0].sessionId).toBe('session-1')
+    expect(api.chatMealPlan.mock.calls[0][0].sessionId).toBe(null)
     expect(api.chatMealPlan.mock.calls[0][0].message).toBe('午餐')
+  })
+
+  test('loads the active session page from the server with trimmed keyword and total', async() => {
+    api.queryChatSessions.mockResolvedValue({
+      content: [
+        { sessionId: 'session-1', title: '午餐排查', customerCode: 'C10001' },
+        { sessionId: 'session-2', title: '晚餐排查', orderCode: 'O10002' }
+      ],
+      totalElements: 25
+    })
+    const ctx = createCtx()
+    ctx.sessionKeyword = '  C10001  '
+
+    await AgentDiagnosis.methods.loadSessions.call(ctx, { reset: true, selectCurrent: false })
+
+    expect(api.queryChatSessions).toHaveBeenCalledWith({
+      archived: false,
+      page: 0,
+      size: 20,
+      keyword: 'C10001'
+    })
+    expect(ctx.sessionTotal).toBe(25)
+    expect(ctx.sessionHasMore).toBe(true)
+    expect(ctx.sessions).toHaveLength(2)
+  })
+
+  test('appends the next page and deduplicates session IDs', async() => {
+    api.queryChatSessions.mockResolvedValue({
+      content: [
+        { sessionId: 'session-1', title: '旧会话' },
+        { sessionId: 'session-2', title: '新会话' }
+      ],
+      totalElements: 2
+    })
+    const ctx = createCtx()
+    ctx.sessions = [{ sessionId: 'session-1', title: '旧会话' }]
+    ctx.sessionPage = 0
+    ctx.sessionTotal = 2
+    ctx.sessionHasMore = true
+
+    await AgentDiagnosis.methods.loadMoreSessions.call(ctx)
+
+    expect(api.queryChatSessions).toHaveBeenCalledWith({ archived: false, page: 1, size: 20 })
+    expect(ctx.sessions.map(session => session.sessionId)).toEqual(['session-1', 'session-2'])
+    expect(ctx.sessionHasMore).toBe(false)
+  })
+
+  test('ignores a stale session search response', async() => {
+    let resolveOld
+    api.queryChatSessions
+      .mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
+      .mockResolvedValueOnce({ content: [{ sessionId: 'new-session' }], totalElements: 1 })
+    const ctx = createCtx()
+
+    const oldRequest = AgentDiagnosis.methods.loadSessions.call(ctx, { reset: true, selectCurrent: false })
+    const newRequest = AgentDiagnosis.methods.loadSessions.call(ctx, { reset: true, selectCurrent: false })
+    await newRequest
+    resolveOld({ content: [{ sessionId: 'old-session' }], totalElements: 1 })
+    await oldRequest
+
+    expect(ctx.sessions.map(session => session.sessionId)).toEqual(['new-session'])
+  })
+
+  test('archives the current session and loads the next active session', async() => {
+    api.archiveChatSession.mockResolvedValue()
+    const ctx = createCtx()
+    ctx.activeSessionId = 'session-1'
+    ctx.activeSessionArchived = false
+    ctx.resetSessionState = jest.fn()
+    ctx.loadSessions = jest.fn().mockResolvedValue()
+
+    await AgentDiagnosis.methods.archiveCurrentSession.call(ctx)
+
+    expect(api.archiveChatSession).toHaveBeenCalledWith('session-1', true)
+    expect(ctx.resetSessionState).toHaveBeenCalledWith()
+    expect(ctx.loadSessions).toHaveBeenCalledWith({ reset: true, selectCurrent: true })
+  })
+
+  test('restores an archived session by switching back to the active view', async() => {
+    api.archiveChatSession.mockResolvedValue()
+    const ctx = createCtx()
+    ctx.activeSessionId = 'session-archived'
+    ctx.activeSessionArchived = true
+    ctx.sessionArchivedView = true
+    ctx.loadSessions = jest.fn().mockResolvedValue()
+
+    await AgentDiagnosis.methods.archiveCurrentSession.call(ctx)
+
+    expect(api.archiveChatSession).toHaveBeenCalledWith('session-archived', false)
+    expect(ctx.sessionArchivedView).toBe(false)
+    expect(ctx.activeSessionArchived).toBe(false)
+    expect(ctx.loadSessions).toHaveBeenCalledWith({ reset: true, selectCurrent: true })
+  })
+
+  test('does not send from an archived read-only session', async() => {
+    const ctx = createCtx()
+    ctx.activeSessionId = 'session-archived'
+    ctx.activeSessionArchived = true
+    ctx.inputMessage = '查 C10001'
+
+    await AgentDiagnosis.methods.sendMessage.call(ctx)
+
+    expect(api.chatMealPlan).not.toHaveBeenCalled()
+    expect(ctx.messages).toHaveLength(1)
+  })
+
+  test('ignores a second send while the first request is loading', async() => {
+    const ctx = createCtx()
+    ctx.activeSessionId = 'session-1'
+    ctx.loading = true
+    ctx.inputMessage = '查 C10001'
+
+    await AgentDiagnosis.methods.sendMessage.call(ctx)
+
+    expect(api.chatMealPlan).not.toHaveBeenCalled()
+    expect(ctx.messages).toHaveLength(1)
+  })
+
+  test('retries an error without adding another user bubble', async() => {
+    api.chatMealPlan.mockResolvedValue({
+      sessionId: 'session-1',
+      clientMessageId: 'msg-retry-new',
+      status: 'ANSWERED',
+      conversationStage: 'ANSWERED',
+      assistantMessage: '重试成功。'
+    })
+    const ctx = createCtx()
+    ctx.activeSessionId = 'session-1'
+    const errorMessage = {
+      role: 'assistant',
+      sessionId: 'session-1',
+      status: 'ERROR',
+      retryText: '查 C10001 今天',
+      content: '服务暂不可用'
+    }
+    ctx.messages.push(errorMessage)
+    const before = ctx.messages.length
+
+    await AgentDiagnosis.methods.retryMessage.call(ctx, errorMessage)
+
+    expect(ctx.messages).toHaveLength(before + 1)
+    expect(ctx.messages[ctx.messages.length - 1].content).toBe('重试成功。')
+    expect(api.chatMealPlan).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      message: '查 C10001 今天'
+    }))
+    expect(api.chatMealPlan.mock.calls[0][0].clientMessageId).not.toBe(errorMessage.clientMessageId)
+    expect(errorMessage.retrying).toBe(false)
+  })
+
+  test('preserves the original text on a network error for the retry action', async() => {
+    api.chatMealPlan.mockRejectedValue(new Error('network'))
+    const ctx = createCtx()
+    ctx.activeSessionId = 'session-1'
+    ctx.inputMessage = '查 C10001 今天'
+
+    await AgentDiagnosis.methods.sendMessage.call(ctx)
+
+    const assistant = ctx.messages[ctx.messages.length - 1]
+    expect(assistant).toMatchObject({ status: 'ERROR', retryText: '查 C10001 今天' })
+    expect(ctx.messages.filter(message => message.role === 'user')).toHaveLength(1)
+  })
+
+  test('explains that a missing retry session requires a new session', async() => {
+    api.chatMealPlan.mockRejectedValue({ response: { status: 404 }})
+    const ctx = createCtx()
+    ctx.activeSessionId = 'archived-session'
+    const errorMessage = {
+      role: 'assistant',
+      sessionId: 'archived-session',
+      status: 'ERROR',
+      retryText: '查 C10001',
+      content: '服务暂不可用'
+    }
+    ctx.messages.push(errorMessage)
+
+    await AgentDiagnosis.methods.retryMessage.call(ctx, errorMessage)
+
+    expect(ctx.messages[ctx.messages.length - 1]).toMatchObject({
+      status: 'ERROR',
+      content: '原会话已归档或不存在，请新建会话后重试。',
+      retryText: ''
+    })
+    expect(ctx.$message.warning).toHaveBeenCalledWith('原会话已不可用，请新建会话后重试')
   })
 
   test('selecting customer candidate sends customer code', async() => {
@@ -332,16 +527,83 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(api.chatMealPlan.mock.calls[0][0].message).toBe('客户编号 B1001')
   })
 
+  test('does not send a candidate that lacks a customer code', async() => {
+    const ctx = createCtx()
+    await AgentDiagnosis.methods.selectCustomerCandidate.call(ctx, { customerId: 1001, customerName: '张三' })
+
+    expect(api.chatMealPlan).not.toHaveBeenCalled()
+  })
+
+  test('builds fixed navigation targets from safe business fields only', () => {
+    const ctx = createCtx()
+    const targets = AgentDiagnosis.methods.navigationTargets.call(ctx, {
+      result: {
+        customerCode: 'C10001',
+        orderCode: 'O10001',
+        recordDate: '2026-08-10',
+        mealType: 'LUNCH',
+        customerId: 1001,
+        customerName: '张三',
+        route: '/unsafe'
+      },
+      slots: {}
+    })
+
+    expect(targets).toEqual([
+      { kind: 'CUSTOMER_PROFILE', label: '客户档案', payload: { customerCode: 'C10001' } },
+      { kind: 'CUSTOMER_ORDER', label: '客户订单', payload: { orderCode: 'O10001', customerCode: 'C10001' } },
+      { kind: 'MEAL_PLAN', label: '排餐详情', payload: { date: '2026-08-10', mealType: 'LUNCH' } }
+    ])
+    AgentDiagnosis.methods.navigateTarget.call(ctx, targets[0])
+    expect(ctx.$router.push).toHaveBeenCalledWith({
+      path: '/customer/profile',
+      query: { customerCode: 'C10001' }
+    })
+  })
+
+  test('copies assistant business text without technical details', async() => {
+    const writeText = jest.fn().mockResolvedValue()
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const ctx = createCtx()
+
+    await AgentDiagnosis.methods.copyAssistantMessage.call(ctx, {
+      status: 'ANSWERED',
+      content: '业务结论'
+    })
+
+    expect(writeText).toHaveBeenCalledWith('业务结论')
+    expect(ctx.$message.success).toHaveBeenCalledWith('结论已复制')
+  })
+
   test('uses non-disclosing message for business query permission denial', () => {
     const ctx = createCtx()
 
     const message = AgentDiagnosis.methods.queryWarningText.call(ctx, {
       partial: true,
-      warnings: ['TOOL_PERMISSION_DENIED']
+      warnings: ['listMealPlans:TOOL_PERMISSION_DENIED']
     })
 
     expect(message).toContain('缺少该类业务数据的查询权限')
     expect(message).toContain('未返回对象是否存在')
+  })
+
+  test('keeps presentation fallback warnings separate from business completeness', () => {
+    const ctx = createCtx()
+
+    expect(AgentDiagnosis.methods.queryWarningText.call(ctx, {
+      partial: false,
+      warnings: ['PRESENTATION_FALLBACK_APPLIED']
+    })).toContain('业务结果仍可查看')
+  })
+
+  test('does not expose a tool trace as a standalone business query result', () => {
+    const ctx = createCtx()
+
+    expect(ctx.hasBusinessQueryResult({
+      toolTraceSummary: [{ toolName: 'listMealPlans', status: 'SUCCESS', resultCount: 20 }]
+    })).toBe(false)
+    expect(ctx.hasBusinessQueryResult({ cards: [{ type: 'MEAL_PLAN_LIST' }] })).toBe(true)
+    expect(ctx.hasBusinessQueryResult({ warnings: ['TOOL_BUDGET_EXCEEDED'] })).toBe(true)
   })
 
   test('loads session detail and maps persisted messages back into page state', async() => {
@@ -388,6 +650,33 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(mapped[0].presentations).toEqual([presentation])
     expect(mapped[0].cards[0].sourceToolCallId).toBe('call-restore')
     expect(mapped[0].warnings).toEqual(['PRESENTATION_RULE_MISSING'])
+  })
+
+  test('restores protocol fields and message ids from persisted business snapshot', () => {
+    const ctx = createCtx()
+    const mapped = AgentDiagnosis.methods.mapSessionMessages.call(ctx, [{
+      role: 'ASSISTANT',
+      requestId: 'req-restore',
+      clientMessageId: 'msg-restore',
+      content: '请补充餐次。',
+      status: 'NEED_MORE_INFO',
+      conversationStage: 'NEED_MORE_INFO',
+      missingSlots: ['MEAL_TYPE'],
+      quickReplies: ['早餐', '午餐', '晚餐'],
+      businessResult: {
+        missingSlots: ['MEAL_TYPE'],
+        quickReplies: ['早餐', '午餐', '晚餐']
+      }
+    }])
+
+    expect(mapped[0]).toMatchObject({
+      requestId: 'req-restore',
+      clientMessageId: 'msg-restore',
+      missingSlots: ['MEAL_TYPE'],
+      quickReplies: ['早餐', '午餐', '晚餐']
+    })
+    expect(AgentDiagnosis.methods.missingSlotText.call(ctx, 'CUSTOMER_OR_ORDER')).toBe('客户或订单')
+    expect(AgentDiagnosis.methods.missingSlotText.call(ctx, 'DATE_RANGE')).toBe('日期范围')
   })
 
   test('restores latest diagnosis result onto matching assistant message after refresh', () => {
@@ -445,7 +734,7 @@ describe('AgentDiagnosis chat page logic', () => {
     ]
     ctx.sessionKeyword = '10001'
 
-    expect(ctx.filteredSessions).toHaveLength(1)
+    expect(ctx.filteredSessions).toHaveLength(2)
     expect(ctx.filteredSessions[0].sessionId).toBe('session-1')
     expect(ctx.sessionOptionLabel({ customerCode: 'C10003', recordDate: '2026-07-08', mealType: 'LUNCH' })).toContain('C10003')
   })
@@ -462,6 +751,6 @@ describe('AgentDiagnosis chat page logic', () => {
 
     expect(api.updateChatSessionTitle).toHaveBeenCalledWith('session-1', { title: '新标题' })
     expect(ctx.$message.success).toHaveBeenCalledWith('会话标题已更新')
-    expect(ctx.loadSessions).toHaveBeenCalledWith(false)
+    expect(ctx.loadSessions).toHaveBeenCalledWith({ reset: true, selectCurrent: false })
   })
 })

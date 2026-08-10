@@ -29,7 +29,7 @@ class HttpAgentServiceClientTest {
     @Test
     void shouldPostChatRequestToAgentService() {
         RestTemplate restTemplate = mock(RestTemplate.class);
-        String responseBody = "{\"sessionId\":\"session-1\",\"status\":\"ANSWERED\",\"assistantMessage\":\"已完成诊断\",\"slots\":{\"customerCode\":\"C10001\",\"recordDate\":\"2026-05-22\",\"mealType\":\"LUNCH\"},\"diagnosisResult\":{\"requestId\":\"request-1\",\"summary\":\"命中规则\",\"fallback\":false,\"reasons\":[]},\"quickReplies\":[\"继续追问\"]}";
+        String responseBody = "{\"sessionId\":\"session-1\",\"status\":\"ANSWERED\",\"assistantMessage\":\"已完成诊断\",\"slots\":{\"customerCode\":\"C10001\",\"recordDate\":\"2026-05-22\",\"mealType\":\"LUNCH\"},\"diagnosisResult\":{\"requestId\":\"request-1\",\"summary\":\"命中规则\",\"fallback\":false,\"reasons\":[]},\"missingSlots\":[],\"quickReplies\":[\"继续追问\"]}";
         when(restTemplate.postForEntity(anyString(), any(), any())).thenReturn(ResponseEntity.ok(responseBody));
 
         HttpAgentServiceClient client = clientWithRestTemplate(restTemplate);
@@ -46,6 +46,7 @@ class HttpAgentServiceClientTest {
         assertEquals("已完成诊断", response.getAssistantMessage());
         assertEquals("C10001", response.getSlots().getCustomerCode());
         assertEquals("request-1", response.getRequestId());
+        assertTrue(response.getMissingSlots().isEmpty());
         assertTrue(response.getPresentations().isEmpty());
     }
 
@@ -135,6 +136,7 @@ class HttpAgentServiceClientTest {
         assertEquals("AGENT_SERVICE_UNAVAILABLE", response.getWarnings().get(0));
         assertTrue(response.isPartial());
         assertNotNull(response.getQuickReplies());
+        assertTrue(response.getQuickReplies().isEmpty());
     }
 
     private HttpAgentServiceClient clientWithRestTemplate(RestTemplate restTemplate) {

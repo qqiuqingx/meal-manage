@@ -58,6 +58,23 @@ class BusinessAgentRunnerPresentationTest {
         assertEquals(1, response.getToolTraceSummary().size());
     }
 
+    /** 同一业务告警重复出现时只保留首次出现值，并保持业务告警对 partial 的语义。 */
+    @Test
+    void shouldDeduplicateBusinessWarningsAndKeepPartialSemantics() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ToolRegistry registry = new ToolRegistry();
+        BusinessAgentRunner runner = runner(objectMapper, registry);
+        ToolExecutionContext context = new ToolExecutionContext(objectMapper, 6, 100);
+        context.record(ToolRegistry.SEARCH_SERVICE_CUSTOMERS, "SERVICE_CUSTOMER_LIST", "{}",
+            "{\"items\":[],\"warnings\":[\"MENU_RESULT_IMPLAUSIBLE\",\"MENU_RESULT_IMPLAUSIBLE\"]}", true);
+
+        me.zhengjie.agent.domain.dto.AgentChatResponse response = runner.runWithAnswer(
+            request("查询客户订单"), "已完成查询。", context);
+
+        assertEquals(java.util.List.of("MENU_RESULT_IMPLAUSIBLE"), response.getWarnings());
+        assertTrue(response.isPartial());
+    }
+
     /** 未知卡片没有 presentation profile 时生成 SYSTEM 通用降级和稳定告警。 */
     @Test
     void shouldFallbackUnknownCardWithoutChangingBusinessPartial() throws Exception {

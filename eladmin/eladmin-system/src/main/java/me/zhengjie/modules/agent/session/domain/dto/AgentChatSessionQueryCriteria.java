@@ -20,11 +20,13 @@ public class AgentChatSessionQueryCriteria {
 
     private String mealType;
 
-    private Boolean archived;
+    /** 默认只查询进行中的会话；归档页显式传 true。 */
+    private Boolean archived = false;
 
     private Integer page = 0;
 
-    private Integer size = 10;
+    /** 会话侧栏固定使用 20 条一页，服务端仍会进一步限制最大值。 */
+    private Integer size = 20;
 
     public String getKeyword() {
         return keyword;

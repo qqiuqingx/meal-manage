@@ -4,6 +4,7 @@ import {
   isSupportedFormat,
   readPath
 } from './agentPresentationFormatters'
+import { hasBusinessIntegrityWarning } from './agentWarningMessages'
 
 /** v1 展示描述允许的视图白名单。 */
 export const PRESENTATION_VIEWS = ['TEXT', 'TABLE', 'BAR', 'LINE', 'PIE']
@@ -78,11 +79,7 @@ function hasTruncatedFlag(card) {
 
 /** 判断告警是否意味着数据不完整，展示降级告警本身不影响业务完整性。 */
 export function hasIntegrityWarning(warnings) {
-  const values = Array.isArray(warnings) ? warnings : []
-  return values.some(value => {
-    const warning = String(value || '').toUpperCase()
-    return /TRUNCAT|INCOMPLETE|PARTIAL|BUDGET_EXCEEDED|PERMISSION_DENIED|TOOL_OUTPUT_INVALID|TOOL_EXECUTION_FAILED|QUERY_.*FAILED|IMPLAUSIBLE/.test(warning)
-  })
+  return hasBusinessIntegrityWarning(warnings)
 }
 
 /** 判断当前卡片是否必须隐藏图表，表格和原始告警仍然保留。 */

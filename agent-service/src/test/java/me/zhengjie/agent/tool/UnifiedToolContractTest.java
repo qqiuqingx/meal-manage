@@ -178,7 +178,7 @@ class UnifiedToolContractTest {
 
         String output = "{\"items\":[{\"customerCode\":\"C1001\"}]}";
         context.record(ToolRegistry.SEARCH_CUSTOMER_PROFILES, "CUSTOMER_PROFILE_LIST", "{}", output, true);
-        context.recordCached(ToolRegistry.SEARCH_CUSTOMER_PROFILES, "CUSTOMER_PROFILE_LIST", output);
+        context.recordCached(ToolRegistry.SEARCH_CUSTOMER_PROFILES, "CUSTOMER_PROFILE_LIST", "{}", output);
         assertEquals(1, context.records());
         assertEquals(1, context.cacheHits());
         assertEquals(2, context.facts().size());

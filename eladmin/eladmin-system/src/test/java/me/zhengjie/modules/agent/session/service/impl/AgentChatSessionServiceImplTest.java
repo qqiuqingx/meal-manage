@@ -1,6 +1,7 @@
 package me.zhengjie.modules.agent.session.service.impl;
 
 import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.modules.agent.domain.dto.AgentChatResponse;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
@@ -14,12 +15,16 @@ import me.zhengjie.modules.agent.session.domain.AgentChatMessage;
 import me.zhengjie.modules.agent.session.domain.AgentChatSession;
 import me.zhengjie.modules.agent.session.mapper.AgentChatMessageMapper;
 import me.zhengjie.modules.agent.session.mapper.AgentChatSessionMapper;
+import me.zhengjie.modules.agent.session.domain.dto.AgentChatSessionQueryCriteria;
+import me.zhengjie.modules.agent.session.domain.dto.AgentChatSessionSummaryDto;
+import me.zhengjie.utils.PageResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.sql.Timestamp;
 import java.util.Collections;
@@ -211,6 +216,7 @@ class AgentChatSessionServiceImplTest {
 
         assertEquals("req-2", response.getRequestId());
         assertEquals("session-1", response.getSessionId());
+        assertEquals("msg-1", response.getClientMessageId());
         assertEquals("ANSWERED", response.getStatus());
         assertEquals("已完成诊断", response.getAssistantMessage());
         assertNotNull(response.getDiagnosisResult());
@@ -357,6 +363,110 @@ class AgentChatSessionServiceImplTest {
         assertEquals(2001L, slots.getOrderId()); assertEquals("O20260001", slots.getOrderCode());
         assertEquals(3001L, slots.getMealPlanRecordId()); assertEquals("2026-07-13", slots.getRecordDate());
         assertEquals("2026-07-01", slots.getStartDate()); assertEquals("2026-07-13", slots.getEndDate()); assertEquals("LUNCH", slots.getMealType());
+    }
+
+    /** Agent 返回 Patch 时，主系统必须优先使用 Patch 槽位和最近查询摘要，而不是旧顶层字段。 */
+    @Test
+    void shouldPreferConversationPatchWhenPersistingSessionFocus() {
+        AgentChatSession session = new AgentChatSession();
+        session.setId(1L); session.setSessionId("session-patch"); session.setOperator("system"); session.setArchived(false);
+        session.setCustomerId(1001L); session.setCustomerCode("C10001");
+        session.setOrderId(2001L); session.setOrderCode("O-OLD"); session.setMealPlanRecordId(3001L);
+        when(sessionMapper.selectOne(any())).thenReturn(session);
+        when(messageMapper.selectOne(any())).thenReturn(null);
+        when(messageMapper.insert(any(AgentChatMessage.class))).thenReturn(1);
+        when(sessionMapper.updateById(any(AgentChatSession.class))).thenReturn(1);
+        when(accessContextService.issue(any(), any())).thenReturn("signed-context");
+
+        DiagnosisSlots topLevelSlots = new DiagnosisSlots();
+        topLevelSlots.setCustomerCode("C99999");
+        AgentChatResponse response = new AgentChatResponse();
+        response.setSessionId("session-patch"); response.setRequestId("req-patch"); response.setStatus("ANSWERED");
+        response.setAssistantMessage("已按新客户查询"); response.setConversationStage("ANSWERED");
+        response.setSlots(topLevelSlots);
+        response.setLastBusinessQueryContext(Collections.singletonMap("lastToolName", "oldTool"));
+        Map<String, Object> patchSlots = new LinkedHashMap<>();
+        patchSlots.put("customerId", 1002L);
+        patchSlots.put("customerCode", "C10002");
+        patchSlots.put("recordDate", "2026-08-09");
+        patchSlots.put("mealType", "DINNER");
+        Map<String, Object> patchSummary = new LinkedHashMap<>();
+        patchSummary.put("lastToolName", "listMealPlans");
+        patchSummary.put("successfulToolNames", Collections.singletonList("listMealPlans"));
+        response.setConversationPatch(new LinkedHashMap<>(Map.of(
+            "slots", patchSlots,
+            "conversationStage", "ANSWERED",
+            "lastBusinessQueryContext", patchSummary)));
+        when(diagnosisFacadeService.chatMealPlan(any(AgentChatRequest.class), any(), any())).thenReturn(response);
+
+        AgentChatRequest request = new AgentChatRequest();
+        request.setSessionId("session-patch"); request.setMessage("查 C10002 今天晚餐");
+        AgentChatResponse result = service.chat(request, "req-patch");
+
+        ArgumentCaptor<AgentChatSession> captor = ArgumentCaptor.forClass(AgentChatSession.class);
+        verify(sessionMapper).updateById(captor.capture());
+        AgentChatSession updated = captor.getValue();
+        assertEquals(1002L, updated.getCustomerId());
+        assertEquals("C10002", updated.getCustomerCode());
+        assertNull(updated.getOrderId());
+        assertNull(updated.getOrderCode());
+        assertNull(updated.getMealPlanRecordId());
+        assertEquals("2026-08-09", updated.getRecordDate());
+        assertEquals("DINNER", updated.getMealType());
+        assertTrue(updated.getLastBusinessQueryContextJson().contains("listMealPlans"));
+        assertEquals("C10002", result.getSlots().getCustomerCode());
+        assertEquals("listMealPlans", result.getLastBusinessQueryContext().get("lastToolName"));
+    }
+
+    /** 澄清回合没有业务卡片时也必须写入现有业务快照，并能从历史快照恢复协议字段。 */
+    @Test
+    void shouldPersistAndRestoreClarificationProtocolFields() {
+        AgentChatResponse response = new AgentChatResponse();
+        response.setStatus("NEED_MORE_INFO");
+        response.setAssistantMessage("请补充餐次。");
+        response.setMissingSlots(List.of("MEAL_TYPE"));
+        response.setQuickReplies(List.of("早餐", "午餐", "晚餐"));
+
+        Map<String, Object> snapshot = ReflectionTestUtils.invokeMethod(service,
+            "buildBusinessSnapshot", response);
+        assertNotNull(snapshot);
+        assertEquals(List.of("MEAL_TYPE"), snapshot.get("missingSlots"));
+        assertEquals(List.of("早餐", "午餐", "晚餐"), snapshot.get("quickReplies"));
+
+        AgentChatResponse restored = new AgentChatResponse();
+        ReflectionTestUtils.invokeMethod(service, "restoreBusinessResponse", restored, snapshot);
+
+        assertEquals(List.of("MEAL_TYPE"), restored.getMissingSlots());
+        assertEquals(List.of("早餐", "午餐", "晚餐"), restored.getQuickReplies());
+    }
+
+    @Test
+    /** 会话列表必须按页返回当前客服可见摘要，并使用进行中视图作为默认归档条件。 */
+    void shouldQueryPagedSessionSummariesWithKeyword() {
+        when(sessionMapper.selectPage(any(), any())).thenAnswer(invocation -> {
+            Page<AgentChatSession> page = invocation.getArgument(0);
+            assertEquals(2L, page.getCurrent());
+            assertEquals(20L, page.getSize());
+            AgentChatSession session = new AgentChatSession();
+            session.setSessionId("session-21");
+            session.setTitle("C10001 午餐排查");
+            session.setCustomerCode("C10001");
+            session.setLastSummary("已完成查询");
+            session.setArchived(false);
+            page.setRecords(Collections.singletonList(session));
+            page.setTotal(25L);
+            return page;
+        });
+
+        AgentChatSessionQueryCriteria criteria = new AgentChatSessionQueryCriteria();
+        criteria.setKeyword("  C10001  ");
+        criteria.setPage(1);
+        PageResult<AgentChatSessionSummaryDto> result = service.querySessions(criteria);
+
+        assertEquals(25L, result.getTotalElements());
+        assertEquals("session-21", result.getContent().get(0).getSessionId());
+        assertEquals("C10001", result.getContent().get(0).getCustomerCode());
+        assertEquals(Boolean.FALSE, criteria.getArchived());
     }
 
 }

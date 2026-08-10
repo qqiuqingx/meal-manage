@@ -1,6 +1,9 @@
 package me.zhengjie.agent.guardrail;
 
+import me.zhengjie.agent.domain.chat.MissingSlot;
+
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -38,6 +41,23 @@ public class FinalAnswerGuardrail {
         validateCustomerIdentities(answer, customerIdentities);
     }
 
+    /**
+     * 校验明确的澄清回复；澄清允许没有成功工具事实，但不能伪装成实时查询结论。
+     *
+     * @param answer 面向客服的澄清文本
+     * @param missingSlots 受控缺失项列表
+     */
+    public void validateClarification(String answer, List<MissingSlot> missingSlots) {
+        if (answer == null || answer.isBlank()) throw new ToolGuardrailException("ANSWER_EMPTY", "answer is empty");
+        if (missingSlots == null || missingSlots.isEmpty()) {
+            throw new ToolGuardrailException("ANSWER_MISSING_SLOTS_REQUIRED", "clarification requires missing slots");
+        }
+        sensitiveDataPolicy.assertSafeAnswer(answer);
+        if (containsRealtimeConclusion(answer)) {
+            throw new ToolGuardrailException("ANSWER_CLARIFICATION_HAS_RESULT", "clarification must not claim a realtime result");
+        }
+    }
+
     /** 成功工具结果会由前端结构化展示，模型回答不得再携带重复的 Markdown 表格。 */
     private void validateStructuredAnswer(String answer, int successfulToolCalls) {
         if (successfulToolCalls > 0 && MARKDOWN_TABLE_SEPARATOR.matcher(answer).find()) {
@@ -57,6 +77,11 @@ public class FinalAnswerGuardrail {
                     "customer name must be paired with its customer code");
             }
         }
+    }
+
+    /** 判断澄清文本是否声称已经取得实时业务结果。 */
+    private boolean containsRealtimeConclusion(String answer) {
+        return answer.matches("(?s).*(已查询|查询结果|已核实|共有\\s*\\d|共\\s*\\d|目前有\\s*\\d|已排餐|已核销).*" );
     }
 
     /** 判断客户身份字段是否为有效文本。 */

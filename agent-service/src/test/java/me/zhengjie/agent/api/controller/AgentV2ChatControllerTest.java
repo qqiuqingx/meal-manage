@@ -6,6 +6,7 @@ import me.zhengjie.agent.application.BusinessAgentRunner;
 import me.zhengjie.agent.domain.chat.ChatStatus;
 import me.zhengjie.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.agent.domain.dto.AgentChatResponse;
+import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -27,6 +28,10 @@ class AgentV2ChatControllerTest {
         response.setStatus(ChatStatus.ANSWERED);
         response.setAssistantMessage("已完成查询");
         response.setConversationStage("ANSWERED");
+        DiagnosisSlots slots = new DiagnosisSlots();
+        slots.setCustomerCode("B3303");
+        response.setSlots(slots);
+        response.setLastBusinessQueryContext(Map.of("lastToolName", "listMealPlans"));
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AgentV2ChatController(runnerReturning(response)))
             .setControllerAdvice(new AgentApiExceptionHandler()).build();
 
@@ -46,7 +51,9 @@ class AgentV2ChatControllerTest {
             .andExpect(jsonPath("$.clientMessageId").value("message-v2"))
             .andExpect(jsonPath("$.sessionId").value("session-v2"))
             .andExpect(jsonPath("$.expectedSessionVersion").value(7))
-            .andExpect(jsonPath("$.conversationPatch.conversationStage").value("ANSWERED"));
+            .andExpect(jsonPath("$.conversationPatch.conversationStage").value("ANSWERED"))
+            .andExpect(jsonPath("$.conversationPatch.slots.customerCode").value("B3303"))
+            .andExpect(jsonPath("$.conversationPatch.lastBusinessQueryContext.lastToolName").value("listMealPlans"));
     }
 
     @Test

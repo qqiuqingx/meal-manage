@@ -2,18 +2,7 @@
   <div class="agent-presentation-card">
     <div class="presentation-header">
       <span class="presentation-title">{{ title }}</span>
-      <el-tag v-if="decisionSource" size="mini" type="info">展示规则：{{ decisionSource }}</el-tag>
     </div>
-
-    <el-alert
-      v-if="hasNotice"
-      class="presentation-notice"
-      :title="noticeText"
-      type="warning"
-      :closable="false"
-      show-icon
-    />
-    <div v-if="queriedAt" class="presentation-time">查询时间：{{ queriedAt }}</div>
 
     <AgentResultSummary
       v-if="showSummaryAbove"
@@ -33,6 +22,8 @@
             v-else-if="view === 'TABLE'"
             :data="cardData"
             :descriptor="safePresentation"
+            :selectable="selectable"
+            @select="$emit('select', $event)"
           />
           <AgentResultChart
             v-else-if="isChartView(view)"
@@ -54,6 +45,8 @@
         v-else-if="currentView === 'TABLE'"
         :data="cardData"
         :descriptor="safePresentation"
+        :selectable="selectable"
+        @select="$emit('select', $event)"
       />
       <AgentResultChart
         v-else-if="isChartView(currentView)"
@@ -62,6 +55,7 @@
         @render-error="handleChartError(currentView)"
       />
     </div>
+    <div v-else-if="chartBlocked" class="presentation-empty">结果不完整，暂不展示图表</div>
     <div v-else class="presentation-empty">展示格式暂不可用</div>
   </div>
 </template>
@@ -71,7 +65,7 @@ import AgentResultChart from './AgentResultChart.vue'
 import AgentResultSummary from './AgentResultSummary.vue'
 import AgentResultTable from './AgentResultTable.vue'
 import { isSafeLabel } from '../utils/agentPresentationFormatters'
-import { sanitizePresentation } from '../utils/agentPresentationValidation'
+import { sanitizePresentation, shouldHideChart } from '../utils/agentPresentationValidation'
 
 const VIEW_LABELS = {
   TEXT: '摘要',
@@ -93,8 +87,8 @@ export default {
     card: { type: Object, required: true },
     partial: { type: Boolean, default: false },
     presentation: { type: Object, default: null },
-    queriedAt: { type: String, default: '' },
-    warnings: { type: Array, default: () => [] }
+    warnings: { type: Array, default: () => [] },
+    selectable: { type: Boolean, default: false }
   },
   data() {
     return {
@@ -117,25 +111,13 @@ export default {
       const value = this.safePresentation && this.safePresentation.title
       return isSafeLabel(value, 100) ? value : '业务结果'
     },
-    decisionSource() {
-      const value = this.safePresentation && this.safePresentation.decisionSource
-      return isSafeLabel(value, 20) ? value : ''
-    },
-    warningList() {
-      const source = Array.isArray(this.warnings) ? this.warnings : []
-      return source
-        .filter(value => value !== undefined && value !== null && String(value).trim())
-        .map(value => String(value))
-        .filter((value, index, values) => values.indexOf(value) === index)
-    },
-    hasNotice() {
-      return this.partial || this.warningList.length > 0
-    },
-    noticeText() {
-      const warningText = this.warningList.join('；')
-      if (this.partial && warningText) return `结果可能不完整：${warningText}`
-      if (this.partial) return '结果可能不完整，请结合工具告警继续核对。'
-      return `展示提示：${warningText}`
+    /** 判断展示描述是否只有图表，且当前消息完整性状态阻止图表渲染。 */
+    chartBlocked() {
+      const views = this.presentation && Array.isArray(this.presentation.availableViews)
+        ? this.presentation.availableViews.map(view => String(view || '').toUpperCase())
+        : []
+      return views.length > 0 && views.every(view => CHART_VIEWS.indexOf(view) >= 0) &&
+        shouldHideChart(this.card, this.warnings, this.partial)
     },
     validViews() {
       const descriptor = this.safePresentation
@@ -229,16 +211,6 @@ export default {
   color: #303133;
   font-size: 13px;
   font-weight: 600;
-}
-
-.presentation-notice {
-  margin-bottom: 10px;
-}
-
-.presentation-time {
-  margin-bottom: 10px;
-  color: #909399;
-  font-size: 12px;
 }
 
 .presentation-tabs {

@@ -2,6 +2,7 @@ package me.zhengjie.agent.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.config.AgentProperties;
+import me.zhengjie.agent.application.conversation.AssistantTurnResult;
 import me.zhengjie.agent.domain.chat.ChatStatus;
 import me.zhengjie.agent.domain.dto.AgentChatRequest;
 import me.zhengjie.agent.domain.dto.AgentChatResponse;
@@ -38,8 +39,8 @@ class BusinessAgentRunnerRecoveryTest {
         context.record(ToolRegistry.SEARCH_SERVICE_CUSTOMERS, "SERVICE_CUSTOMER_LIST", "{}",
             "{\"items\":[{\"customerCode\":\"C1001\",\"customerName\":\"张三\",\"orderCode\":\"O1\",\"orderTime\":\"2026-08-05T10:00:00\",\"status\":\"ACTIVE\",\"parentPackageName\":\"套餐\"}],\"warnings\":[]}", true);
 
-        String answer = runner.invokeWithRepairs("测试提示\n\n用户问题：\n查询客户", List.of(), context, "查询客户");
-        AgentChatResponse response = runner.runWithAnswer(request("查询客户"), answer, context);
+        AssistantTurnResult turn = runner.invokeWithRepairs("测试提示", "查询客户", List.of(), context);
+        AgentChatResponse response = runner.runWithAnswer(request("查询客户"), turn.assistantMessage(), context);
 
         assertEquals(1, executor.calls);
         assertEquals("查询已完成，详细结果见下方。", response.getAssistantMessage());

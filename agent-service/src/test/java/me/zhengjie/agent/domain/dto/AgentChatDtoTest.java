@@ -3,6 +3,7 @@ package me.zhengjie.agent.domain.dto;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.application.conversation.ConversationPatch;
 import me.zhengjie.agent.domain.chat.ChatStatus;
+import me.zhengjie.agent.domain.chat.MissingSlot;
 import me.zhengjie.agent.presentation.PresentationDescriptor;
 import org.junit.jupiter.api.Test;
 
@@ -31,6 +32,8 @@ class AgentChatDtoTest {
         response.setClientMessageId("message-1");
         response.setStatus(ChatStatus.ANSWERED);
         response.setAssistantMessage("已完成查询");
+        response.setMissingSlots(List.of(MissingSlot.MEAL_TYPE));
+        response.setQuickReplies(List.of("早餐", "午餐", "晚餐"));
         response.setCards(List.of(Map.of(
             "type", "SERVICE_CUSTOMER_LIST",
             "sourceToolCallId", "call-1",
@@ -46,6 +49,8 @@ class AgentChatDtoTest {
         assertEquals("request-1", parsed.getRequestId());
         assertEquals("message-1", parsed.getClientMessageId());
         assertEquals(ChatStatus.ANSWERED, parsed.getStatus());
+        assertEquals(List.of(MissingSlot.MEAL_TYPE), parsed.getMissingSlots());
+        assertEquals(List.of("早餐", "午餐", "晚餐"), parsed.getQuickReplies());
         assertEquals("SERVICE_CUSTOMER_LIST", parsed.getCards().get(0).get("type"));
         assertEquals("searchServiceCustomers", parsed.getToolFacts().get(0).get("toolName"));
         assertEquals("SUCCESS", parsed.getToolTraceSummary().get(0).get("status"));

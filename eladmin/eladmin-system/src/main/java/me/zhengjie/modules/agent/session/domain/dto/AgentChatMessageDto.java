@@ -31,6 +31,12 @@ public class AgentChatMessageDto {
 
     private String conversationStage;
 
+    /** 助手明确声明的待补充条件，从业务快照恢复。 */
+    private List<String> missingSlots = new ArrayList<>();
+
+    /** 由主系统按缺失条件生成的受控快捷回复，从业务快照恢复。 */
+    private List<String> quickReplies = new ArrayList<>();
+
     private DiagnosisSlots slots;
 
     private AgentDiagnosisResponse diagnosisResult;
@@ -118,6 +124,26 @@ public class AgentChatMessageDto {
 
     public void setConversationStage(String conversationStage) {
         this.conversationStage = conversationStage;
+    }
+
+    /** 返回待补充条件，历史消息缺失该字段时返回空列表。 */
+    public List<String> getMissingSlots() {
+        return missingSlots == null ? new ArrayList<>() : missingSlots;
+    }
+
+    /** 设置待补充条件，null 按空列表处理。 */
+    public void setMissingSlots(List<String> missingSlots) {
+        this.missingSlots = missingSlots == null ? new ArrayList<>() : missingSlots;
+    }
+
+    /** 返回受控快捷回复，历史消息缺失该字段时返回空列表。 */
+    public List<String> getQuickReplies() {
+        return quickReplies == null ? new ArrayList<>() : quickReplies;
+    }
+
+    /** 设置受控快捷回复，null 按空列表处理。 */
+    public void setQuickReplies(List<String> quickReplies) {
+        this.quickReplies = quickReplies == null ? new ArrayList<>() : quickReplies;
     }
 
     public DiagnosisSlots getSlots() {

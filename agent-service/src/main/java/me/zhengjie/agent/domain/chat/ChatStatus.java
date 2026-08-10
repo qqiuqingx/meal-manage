@@ -5,5 +5,6 @@ package me.zhengjie.agent.domain.chat;
  */
 public enum ChatStatus {
     ANSWERED,
+    NEED_MORE_INFO,
     ERROR
 }

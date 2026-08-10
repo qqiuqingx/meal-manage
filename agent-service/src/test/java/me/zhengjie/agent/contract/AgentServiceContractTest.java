@@ -43,6 +43,17 @@ class AgentServiceContractTest {
             assertFalse(resultSchema.path("additionalProperties").asBoolean(true));
             assertTrue(resultSchema.path("properties").has("sessionId"));
             assertTrue(resultSchema.path("properties").has("status"));
+            assertEquals(Set.of("ANSWERED", "NEED_MORE_INFO", "ERROR"),
+                enumValues(resultSchema.path("properties").path("status")));
+            JsonNode missingSlots = resultSchema.path("properties").path("missingSlots");
+            assertEquals(4, missingSlots.path("maxItems").asInt());
+            assertTrue(missingSlots.path("uniqueItems").asBoolean(false));
+            assertEquals(Set.of("CUSTOMER_OR_ORDER", "RECORD_DATE", "DATE_RANGE", "MEAL_TYPE", "PACKAGE", "RULE_TOPIC"),
+                enumValues(missingSlots.path("items")));
+            JsonNode quickReplies = resultSchema.path("properties").path("quickReplies");
+            assertEquals(6, quickReplies.path("maxItems").asInt());
+            assertTrue(quickReplies.path("uniqueItems").asBoolean(false));
+            assertEquals(20, quickReplies.path("items").path("maxLength").asInt());
             assertFalse(root.path("components").path("schemas").path("ConversationPatch")
                 .path("properties").has("assistantMessage"));
             JsonNode errorCodes = root.path("components").path("schemas").path("AgentApiError")

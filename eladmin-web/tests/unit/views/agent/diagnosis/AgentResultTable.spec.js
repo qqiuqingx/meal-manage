@@ -80,4 +80,12 @@ describe('AgentResultTable', () => {
     })
     expect(context.sections).toEqual([])
   })
+
+  test('only offers candidate selection for rows with a customer code', () => {
+    const context = createContext({}, { table: { dataPath: 'items', columns: [] } })
+
+    expect(context.canSelectRow({ customerCode: 'C001', customerId: 1 })).toBe(true)
+    expect(context.canSelectRow({ customerId: 1, customerName: '张三' })).toBe(false)
+    expect(context.canSelectRow(null)).toBe(false)
+  })
 })

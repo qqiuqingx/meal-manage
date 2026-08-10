@@ -54,15 +54,15 @@ public class ToolExecutionContext {
         if (success) records += count;
         // 失败结果不能进入同参缓存，否则后续修复会被旧错误短路。
         if (success) cache.put(cacheKey(toolName, inputJson), outputJson);
-        facts.add(new ToolFact(callId, toolName, cardType, outputJson, success, count));
+        facts.add(new ToolFact(callId, toolName, cardType, inputJson, outputJson, success, count));
         return callId;
     }
 
     /** 记录命中同参缓存的工具事实，不再次消耗业务记录预算。 */
-    public synchronized String recordCached(String toolName, String cardType, String outputJson) {
+    public synchronized String recordCached(String toolName, String cardType, String inputJson, String outputJson) {
         String callId = "call-" + (facts.size() + 1);
         cacheHits++;
-        facts.add(new ToolFact(callId, toolName, cardType, outputJson, true, countItems(outputJson)));
+        facts.add(new ToolFact(callId, toolName, cardType, inputJson, outputJson, true, countItems(outputJson)));
         return callId;
     }
 
@@ -129,6 +129,6 @@ public class ToolExecutionContext {
     }
 
     /** 模型工具调用的受控审计摘要；outputJson 只在 Agent 内部继续用于事实校验。 */
-    public record ToolFact(String callId, String toolName, String cardType, String outputJson,
+    public record ToolFact(String callId, String toolName, String cardType, String inputJson, String outputJson,
                            boolean success, int resultCount) { }
 }

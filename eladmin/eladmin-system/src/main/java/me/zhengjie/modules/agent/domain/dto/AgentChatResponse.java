@@ -36,6 +36,9 @@ public class AgentChatResponse {
 
     private List<String> quickReplies = new ArrayList<>();
 
+    /** Agent 明确声明的待补充条件；仅使用受控枚举字符串，历史响应缺失时为空数组。 */
+    private List<String> missingSlots = new ArrayList<>();
+
     private String conversationStage;
 
     /** 可追溯事实，前端直接展示而不解析自然语言。 */
@@ -137,11 +140,21 @@ public class AgentChatResponse {
     }
 
     public List<String> getQuickReplies() {
-        return quickReplies;
+        return quickReplies == null ? new ArrayList<>() : quickReplies;
     }
 
     public void setQuickReplies(List<String> quickReplies) {
-        this.quickReplies = quickReplies;
+        this.quickReplies = quickReplies == null ? new ArrayList<>() : quickReplies;
+    }
+
+    /** 返回 Agent 明确声明的待补充条件，兼容旧响应的空值。 */
+    public List<String> getMissingSlots() {
+        return missingSlots == null ? new ArrayList<>() : missingSlots;
+    }
+
+    /** 设置待补充条件，null 按空数组处理，避免前端分支出现空值。 */
+    public void setMissingSlots(List<String> missingSlots) {
+        this.missingSlots = missingSlots == null ? new ArrayList<>() : missingSlots;
     }
 
     public String getConversationStage() {

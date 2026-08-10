@@ -15,6 +15,19 @@
               <span :class="cellClass(column.field)">{{ cellValue(scope.row, column) }}</span>
             </template>
           </el-table-column>
+          <el-table-column v-if="selectable" label="操作" width="80" fixed="right">
+            <template slot-scope="scope">
+              <el-button
+                v-if="canSelectRow(scope.row)"
+                type="primary"
+                size="mini"
+                plain
+                @click="$emit('select', scope.row)"
+              >
+                选择
+              </el-button>
+            </template>
+          </el-table-column>
         </el-table>
         <el-empty v-else description="暂无数据" :image-size="64" />
         <el-pagination
@@ -82,7 +95,8 @@ export default {
     data: { type: [Object, Array], default: null },
     descriptor: { type: Object, default: null },
     pageSize: { type: Number, default: 10 },
-    table: { type: Object, default: null }
+    table: { type: Object, default: null },
+    selectable: { type: Boolean, default: false }
   },
   data() {
     return {
@@ -157,6 +171,11 @@ export default {
       if (field === 'customerCode') return 'customer-code'
       if (field === 'customerName') return 'customer-name'
       return 'table-cell-text'
+    },
+
+    /** 仅允许带有安全客户编号的候选行触发选择，避免把内部 ID 暴露到后续查询。 */
+    canSelectRow(row) {
+      return !!(row && typeof row.customerCode === 'string' && row.customerCode.trim())
     },
 
     /** 判断当前分区是否需要显示本地分页控件。 */

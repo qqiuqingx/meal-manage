@@ -65,6 +65,6 @@ class DiagnosisResultValidatorTest {
     }
 
     private ToolExecutionContext.ToolFact fact(String name, String output) {
-        return new ToolExecutionContext.ToolFact("call-1", name, "SERVICE_CUSTOMER_DETAIL", output, true, 1);
+        return new ToolExecutionContext.ToolFact("call-1", name, "SERVICE_CUSTOMER_DETAIL", "{}", output, true, 1);
     }
 }

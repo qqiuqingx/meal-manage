@@ -90,14 +90,22 @@ components:
         expectedSessionVersion: { type: integer, format: int64, minimum: 0 }
         conversationPatch: { $ref: '#/components/schemas/ConversationPatch' }
         sessionId: { type: string, minLength: 1, maxLength: 128 }
-        status: { type: string, enum: [ANSWERED, ERROR] }
+        status: { type: string, enum: [ANSWERED, NEED_MORE_INFO, ERROR] }
         assistantMessage: { type: string, maxLength: 12000 }
         slots: { $ref: '#/components/schemas/ConversationSummary' }
         diagnosisResult: { type: object, additionalProperties: true }
+        missingSlots:
+          type: array
+          maxItems: 4
+          uniqueItems: true
+          items:
+            type: string
+            enum: [CUSTOMER_OR_ORDER, RECORD_DATE, DATE_RANGE, MEAL_TYPE, PACKAGE, RULE_TOPIC]
         quickReplies:
           type: array
-          maxItems: 20
-          items: { type: string, maxLength: 200 }
+          maxItems: 6
+          uniqueItems: true
+          items: { type: string, maxLength: 20 }
         conversationStage: { type: string, maxLength: 80 }
         facts:
           type: array

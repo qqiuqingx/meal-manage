@@ -173,7 +173,6 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         response.setClientMessageId(request.getClientMessageId());
         response.setStatus("ERROR");
         response.setAssistantMessage(failureType.getFallbackMessage());
-        response.setQuickReplies(java.util.Arrays.asList("重新排查", "清空会话"));
         response.setConversationStage("ERROR");
         response.setWarnings(java.util.Collections.singletonList(failureType.name()));
         response.setPartial(true);

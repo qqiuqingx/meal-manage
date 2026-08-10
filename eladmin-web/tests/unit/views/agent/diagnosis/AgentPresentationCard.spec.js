@@ -38,8 +38,34 @@ describe('AgentPresentationCard', () => {
     expect(context.validViews).toEqual(['TABLE'])
     expect(context.hasTabs).toBe(false)
     expect(context.currentView).toBe('TABLE')
-    expect(context.hasNotice).toBe(true)
-    expect(context.noticeText).toContain('TOOL_BUDGET_EXCEEDED')
+  })
+
+  test('shows an integrity-specific empty state when a chart-only descriptor is blocked', () => {
+    const context = createContext({
+      title: '运营指标',
+      schemaVersion: 'v1',
+      sourceToolCallId: 'call-1',
+      cardType: 'METRIC_RESULT',
+      decisionSource: 'SYSTEM',
+      layout: 'TABS',
+      defaultView: 'BAR',
+      availableViews: ['BAR'],
+      chart: {
+        type: 'BAR',
+        dataPath: 'data.breakdown',
+        dimensionField: 'label',
+        metricFields: ['value'],
+        dimensionLabel: '分组',
+        metricLabels: ['数值']
+      }
+    }, null, {
+      type: 'METRIC_RESULT',
+      sourceToolCallId: 'call-1',
+      data: { data: { breakdown: [{ label: 'A', value: 1 }] } }
+    })
+
+    expect(context.chartBlocked).toBe(true)
+    expect(context.currentView).toBe(null)
   })
 
   test('uses default view and isolates failed view state per card', () => {

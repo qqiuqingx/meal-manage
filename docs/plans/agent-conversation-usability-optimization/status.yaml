@@ -1,0 +1,48 @@
+feature: agent-conversation-usability-optimization
+title: Agent 对话与易用性优化
+source_review: 2026-08-09 当前 Agent 对话、易用性与展示代码审查
+
+current_phase: complete
+
+phases:
+  - id: phase-01
+    name: 多轮业务焦点闭环
+    file: 01-conversation-context.md
+    status: completed
+    depends_on: []
+
+  - id: phase-02
+    name: 澄清与回复契约
+    file: 02-clarification-contract.md
+    status: completed
+    depends_on: [phase-01]
+
+  - id: phase-03
+    name: 结果完整性与告警展示
+    file: 03-result-integrity.md
+    status: completed
+    depends_on: [phase-02]
+
+  - id: phase-04
+    name: 任务型对话交互
+    file: 04-conversation-interactions.md
+    status: completed
+    depends_on: [phase-03]
+
+  - id: phase-05
+    name: 会话列表与生命周期
+    file: 05-session-experience.md
+    status: completed
+    depends_on: [phase-04]
+
+  - id: phase-06
+    name: 前端代码收敛
+    file: 06-frontend-convergence.md
+    status: completed
+    depends_on: [phase-05]
+
+  - id: phase-07
+    name: 联调、文档与发布验收
+    file: 07-acceptance-release.md
+    status: completed
+    depends_on: [phase-01, phase-02, phase-03, phase-04, phase-05, phase-06]

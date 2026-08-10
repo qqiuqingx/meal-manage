@@ -110,6 +110,29 @@ describe('agentPresentationValidation', () => {
     })).toEqual(['TABLE'])
   })
 
+  test('hides charts for prefixed integrity warnings but keeps presentation fallback warnings usable', () => {
+    const value = descriptor({
+      availableViews: ['TABLE', 'BAR'],
+      chart: {
+        type: 'BAR',
+        dataPath: 'data.breakdown',
+        dimensionField: 'label',
+        metricFields: ['value'],
+        dimensionLabel: '分组',
+        metricLabels: ['数值']
+      }
+    })
+
+    expect(getValidPresentationViews(value, card({ breakdown: [{ label: 'A', value: 1 }] }), {
+      warnings: ['listMealPlans:TOOL_PERMISSION_DENIED'],
+      partial: false
+    })).toEqual(['TABLE'])
+    expect(getValidPresentationViews(value, card({ breakdown: [{ label: 'A', value: 1 }] }), {
+      warnings: ['PRESENTATION_FALLBACK_APPLIED'],
+      partial: false
+    })).toEqual(['TABLE', 'BAR'])
+  })
+
   test('reports all views invalid without turning formatting failure into no-result data', () => {
     const result = validatePresentation(descriptor({
       defaultView: 'BAR',

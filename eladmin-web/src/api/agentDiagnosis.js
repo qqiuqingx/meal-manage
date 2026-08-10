@@ -47,22 +47,6 @@ export function updateChatSessionTitle(sessionId, data) {
   })
 }
 
-export function confirmActionDraft(data) {
-  return axios({
-    url: '/api/agent/action-drafts/confirm',
-    method: 'post',
-    data
-  })
-}
-
-export function queryActionAudits(params) {
-  return axios({
-    url: '/api/agent/action-drafts/audits',
-    method: 'get',
-    params
-  })
-}
-
 export function submitDiagnosisFeedback(data) {
   return axios({
     url: '/api/agent/feedback',
@@ -118,8 +102,6 @@ export default {
   getChatSession,
   archiveChatSession,
   updateChatSessionTitle,
-  confirmActionDraft,
-  queryActionAudits,
   submitDiagnosisFeedback,
   queryDiagnosisFeedback,
   queryDiagnosisFeedbackStats,

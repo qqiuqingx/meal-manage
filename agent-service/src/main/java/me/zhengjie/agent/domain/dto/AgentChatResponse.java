@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import me.zhengjie.agent.domain.chat.ChatStatus;
+import me.zhengjie.agent.domain.chat.MissingSlot;
 import me.zhengjie.agent.application.conversation.ConversationPatch;
 import me.zhengjie.agent.presentation.PresentationDescriptor;
 
@@ -29,6 +30,8 @@ public class AgentChatResponse {
     private DiagnosisSlots slots;
     private DiagnosisResponse diagnosisResult;
     private List<String> quickReplies = new ArrayList<>();
+    /** 模型明确返回的受控缺失条件；旧响应缺失时为空数组。 */
+    private List<MissingSlot> missingSlots = new ArrayList<>();
     private String conversationStage;
 
     private List<Map<String, Object>> facts = new ArrayList<>();
@@ -124,12 +127,24 @@ public class AgentChatResponse {
         this.diagnosisResult = diagnosisResult;
     }
 
+    /** 返回由 Agent 端确定性生成的快捷回复，历史响应缺失时按空数组兼容。 */
     public List<String> getQuickReplies() {
-        return quickReplies;
+        return quickReplies == null ? new ArrayList<>() : quickReplies;
     }
 
+    /** 设置由 Agent 端确定性生成的快捷回复，null 按空数组处理。 */
     public void setQuickReplies(List<String> quickReplies) {
-        this.quickReplies = quickReplies;
+        this.quickReplies = quickReplies == null ? new ArrayList<>() : quickReplies;
+    }
+
+    /** 返回受控缺失项；历史响应缺失该字段时按空数组兼容。 */
+    public List<MissingSlot> getMissingSlots() {
+        return missingSlots == null ? new ArrayList<>() : missingSlots;
+    }
+
+    /** 设置受控缺失项；null 按空数组处理。 */
+    public void setMissingSlots(List<MissingSlot> missingSlots) {
+        this.missingSlots = missingSlots == null ? new ArrayList<>() : missingSlots;
     }
 
     public String getConversationStage() {

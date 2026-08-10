@@ -191,23 +191,25 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
      * 构造当前登录客服可见的会话筛选条件。
      */
     private LambdaQueryWrapper<AgentChatSession> buildSessionWrapper(AgentChatSessionQueryCriteria criteria) {
+        String keyword = trimToNull(criteria.getKeyword());
+        Boolean archived = criteria.getArchived() == null ? Boolean.FALSE : criteria.getArchived();
         LambdaQueryWrapper<AgentChatSession> wrapper = new LambdaQueryWrapper<AgentChatSession>()
             .eq(criteria.getCustomerId() != null, AgentChatSession::getCustomerId, criteria.getCustomerId())
             .eq(StringUtils.isNotBlank(criteria.getCustomerCode()), AgentChatSession::getCustomerCode, criteria.getCustomerCode())
             .ge(StringUtils.isNotBlank(criteria.getRecordDateStart()), AgentChatSession::getRecordDate, criteria.getRecordDateStart())
             .le(StringUtils.isNotBlank(criteria.getRecordDateEnd()), AgentChatSession::getRecordDate, criteria.getRecordDateEnd())
             .eq(StringUtils.isNotBlank(criteria.getMealType()), AgentChatSession::getMealType, normalize(criteria.getMealType()))
-            .eq(criteria.getArchived() != null, AgentChatSession::getArchived, criteria.getArchived());
+            .eq(AgentChatSession::getArchived, archived);
         String operator = currentUsername();
         if (StringUtils.isNotBlank(operator)) {
             wrapper.eq(AgentChatSession::getOperator, operator);
         }
-        if (StringUtils.isNotBlank(criteria.getKeyword())) {
-            wrapper.and(item -> item.like(AgentChatSession::getTitle, criteria.getKeyword())
+        if (StringUtils.isNotBlank(keyword)) {
+            wrapper.and(item -> item.like(AgentChatSession::getTitle, keyword)
                 .or()
-                .like(AgentChatSession::getCustomerCode, criteria.getKeyword())
+                .like(AgentChatSession::getCustomerCode, keyword)
                 .or()
-                .like(AgentChatSession::getLastSummary, criteria.getKeyword()));
+                .like(AgentChatSession::getLastSummary, keyword));
         }
         return wrapper.orderByDesc(AgentChatSession::getUpdateTime)
             .orderByDesc(AgentChatSession::getLastMessageTime)
@@ -305,6 +307,10 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         dto.setBusinessResult(parseMap(message.getBusinessResultJson()));
         Map<String, Object> businessResult = dto.getBusinessResult();
         if (businessResult != null) {
+            dto.setMissingSlots(businessResult.get("missingSlots") instanceof List
+                ? (List<String>) businessResult.get("missingSlots") : Collections.emptyList());
+            dto.setQuickReplies(businessResult.get("quickReplies") instanceof List
+                ? (List<String>) businessResult.get("quickReplies") : Collections.emptyList());
             dto.setCards(businessResult.get("cards") instanceof List
                 ? (List<Map<String, Object>>) businessResult.get("cards") : Collections.emptyList());
             dto.setToolFacts(businessResult.get("toolFacts") instanceof List
@@ -481,6 +487,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         AgentChatMessage message = new AgentChatMessage();
         message.setSessionId(session.getSessionId());
         message.setRequestId(response.getRequestId());
+        message.setClientMessageId(response.getClientMessageId());
         message.setRole(ROLE_ASSISTANT);
         message.setContent(response.getAssistantMessage());
         message.setStatus(response.getStatus());
@@ -505,7 +512,18 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
                                        AgentChatRequest request,
                                        AgentChatResponse response,
                                        String requestId) {
-        DiagnosisSlots slots = response.getSlots();
+        ConversationPatchData patch = readConversationPatch(response.getConversationPatch());
+        DiagnosisSlots slots = patch.slots == null ? response.getSlots() : patch.slots;
+        if (slots == null) {
+            slots = new DiagnosisSlots();
+        }
+        response.setSlots(slots);
+        if (patch.hasLastBusinessQueryContext) {
+            response.setLastBusinessQueryContext(patch.lastBusinessQueryContext);
+        }
+        if (StringUtils.isNotBlank(patch.conversationStage)) {
+            response.setConversationStage(patch.conversationStage);
+        }
         AgentDiagnosisResponse diagnosisResult = response.getDiagnosisResult();
         session.setLastRequestId(requestId);
         session.setStage(trimToNull(response.getConversationStage()) == null ? DEFAULT_STAGE : response.getConversationStage());
@@ -516,7 +534,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         if (slots != null) {
             boolean customerFocusChanged = customerFocusChanged(session, slots);
             session.setCustomerId(slots.getCustomerId());
-            session.setCustomerCode(firstNonBlank(slots.getCustomerCode(), session.getCustomerCode()));
+            session.setCustomerCode(customerFocusChanged ? trimToNull(slots.getCustomerCode())
+                : firstNonBlank(slots.getCustomerCode(), session.getCustomerCode()));
             if (StringUtils.isNotBlank(slots.getStartDate()) && StringUtils.isNotBlank(slots.getEndDate())) {
                 session.setRecordDate(null);
                 session.setQueryStartDate(slots.getStartDate());
@@ -554,6 +573,66 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
     }
 
     /**
+     * 读取 Agent 返回的结构化会话 Patch；没有 Patch 或字段不兼容时回退到顶层兼容字段。
+     *
+     * @param patch Agent v2 响应中的 Patch 映射
+     * @return 解析后的槽位、摘要和会话阶段
+     */
+    @SuppressWarnings("unchecked")
+    private ConversationPatchData readConversationPatch(Map<String, Object> patch) {
+        if (patch == null || patch.isEmpty()) {
+            return new ConversationPatchData(null, false, null, null);
+        }
+        DiagnosisSlots slots = parseConversationSlots(patch.get("slots"));
+        boolean hasLastContext = patch.containsKey("lastBusinessQueryContext");
+        Map<String, Object> lastContext = null;
+        if (hasLastContext && patch.get("lastBusinessQueryContext") instanceof Map) {
+            lastContext = (Map<String, Object>) patch.get("lastBusinessQueryContext");
+        } else if (hasLastContext && patch.get("lastBusinessQueryContext") != null) {
+            hasLastContext = false;
+        }
+        Object stage = patch.get("conversationStage");
+        String conversationStage = stage == null ? null : trimToNull(String.valueOf(stage));
+        return new ConversationPatchData(slots, hasLastContext, lastContext, conversationStage);
+    }
+
+    /**
+     * 将 Patch 中的槽位值转换为主系统 DTO，兼容 Map、DTO 和历史缺失值。
+     *
+     * @param value Patch 中的槽位原始值
+     * @return 可使用的槽位，无法转换时返回 null
+     */
+    private DiagnosisSlots parseConversationSlots(Object value) {
+        if (value instanceof DiagnosisSlots) {
+            return (DiagnosisSlots) value;
+        }
+        if (!(value instanceof Map)) {
+            return null;
+        }
+        try {
+            return JSON.parseObject(JSON.toJSONString(value), DiagnosisSlots.class);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /** 结构化会话 Patch 的主系统兼容解析结果。 */
+    private static final class ConversationPatchData {
+        private final DiagnosisSlots slots;
+        private final boolean hasLastBusinessQueryContext;
+        private final Map<String, Object> lastBusinessQueryContext;
+        private final String conversationStage;
+
+        private ConversationPatchData(DiagnosisSlots slots, boolean hasLastBusinessQueryContext,
+                                      Map<String, Object> lastBusinessQueryContext, String conversationStage) {
+            this.slots = slots;
+            this.hasLastBusinessQueryContext = hasLastBusinessQueryContext;
+            this.lastBusinessQueryContext = lastBusinessQueryContext;
+            this.conversationStage = conversationStage;
+        }
+    }
+
+    /**
      * 标准化下游助手响应，确保会话ID、请求ID和幂等消息ID始终回传给前端。
      */
     private AgentChatResponse normalizeResponse(AgentChatResponse response,
@@ -564,8 +643,9 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         normalized.setSessionId(StringUtils.defaultIfBlank(normalized.getSessionId(), sessionId));
         normalized.setRequestId(StringUtils.defaultIfBlank(normalized.getRequestId(), requestId));
         normalized.setClientMessageId(clientMessageId);
-        normalized.setStatus(StringUtils.defaultIfBlank(normalized.getStatus(), "ERROR"));
-        normalized.setConversationStage(StringUtils.defaultIfBlank(normalized.getConversationStage(), "ERROR"));
+        String status = StringUtils.defaultIfBlank(normalized.getStatus(), "ERROR");
+        normalized.setStatus(status);
+        normalized.setConversationStage(StringUtils.defaultIfBlank(normalized.getConversationStage(), status));
         if (normalized.getSlots() == null) {
             normalized.setSlots(new DiagnosisSlots());
         }
@@ -664,7 +744,11 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         boolean hasPresentations = response.getPresentations() != null && !response.getPresentations().isEmpty();
         boolean hasToolFacts = response.getToolFacts() != null && !response.getToolFacts().isEmpty();
         boolean hasToolTrace = response.getToolTraceSummary() != null && !response.getToolTraceSummary().isEmpty();
-        if (!hasCards && !hasPresentations && !hasToolFacts && !hasToolTrace && !response.isPartial()) {
+        boolean hasConversationProtocol = "NEED_MORE_INFO".equalsIgnoreCase(response.getStatus())
+            || (response.getMissingSlots() != null && !response.getMissingSlots().isEmpty())
+            || (response.getQuickReplies() != null && !response.getQuickReplies().isEmpty());
+        if (!hasCards && !hasPresentations && !hasToolFacts && !hasToolTrace && !response.isPartial()
+            && !hasConversationProtocol) {
             return null;
         }
         Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
@@ -679,6 +763,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         snapshot.put("queriedAt", response.getQueriedAt());
         snapshot.put("lastBusinessQueryContext", response.getLastBusinessQueryContext());
         snapshot.put("conversationPatch", response.getConversationPatch());
+        snapshot.put("missingSlots", response.getMissingSlots());
+        snapshot.put("quickReplies", response.getQuickReplies());
         return snapshot;
     }
 
@@ -707,6 +793,10 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
             ? (Map<String, Object>) snapshot.get("lastBusinessQueryContext") : null);
         response.setConversationPatch(snapshot.get("conversationPatch") instanceof Map
             ? (Map<String, Object>) snapshot.get("conversationPatch") : null);
+        response.setMissingSlots(snapshot.get("missingSlots") instanceof List
+            ? (List<String>) snapshot.get("missingSlots") : Collections.emptyList());
+        response.setQuickReplies(snapshot.get("quickReplies") instanceof List
+            ? (List<String>) snapshot.get("quickReplies") : Collections.emptyList());
     }
 
     /**
