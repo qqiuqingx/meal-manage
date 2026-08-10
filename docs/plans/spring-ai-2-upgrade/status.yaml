@@ -1,0 +1,24 @@
+feature: spring-ai-2-upgrade
+status: complete
+current_phase: phase-04
+
+phases:
+  - id: phase-01
+    name: 版本基线与依赖对齐
+    file: 01-dependency-baseline.md
+    status: completed
+
+  - id: phase-02
+    name: 模型网关与 Provider 迁移
+    file: 02-model-gateway-migration.md
+    status: completed
+
+  - id: phase-03
+    name: Boot 4 配置与启动兼容
+    file: 03-boot4-runtime-compatibility.md
+    status: completed
+
+  - id: phase-04
+    name: 全链路回归与发布收口
+    file: 04-regression-and-release.md
+    status: completed

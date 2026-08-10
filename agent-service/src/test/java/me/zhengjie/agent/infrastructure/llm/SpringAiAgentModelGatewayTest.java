@@ -37,35 +37,63 @@ class SpringAiAgentModelGatewayTest {
     }
 
     @Test
-    void selectedProfileModelMustBeAppliedToChatClient() {
-        ChatOptions[] captured = new ChatOptions[1];
+    void selectedProfileModelsMustBeAppliedToClonedBuilder() {
+        java.util.List<ChatOptions.Builder<?>> captured = new java.util.ArrayList<>();
         ChatClient chatClient = proxy(ChatClient.class, (method, args) -> defaultValue(method.getReturnType()));
-        Object[] builderHolder = new Object[1];
-        ChatClient.Builder builder = proxy(ChatClient.Builder.class, (method, args) -> {
+        boolean[] originalBuilderMutated = {false};
+        Object[] clonedBuilderHolder = new Object[1];
+        ChatClient.Builder clonedBuilder = proxy(ChatClient.Builder.class, (method, args) -> {
             if ("defaultOptions".equals(method.getName())) {
-                captured[0] = (ChatOptions) args[0];
-                return builderHolder[0];
+                captured.add((ChatOptions.Builder<?>) args[0]);
+                return clonedBuilderHolder[0];
             }
             if ("build".equals(method.getName())) return chatClient;
-            if ("clone".equals(method.getName())) return builderHolder[0];
+            if ("clone".equals(method.getName())) return clonedBuilderHolder[0];
             return ChatClient.Builder.class.isAssignableFrom(method.getReturnType())
-                ? builderHolder[0] : defaultValue(method.getReturnType());
+                ? clonedBuilderHolder[0] : defaultValue(method.getReturnType());
         });
-        builderHolder[0] = builder;
-        SpringAiAgentModelGateway gateway = gateway(properties("diagnosis", true, true), builder);
+        clonedBuilderHolder[0] = clonedBuilder;
+        Object[] originalBuilderHolder = new Object[1];
+        ChatClient.Builder originalBuilder = proxy(ChatClient.Builder.class, (method, args) -> {
+            if ("clone".equals(method.getName())) return clonedBuilder;
+            if ("defaultOptions".equals(method.getName())) {
+                originalBuilderMutated[0] = true;
+                return originalBuilderHolder[0];
+            }
+            return ChatClient.Builder.class.isAssignableFrom(method.getReturnType())
+                ? originalBuilderHolder[0] : defaultValue(method.getReturnType());
+        });
+        originalBuilderHolder[0] = originalBuilder;
+        SpringAiAgentModelGateway gateway = gateway(propertiesWithProfiles(), originalBuilder);
 
-        assertSame(chatClient, gateway.chatClient("diagnosis"));
-        assertEquals("model-diagnosis", captured[0].getModel());
+        assertSame(chatClient, gateway.chatClient("default"));
+        assertSame(chatClient, gateway.chatClient("presentation"));
+        assertEquals(java.util.List.of("model-default", "model-presentation"),
+            captured.stream().map(builder -> builder.build().getModel()).toList());
+        assertFalse(originalBuilderMutated[0]);
     }
 
     private AgentProperties properties(String profileId, boolean structuredOutput, boolean toolCalling) {
         AgentProperties properties = new AgentProperties();
+        properties.getModels().setProfiles(new LinkedHashMap<>(Map.of(profileId,
+            modelProfile(profileId, structuredOutput, toolCalling))));
+        return properties;
+    }
+
+    private AgentProperties propertiesWithProfiles() {
+        AgentProperties properties = new AgentProperties();
+        properties.getModels().setProfiles(new LinkedHashMap<>(Map.of(
+            "default", modelProfile("default", true, true),
+            "presentation", modelProfile("presentation", true, true))));
+        return properties;
+    }
+
+    private AgentProperties.ModelProfile modelProfile(String profileId, boolean structuredOutput, boolean toolCalling) {
         AgentProperties.ModelProfile profile = new AgentProperties.ModelProfile();
         profile.setModel("model-" + profileId);
         profile.setStructuredOutput(structuredOutput);
         profile.setToolCalling(toolCalling);
-        properties.getModels().setProfiles(new LinkedHashMap<>(Map.of(profileId, profile)));
-        return properties;
+        return profile;
     }
 
     private SpringAiAgentModelGateway gateway(AgentProperties properties, ChatClient.Builder builder) {

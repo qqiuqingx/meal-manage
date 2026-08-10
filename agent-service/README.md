@@ -15,10 +15,13 @@
 
 ## 环境与启动
 
-- Java 17，Maven 3.9.9；执行前使用 `jenv shell 17` 和 `mvn399`。
+- 运行基线：Spring Boot 4.0.7、Spring AI 2.0.0、Spring Framework 7.x、Java 17，Maven 3.9.9；执行前使用 `jenv shell 17` 和 `mvn399`。
 - 默认端口：`18081`。主系统地址：`AGENT_CONTEXT_BASE_URL`（默认 `http://localhost:8000`）。
 - 内部令牌：`AGENT_INTERNAL_TOKEN`；生产、预发必须配置非空值。
 - 模型配置使用 `AGENT_DEEPSEEK_API_KEY`、`AGENT_DEEPSEEK_BASE_URL`、`AGENT_DEEPSEEK_MODEL`，并由 `AgentModelGateway` 选择 profile。
+- OpenAI-compatible fallback 默认关闭；只有同时设置 `AGENT_FALLBACK_OPENAI_ENABLED=true`、`AGENT_FALLBACK_OPENAI_BASE_URL`、`AGENT_FALLBACK_OPENAI_API_KEY` 和 `AGENT_FALLBACK_OPENAI_MODEL` 时才会参与主 Provider 失败后的业务层 fallback。
+- 当前运行基线为 Spring Boot 4.0.7 + Spring AI 2.0.0；Jackson 2 通过 `spring-boot-jackson2` 和 `spring.http.converters.preferred-json-mapper: jackson2` 兼容现有 `com.fasterxml.jackson.databind`/YAMLMapper 代码。
+- Boot 4 已将 Jackson 2 HTTP Converter 标记为待删除；在完成 Jackson 3 迁移前，不要恢复旧的 `spring.jackson` 或 `spring.ai.deepseek.chat.options.model` 配置。迁移时必须同步验证 HTTP JSON 严格反序列化和 YAML 规则加载。
 
 ```bash
 cd agent-service
@@ -41,6 +44,10 @@ mvn -q spring-boot:run
 | `AGENT_CHAT_LOG_CONTENT` | `true` | 是否记录脱敏后的 LLM 提示/回答、工具入参/出参和主系统查询正文；设为 `false` 仅保留摘要 |
 
 生产 profile 下内部令牌为空会在启动期失败。模型不可用时返回稳定 fallback；不会绕过工具白名单、主系统权限或数据护栏。
+
+健康检查：`GET /api/agent/health`；本地启动冒烟时使用 `AGENT_DEEPSEEK_API_KEY=unused` 和测试内部令牌即可，不会触发模型请求。若启动失败，优先检查 JDK/Maven 版本、`AGENT_INTERNAL_TOKEN`、规则目录和 `AGENT_CONTEXT_BASE_URL`；OpenAI-compatible 配置不完整时应保持禁用，而不是填入占位密钥。
+
+应用回滚不涉及数据库或不可逆配置变更：停止当前 JAR，恢复部署系统归档的上一版 Spring Boot 3.5.14 / Spring AI 1.1.6 制品，按原命令启动，并重新检查 `/api/agent/health`、普通对话和单工具对话。
 
 ## 规则资源
 

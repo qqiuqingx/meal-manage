@@ -14,6 +14,21 @@
 | 诊断规则 | YAML 规则目录，requiredTools 引用统一工具 | `rules/{scene}/` |
 | 会话状态 | 主系统快照 + `sessionVersion`，Agent 无本地会话缓存 | v2 信封与 `ConversationPatch` |
 
+## Spring AI 2 / Boot 4 运行基线
+
+| 项目 | 当前约束 | 说明 |
+|---|---|---|
+| 框架版本 | Spring Boot 4.0.7、Spring AI 2.0.0、Spring Framework 7.x | 由 `agent-service/pom.xml` 中的两个 BOM 统一管理 |
+| 主 Provider | `spring-ai-starter-model-deepseek` | `spring.ai.model.chat=deepseek`，模型名使用 `spring.ai.deepseek.chat.model` |
+| 备用 Provider | `spring-ai-openai` + `OpenAiCompatibleProviderModelGateway` | 默认关闭；完整 base-url、api-key、model 且显式启用后才参与 fallback，不启用 OpenAI 自动配置 Starter |
+| 工具循环责任 | `BusinessAgentRunner` 请求级 `ToolCallAdvisor` | Provider 模型 Builder 不注入额外 `ToolCallingManager`，工具白名单、动态回调和预算仍由业务层控制 |
+| 重试与 fallback | `FallbackModelExecutor` | SDK 不配置隐式重试，主/备用 Provider 的尝试顺序和可恢复失败重放由业务层控制 |
+| JSON/YAML | `spring-boot-jackson2` + `spring.http.converters.preferred-json-mapper: jackson2` | 保持 `com.fasterxml.jackson.databind`、严格未知字段和 YAMLMapper；这是迁移到 Jackson 3 前的过渡边界 |
+
+### 升级回滚
+
+本次升级没有数据库迁移和不可逆配置中心变更。发布失败时整体恢复部署系统归档的上一版 Spring Boot 3.5.14 / Spring AI 1.1.6 JAR，不单独混用旧 POM 与新源码；恢复后重新执行健康接口、普通对话和单工具对话验证。
+
 ## 工具集合
 
 `searchCustomerProfiles`、`searchServiceCustomers`、`getServiceCustomerDetail`、`listMealPlans`、`listVerifications`、`listRefunds`、`previewDishCandidates`、`listScheduledDishes`、`searchDishes`、`getPackageDetail`、`queryBusinessMetrics`、`explainBusinessRule`。
