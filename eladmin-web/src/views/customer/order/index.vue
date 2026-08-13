@@ -181,6 +181,7 @@
     <!--表单组件-->
     <el-dialog
       ref="dialogRef"
+      v-loading="agentDraftLoading"
       append-to-body
       :close-on-click-modal="false"
       :before-close="handleDialogClose"
@@ -189,6 +190,25 @@
       width="900px"
       top="5vh"
     >
+      <el-alert
+        v-if="agentDraft && !form.id"
+        title="来自智能客服草稿，请核对并补齐订单资料后手动提交。"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 12px;"
+      >
+        <template slot="description">
+          草稿版本 {{ agentDraft.revision }}；待补充 {{ agentDraft.missingFields.length }} 项。
+          <el-button v-if="agentDraft.sourceSessionId" type="text" @click="returnToAgentSession">返回原会话</el-button>
+          <div v-if="agentDraft.missingFields.length" class="agent-draft-review-list">
+            缺失字段：{{ agentDraft.missingFields.join('、') }}
+          </div>
+          <div v-if="agentDraft.warnings.length" class="agent-draft-review-list">
+            复核提示：{{ agentDraft.warnings.map(item => item.message || item.code).join('；') }}
+          </div>
+        </template>
+      </el-alert>
       <el-form ref="form" :model="form" :rules="rules" size="small" label-width="110px">
         <OrderForm
           ref="orderFormRef"
@@ -253,6 +273,9 @@ import crudOperation from '@crud/CRUD.operation'
 import OrderForm from '@/components/Order/OrderForm.vue'
 import { parseTime } from '@/utils/index'
 import { mapGetters } from 'vuex'
+import { claimFormDraft } from '@/api/agentFormDraft'
+import * as profileApi from '@/api/customer/profile'
+import { mapAgentOrderDraft } from './utils/agentOrderDraftMapper'
 
 function cleanReplaceRules(rules) {
   if (!rules || !rules.length) return []
@@ -263,6 +286,7 @@ function cleanReplaceRules(rules) {
     targetDishId: r.targetDishId,
     targetDishName: r.targetDishName,
     targetDishType: r.targetDishType,
+    enabled: r.enabled == null ? true : r.enabled,
     remark: r.remark
   }))
 }
@@ -296,6 +320,8 @@ export default {
       },
       customerSourceOptions: [],
       editRequestId: 0,
+      agentDraft: null,
+      agentDraftLoading: false,
       rules: {
         customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
         totalAmount: [{
@@ -355,11 +381,12 @@ export default {
     }
   },
   created() {
-    const { customerCode, customerName, scheduleDate } = this.$route.query || {}
+    const { customerCode, customerName, scheduleDate, draftId } = this.$route.query || {}
     if (customerCode) this.query.customerCode = customerCode
     if (customerName) this.query.customerName = customerName
     if (scheduleDate) this.query.scheduleDate = scheduleDate
     this.loadCustomerSourceDict()
+    if (draftId) this.claimAgentDraft(draftId)
   },
   methods: {
     loadCustomerSourceDict() {
@@ -391,6 +418,7 @@ export default {
     [CRUD.HOOK.beforeToAdd]() {
       // 重置表单
       Object.assign(this.form, createOrderDefaultForm())
+      this.agentDraft = null
       return true
     },
     [CRUD.HOOK.beforeSubmit]() {
@@ -404,6 +432,40 @@ export default {
     },
     cancelDialog() {
       this.crud.cancelCU()
+    },
+    /** 领取订单草稿、重新确认客户可见性，再应用到新增表单。 */
+    async claimAgentDraft(draftId) {
+      try {
+        this.agentDraftLoading = true
+        const response = await claimFormDraft(draftId)
+        const claim = response.data || response
+        const mapped = mapAgentOrderDraft(claim, createOrderDefaultForm())
+        if (!mapped) throw new Error('草稿类型、状态、客户或版本不受支持')
+        const customerResponse = await profileApi.getProfile(mapped.form.customerId)
+        const customer = customerResponse.data || customerResponse
+        if (!customer || customer.id !== mapped.form.customerId) throw new Error('草稿客户已失效或不可见')
+        this.crud.toAdd()
+        await this.$nextTick()
+        Object.assign(this.form, mapped.form, {
+          customerCode: customer.customerCode || mapped.form.customerCode,
+          customerName: customer.customerName,
+          phone: customer.phone,
+          allergyTags: customer.allergyTags || [],
+          specialRequirements: customer.specialRequirements || null
+        })
+        this.agentDraft = mapped
+      } catch (e) {
+        this.agentDraft = null
+        this.$message.error((e && e.message) || '草稿领取失败，请返回智能客服重试')
+      } finally {
+        this.agentDraftLoading = false
+      }
+    },
+    /** 返回固定智能客服页面并携带受控来源会话标识。 */
+    returnToAgentSession() {
+      if (!this.agentDraft || !this.agentDraft.sourceSessionId) return false
+      this.$router.push({ path: '/agent/diagnosis', query: { sessionId: this.agentDraft.sourceSessionId }})
+      return true
     },
     async handleEdit(row) {
       const requestId = this.editRequestId + 1
@@ -460,6 +522,17 @@ export default {
         ...this.form,
         replaceRules: cleanReplaceRules(this.form.replaceRules)
       }
+      if (!this.form.id && this.agentDraft) {
+        payload.agentDraftId = this.agentDraft.draftId
+        payload.agentDraftRevision = this.agentDraft.revision
+        delete payload.id
+        delete payload.orderCode
+        delete payload.verifiedCount
+        delete payload.verifiedAmount
+        delete payload.mealBalance
+        delete payload.remainingCount
+        delete payload.customMenuImage
+      }
       if (!this.canEditAmount) {
         delete payload.depositAmount
         delete payload.totalAmount
@@ -483,8 +556,12 @@ export default {
           await orderApi.edit(payload)
           this.$message.success('编辑成功')
         } else {
-          await orderApi.add(payload)
+          const sourceSessionId = this.agentDraft && this.agentDraft.sourceSessionId
+          const response = await orderApi.add(payload)
+          const orderId = response.data || response
           this.$message.success('新增成功')
+          this.agentDraft = null
+          if (sourceSessionId && orderId) this.showAgentDraftSuccess(orderId, sourceSessionId)
         }
         this.crud.cancelCU()
         this.crud.refresh()
@@ -494,6 +571,21 @@ export default {
       } finally {
         this.submitLoading = false
       }
+    },
+    /** 草稿订单创建成功后允许查看订单或返回来源会话。 */
+    showAgentDraftSuccess(orderId, sourceSessionId) {
+      this.$confirm('订单已创建，可查看新订单或返回原智能客服会话。', '草稿提交成功', {
+        confirmButtonText: '查看新订单',
+        cancelButtonText: '返回原会话',
+        distinguishCancelAndClose: true,
+        type: 'success'
+      }).then(async() => {
+        const response = await orderApi.getOrder(orderId)
+        const detail = response.data || response
+        this.crud.toEdit(detail)
+      }).catch(action => {
+        if (action === 'cancel') this.$router.push({ path: '/agent/diagnosis', query: { sessionId: sourceSessionId }})
+      })
     },
     onCustomerChange(customerId, customer) {
       // 客户变更事件处理（如有需要可扩展）

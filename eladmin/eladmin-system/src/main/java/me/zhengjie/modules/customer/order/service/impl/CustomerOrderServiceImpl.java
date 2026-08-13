@@ -1,6 +1,10 @@
 package me.zhengjie.modules.customer.order.service.impl;
 
 import me.zhengjie.exception.BadRequestException;
+import me.zhengjie.modules.agent.formdraft.domain.AgentFormDraft;
+import me.zhengjie.modules.agent.formdraft.service.AgentFormDraftService;
+import me.zhengjie.modules.agent.security.AgentCustomerDataScopeContext;
+import me.zhengjie.modules.agent.security.AgentCustomerDataScopeResolver;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderBalanceRecalculateResult;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
@@ -85,6 +89,12 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
     @Autowired
     private MealPlanCustomerMapper mealPlanCustomerMapper;
+
+    @Autowired
+    private AgentFormDraftService agentFormDraftService;
+
+    @Autowired
+    private AgentCustomerDataScopeResolver agentCustomerDataScopeResolver;
 
     private static final DateTimeFormatter ORDER_CODE_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
 
@@ -198,7 +208,17 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void create(CustomerOrderSaveDto dto) {
+    public Long create(CustomerOrderSaveDto dto) {
+        AgentFormDraft lockedDraft = null;
+        if (dto != null && StringUtils.isNotBlank(dto.getAgentDraftId())) {
+            try {
+                AgentCustomerDataScopeContext.bind(agentCustomerDataScopeResolver.resolveCurrent());
+                lockedDraft = agentFormDraftService.lockForSubmission(dto.getAgentDraftId(), SecurityUtils.getCurrentUserId(),
+                    dto.getAgentDraftRevision(), "CREATE_ORDER");
+            } finally {
+                AgentCustomerDataScopeContext.clear();
+            }
+        }
         // 先校验订单冲突
         validateOrderConflict(dto, null);
         validateAndNormalize(dto, null);
@@ -218,7 +238,10 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             try {
                 orderMapper.insert(order);
                 saveReplaceRules(order.getId(), dto.getReplaceRules());
-                return;
+                if (lockedDraft != null) {
+                    agentFormDraftService.markSubmitted(lockedDraft, order.getId());
+                }
+                return order.getId();
             } catch (DuplicateKeyException ex) {
                 if (attempt >= 2) {
                     throw new BadRequestException("订单编号生成失败，请重试或联系管理员");

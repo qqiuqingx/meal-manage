@@ -2,6 +2,7 @@ package me.zhengjie.agent.tool;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.client.MainSystemQueryClient;
+import me.zhengjie.agent.client.MainSystemFormDraftClient;
 import me.zhengjie.agent.client.MainSystemQueryException;
 import me.zhengjie.agent.config.AgentProperties;
 import me.zhengjie.agent.guardrail.ToolExecutionContext;
@@ -35,6 +36,7 @@ import me.zhengjie.agent.tool.input.QueryBusinessMetricsInput;
 import me.zhengjie.agent.tool.input.SearchCustomerProfilesInput;
 import me.zhengjie.agent.tool.input.SearchDishesInput;
 import me.zhengjie.agent.tool.input.SearchServiceCustomersInput;
+import me.zhengjie.agent.tool.input.formdraft.SaveFormDraftInput;
 
 /**
  * 统一强类型工具门面。
@@ -47,6 +49,7 @@ public class BusinessAgentTools {
     private static final Logger log = LoggerFactory.getLogger(BusinessAgentTools.class);
     private final ToolRegistry registry;
     private final MainSystemQueryClient queryClient;
+    private final MainSystemFormDraftClient formDraftClient;
     private final ToolInputGuardrail inputGuardrail;
     private final ToolOutputGuardrail outputGuardrail;
     private final ObjectMapper objectMapper;
@@ -54,10 +57,12 @@ public class BusinessAgentTools {
     private final Map<String, Function<Object, Object>> executors = new LinkedHashMap<>();
 
     public BusinessAgentTools(ToolRegistry registry, MainSystemQueryClient queryClient,
+                              MainSystemFormDraftClient formDraftClient,
                               ToolInputGuardrail inputGuardrail, ToolOutputGuardrail outputGuardrail,
                               ObjectMapper objectMapper, AgentProperties properties) {
         this.registry = registry;
         this.queryClient = queryClient;
+        this.formDraftClient = formDraftClient;
         this.inputGuardrail = inputGuardrail;
         this.outputGuardrail = outputGuardrail;
         this.objectMapper = objectMapper;
@@ -105,6 +110,7 @@ public class BusinessAgentTools {
         executors.put(ToolRegistry.GET_PACKAGE_DETAIL, input -> queryClient.getPackageDetail((GetPackageDetailInput) input));
         executors.put(ToolRegistry.QUERY_BUSINESS_METRICS, input -> queryClient.queryBusinessMetrics((QueryBusinessMetricsInput) input));
         executors.put(ToolRegistry.EXPLAIN_BUSINESS_RULE, input -> queryClient.explainBusinessRule((ExplainBusinessRuleInput) input));
+        executors.put(ToolRegistry.SAVE_FORM_DRAFT, input -> formDraftClient.save((SaveFormDraftInput) input));
     }
 
     /** 在 Spring AI callback 之前执行输入/输出/预算/缓存护栏。 */
@@ -132,7 +138,7 @@ public class BusinessAgentTools {
             try {
                 Object input = inputGuardrail.validate((ToolRegistry.ToolSpec<Object>) spec, rawInput);
                 String key = context.cacheKey(spec.name(), rawInput);
-                String cached = context.cached(key);
+                String cached = spec.cacheable() ? context.cached(key) : null;
                 if (cached != null) {
                     String callId = context.recordCached(spec.name(), spec.cardType(), rawInput, cached);
                     logToolResponse(spec.name(), callId, "CACHED", null,
@@ -143,7 +149,7 @@ public class BusinessAgentTools {
                 Object output = executors.get(spec.name()).apply(input);
                 String json = objectMapper.writeValueAsString(output);
                 outputGuardrail.validate(spec, json);
-                String callId = context.record(spec.name(), spec.cardType(), rawInput, json, true);
+                String callId = context.record(spec.name(), spec.cardType(), rawInput, json, true, spec.cacheable());
                 logToolResponse(spec.name(), callId, "SUCCESS", null,
                     null, json, resultCount(callId), textLength(json), startedAt);
                 return json;
@@ -151,7 +157,7 @@ public class BusinessAgentTools {
                 String code = stableCode(exception);
                 String json = errorJson(code, exception);
                 String callId = null;
-                try { callId = context.record(spec.name(), spec.cardType(), rawInput, json, false); }
+                try { callId = context.record(spec.name(), spec.cardType(), rawInput, json, false, false); }
                 catch (RuntimeException ignored) { /* 预算错误本身不应覆盖稳定工具错误。 */ }
                 logToolResponse(spec.name(), callId, "FAILED", code,
                     exception.getMessage(), json, resultCount(callId), textLength(json), startedAt);
@@ -159,7 +165,7 @@ public class BusinessAgentTools {
             } catch (Exception exception) {
                 String json = errorJson("TOOL_OUTPUT_INVALID", exception);
                 String callId = null;
-                try { callId = context.record(spec.name(), spec.cardType(), rawInput, json, false); }
+                try { callId = context.record(spec.name(), spec.cardType(), rawInput, json, false, false); }
                 catch (RuntimeException ignored) { }
                 logToolResponse(spec.name(), callId, "FAILED", "TOOL_OUTPUT_INVALID",
                     exception.getMessage(), json, resultCount(callId), textLength(json), startedAt);

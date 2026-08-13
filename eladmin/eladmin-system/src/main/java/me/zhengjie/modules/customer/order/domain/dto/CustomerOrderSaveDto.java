@@ -24,6 +24,12 @@ public class CustomerOrderSaveDto implements Serializable {
 
     private Long id;
 
+    /** Agent 辅助草稿 ID，仅用于创建事务关联，不写入订单表。 */
+    private String agentDraftId;
+
+    /** 页面领取的 Agent 草稿版本，仅用于防止重复或过期提交。 */
+    private Integer agentDraftRevision;
+
     /**
      * 客户ID
      */

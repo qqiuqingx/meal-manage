@@ -45,6 +45,7 @@ public class PresentationRegistry {
         this.rules = Collections.unmodifiableMap(target);
 
         Set<String> currentCardTypes = toolRegistry.all().stream()
+            .filter(spec -> spec.effect() == ToolRegistry.ToolEffect.READ_ONLY)
             .map(ToolRegistry.ToolSpec::cardType).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         this.currentCardTypeCount = currentCardTypes.size();
         List<String> warnings = new ArrayList<>();
@@ -63,7 +64,9 @@ public class PresentationRegistry {
 
     /** 返回当前工具卡片类型数量，用于健康摘要。 */
     public int currentCardTypeCount(ToolRegistry toolRegistry) {
-        return (int) toolRegistry.all().stream().map(ToolRegistry.ToolSpec::cardType).distinct().count();
+        return (int) toolRegistry.all().stream()
+            .filter(spec -> spec.effect() == ToolRegistry.ToolEffect.READ_ONLY)
+            .map(ToolRegistry.ToolSpec::cardType).distinct().count();
     }
 
     /** 获取指定卡片规则；未知卡片由 Phase 03 继续处理。 */

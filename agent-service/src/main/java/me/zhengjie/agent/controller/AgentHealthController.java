@@ -29,18 +29,20 @@ public class AgentHealthController {
     private final AgentModelGateway modelGateway;
     private final AgentProperties properties;
     private final PresentationRegistry presentationRegistry;
+    private final ToolRegistry toolRegistry;
 
     /** Spring 构造入口，展示规则已在注册表创建时完成启动校验。 */
     @Autowired
     public AgentHealthController(RuleRegistryLoader ruleRegistryLoader,
                                  MainSystemQueryClient toolDataClient,
                                  AgentModelGateway modelGateway, AgentProperties properties,
-                                 PresentationRegistry presentationRegistry) {
+                                 PresentationRegistry presentationRegistry, ToolRegistry toolRegistry) {
         this.ruleRegistryLoader = ruleRegistryLoader;
         this.toolDataClient = toolDataClient;
         this.modelGateway = modelGateway;
         this.properties = properties;
         this.presentationRegistry = presentationRegistry;
+        this.toolRegistry = toolRegistry;
     }
 
     /** 保留手工构造入口，兼容不加载 Spring 展示 Bean 的旧健康测试。 */
@@ -48,7 +50,7 @@ public class AgentHealthController {
                                  MainSystemQueryClient toolDataClient,
                                  AgentModelGateway modelGateway, AgentProperties properties) {
         this(ruleRegistryLoader, toolDataClient, modelGateway, properties,
-            new PresentationRegistry(new ToolRegistry()));
+            new PresentationRegistry(new ToolRegistry()), new ToolRegistry());
     }
 
     /**
@@ -74,6 +76,17 @@ public class AgentHealthController {
         response.setPresentationRuleCount(presentationRegistry == null ? 0 : presentationRegistry.ruleCount());
         response.setPresentationWarnings(presentationRegistry == null ? java.util.List.of("PRESENTATION_REGISTRY_UNAVAILABLE")
             : presentationRegistry.healthWarnings());
+        int readOnlyCount = 0;
+        boolean formDraftWriteRegistered = false;
+        if (toolRegistry != null) {
+            for (ToolRegistry.ToolSpec<?> spec : toolRegistry.all()) {
+                if (spec.effect() == ToolRegistry.ToolEffect.READ_ONLY) readOnlyCount++;
+                if (spec.effect() == ToolRegistry.ToolEffect.FORM_DRAFT_WRITE
+                    && ToolRegistry.SAVE_FORM_DRAFT.equals(spec.name())) formDraftWriteRegistered = true;
+            }
+        }
+        response.setReadOnlyToolCount(readOnlyCount);
+        response.setFormDraftWriteToolRegistered(formDraftWriteRegistered);
         response.setStatus(response.isRuleRegistryLoaded() ? "UP" : "DOWN");
         return response;
     }

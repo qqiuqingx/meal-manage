@@ -1,0 +1,54 @@
+feature: agent-form-draft-navigation
+title: Agent 客户/订单表单草稿与页面预填
+design: docs/superpowers/specs/2026-08-12-agent-form-draft-navigation-design.md
+
+current_phase: complete
+
+phases:
+  - id: phase-01
+    name: 草稿生命周期与主系统接口
+    file: 01-draft-lifecycle-main-system.md
+    status: completed
+    depends_on: []
+
+  - id: phase-02
+    name: LLM saveFormDraft 工具
+    file: 02-llm-save-draft-tool.md
+    status: completed
+    depends_on: [phase-01]
+
+  - id: phase-03
+    name: 确定性草稿动作与会话恢复
+    file: 03-deterministic-action-session.md
+    status: completed
+    depends_on: [phase-02]
+
+  - id: phase-04
+    name: 对话草稿卡片与固定导航
+    file: 04-chat-card-navigation.md
+    status: completed
+    depends_on: [phase-03]
+
+  - id: phase-05
+    name: 客户与首单预填提交
+    file: 05-customer-first-order-prefill.md
+    status: completed
+    depends_on: [phase-04]
+
+  - id: phase-06
+    name: 已有客户新增订单预填提交
+    file: 06-existing-customer-order-prefill.md
+    status: completed
+    depends_on: [phase-05]
+
+  - id: phase-07
+    name: 安全、幂等与端到端验收
+    file: 07-security-idempotency-e2e.md
+    status: completed
+    depends_on: [phase-01, phase-02, phase-03, phase-04, phase-05, phase-06]
+
+  - id: phase-08
+    name: 文档、灰度与发布收口
+    file: 08-docs-rollout-release.md
+    status: completed
+    depends_on: [phase-07]

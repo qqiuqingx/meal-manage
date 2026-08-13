@@ -71,6 +71,12 @@ public class AgentChatResponse {
     /** Agent 返回的最近业务查询脱敏摘要。 */
     private Map<String, Object> lastBusinessQueryContext;
 
+    /** Agent 草稿工具成功事实生成的脱敏摘要。 */
+    private AgentFormDraftSummaryDto formDraftSummary;
+
+    /** 固定动作类型和最小参数，不接受任意 URL 或 route。 */
+    private List<AgentUiActionDto> uiActions = new ArrayList<>();
+
     public String getRequestId() {
         return requestId;
     }
@@ -194,4 +200,8 @@ public class AgentChatResponse {
     public void setQueriedAt(String queriedAt) { this.queriedAt = queriedAt; }
     public Map<String, Object> getLastBusinessQueryContext() { return lastBusinessQueryContext; }
     public void setLastBusinessQueryContext(Map<String, Object> lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
+    public AgentFormDraftSummaryDto getFormDraftSummary() { return formDraftSummary; }
+    public void setFormDraftSummary(AgentFormDraftSummaryDto formDraftSummary) { this.formDraftSummary = formDraftSummary; }
+    public List<AgentUiActionDto> getUiActions() { return uiActions == null ? new ArrayList<>() : uiActions; }
+    public void setUiActions(List<AgentUiActionDto> uiActions) { this.uiActions = uiActions == null ? new ArrayList<>() : uiActions; }
 }

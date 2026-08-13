@@ -2,9 +2,11 @@ package me.zhengjie.modules.agent.security.impl;
 
 import me.zhengjie.modules.agent.security.AgentAccessContext;
 import me.zhengjie.modules.agent.security.AgentQueryPermissionService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import me.zhengjie.utils.SecurityUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -15,7 +17,7 @@ import java.util.List;
  * Agent 工具权限校验实现。
  *
  * <p>入口权限、业务权限和工具白名单分别校验；模型只会收到当前上下文实际允许的
- * 12 个统一只读工具名称，不保留旧工具别名或旧权限组合兼容分支。</p>
+ * 12 个统一只读工具和受控表单草稿写工具名称，不保留旧工具别名或旧权限组合兼容分支。</p>
  */
 @Service
 public class DefaultAgentQueryPermissionService implements AgentQueryPermissionService {
@@ -34,8 +36,16 @@ public class DefaultAgentQueryPermissionService implements AgentQueryPermissionS
         new ToolDefinition("searchDishes", "dish:list"),
         new ToolDefinition("getPackageDetail", "package:list"),
         new ToolDefinition("queryBusinessMetrics"),
-        new ToolDefinition("explainBusinessRule", AGENT_ENTRY_PERMISSION)
+        new ToolDefinition("explainBusinessRule", AGENT_ENTRY_PERMISSION),
+        new ToolDefinition("saveFormDraft", "customerProfile:add", "customerOrder:add")
     ));
+    private final boolean formDraftEnabled;
+
+    /** 创建权限服务，并按发布开关决定是否向 Agent 暴露草稿写工具。 */
+    public DefaultAgentQueryPermissionService(
+        @Value("${agent.form-draft.enabled:false}") boolean formDraftEnabled) {
+        this.formDraftEnabled = formDraftEnabled;
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -57,13 +67,31 @@ public class DefaultAgentQueryPermissionService implements AgentQueryPermissionS
 
     /** {@inheritDoc} */
     @Override
+    public void requireCurrent(String... requiredPermissions) {
+        try {
+            List<String> permissions = new ArrayList<>();
+            SecurityUtils.getCurrentUser().getAuthorities().forEach(item -> permissions.add(item.getAuthority()));
+            AgentAccessContext context = new AgentAccessContext();
+            context.setPermissions(permissions);
+            require(context, requiredPermissions);
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw denied();
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public List<String> availableToolNames(AgentAccessContext context) {
         if (context == null || !isAdministrator(context) && !has(context, AGENT_ENTRY_PERMISSION)) {
             return Collections.emptyList();
         }
         List<String> result = new ArrayList<>();
         for (ToolDefinition definition : TOOL_DEFINITIONS) {
-            if (isAdministrator(context) || canUse(context, definition)) {
+            // 管理员可绕过业务权限，但不能绕过草稿功能总开关。
+            if ((isAdministrator(context) && !"saveFormDraft".equals(definition.name))
+                || canUse(context, definition)) {
                 result.add(definition.name);
             }
         }
@@ -72,6 +100,11 @@ public class DefaultAgentQueryPermissionService implements AgentQueryPermissionS
 
     /** 判断一个统一工具的全部业务权限是否满足。 */
     private boolean canUse(AgentAccessContext context, ToolDefinition definition) {
+        if ("saveFormDraft".equals(definition.name)) {
+            return formDraftEnabled
+                && (isAdministrator(context)
+                    || has(context, "customerProfile:add") || has(context, "customerOrder:add"));
+        }
         if ("queryBusinessMetrics".equals(definition.name)) {
             return has(context, "customerProfile:list")
                 || has(context, "customerOrder:list")

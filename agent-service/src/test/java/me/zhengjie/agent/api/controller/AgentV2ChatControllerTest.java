@@ -39,6 +39,7 @@ class AgentV2ChatControllerTest {
             "contractVersion", "v2",
             "messageRequest", Map.of("sessionId", "session-v2", "clientMessageId", "message-v2", "message", "查询客户订单"),
             "availableTools", java.util.List.of("searchServiceCustomers"),
+            "formDraftContext", Map.of("draftId", "afd_1234567890abcdef", "revision", 2),
             "sessionVersion", 7
         );
 

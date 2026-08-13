@@ -14,6 +14,8 @@ public class AgentChatMessageRequest {
 
     private String sessionId;
     private String clientMessageId;
+    /** 固定草稿动作携带的草稿引用；服务端会重新校验所有权和会话。 */
+    private String formDraftId;
     @NotBlank
     private String message;
 }

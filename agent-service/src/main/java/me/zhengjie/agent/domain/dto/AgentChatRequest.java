@@ -25,6 +25,8 @@ public class AgentChatRequest {
     private Long sessionVersion;
     /** 主系统持久化的最近已执行查询脱敏摘要。 */
     private Map<String, Object> lastBusinessQueryContext;
+    /** 主系统按当前客服和会话校验后提供的活动表单草稿上下文。 */
+    private Map<String, Object> formDraftContext;
 
     public String getSessionId() {
         return sessionId;
@@ -58,4 +60,6 @@ public class AgentChatRequest {
     public void setSessionVersion(Long sessionVersion) { this.sessionVersion = sessionVersion; }
     public Map<String, Object> getLastBusinessQueryContext() { return lastBusinessQueryContext; }
     public void setLastBusinessQueryContext(Map<String, Object> lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
+    public Map<String, Object> getFormDraftContext() { return formDraftContext; }
+    public void setFormDraftContext(Map<String, Object> formDraftContext) { this.formDraftContext = formDraftContext; }
 }

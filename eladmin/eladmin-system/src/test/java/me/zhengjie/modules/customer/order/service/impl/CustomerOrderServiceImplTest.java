@@ -1,6 +1,10 @@
 package me.zhengjie.modules.customer.order.service.impl;
 
+import cn.hutool.jwt.JWT;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import me.zhengjie.modules.agent.formdraft.domain.AgentFormDraft;
+import me.zhengjie.modules.agent.formdraft.service.AgentFormDraftService;
+import me.zhengjie.modules.agent.security.AgentCustomerDataScopeResolver;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
@@ -18,11 +22,15 @@ import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.utils.PageResult;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.LocalDate;
 import java.util.Collections;
@@ -66,8 +74,20 @@ class CustomerOrderServiceImplTest {
     @Mock
     private DishMapper dishMapper;
 
+    @Mock
+    private AgentFormDraftService agentFormDraftService;
+
+    @Mock
+    private AgentCustomerDataScopeResolver agentCustomerDataScopeResolver;
+
     @InjectMocks
     private CustomerOrderServiceImpl orderService;
+
+    /** 清理草稿提交测试设置的请求上下文。 */
+    @AfterEach
+    void tearDown() {
+        RequestContextHolder.resetRequestAttributes();
+    }
 
     @Test
     void query_setsEstimatedRemainingCountFromCurrentRemainingMinusTodayUnverifiedPlans() {
@@ -154,11 +174,50 @@ class CustomerOrderServiceImplTest {
 
         when(profileMapper.selectById(1L)).thenReturn(profile);
 
-        orderService.create(dto);
+        Long orderId = orderService.create(dto);
 
         ArgumentCaptor<CustomerOrder> captor = ArgumentCaptor.forClass(CustomerOrder.class);
         verify(orderMapper).insert(captor.capture());
         assertEquals("/file/avatar/menu-001.jpg", captor.getValue().getCustomMenuImage());
+        assertEquals(captor.getValue().getId(), orderId);
+        verify(agentFormDraftService, never()).lockForSubmission(any(), any(), any(), any());
+    }
+
+    /** Agent 草稿新增订单时必须锁定版本，并在订单和换菜规则保存后标记已提交。 */
+    @Test
+    void create_submitsClaimedAgentDraftAfterOrderIsCreated() {
+        CustomerOrderSaveDto dto = buildValidDto();
+        dto.setAgentDraftId("afd_order_123456789");
+        dto.setAgentDraftRevision(4);
+        AgentFormDraft lockedDraft = new AgentFormDraft();
+        lockedDraft.setId(8L);
+        lockedDraft.setStatus("CLAIMED");
+        when(agentFormDraftService.lockForSubmission("afd_order_123456789", 7L, 4, "CREATE_ORDER"))
+            .thenReturn(lockedDraft);
+        when(agentCustomerDataScopeResolver.resolveCurrent()).thenReturn(null);
+        when(profileMapper.selectById(1L)).thenReturn(buildProfile());
+        org.mockito.Mockito.doAnswer(invocation -> {
+            CustomerOrder order = invocation.getArgument(0);
+            order.setId(88L);
+            return 1;
+        }).when(orderMapper).insert(any(CustomerOrder.class));
+        bindUserRequest(7L);
+
+        assertEquals(88L, orderService.create(dto));
+
+        verify(agentFormDraftService).lockForSubmission("afd_order_123456789", 7L, 4, "CREATE_ORDER");
+        verify(agentFormDraftService).markSubmitted(lockedDraft, 88L);
+    }
+
+    /** 构造 SecurityUtils 可解析的当前客服请求。 */
+    private void bindUserRequest(Long userId) {
+        String token = JWT.create().setKey("agent-draft-test-key".getBytes())
+            .setPayload("userId", userId).setPayload("sub", "tester").sign();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        me.zhengjie.utils.SecurityUtils.header = "Authorization";
+        me.zhengjie.utils.SecurityUtils.tokenStartWith = "Bearer ";
+        request.addHeader("Authorization", "Bearer " + token);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
     }
 
     @Test

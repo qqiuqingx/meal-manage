@@ -24,11 +24,19 @@ public class ToolInputGuardrail {
 
     private final ObjectMapper objectMapper;
     private final SensitiveDataPolicy sensitiveDataPolicy;
+    private final FormDraftSensitiveDataPolicy formDraftSensitiveDataPolicy;
 
     /** 创建工具输入护栏并复用统一敏感数据策略。 */
     public ToolInputGuardrail(ObjectMapper objectMapper, SensitiveDataPolicy sensitiveDataPolicy) {
+        this(objectMapper, sensitiveDataPolicy, new FormDraftSensitiveDataPolicy());
+    }
+
+    /** 创建同时支持只读工具和窄范围草稿敏感输入的护栏。 */
+    public ToolInputGuardrail(ObjectMapper objectMapper, SensitiveDataPolicy sensitiveDataPolicy,
+                              FormDraftSensitiveDataPolicy formDraftSensitiveDataPolicy) {
         this.objectMapper = objectMapper;
         this.sensitiveDataPolicy = sensitiveDataPolicy;
+        this.formDraftSensitiveDataPolicy = formDraftSensitiveDataPolicy;
     }
 
     /** 校验原始 JSON，并在成功后返回强类型输入对象。 */
@@ -76,7 +84,8 @@ public class ToolInputGuardrail {
     /** 校验工具共用的敏感字段、分页、日期范围和业务必填条件。 */
     private void validateCommon(ToolRegistry.ToolSpec<?> spec, JsonNode node) {
         String toolName = spec.name();
-        sensitiveDataPolicy.assertSafe(node);
+        if (ToolRegistry.SAVE_FORM_DRAFT.equals(toolName)) formDraftSensitiveDataPolicy.assertSafe(node);
+        else sensitiveDataPolicy.assertSafe(node);
         validatePage(node, spec.maxResults());
         validateQueryFields(spec.name(), node);
         validateDates(node);
@@ -96,6 +105,29 @@ public class ToolInputGuardrail {
             if (dimensions != null && dimensions.isArray() && dimensions.size() > 2) {
                 throw rejected("TOOL_ENUM_INVALID", "at most two metric dimensions are allowed");
             }
+        }
+        if (ToolRegistry.SAVE_FORM_DRAFT.equals(toolName)) validateFormDraft(node);
+    }
+
+    /** 校验草稿类型、payload 互斥和创建/修订幂等字段。 */
+    private void validateFormDraft(JsonNode node) {
+        String type = node.path("draftType").asText("");
+        if (!Set.of("CREATE_CUSTOMER_WITH_ORDER", "CREATE_ORDER").contains(type)) {
+            throw rejected("TOOL_ENUM_INVALID", "draftType is invalid");
+        }
+        if (!"v1".equals(node.path("schemaVersion").asText())) {
+            throw rejected("TOOL_ENUM_INVALID", "schemaVersion must be v1");
+        }
+        boolean revision = hasText(node, "draftId") || hasValue(node, "expectedRevision");
+        if (revision && (!hasText(node, "draftId") || !hasValue(node, "expectedRevision")
+            || node.path("expectedRevision").asInt(0) < 1)) {
+            throw rejected("TOOL_INPUT_INVALID", "draftId and expectedRevision are required for revision");
+        }
+        if ("CREATE_ORDER".equals(type)) {
+            if (!hasValue(node, "orderPayload") || hasValue(node, "customerWithOrderPayload"))
+                throw rejected("TOOL_INPUT_INVALID", "orderPayload must match draftType");
+        } else if (!hasValue(node, "customerWithOrderPayload") || hasValue(node, "orderPayload")) {
+            throw rejected("TOOL_INPUT_INVALID", "customerWithOrderPayload must match draftType");
         }
     }
 

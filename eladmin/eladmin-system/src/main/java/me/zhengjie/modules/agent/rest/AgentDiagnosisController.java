@@ -33,6 +33,7 @@ public class AgentDiagnosisController {
         AgentChatRequest command = new AgentChatRequest();
         command.setSessionId(request.getSessionId());
         command.setClientMessageId(request.getClientMessageId());
+        command.setFormDraftId(request.getFormDraftId());
         command.setMessage(request.getMessage());
         return ResponseEntity.ok(chatSessionService.chat(command, requestId));
     }

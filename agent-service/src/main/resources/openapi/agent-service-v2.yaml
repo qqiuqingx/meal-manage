@@ -70,6 +70,10 @@ components:
           uniqueItems: true
           items: { type: string, maxLength: 80 }
         lastBusinessQueryContext: { $ref: '#/components/schemas/ControlledSessionSummary' }
+        formDraftContext:
+          type: object
+          description: 主系统按当前客服、会话和数据范围重新校验的活动表单草稿上下文，仅供 saveFormDraft 修订。
+          additionalProperties: true
         sessionVersion: { type: integer, format: int64, minimum: 0 }
     ChatMessageRequest:
       type: object
@@ -130,6 +134,50 @@ components:
         toolTraceSummary:
           type: array
           items: { type: object, additionalProperties: true }
+        formDraftSummary: { $ref: '#/components/schemas/FormDraftSummary' }
+        uiActions:
+          type: array
+          maxItems: 3
+          items: { $ref: '#/components/schemas/AgentUiAction' }
+    FormDraftSummary:
+      type: object
+      additionalProperties: false
+      required: [draftId, type, status, revision, recognizedFields, missingFields, warnings, expiresAt]
+      properties:
+        draftId: { type: string, pattern: '^afd_[A-Za-z0-9_-]{16,64}$' }
+        type: { type: string, enum: [CREATE_CUSTOMER_WITH_ORDER, CREATE_ORDER] }
+        status: { type: string, enum: [EDITABLE, READY, CLAIMED, SUBMITTED, EXPIRED, CANCELLED] }
+        revision: { type: integer, minimum: 1 }
+        recognizedFields: { type: array, maxItems: 128, items: { type: string, maxLength: 100 } }
+        missingFields: { type: array, maxItems: 128, items: { type: string, maxLength: 100 } }
+        warnings:
+          type: array
+          maxItems: 32
+          items:
+            type: object
+            additionalProperties: false
+            required: [code]
+            properties:
+              code: { type: string, maxLength: 80 }
+              message: { type: string, maxLength: 200 }
+        expiresAt: { type: string, maxLength: 40 }
+    AgentUiAction:
+      type: object
+      additionalProperties: false
+      required: [type, label, enabled, payload]
+      properties:
+        type:
+          type: string
+          enum: [OPEN_CREATE_CUSTOMER_WITH_ORDER_FORM, OPEN_CREATE_ORDER_FORM, CONVERT_TO_CREATE_CUSTOMER_WITH_ORDER]
+        label: { type: string, minLength: 1, maxLength: 30 }
+        enabled: { type: boolean }
+        payload:
+          type: object
+          additionalProperties: false
+          required: [draftId]
+          properties:
+            draftId: { type: string, pattern: '^afd_[A-Za-z0-9_-]{16,64}$' }
+            sourceSessionId: { type: string, minLength: 1, maxLength: 128 }
     PresentationDescriptor:
       type: object
       additionalProperties: false

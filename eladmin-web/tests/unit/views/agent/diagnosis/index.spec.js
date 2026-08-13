@@ -4,6 +4,7 @@ jest.mock('@/api/agentDiagnosis', () => ({
   chatMealPlan: jest.fn(),
   createChatSession: jest.fn(),
   getChatSession: jest.fn(),
+  getFormDraftSummary: jest.fn(),
   queryChatSessions: jest.fn(),
   submitDiagnosisFeedback: jest.fn(),
   updateChatSessionTitle: jest.fn()
@@ -19,6 +20,7 @@ function createCtx() {
     $message: { success: jest.fn(), warning: jest.fn(), error: jest.fn() },
     $prompt: jest.fn(),
     $router: { push: jest.fn() },
+    $set: (target, key, value) => { target[key] = value },
     $nextTick: fn => fn && fn(),
     $refs: { messageList: { scrollTop: 0, scrollHeight: 100 }},
     extractPageContent: AgentDiagnosis.methods.extractPageContent,
@@ -32,6 +34,7 @@ function createCtx() {
     loadMoreSessions: AgentDiagnosis.methods.loadMoreSessions,
     formatSessionTime: AgentDiagnosis.methods.formatSessionTime,
     handleSessionChange: AgentDiagnosis.methods.handleSessionChange,
+    refreshSessionDraftSummaries: AgentDiagnosis.methods.refreshSessionDraftSummaries,
     createSession: AgentDiagnosis.methods.createSession,
     archiveCurrentSession: AgentDiagnosis.methods.archiveCurrentSession,
     renameCurrentSession: AgentDiagnosis.methods.renameCurrentSession,
@@ -48,6 +51,7 @@ function createCtx() {
     firstBusinessRow: AgentDiagnosis.methods.firstBusinessRow,
     copyAssistantMessage: AgentDiagnosis.methods.copyAssistantMessage,
     navigateTarget: AgentDiagnosis.methods.navigateTarget,
+    navigateFormDraftAction: AgentDiagnosis.methods.navigateFormDraftAction,
     queryWarningText: AgentDiagnosis.methods.queryWarningText,
     hasBusinessQueryResult: AgentDiagnosis.methods.hasBusinessQueryResult,
     clearSession: AgentDiagnosis.methods.clearSession,
@@ -86,11 +90,13 @@ describe('AgentDiagnosis chat page logic', () => {
     api.chatMealPlan.mockReset()
     api.createChatSession.mockReset()
     api.getChatSession.mockReset()
+    api.getFormDraftSummary.mockReset()
     api.queryChatSessions.mockReset()
     api.archiveChatSession.mockReset()
     api.updateChatSessionTitle.mockReset()
     api.submitDiagnosisFeedback.mockReset()
     api.createChatSession.mockResolvedValue({ sessionId: 'session-1', title: '新会话' })
+    api.getFormDraftSummary.mockResolvedValue({})
   })
 
   test('shows initial welcome assistant message', () => {
@@ -137,6 +143,21 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(ctx.slotConfidence.customer).toBe('HIGH')
     expect(ctx.missingSlots).toEqual(['MEAL_TYPE'])
     expect(ctx.messages[2].clientMessageId).toContain('msg-')
+  })
+
+  test('sends trusted draft reference only for a fixed conversion command', async() => {
+    api.chatMealPlan.mockResolvedValue({ sessionId: 'session-1', status: 'ANSWERED', assistantMessage: '已转换草稿' })
+    const ctx = createCtx()
+    ctx.activeSessionId = 'session-1'
+
+    await AgentDiagnosis.methods.sendMessage.call(ctx, '请转换草稿', {
+      formDraftId: 'afd_1234567890abcdef'
+    })
+
+    expect(api.chatMealPlan).toHaveBeenCalledWith(expect.objectContaining({
+      formDraftId: 'afd_1234567890abcdef',
+      message: '请转换草稿'
+    }))
   })
 
   test('appends diagnosis result and keeps latest diagnosis context', async() => {
@@ -550,9 +571,9 @@ describe('AgentDiagnosis chat page logic', () => {
     })
 
     expect(targets).toEqual([
-      { kind: 'CUSTOMER_PROFILE', label: '客户档案', payload: { customerCode: 'C10001' } },
-      { kind: 'CUSTOMER_ORDER', label: '客户订单', payload: { orderCode: 'O10001', customerCode: 'C10001' } },
-      { kind: 'MEAL_PLAN', label: '排餐详情', payload: { date: '2026-08-10', mealType: 'LUNCH' } }
+      { kind: 'CUSTOMER_PROFILE', label: '客户档案', payload: { customerCode: 'C10001' }},
+      { kind: 'CUSTOMER_ORDER', label: '客户订单', payload: { orderCode: 'O10001', customerCode: 'C10001' }},
+      { kind: 'MEAL_PLAN', label: '排餐详情', payload: { date: '2026-08-10', mealType: 'LUNCH' }}
     ])
     AgentDiagnosis.methods.navigateTarget.call(ctx, targets[0])
     expect(ctx.$router.push).toHaveBeenCalledWith({
@@ -561,9 +582,32 @@ describe('AgentDiagnosis chat page logic', () => {
     })
   })
 
+  test('sends fixed conversion command instead of navigating to an arbitrary route', async() => {
+    const ctx = createCtx()
+    ctx.activeSessionId = 'session-1'
+    ctx.sendMessage = jest.fn().mockResolvedValue(true)
+
+    const result = AgentDiagnosis.methods.navigateFormDraftAction.call(ctx, {
+      type: 'CONVERT_TO_CREATE_CUSTOMER_WITH_ORDER',
+      enabled: true,
+      payload: {
+        draftId: 'afd_1234567890abcdef',
+        sourceSessionId: 'session-1',
+        path: '/unsafe'
+      }
+    })
+
+    expect(result).toBe(true)
+    expect(ctx.sendMessage).toHaveBeenCalledWith(
+      '请将当前新增订单草稿转换为新增客户及首单草稿',
+      { formDraftId: 'afd_1234567890abcdef' }
+    )
+    expect(ctx.$router.push).not.toHaveBeenCalled()
+  })
+
   test('copies assistant business text without technical details', async() => {
     const writeText = jest.fn().mockResolvedValue()
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText }})
     const ctx = createCtx()
 
     await AgentDiagnosis.methods.copyAssistantMessage.call(ctx, {
@@ -628,6 +672,33 @@ describe('AgentDiagnosis chat page logic', () => {
     expect(ctx.messages[1].result.summary).toBe('命中客户排除日期')
   })
 
+  test('refreshes persisted draft status and removes submitted navigation action', async() => {
+    api.getChatSession.mockResolvedValue({
+      sessionId: 'session-draft',
+      messages: [{
+        role: 'ASSISTANT',
+        content: '草稿已保存',
+        formDraftSummary: { draftId: 'afd_1234567890abcdef', type: 'CREATE_ORDER', status: 'READY', revision: 1 },
+        uiActions: [{
+          type: 'OPEN_CREATE_ORDER_FORM', enabled: true,
+          payload: { draftId: 'afd_1234567890abcdef', sourceSessionId: 'session-draft' }
+        }]
+      }]
+    })
+    api.getFormDraftSummary.mockResolvedValue({
+      draftId: 'afd_1234567890abcdef', draftType: 'CREATE_ORDER', status: 'SUBMITTED', revision: 1,
+      recognizedFieldCount: 8, missingFields: [], warnings: [], targetBusinessId: 88
+    })
+    const ctx = createCtx()
+
+    await AgentDiagnosis.methods.handleSessionChange.call(ctx, 'session-draft')
+
+    expect(api.getFormDraftSummary).toHaveBeenCalledWith('afd_1234567890abcdef')
+    expect(ctx.messages[0].formDraftSummary.status).toBe('SUBMITTED')
+    expect(ctx.messages[0].formDraftSummary.type).toBe('CREATE_ORDER')
+    expect(ctx.messages[0].uiActions).toEqual([])
+  })
+
   test('restores persisted presentations without recalculating the descriptor', () => {
     const ctx = createCtx()
     const presentation = {
@@ -641,7 +712,7 @@ describe('AgentDiagnosis chat page logic', () => {
       role: 'ASSISTANT',
       content: '已恢复业务查询',
       businessResult: {
-        cards: [{ sourceToolCallId: 'call-restore', type: 'METRIC_RESULT', data: {} }],
+        cards: [{ sourceToolCallId: 'call-restore', type: 'METRIC_RESULT', data: {}}],
         presentations: [presentation],
         warnings: ['PRESENTATION_RULE_MISSING']
       }

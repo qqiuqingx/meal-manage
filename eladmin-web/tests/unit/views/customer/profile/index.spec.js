@@ -393,6 +393,14 @@ describe('CustomerProfile payload building', () => {
     expect(source).toContain('@keydown.native.capture="handleAllergyKeydown"')
     expect(source).not.toContain('@keydown.native="handleAllergyKeydown"')
   })
+
+  test('keeps first-order child package, end date and disabled replacement rules in real submit mapping', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../../../../../src/views/customer/profile/index.vue'), 'utf8')
+
+    expect(source).toContain('childPackageId: orderInfo.childPackageId || null')
+    expect(source).toContain('endDate: orderInfo.endDate || null')
+    expect(source).toContain('enabled: r.enabled == null ? true : r.enabled')
+  })
 })
 
 // --- Excluded Dates Tests (Phase 12 UI-01/UI-03) ---

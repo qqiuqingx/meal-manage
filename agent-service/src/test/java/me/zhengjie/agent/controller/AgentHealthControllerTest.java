@@ -34,6 +34,8 @@ class AgentHealthControllerTest {
             .andExpect(jsonPath("$.modelConfigured").value(false))
             .andExpect(jsonPath("$.toolClientConfigured").value(false))
             .andExpect(jsonPath("$.presentationRuleCount").value(11))
+            .andExpect(jsonPath("$.readOnlyToolCount").value(12))
+            .andExpect(jsonPath("$.formDraftWriteToolRegistered").value(true))
             .andExpect(jsonPath("$.presentationWarnings").isEmpty());
 
         mockMvc.perform(get("/api/agent/health/liveness"))

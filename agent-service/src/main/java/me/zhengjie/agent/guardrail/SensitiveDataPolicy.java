@@ -29,7 +29,7 @@ public class SensitiveDataPolicy {
         if (answer.matches("(?s).*(金额|价格|退款金额|单价|优惠|折扣|支付密码|访问令牌|SQL).*")) {
             throw new ToolGuardrailException("SENSITIVE_DATA_REJECTED", "answer contains forbidden business data");
         }
-        if (answer.matches("(?s).*(已修改|已经修改|已下单|已经下单|已排餐|已经排餐|已退款|已经退款|已核销|已经核销).*")) {
+        if (answer.matches("(?s).*(已修改|已经修改|已下单|已经下单|已排餐|已经排餐|已退款|已经退款|已核销|已经核销|客户已新建|客户已经新建|订单已创建|订单已经创建).*")) {
             throw new ToolGuardrailException("WRITE_OPERATION_CLAIM_REJECTED", "answer claims a write operation");
         }
     }

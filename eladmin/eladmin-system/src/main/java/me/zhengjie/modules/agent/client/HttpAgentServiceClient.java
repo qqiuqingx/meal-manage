@@ -112,6 +112,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         envelope.put("contextSnapshot", request.getContextSlots());
         envelope.put("availableTools", request.getAvailableTools());
         envelope.put("lastBusinessQueryContext", request.getLastBusinessQueryContext());
+        envelope.put("formDraftContext", request.getFormDraftContext());
         envelope.put("sessionVersion", request.getSessionVersion());
         return envelope;
     }

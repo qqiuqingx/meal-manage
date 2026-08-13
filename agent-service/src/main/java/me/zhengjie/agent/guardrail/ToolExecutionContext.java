@@ -46,6 +46,12 @@ public class ToolExecutionContext {
 
     /** 记录成功或失败的受控工具事实。 */
     public synchronized String record(String toolName, String cardType, String inputJson, String outputJson, boolean success) {
+        return record(toolName, cardType, inputJson, outputJson, success, true);
+    }
+
+    /** 记录工具事实，并按工具元数据决定成功结果是否进入只读同参缓存。 */
+    public synchronized String record(String toolName, String cardType, String inputJson, String outputJson,
+                                      boolean success, boolean cacheable) {
         String callId = "call-" + (facts.size() + 1);
         int count = countItems(outputJson);
         if (success && records + count > maxRecords) {
@@ -53,7 +59,7 @@ public class ToolExecutionContext {
         }
         if (success) records += count;
         // 失败结果不能进入同参缓存，否则后续修复会被旧错误短路。
-        if (success) cache.put(cacheKey(toolName, inputJson), outputJson);
+        if (success && cacheable) cache.put(cacheKey(toolName, inputJson), outputJson);
         facts.add(new ToolFact(callId, toolName, cardType, inputJson, outputJson, success, count));
         return callId;
     }

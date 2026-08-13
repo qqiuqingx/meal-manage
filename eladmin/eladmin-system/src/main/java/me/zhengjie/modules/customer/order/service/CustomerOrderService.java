@@ -26,9 +26,12 @@ public interface CustomerOrderService {
     CustomerOrderDetailDto getDetail(Long id);
 
     /**
-     * 创建订单
+     * 创建已有客户的新订单。
+     *
+     * @param dto 订单以及可选 Agent 草稿提交上下文
+     * @return 新建订单 ID
      */
-    void create(CustomerOrderSaveDto dto);
+    Long create(CustomerOrderSaveDto dto);
 
     /**
      * 更新订单

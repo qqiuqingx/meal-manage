@@ -27,10 +27,17 @@ public class AgentServiceConfig {
     @Bean
     public SensitiveDataPolicy sensitiveDataPolicy() { return new SensitiveDataPolicy(); }
 
+    /** 创建只允许草稿登记路径携带手机号和地址的专用策略。 */
+    @Bean
+    public me.zhengjie.agent.guardrail.FormDraftSensitiveDataPolicy formDraftSensitiveDataPolicy() {
+        return new me.zhengjie.agent.guardrail.FormDraftSensitiveDataPolicy();
+    }
+
     /** 创建工具输入护栏，未知字段由 Jackson 严格模式拒绝。 */
     @Bean
-    public ToolInputGuardrail toolInputGuardrail(ObjectMapper objectMapper, SensitiveDataPolicy policy) {
-        return new ToolInputGuardrail(objectMapper, policy);
+    public ToolInputGuardrail toolInputGuardrail(ObjectMapper objectMapper, SensitiveDataPolicy policy,
+        me.zhengjie.agent.guardrail.FormDraftSensitiveDataPolicy draftPolicy) {
+        return new ToolInputGuardrail(objectMapper, policy, draftPolicy);
     }
 
     /** 创建工具输出护栏，主系统响应进入模型前必须经过字段级检查。 */

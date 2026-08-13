@@ -3,6 +3,8 @@ package me.zhengjie.modules.agent.session.domain.dto;
 import lombok.Data;
 import me.zhengjie.modules.agent.domain.dto.AgentDiagnosisResponse;
 import me.zhengjie.modules.agent.domain.dto.DiagnosisSlots;
+import me.zhengjie.modules.agent.domain.dto.AgentFormDraftSummaryDto;
+import me.zhengjie.modules.agent.domain.dto.AgentUiActionDto;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -54,6 +56,12 @@ public class AgentChatMessageDto {
 
     /** 新统一工具调用追踪摘要。 */
     private List<Map<String, Object>> toolTraceSummary = new ArrayList<>();
+
+    /** 从消息快照恢复的脱敏草稿摘要。 */
+    private AgentFormDraftSummaryDto formDraftSummary;
+
+    /** 从消息快照恢复的固定 UI 动作。 */
+    private List<AgentUiActionDto> uiActions = new ArrayList<>();
 
     /** 受控业务查询卡片快照，刷新历史会话时用于恢复结构化展示。 */
     private Map<String, Object> businessResult;

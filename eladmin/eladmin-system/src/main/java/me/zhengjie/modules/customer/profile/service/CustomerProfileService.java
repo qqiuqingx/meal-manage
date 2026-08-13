@@ -52,9 +52,12 @@ public interface CustomerProfileService {
     CustomerProfileDetailDto getDetail(Long id);
 
     /**
-     * 创建客户档案
+     * 创建客户档案及首单。
+     *
+     * @param dto 客户、地址、首单以及可选 Agent 草稿提交上下文
+     * @return 新建客户 ID
      */
-    void create(CustomerProfileSaveDto dto);
+    Long create(CustomerProfileSaveDto dto);
 
     /**
      * 更新客户档案

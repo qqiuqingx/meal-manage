@@ -169,6 +169,13 @@ agent:
   internal-token: ${AGENT_INTERNAL_TOKEN:}
   access-context-secret: ${AGENT_ACCESS_CONTEXT_SECRET:}
   access-context-ttl-seconds: ${AGENT_ACCESS_CONTEXT_TTL_SECONDS:120}
+  form-draft:
+    # 发布后默认不向 Agent 暴露草稿写工具，完成 DDL/三端部署和人工验收后再灰度开启。
+    enabled: ${AGENT_FORM_DRAFT_ENABLED:false}
+    # 客户/订单辅助草稿默认 24 小时过期；过期任务会清空敏感 payload。
+    expiration-hours: ${AGENT_FORM_DRAFT_EXPIRATION_HOURS:24}
+    expiration-batch-size: ${AGENT_FORM_DRAFT_EXPIRATION_BATCH_SIZE:100}
+    expiration-cron: ${AGENT_FORM_DRAFT_EXPIRATION_CRON:0 0/30 * * * ?}
   audit:
     retention-days: ${AGENT_AUDIT_RETENTION_DAYS:180}
     retention-cron: ${AGENT_AUDIT_RETENTION_CRON:0 15 3 * * ?}

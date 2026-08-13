@@ -52,7 +52,7 @@ public class AgentV2ChatController {
             throw new IllegalArgumentException("messageRequest must not be null");
         }
         AgentChatRequest request = toChatRequest(envelope, message);
-        AgentAccessContextHolder.bind(accessContext, request.getSessionId());
+        AgentAccessContextHolder.bind(accessContext, request.getSessionId(), request.getClientMessageId());
         AgentAccessContextHolder.bindAvailableTools(request.getAvailableTools());
         if (envelope.getSessionVersion() != null) MDC.put("sessionVersion", String.valueOf(envelope.getSessionVersion()));
         try {
@@ -81,6 +81,7 @@ public class AgentV2ChatController {
         request.setAvailableTools(envelope.getAvailableTools());
         request.setSessionVersion(envelope.getSessionVersion());
         request.setLastBusinessQueryContext(envelope.getLastBusinessQueryContext());
+        request.setFormDraftContext(envelope.getFormDraftContext());
         return request;
     }
 

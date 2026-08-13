@@ -16,6 +16,8 @@ public class AgentChatRequest {
 
     private String clientMessageId;
 
+    private String formDraftId;
+
     @NotBlank
     private String message;
 
@@ -28,6 +30,8 @@ public class AgentChatRequest {
     private Long sessionVersion;
     /** 主系统从会话表恢复的 Last Context，前端传入值会被服务层覆盖。 */
     private Map<String, Object> lastBusinessQueryContext;
+    /** 服务端按会话和所有者读取的活动草稿上下文，前端值不会直接透传。 */
+    private Map<String, Object> formDraftContext;
 
     public String getSessionId() {
         return sessionId;
@@ -61,4 +65,6 @@ public class AgentChatRequest {
     public void setSessionVersion(Long sessionVersion) { this.sessionVersion = sessionVersion; }
     public Map<String, Object> getLastBusinessQueryContext() { return lastBusinessQueryContext; }
     public void setLastBusinessQueryContext(Map<String, Object> lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
+    public Map<String, Object> getFormDraftContext() { return formDraftContext; }
+    public void setFormDraftContext(Map<String, Object> formDraftContext) { this.formDraftContext = formDraftContext; }
 }

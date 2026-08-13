@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Agent 工具权限映射安全测试。 */
 class DefaultAgentQueryPermissionServiceTest {
 
-    private final DefaultAgentQueryPermissionService service = new DefaultAgentQueryPermissionService();
+    private final DefaultAgentQueryPermissionService service = new DefaultAgentQueryPermissionService(true);
 
     /** 入口权限不能替代业务权限。 */
     @Test
@@ -46,7 +46,7 @@ class DefaultAgentQueryPermissionServiceTest {
         AgentAccessContext context = context("admin");
 
         assertDoesNotThrow(() -> service.require(context, "customerProfile:list", "customerOrder:list"));
-        assertTrue(service.availableToolNames(context).size() == 12);
+        assertTrue(service.availableToolNames(context).size() == 13);
     }
 
     /** 进行中订单统计复用订单只读权限，不应额外要求客户档案或排餐权限。 */
@@ -73,6 +73,27 @@ class DefaultAgentQueryPermissionServiceTest {
         AgentAccessContext context = context("agentDiagnosis:list", "mealPlan:list");
 
         org.junit.jupiter.api.Assertions.assertFalse(service.availableToolNames(context).contains("listScheduledDishes"));
+    }
+
+    /** 新增客户和新增订单权限应分别暴露同一个受控草稿工具。 */
+    @Test
+    void shouldExposeFormDraftToolForEitherTargetAddPermission() {
+        assertTrue(service.availableToolNames(context("agentDiagnosis:list", "customerProfile:add"))
+            .contains("saveFormDraft"));
+        assertTrue(service.availableToolNames(context("agentDiagnosis:list", "customerOrder:add"))
+            .contains("saveFormDraft"));
+    }
+
+    /** 发布开关关闭时只保留原有只读工具，管理员也不能绕过该开关。 */
+    @Test
+    void shouldHideFormDraftToolWhenFeatureDisabled() {
+        DefaultAgentQueryPermissionService disabled = new DefaultAgentQueryPermissionService(false);
+
+        org.junit.jupiter.api.Assertions.assertFalse(disabled.availableToolNames(context("admin"))
+            .contains("saveFormDraft"));
+        org.junit.jupiter.api.Assertions.assertFalse(disabled.availableToolNames(
+            context("agentDiagnosis:list", "customerProfile:add", "customerOrder:add"))
+            .contains("saveFormDraft"));
     }
 
     private AgentAccessContext context(String... permissions) {

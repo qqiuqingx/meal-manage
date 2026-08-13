@@ -42,6 +42,10 @@ import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.modules.customer.profile.util.CustomerMealStatsScheduleUtil;
+import me.zhengjie.modules.agent.formdraft.domain.AgentFormDraft;
+import me.zhengjie.modules.agent.formdraft.service.AgentFormDraftService;
+import me.zhengjie.modules.agent.security.AgentCustomerDataScopeContext;
+import me.zhengjie.modules.agent.security.AgentCustomerDataScopeResolver;
 import me.zhengjie.modules.customer.numberpool.domain.NumberPoolConfig;
 import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
 import me.zhengjie.modules.meal.domain.Dish;
@@ -95,6 +99,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private final MealPlanCustomerMapper mealPlanCustomerMapper;
     private final CustomerMealScheduleAdditionMapper customerMealScheduleAdditionMapper;
     private final MealPlanService mealPlanService;
+    private final AgentFormDraftService agentFormDraftService;
+    private final AgentCustomerDataScopeResolver agentCustomerDataScopeResolver;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -532,7 +538,17 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void create(CustomerProfileSaveDto dto) {
+    public Long create(CustomerProfileSaveDto dto) {
+        AgentFormDraft lockedDraft = null;
+        if (dto != null && StringUtils.isNotBlank(dto.getAgentDraftId())) {
+            try {
+                AgentCustomerDataScopeContext.bind(agentCustomerDataScopeResolver.resolveCurrent());
+                lockedDraft = agentFormDraftService.lockForSubmission(dto.getAgentDraftId(), SecurityUtils.getCurrentUserId(),
+                    dto.getAgentDraftRevision(), "CREATE_CUSTOMER_WITH_ORDER");
+            } finally {
+                AgentCustomerDataScopeContext.clear();
+            }
+        }
         CustomerProfileSaveDto.OrderInfoDto orderInfo = normalizeAndValidate(dto, true);
         String customerCode = resolveCustomerCode(dto.getCustomerCode(), orderInfo.getParentPackageId());
 
@@ -555,6 +571,10 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
         saveAddresses(profile.getId(), dto.getAddresses());
         saveFirstOrder(profile, orderInfo);
+        if (lockedDraft != null) {
+            agentFormDraftService.markSubmitted(lockedDraft, profile.getId());
+        }
+        return profile.getId();
     }
 
     @Override

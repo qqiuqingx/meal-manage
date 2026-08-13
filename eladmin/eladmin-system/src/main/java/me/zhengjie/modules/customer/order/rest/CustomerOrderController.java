@@ -62,13 +62,18 @@ public class CustomerOrderController {
         return ResponseEntity.ok(orderService.getDetail(id));
     }
 
+    /**
+     * 新增已有客户订单。
+     *
+     * @param dto 订单以及可选 Agent 草稿提交上下文
+     * @return 新建订单 ID
+     */
     @ApiOperation("新增订单")
     @PostMapping
     @Log("新增订单")
     @PreAuthorize("@el.check('customerOrder:add')")
-    public ResponseEntity<Void> create(@Validated @RequestBody CustomerOrderSaveDto dto) {
-        orderService.create(dto);
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+    public ResponseEntity<Long> create(@Validated @RequestBody CustomerOrderSaveDto dto) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(orderService.create(dto));
     }
 
     @ApiOperation("校验订单冲突")

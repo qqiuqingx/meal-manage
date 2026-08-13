@@ -7,15 +7,17 @@ public final class AgentAccessContextHolder {
 
     private static final ThreadLocal<String> ACCESS_CONTEXT = new ThreadLocal<>();
     private static final ThreadLocal<String> SESSION_ID = new ThreadLocal<>();
+    private static final ThreadLocal<String> CLIENT_MESSAGE_ID = new ThreadLocal<>();
     private static final ThreadLocal<java.util.Set<String>> AVAILABLE_TOOLS = new ThreadLocal<>();
 
     private AgentAccessContextHolder() {
     }
 
-    /** 绑定当前请求的访问上下文和会话标识。 */
-    public static void bind(String accessContext, String sessionId) {
+    /** 绑定当前请求的访问上下文、会话标识和主系统持久化后的消息幂等键。 */
+    public static void bind(String accessContext, String sessionId, String clientMessageId) {
         if (accessContext != null && !accessContext.trim().isEmpty()) ACCESS_CONTEXT.set(accessContext.trim());
         if (sessionId != null && !sessionId.trim().isEmpty()) SESSION_ID.set(sessionId.trim());
+        if (clientMessageId != null && !clientMessageId.trim().isEmpty()) CLIENT_MESSAGE_ID.set(clientMessageId.trim());
     }
 
     /** 绑定由主系统计算的本轮工具白名单；空值表示兼容旧调用，不预过滤工具。 */
@@ -29,9 +31,17 @@ public final class AgentAccessContextHolder {
     /** 返回当前请求的会话 ID。 */
     public static String sessionId() { return SESSION_ID.get(); }
 
+    /** 返回主系统持久化后下发的本轮用户消息幂等 ID。 */
+    public static String clientMessageId() { return CLIENT_MESSAGE_ID.get(); }
+
     /** 返回本轮工具白名单；null 表示调用方未提供白名单。 */
     public static java.util.Set<String> availableTools() { return AVAILABLE_TOOLS.get(); }
 
     /** 请求结束后清理线程变量，避免线程池串用。 */
-    public static void clear() { ACCESS_CONTEXT.remove(); SESSION_ID.remove(); AVAILABLE_TOOLS.remove(); }
+    public static void clear() {
+        ACCESS_CONTEXT.remove();
+        SESSION_ID.remove();
+        CLIENT_MESSAGE_ID.remove();
+        AVAILABLE_TOOLS.remove();
+    }
 }

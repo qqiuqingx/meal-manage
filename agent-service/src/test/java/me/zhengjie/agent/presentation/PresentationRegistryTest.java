@@ -22,6 +22,7 @@ class PresentationRegistryTest {
     @Test
     void shouldCoverEveryKnownCardType() {
         Set<String> cardTypes = toolRegistry.all().stream()
+            .filter(spec -> spec.effect() == ToolRegistry.ToolEffect.READ_ONLY)
             .map(ToolRegistry.ToolSpec::cardType).collect(Collectors.toSet());
 
         assertEquals(11, cardTypes.size());

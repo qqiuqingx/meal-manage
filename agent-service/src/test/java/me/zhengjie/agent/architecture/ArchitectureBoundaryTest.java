@@ -22,10 +22,12 @@ class ArchitectureBoundaryTest {
      * 生产入口必须收敛为一个业务 Agent Runner，工具名称必须来自唯一登记表。
      */
     @Test
-    void shouldExposeSingleToolCallingEntryAndTwelveTools() {
+    void shouldExposeSingleToolCallingEntryAndThirteenTools() {
         assertTrue(BusinessAgentRunner.class.isAnnotationPresent(
             org.springframework.stereotype.Component.class));
-        assertEquals(12, new ToolRegistry().all().size());
+        assertEquals(13, new ToolRegistry().all().size());
+        assertEquals(1, new ToolRegistry().all().stream()
+            .filter(spec -> spec.effect() == ToolRegistry.ToolEffect.FORM_DRAFT_WRITE).count());
     }
 
     /**
@@ -50,7 +52,7 @@ class ArchitectureBoundaryTest {
     }
 
     /**
-     * Agent 服务只依赖主系统只读 HTTP 端口，不得引入数据库、Mapper 或 JDBC 依赖。
+     * Agent 服务只依赖主系统固定 HTTP 端口，不得引入数据库、Mapper 或 JDBC 依赖。
      */
     @Test
     void agentServiceMustNotDeclareDatabaseDependencies() throws Exception {
@@ -61,6 +63,9 @@ class ArchitectureBoundaryTest {
         assertTrue(Files.readString(Path.of(
             "src/main/java/me/zhengjie/agent/client/HttpMainSystemQueryClient.java"))
             .contains("/api/internal/agent/query/"));
+        assertTrue(Files.readString(Path.of(
+            "src/main/java/me/zhengjie/agent/client/HttpMainSystemFormDraftClient.java"))
+            .contains("/api/internal/agent/form-drafts:save"));
     }
 
     /**

@@ -14,6 +14,13 @@ public interface AgentQueryPermissionService {
     void require(AgentAccessContext context, String... requiredPermissions);
 
     /**
+     * 验证当前登录客服同时具备 Agent 入口权限和指定业务权限。
+     *
+     * @param requiredPermissions 目标业务权限
+     */
+    void requireCurrent(String... requiredPermissions);
+
+    /**
      * 根据当前客服的入口和业务权限计算本轮可见的 Agent 工具。
      *
      * @param context 已校验访问上下文

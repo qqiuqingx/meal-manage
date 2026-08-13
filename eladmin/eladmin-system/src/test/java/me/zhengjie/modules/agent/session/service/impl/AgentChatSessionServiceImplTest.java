@@ -11,6 +11,7 @@ import me.zhengjie.modules.agent.mapper.AgentDiagnosisFeedbackMapper;
 import me.zhengjie.modules.agent.service.AgentDiagnosisFacadeService;
 import me.zhengjie.modules.agent.service.AgentBusinessQueryAuditService;
 import me.zhengjie.modules.agent.security.AgentAccessContextService;
+import me.zhengjie.modules.agent.formdraft.service.AgentFormDraftConversationContextResolver;
 import me.zhengjie.modules.agent.session.domain.AgentChatMessage;
 import me.zhengjie.modules.agent.session.domain.AgentChatSession;
 import me.zhengjie.modules.agent.session.mapper.AgentChatMessageMapper;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -67,8 +69,39 @@ class AgentChatSessionServiceImplTest {
     @Mock
     private AgentBusinessQueryAuditService businessQueryAuditService;
 
+    @Mock
+    private AgentFormDraftConversationContextResolver formDraftContextResolver;
+
     @InjectMocks
     private AgentChatSessionServiceImpl service;
+
+    /** 固定草稿动作必须将草稿引用交给服务端解析器，并把可信上下文下发给 Agent。 */
+    @Test
+    void shouldResolveTrustedDraftContextForConversation() {
+        AgentChatSession session = new AgentChatSession();
+        session.setId(1L); session.setSessionId("session-draft"); session.setOperator("system");
+        session.setArchived(false); session.setVersion(1);
+        when(sessionMapper.selectOne(any())).thenReturn(session);
+        when(messageMapper.selectOne(any())).thenReturn(null);
+        when(messageMapper.insert(any(AgentChatMessage.class))).thenReturn(1);
+        when(accessContextService.issue(any(), any())).thenReturn("signed-context");
+        when(formDraftContextResolver.resolve("afd_1234567890abcdef", "session-draft"))
+            .thenReturn(Map.of("draftId", "afd_1234567890abcdef", "revision", 2));
+        AgentChatResponse facadeResponse = new AgentChatResponse();
+        facadeResponse.setSessionId("session-draft"); facadeResponse.setStatus("ANSWERED");
+        facadeResponse.setAssistantMessage("已转换草稿"); facadeResponse.setConversationStage("ANSWERED");
+        when(diagnosisFacadeService.chatMealPlan(any(AgentChatRequest.class), any(), any())).thenReturn(facadeResponse);
+        when(sessionMapper.updateById(any())).thenReturn(1);
+        AgentChatRequest request = new AgentChatRequest();
+        request.setSessionId("session-draft"); request.setMessage("请转换草稿");
+        request.setFormDraftId("afd_1234567890abcdef");
+
+        service.chat(request, "req-draft");
+
+        ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
+        verify(diagnosisFacadeService).chatMealPlan(captor.capture(), any(), any());
+        assertEquals(2, captor.getValue().getFormDraftContext().get("revision"));
+    }
 
     @Test
     /** 新消息快照必须无损保存 cards 与 presentations 的关联、来源和列顺序。 */
@@ -438,6 +471,41 @@ class AgentChatSessionServiceImplTest {
 
         assertEquals(List.of("MEAL_TYPE"), restored.getMissingSlots());
         assertEquals(List.of("早餐", "午餐", "晚餐"), restored.getQuickReplies());
+    }
+
+    /** 草稿摘要和固定动作必须进入脱敏消息快照并支持幂等恢复。 */
+    @Test
+    void shouldPersistAndRestoreFormDraftSnapshot() {
+        AgentChatResponse response = new AgentChatResponse();
+        response.setStatus("ANSWERED");
+        me.zhengjie.modules.agent.domain.dto.AgentFormDraftSummaryDto summary =
+            new me.zhengjie.modules.agent.domain.dto.AgentFormDraftSummaryDto();
+        summary.setDraftId("afd_1234567890abcdef");
+        summary.setType("CREATE_ORDER");
+        summary.setStatus("READY");
+        summary.setRevision(2);
+        summary.setRecognizedFields(List.of("customerId"));
+        summary.setMissingFields(Collections.emptyList());
+        summary.setExpiresAt("2026-08-13 12:00:00");
+        response.setFormDraftSummary(summary);
+        me.zhengjie.modules.agent.domain.dto.AgentUiActionDto action =
+            new me.zhengjie.modules.agent.domain.dto.AgentUiActionDto();
+        action.setType("OPEN_CREATE_ORDER_FORM");
+        action.setLabel("去新增订单");
+        action.setEnabled(true);
+        action.setPayload(new LinkedHashMap<>(Map.of("draftId", summary.getDraftId(), "sourceSessionId", "session-1")));
+        response.setUiActions(List.of(action));
+
+        Map<String, Object> snapshot = ReflectionTestUtils.invokeMethod(service, "buildBusinessSnapshot", response);
+        assertNotNull(snapshot);
+        assertFalse(com.alibaba.fastjson2.JSON.toJSONString(snapshot).contains("phone"));
+        assertFalse(com.alibaba.fastjson2.JSON.toJSONString(snapshot).contains("address"));
+
+        AgentChatResponse restored = new AgentChatResponse();
+        ReflectionTestUtils.invokeMethod(service, "restoreBusinessResponse", restored, snapshot);
+        assertEquals("READY", restored.getFormDraftSummary().getStatus());
+        assertEquals("OPEN_CREATE_ORDER_FORM", restored.getUiActions().get(0).getType());
+        assertEquals(summary.getDraftId(), restored.getUiActions().get(0).getPayload().get("draftId"));
     }
 
     @Test

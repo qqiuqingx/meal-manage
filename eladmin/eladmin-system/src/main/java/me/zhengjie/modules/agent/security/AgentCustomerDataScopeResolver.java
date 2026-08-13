@@ -7,6 +7,7 @@ import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.system.domain.User;
 import me.zhengjie.modules.system.mapper.UserMapper;
 import org.springframework.stereotype.Component;
+import me.zhengjie.utils.SecurityUtils;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -38,6 +39,19 @@ public class AgentCustomerDataScopeResolver {
             .select("id").in("create_by", creators));
         return profiles.stream().map(CustomerProfile::getId).filter(java.util.Objects::nonNull)
             .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /**
+     * 将当前登录客服的数据权限转换为客户 ID 范围，供草稿领取时重新校验关联客户。
+     *
+     * @return null 表示全量范围；空集合表示无可访问客户
+     */
+    public Set<Long> resolveCurrent() {
+        AgentAccessContext context = new AgentAccessContext();
+        List<Long> deptIds = SecurityUtils.getCurrentUserDataScope();
+        context.setAllDataScope(deptIds == null || deptIds.isEmpty());
+        context.setDataScopeDeptIds(deptIds == null ? Collections.emptyList() : deptIds);
+        return resolve(context);
     }
 
     private boolean hasText(String value) { return value != null && !value.trim().isEmpty(); }

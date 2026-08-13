@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.tool.ToolRegistry;
 
+import java.util.Set;
+
 /** 工具结果进入模型上下文前的类型、条数、脱敏和不可信文本护栏。 */
 public class ToolOutputGuardrail {
     private final ObjectMapper objectMapper;
@@ -23,12 +25,24 @@ public class ToolOutputGuardrail {
             if (resultCount(node) > spec.maxResults()) {
                 throw rejected("TOOL_RESULT_LIMIT_EXCEEDED", "tool result exceeded the registered result limit");
             }
+            if (ToolRegistry.SAVE_FORM_DRAFT.equals(spec.name())) validateFormDraft(node);
             sensitiveDataPolicy.assertSafe(node);
             return node;
         } catch (ToolGuardrailException exception) {
             throw exception;
         } catch (Exception exception) {
             throw rejected("TOOL_OUTPUT_INVALID", "tool output does not match the registered contract");
+        }
+    }
+
+    /** 校验草稿成功输出的必填事实及合法状态。 */
+    private void validateFormDraft(JsonNode node) {
+        if (!node.path("success").asBoolean(false)) return;
+        if (!node.path("draftId").isTextual() || !node.path("draftId").asText().matches("afd_[A-Za-z0-9_-]{16,64}")
+            || !Set.of("EDITABLE", "READY").contains(node.path("status").asText())
+            || node.path("revision").asInt(0) < 1 || !node.path("expiresAt").isTextual()
+            || node.path("expiresAt").asText().isBlank()) {
+            throw rejected("TOOL_OUTPUT_INVALID", "form draft output is incomplete");
         }
     }
 

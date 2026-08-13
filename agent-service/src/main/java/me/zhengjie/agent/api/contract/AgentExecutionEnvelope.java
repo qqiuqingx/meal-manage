@@ -28,6 +28,7 @@ public class AgentExecutionEnvelope {
     @Size(max = 100)
     private List<@NotBlank @Size(max = 80) String> availableTools = new ArrayList<>();
     private Map<String, Object> lastBusinessQueryContext;
+    private Map<String, Object> formDraftContext;
     /** 主系统读取会话快照时的乐观锁版本；Agent 仅回传，不自行提交会话。 */
     @NotNull
     @PositiveOrZero
@@ -43,6 +44,8 @@ public class AgentExecutionEnvelope {
     public void setAvailableTools(List<String> availableTools) { this.availableTools = availableTools == null ? new ArrayList<>() : availableTools; }
     public Map<String, Object> getLastBusinessQueryContext() { return lastBusinessQueryContext; }
     public void setLastBusinessQueryContext(Map<String, Object> lastBusinessQueryContext) { this.lastBusinessQueryContext = lastBusinessQueryContext; }
+    public Map<String, Object> getFormDraftContext() { return formDraftContext; }
+    public void setFormDraftContext(Map<String, Object> formDraftContext) { this.formDraftContext = formDraftContext; }
     public Long getSessionVersion() { return sessionVersion; }
     public void setSessionVersion(Long sessionVersion) { this.sessionVersion = sessionVersion; }
 }

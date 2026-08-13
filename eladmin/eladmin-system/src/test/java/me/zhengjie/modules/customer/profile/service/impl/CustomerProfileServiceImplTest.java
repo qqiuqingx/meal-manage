@@ -1,7 +1,11 @@
 package me.zhengjie.modules.customer.profile.service.impl;
 
+import cn.hutool.jwt.JWT;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import me.zhengjie.exception.BadRequestException;
+import me.zhengjie.modules.agent.formdraft.domain.AgentFormDraft;
+import me.zhengjie.modules.agent.formdraft.service.AgentFormDraftService;
+import me.zhengjie.modules.agent.security.AgentCustomerDataScopeResolver;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRule;
@@ -33,12 +37,16 @@ import me.zhengjie.modules.meal.service.MealPlanService;
 import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
 import me.zhengjie.utils.PageResult;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -111,6 +119,12 @@ class CustomerProfileServiceImplTest {
     @Mock
     private DishMapper dishMapper;
 
+    @Mock
+    private AgentFormDraftService agentFormDraftService;
+
+    @Mock
+    private AgentCustomerDataScopeResolver agentCustomerDataScopeResolver;
+
     @InjectMocks
     private CustomerProfileServiceImpl customerProfileService;
 
@@ -149,6 +163,12 @@ class CustomerProfileServiceImplTest {
         address3.setAddressDetail("北京市西城区xxx胡同789号");
         address3.setContactName("王五");
         address3.setContactPhone("13700137000");
+    }
+
+    /** 清理可能由草稿提交测试设置的请求上下文。 */
+    @AfterEach
+    void tearDown() {
+        RequestContextHolder.resetRequestAttributes();
     }
 
     private void invokeFillDefaultAddress(CustomerProfile profile) throws Exception {
@@ -481,7 +501,7 @@ class CustomerProfileServiceImplTest {
         orderInfo.setParentPackageId(1L);
         dto.setOrderInfo(orderInfo);
 
-        customerProfileService.create(dto);
+        Long customerId = customerProfileService.create(dto);
 
         ArgumentCaptor<CustomerProfile> profileCaptor = ArgumentCaptor.forClass(CustomerProfile.class);
         verify(profileMapper).insert(profileCaptor.capture());
@@ -508,6 +528,56 @@ class CustomerProfileServiceImplTest {
         assertEquals(BigDecimal.ZERO, createdOrder.getTotalAmount());
         assertEquals(BigDecimal.ZERO, createdOrder.getFinalAmount());
         verify(addressMapper).insert(any(CustomerProfileAddress.class));
+        assertEquals(88L, customerId);
+        verify(agentFormDraftService, never()).lockForSubmission(any(), any(), any(), any());
+    }
+
+    /** Agent 草稿创建客户时必须先锁定版本，并在全部业务写入后标记同一草稿已提交。 */
+    @Test
+    void shouldSubmitClaimedAgentDraftAfterCustomerAndFirstOrderAreCreated() {
+        ParentPackage parentPackage = new ParentPackage();
+        parentPackage.setId(1L);
+        parentPackage.setStatus(true);
+        parentPackage.setPackageName("试餐午晚套餐");
+        when(parentPackageMapper.selectById(1L)).thenReturn(parentPackage);
+        doAnswer(invocation -> {
+            CustomerProfile profileArg = invocation.getArgument(0);
+            profileArg.setId(89L);
+            return 1;
+        }).when(profileMapper).insert(any(CustomerProfile.class));
+        AgentFormDraft lockedDraft = new AgentFormDraft();
+        lockedDraft.setId(9L);
+        lockedDraft.setStatus("CLAIMED");
+        when(agentFormDraftService.lockForSubmission("afd_customer_123456", 7L, 3,
+            "CREATE_CUSTOMER_WITH_ORDER")).thenReturn(lockedDraft);
+        when(agentCustomerDataScopeResolver.resolveCurrent()).thenReturn(null);
+        bindUserRequest(7L);
+
+        CustomerProfileSaveDto dto = new CustomerProfileSaveDto();
+        dto.setAgentDraftId("afd_customer_123456");
+        dto.setAgentDraftRevision(3);
+        dto.setPhone("13800001234");
+        dto.setAddresses(Collections.singletonList(buildAddressDto("DEFAULT", "成都市高新区天府大道1号")));
+        CustomerProfileSaveDto.OrderInfoDto orderInfo = new CustomerProfileSaveDto.OrderInfoDto();
+        orderInfo.setParentPackageId(1L);
+        dto.setOrderInfo(orderInfo);
+
+        assertEquals(89L, customerProfileService.create(dto));
+
+        verify(agentFormDraftService).lockForSubmission("afd_customer_123456", 7L, 3,
+            "CREATE_CUSTOMER_WITH_ORDER");
+        verify(agentFormDraftService).markSubmitted(lockedDraft, 89L);
+    }
+
+    /** 构造 SecurityUtils 可解析的当前客服请求。 */
+    private void bindUserRequest(Long userId) {
+        String token = JWT.create().setKey("agent-draft-test-key".getBytes())
+            .setPayload("userId", userId).setPayload("sub", "tester").sign();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        me.zhengjie.utils.SecurityUtils.header = "Authorization";
+        me.zhengjie.utils.SecurityUtils.tokenStartWith = "Bearer ";
+        request.addHeader("Authorization", "Bearer " + token);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
     }
 
     @Test

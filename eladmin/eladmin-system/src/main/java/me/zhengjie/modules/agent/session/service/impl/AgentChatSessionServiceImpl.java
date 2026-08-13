@@ -17,6 +17,7 @@ import me.zhengjie.modules.agent.mapper.AgentDiagnosisFeedbackMapper;
 import me.zhengjie.modules.agent.service.AgentDiagnosisFacadeService;
 import me.zhengjie.modules.agent.service.AgentBusinessQueryAuditService;
 import me.zhengjie.modules.agent.security.AgentAccessContextService;
+import me.zhengjie.modules.agent.formdraft.service.AgentFormDraftConversationContextResolver;
 import me.zhengjie.modules.agent.session.domain.AgentChatMessage;
 import me.zhengjie.modules.agent.session.domain.AgentChatSession;
 import me.zhengjie.modules.agent.session.domain.dto.AgentChatMessageDto;
@@ -60,6 +61,7 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
     private final AgentDiagnosisFacadeService diagnosisFacadeService;
     private final AgentAccessContextService accessContextService;
     private final AgentBusinessQueryAuditService businessQueryAuditService;
+    private final AgentFormDraftConversationContextResolver formDraftContextResolver;
 
     /**
      * 创建一个新的智能排查会话，允许前端显式预建空会话后再发送消息。
@@ -172,6 +174,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         downstreamRequest.setMessage(safeRequest.getMessage());
         downstreamRequest.setContextSlots(toPersistedSlots(session));
         downstreamRequest.setLastBusinessQueryContext(parseMap(session.getLastBusinessQueryContextJson()));
+        downstreamRequest.setFormDraftContext(formDraftContextResolver.resolve(
+            safeRequest.getFormDraftId(), session.getSessionId()));
         downstreamRequest.setSessionVersion(session.getVersion() == null ? 0L : session.getVersion().longValue());
         String accessContext = accessContextService.issue(session.getSessionId(), resolvedRequestId);
         long queryStart = System.currentTimeMillis();
@@ -317,6 +321,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
                 ? (List<Map<String, Object>>) businessResult.get("toolFacts") : Collections.emptyList());
             dto.setToolTraceSummary(businessResult.get("toolTraceSummary") instanceof List
                 ? (List<Map<String, Object>>) businessResult.get("toolTraceSummary") : dto.getToolSummary());
+            dto.setFormDraftSummary(convertFormDraftSummary(businessResult.get("formDraftSummary")));
+            dto.setUiActions(convertUiActions(businessResult.get("uiActions")));
         }
         dto.setPresentations(readPresentationList(businessResult == null ? null : businessResult.get("presentations")));
         dto.setCreateBy(message.getCreateBy());
@@ -747,8 +753,10 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         boolean hasConversationProtocol = "NEED_MORE_INFO".equalsIgnoreCase(response.getStatus())
             || (response.getMissingSlots() != null && !response.getMissingSlots().isEmpty())
             || (response.getQuickReplies() != null && !response.getQuickReplies().isEmpty());
+        boolean hasFormDraft = response.getFormDraftSummary() != null
+            || response.getUiActions() != null && !response.getUiActions().isEmpty();
         if (!hasCards && !hasPresentations && !hasToolFacts && !hasToolTrace && !response.isPartial()
-            && !hasConversationProtocol) {
+            && !hasConversationProtocol && !hasFormDraft) {
             return null;
         }
         Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
@@ -765,6 +773,8 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
         snapshot.put("conversationPatch", response.getConversationPatch());
         snapshot.put("missingSlots", response.getMissingSlots());
         snapshot.put("quickReplies", response.getQuickReplies());
+        snapshot.put("formDraftSummary", response.getFormDraftSummary());
+        snapshot.put("uiActions", response.getUiActions());
         return snapshot;
     }
 
@@ -797,6 +807,28 @@ public class AgentChatSessionServiceImpl implements AgentChatSessionService {
             ? (List<String>) snapshot.get("missingSlots") : Collections.emptyList());
         response.setQuickReplies(snapshot.get("quickReplies") instanceof List
             ? (List<String>) snapshot.get("quickReplies") : Collections.emptyList());
+        response.setFormDraftSummary(convertFormDraftSummary(snapshot.get("formDraftSummary")));
+        response.setUiActions(convertUiActions(snapshot.get("uiActions")));
+    }
+
+    /** 将历史快照中的草稿摘要安全转换为强类型 DTO。 */
+    private me.zhengjie.modules.agent.domain.dto.AgentFormDraftSummaryDto convertFormDraftSummary(Object value) {
+        if (value == null) return null;
+        try {
+            return JSON.parseObject(JSON.toJSONString(value), me.zhengjie.modules.agent.domain.dto.AgentFormDraftSummaryDto.class);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    /** 将历史快照中的固定动作列表安全转换为强类型 DTO。 */
+    private List<me.zhengjie.modules.agent.domain.dto.AgentUiActionDto> convertUiActions(Object value) {
+        if (!(value instanceof List)) return new ArrayList<>();
+        try {
+            return JSON.parseArray(JSON.toJSONString(value), me.zhengjie.modules.agent.domain.dto.AgentUiActionDto.class);
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
     }
 
     /**

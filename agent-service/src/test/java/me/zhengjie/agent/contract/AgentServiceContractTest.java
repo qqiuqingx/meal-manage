@@ -43,6 +43,10 @@ class AgentServiceContractTest {
             assertFalse(resultSchema.path("additionalProperties").asBoolean(true));
             assertTrue(resultSchema.path("properties").has("sessionId"));
             assertTrue(resultSchema.path("properties").has("status"));
+            assertTrue(resultSchema.path("properties").has("formDraftSummary"));
+            assertEquals(Set.of("OPEN_CREATE_CUSTOMER_WITH_ORDER_FORM", "OPEN_CREATE_ORDER_FORM", "CONVERT_TO_CREATE_CUSTOMER_WITH_ORDER"),
+                enumValues(root.path("components").path("schemas").path("AgentUiAction")
+                    .path("properties").path("type")));
             assertEquals(Set.of("ANSWERED", "NEED_MORE_INFO", "ERROR"),
                 enumValues(resultSchema.path("properties").path("status")));
             JsonNode missingSlots = resultSchema.path("properties").path("missingSlots");

@@ -25,6 +25,7 @@
       @navigate="$emit('navigate', $event)"
       @select-customer="$emit('select-customer', $event)"
       @feedback="$emit('feedback', $event)"
+      @form-draft-action="$emit('form-draft-action', $event)"
     />
     <div v-if="loading" class="message-row message-row-assistant">
       <div class="message-bubble assistant-bubble">

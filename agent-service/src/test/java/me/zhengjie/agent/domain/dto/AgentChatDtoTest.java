@@ -89,6 +89,7 @@ class AgentChatDtoTest {
             "clientMessageId", "message-1",
             "message", "查询客户",
             "availableTools", List.of("searchCustomerProfiles"),
+            "formDraftContext", Map.of("draftId", "afd_1234567890abcdef", "revision", 2),
             "lastBusinessQueryContext", Map.of("toolName", "searchCustomerProfiles")));
 
         AgentChatRequest parsed = objectMapper.readValue(json, AgentChatRequest.class);
@@ -98,6 +99,7 @@ class AgentChatDtoTest {
         assertEquals("查询客户", parsed.getMessage());
         assertEquals(List.of("searchCustomerProfiles"), parsed.getAvailableTools());
         assertEquals("searchCustomerProfiles", parsed.getLastBusinessQueryContext().get("toolName"));
+        assertEquals(2, parsed.getFormDraftContext().get("revision"));
         assertNull(parsed.getContextSlots());
     }
 

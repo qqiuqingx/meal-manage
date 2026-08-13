@@ -42,6 +42,14 @@
         @select-customer="$emit('select-customer', $event)"
       />
       <AgentTechnicalDetails v-if="message.role === 'assistant'" :message="message" />
+      <AgentFormDraftCard
+        v-if="message.role === 'assistant' && message.formDraftSummary"
+        :summary="message.formDraftSummary"
+        :actions="message.uiActions"
+        :archived="archived"
+        :loading="loading"
+        @action="$emit('form-draft-action', $event)"
+      />
       <AgentMessageActions
         v-if="message.role === 'assistant'"
         :message="message"
@@ -62,6 +70,7 @@ import AgentBusinessResult from './AgentBusinessResult.vue'
 import AgentDiagnosisResult from './AgentDiagnosisResult.vue'
 import AgentMessageActions from './AgentMessageActions.vue'
 import AgentTechnicalDetails from './AgentTechnicalDetails.vue'
+import AgentFormDraftCard from './AgentFormDraftCard.vue'
 
 export default {
   name: 'AgentChatMessage',
@@ -69,7 +78,8 @@ export default {
     AgentBusinessResult,
     AgentDiagnosisResult,
     AgentMessageActions,
-    AgentTechnicalDetails
+    AgentTechnicalDetails,
+    AgentFormDraftCard
   },
   props: {
     message: { type: Object, required: true },

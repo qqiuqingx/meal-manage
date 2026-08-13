@@ -12,6 +12,7 @@ import me.zhengjie.agent.tool.input.MetricName;
 import me.zhengjie.agent.tool.input.QueryBusinessMetricsInput;
 import me.zhengjie.agent.tool.input.SearchServiceCustomersInput;
 import me.zhengjie.agent.tool.output.ToolOutputs;
+import me.zhengjie.agent.tool.input.formdraft.SaveFormDraftInput;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.tool.function.FunctionToolCallback;
 
@@ -34,19 +35,23 @@ class UnifiedToolContractTest {
     private static final Set<String> TOOL_NAMES = Set.of(
         "searchCustomerProfiles", "searchServiceCustomers", "getServiceCustomerDetail", "listMealPlans",
         "listVerifications", "listRefunds", "previewDishCandidates", "listScheduledDishes", "searchDishes",
-        "getPackageDetail", "queryBusinessMetrics", "explainBusinessRule");
+        "getPackageDetail", "queryBusinessMetrics", "explainBusinessRule", "saveFormDraft");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SensitiveDataPolicy sensitiveDataPolicy = new SensitiveDataPolicy();
 
-    /** 目录必须精确登记 12 个可由模型调用的业务工具。 */
+    /** 目录必须精确登记 12 个只读工具和 1 个受控草稿写工具。 */
     @Test
-    void shouldRegisterExactlyTwelveUnifiedTools() {
+    void shouldRegisterTwelveReadToolsAndOneDraftWriteTool() {
         ToolRegistry registry = new ToolRegistry();
 
-        assertEquals(12, registry.all().size());
+        assertEquals(13, registry.all().size());
         assertEquals(TOOL_NAMES, registry.all().stream().map(ToolRegistry.ToolSpec::name).collect(Collectors.toSet()));
         assertTrue(registry.all().stream().allMatch(spec -> spec.maxResults() > 0 && spec.timeoutMillis() == 3000));
+        assertEquals(12, registry.all().stream().filter(spec -> spec.effect() == ToolRegistry.ToolEffect.READ_ONLY).count());
+        ToolRegistry.ToolSpec<?> draft = registry.require(ToolRegistry.SAVE_FORM_DRAFT);
+        assertEquals(ToolRegistry.ToolEffect.FORM_DRAFT_WRITE, draft.effect());
+        assertFalse(draft.cacheable());
     }
 
     /** 输入必须拒绝未知字段、越权字段和无界历史查询。 */
@@ -222,5 +227,55 @@ class UnifiedToolContractTest {
             "{\"size\":20,\"page\":1,\"customerCode\":\"C1001\"}");
 
         assertEquals(first, second);
+    }
+
+    /** 草稿输入允许登记路径携带手机号地址，但同样内容仍不得进入查询工具。 */
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldAllowSensitiveValuesOnlyInRegisteredDraftPaths() {
+        ToolInputGuardrail guardrail = new ToolInputGuardrail(objectMapper, sensitiveDataPolicy);
+        ToolRegistry registry = new ToolRegistry();
+        ToolRegistry.ToolSpec<SaveFormDraftInput> spec =
+            (ToolRegistry.ToolSpec<SaveFormDraftInput>) (ToolRegistry.ToolSpec<?>) registry.require(ToolRegistry.SAVE_FORM_DRAFT);
+
+        SaveFormDraftInput input = guardrail.validate(spec,
+            "{\"draftType\":\"CREATE_CUSTOMER_WITH_ORDER\",\"schemaVersion\":\"v1\","
+                + "\"customerWithOrderPayload\":{\"customer\":{"
+                + "\"phone\":\"13800000000\",\"addresses\":[{\"addressType\":\"DEFAULT\","
+                + "\"addressDetail\":\"上海市示例路1号\",\"contactPhone\":\"13900000000\"}]},\"order\":{}}}");
+
+        assertEquals("13800000000", input.getCustomerWithOrderPayload().getCustomer().getPhone());
+        assertThrows(ToolGuardrailException.class, () -> guardrail.validate(
+            registry.require(ToolRegistry.SEARCH_CUSTOMER_PROFILES), "{\"customerCode\":\"13800000000\"}"));
+        assertThrows(ToolGuardrailException.class, () -> guardrail.validate(spec,
+            "{\"draftType\":\"CREATE_ORDER\",\"schemaVersion\":\"v1\","
+                + "\"orderPayload\":{\"remark\":\"联系电话13800000000\"}}"));
+    }
+
+    /** 创建草稿的消息幂等键由请求上下文注入，模型输入无需也不应决定该值。 */
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldAcceptDraftCreationWithoutModelSuppliedClientMessageId() {
+        ToolRegistry.ToolSpec<SaveFormDraftInput> spec =
+            (ToolRegistry.ToolSpec<SaveFormDraftInput>) (ToolRegistry.ToolSpec<?>)
+                new ToolRegistry().require(ToolRegistry.SAVE_FORM_DRAFT);
+
+        SaveFormDraftInput input = new ToolInputGuardrail(objectMapper, sensitiveDataPolicy).validate(spec,
+            "{\"draftType\":\"CREATE_CUSTOMER_WITH_ORDER\",\"schemaVersion\":\"v1\","
+                + "\"customerWithOrderPayload\":{\"customer\":{},\"order\":{}}}");
+
+        assertEquals("CREATE_CUSTOMER_WITH_ORDER", input.getDraftType());
+    }
+
+    /** 草稿成功输出必须含合法 ID、服务端状态、版本和过期时间。 */
+    @Test
+    void shouldValidateDeterministicFormDraftOutput() {
+        ToolOutputGuardrail guardrail = new ToolOutputGuardrail(objectMapper, sensitiveDataPolicy);
+        ToolRegistry.ToolSpec<?> spec = new ToolRegistry().require(ToolRegistry.SAVE_FORM_DRAFT);
+
+        assertTrue(guardrail.validate(spec, "{\"success\":true,\"draftId\":\"afd_1234567890abcdef\","
+            + "\"status\":\"READY\",\"revision\":1,\"expiresAt\":\"2026-08-13 12:00:00\"}").isObject());
+        assertThrows(ToolGuardrailException.class, () -> guardrail.validate(spec,
+            "{\"success\":true,\"draftId\":\"afd_short\",\"status\":\"SUBMITTED\",\"revision\":0}"));
     }
 }

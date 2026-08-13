@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.zhengjie.agent.domain.dto.DiagnosisSlots;
 import me.zhengjie.agent.guardrail.ToolExecutionContext;
+import me.zhengjie.agent.tool.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,6 +83,9 @@ public final class ConversationContextUpdater {
             }
             partial = partial || factHasIncompleteResult(fact);
             if (!fact.success()) {
+                continue;
+            }
+            if (ToolRegistry.SAVE_FORM_DRAFT.equals(fact.toolName())) {
                 continue;
             }
             hasSuccessfulFact = true;

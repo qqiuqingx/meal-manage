@@ -81,14 +81,16 @@ public class CustomerProfileController {
     }
 
     /**
-     * 新增客户档案
+     * 新增客户档案及首单。
+     *
+     * @param dto 客户、地址、首单以及可选 Agent 草稿提交上下文
+     * @return 新建客户 ID
      */
     @PostMapping
     @Log("新增客户档案")
     @PreAuthorize("@el.check('customerProfile:add')")
-    public ResponseEntity<Void> create(@Validated @RequestBody CustomerProfileSaveDto dto) {
-        profileService.create(dto);
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+    public ResponseEntity<Long> create(@Validated @RequestBody CustomerProfileSaveDto dto) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(profileService.create(dto));
     }
 
     /**

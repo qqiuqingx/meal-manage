@@ -59,6 +59,7 @@
             @navigate="navigateTarget"
             @select-customer="selectCustomerCandidate"
             @feedback="openFeedbackDialog($event.result, $event.accepted)"
+            @form-draft-action="navigateFormDraftAction"
           />
 
           <AgentComposer
@@ -124,6 +125,7 @@ import {
   chatMealPlan,
   createChatSession,
   getChatSession,
+  getFormDraftSummary,
   queryChatSessions,
   submitDiagnosisFeedback,
   updateChatSessionTitle
@@ -134,6 +136,7 @@ import AgentSessionSidebar from './components/AgentSessionSidebar.vue'
 import { mapLegacyCards } from './utils/agentPresentationCompatibility'
 import { businessWarningMessage } from './utils/agentWarningMessages'
 import { renderAssistantMessage as renderAssistantMessageHtml } from './utils/assistantMessageRenderer'
+import { normalizeFormDraftActions, resolveFormDraftAction } from './utils/agentFormDraftActions'
 
 function welcomeMessage() {
   return {
@@ -156,6 +159,7 @@ export default {
   data() {
     return {
       loading: false,
+      formDraftNavigating: false,
       sessionId: null,
       activeSessionId: null,
       activeSessionArchived: false,
@@ -329,6 +333,7 @@ export default {
       try {
         const detail = await getChatSession(sessionId)
         this.applySessionDetail(detail)
+        await this.refreshSessionDraftSummaries()
       } catch (e) {
         this.$message.error('会话加载失败')
       } finally {
@@ -441,7 +446,13 @@ export default {
       this.loading = true
       this.scrollToBottom()
       try {
-        const response = await chatMealPlan({ sessionId: this.activeSessionId || null, clientMessageId, message })
+        const chatRequest = {
+          sessionId: this.activeSessionId || null,
+          clientMessageId,
+          message
+        }
+        if (options && options.formDraftId) chatRequest.formDraftId = options.formDraftId
+        const response = await chatMealPlan(chatRequest)
         if (userMessage) {
           userMessage.status = response && response.status === 'ERROR' ? 'ERROR' : 'SENT'
         }
@@ -648,6 +659,25 @@ export default {
       }
       return false
     },
+    /** 按本地白名单执行草稿导航或转换命令，归档会话和重复点击均不执行。 */
+    navigateFormDraftAction(action) {
+      if (this.activeSessionArchived || this.formDraftNavigating) return false
+      const target = resolveFormDraftAction(action)
+      if (!target) return false
+      this.formDraftNavigating = true
+      let result
+      if (target.kind === 'CONVERT') {
+        result = this.sendMessage(target.message, { formDraftId: target.formDraftId })
+      } else if (this.$router) {
+        result = this.$router.push({ path: target.path, query: target.query })
+      } else {
+        this.formDraftNavigating = false
+        return false
+      }
+      if (result && typeof result.finally === 'function') result.finally(() => { this.formDraftNavigating = false })
+      else this.formDraftNavigating = false
+      return true
+    },
     queryWarningText(message) {
       return businessWarningMessage(message && message.warnings, message && message.partial)
     },
@@ -687,6 +717,8 @@ export default {
         presentations: Array.isArray(source.presentations) ? source.presentations : [],
         toolFacts: Array.isArray(source.toolFacts) ? source.toolFacts : [],
         toolTraceSummary: Array.isArray(source.toolTraceSummary) ? source.toolTraceSummary : [],
+        formDraftSummary: source.formDraftSummary && typeof source.formDraftSummary === 'object' ? source.formDraftSummary : null,
+        uiActions: normalizeFormDraftActions(source.uiActions),
         warnings,
         cached: source.cached === true,
         partial: source.partial === true,
@@ -736,6 +768,31 @@ export default {
       this.currentDiagnosis = (detail && detail.latestDiagnosisResult) || null
       this.messages = this.restoreSessionMessages(detail)
       this.scrollToBottom()
+    },
+    /** 会话恢复时以主系统摘要为真相源刷新草稿状态，并在非 READY 后移除导航动作。 */
+    async refreshSessionDraftSummaries() {
+      const candidates = (this.messages || []).filter(message => message && message.formDraftSummary && message.formDraftSummary.draftId)
+      await Promise.all(candidates.map(async message => {
+        try {
+          const response = await getFormDraftSummary(message.formDraftSummary.draftId)
+          const summary = response.data || response
+          this.$set(message, 'formDraftSummary', {
+            ...message.formDraftSummary,
+            ...summary,
+            type: summary.draftType || message.formDraftSummary.type,
+            recognizedFields: message.formDraftSummary.recognizedFields || []
+          })
+          const actions = normalizeFormDraftActions(message.uiActions)
+          this.$set(message, 'uiActions', actions.filter(action => {
+            if (summary.status === 'READY') return action.type !== 'CONVERT_TO_CREATE_CUSTOMER_WITH_ORDER'
+            return summary.status === 'EDITABLE' &&
+              (summary.draftType || message.formDraftSummary.type) === 'CREATE_ORDER' &&
+              action.type === 'CONVERT_TO_CREATE_CUSTOMER_WITH_ORDER'
+          }))
+        } catch (e) {
+          this.$set(message, 'uiActions', [])
+        }
+      }))
     },
     restoreSessionMessages(detail) {
       const mappedMessages = this.mapSessionMessages(detail && detail.messages)
@@ -826,6 +883,8 @@ export default {
           presentations: storedPresentations.length ? storedPresentations : legacyState.presentations,
           toolFacts: business.toolFacts || [],
           toolTraceSummary: business.toolTraceSummary || message.toolSummary || [],
+          formDraftSummary: business.formDraftSummary || message.formDraftSummary || null,
+          uiActions: normalizeFormDraftActions(business.uiActions || message.uiActions),
           warnings: business.warnings || message.warnings || [],
           cached: business.cached === true,
           partial: business.partial === true,

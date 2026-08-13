@@ -48,6 +48,10 @@ public class AgentChatResponse {
     private List<Map<String, Object>> toolTraceSummary = new ArrayList<>();
     /** 与业务卡片一一对应的受控展示描述；默认为空，便于旧调用方兼容。 */
     private List<PresentationDescriptor> presentations = new ArrayList<>();
+    /** 最近一次成功草稿写工具生成的脱敏摘要。 */
+    private FormDraftSummary formDraftSummary;
+    /** 由草稿事实生成的固定动作，模型不能提供路由。 */
+    private List<AgentUiAction> uiActions = new ArrayList<>();
 
     public List<Map<String, Object>> getFacts() { return facts; }
     public void setFacts(List<Map<String, Object>> facts) { this.facts = facts == null ? new ArrayList<>() : facts; }
@@ -69,6 +73,10 @@ public class AgentChatResponse {
     public void setToolTraceSummary(List<Map<String, Object>> value) { toolTraceSummary = value == null ? new ArrayList<>() : value; }
     public List<PresentationDescriptor> getPresentations() { return presentations; }
     public void setPresentations(List<PresentationDescriptor> value) { presentations = value == null ? new ArrayList<>() : value; }
+    public FormDraftSummary getFormDraftSummary() { return formDraftSummary; }
+    public void setFormDraftSummary(FormDraftSummary value) { formDraftSummary = value; }
+    public List<AgentUiAction> getUiActions() { return uiActions; }
+    public void setUiActions(List<AgentUiAction> value) { uiActions = value == null ? new ArrayList<>() : value; }
 
     public String getRequestId() {
         return requestId;

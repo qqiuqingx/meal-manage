@@ -102,6 +102,7 @@
 
     <!--表单组件-->
     <el-dialog
+      v-loading="agentDraftLoading"
       append-to-body
       :close-on-click-modal="false"
       :visible.sync="dialogVisible"
@@ -110,6 +111,25 @@
       top="5vh"
     >
       <div v-if="isCreateMode()" class="dialog-top-actions">
+        <el-alert
+          v-if="agentDraft"
+          title="来自智能客服草稿，请核对并补齐资料后手动提交。"
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 12px;"
+        >
+          <template slot="description">
+            草稿版本 {{ agentDraft.revision }}；待补充 {{ agentDraft.missingFields.length }} 项。
+            <el-button v-if="agentDraft.sourceSessionId" type="text" @click="returnToAgentSession">返回原会话</el-button>
+            <div v-if="agentDraft.missingFields.length" class="agent-draft-review-list">
+              缺失字段：{{ agentDraft.missingFields.join('、') }}
+            </div>
+            <div v-if="agentDraft.warnings.length" class="agent-draft-review-list">
+              复核提示：{{ agentDraft.warnings.map(item => item.message || item.code).join('；') }}
+            </div>
+          </template>
+        </el-alert>
         <el-button
           type="primary"
           icon="el-icon-document-copy"
@@ -410,6 +430,8 @@ import crudOperation from '@crud/CRUD.operation'
 import OrderForm, { createFirstOrderDefaultForm } from '@/components/Order/OrderForm.vue'
 import CustomerDetailDialog from './CustomerDetailDialog.vue'
 import { mapGetters } from 'vuex'
+import { claimFormDraft } from '@/api/agentFormDraft'
+import { mapAgentCustomerDraft } from './utils/agentCustomerDraftMapper'
 
 function createDefaultAddresses() {
   return [
@@ -445,6 +467,7 @@ function cleanReplaceRules(rules) {
     targetDishId: r.targetDishId,
     targetDishName: r.targetDishName,
     targetDishType: r.targetDishType,
+    enabled: r.enabled == null ? true : r.enabled,
     remark: r.remark
   }))
 }
@@ -523,7 +546,9 @@ export default {
       intakeDialogVisible: false,
       intakeText: '',
       intakeParsing: false,
-      intakeResult: null
+      intakeResult: null,
+      agentDraft: null,
+      agentDraftLoading: false
     }
   },
   computed: {
@@ -555,9 +580,10 @@ export default {
     }
   },
   created() {
-    const { customerCode, customerName } = this.$route.query || {}
+    const { customerCode, customerName, draftId } = this.$route.query || {}
     if (customerCode) this.query.customerCode = customerCode
     if (customerName) this.query.customerName = customerName
+    if (draftId) this.claimAgentDraft(draftId)
   },
   methods: {
     isTrialCreateMode() {
@@ -631,6 +657,10 @@ export default {
       }
 
       if (this.isCreateMode()) {
+        if (this.agentDraft) {
+          payload.agentDraftId = this.agentDraft.draftId
+          payload.agentDraftRevision = this.agentDraft.revision
+        }
         const orderInfo = formData.orderInfo || createFirstOrderDefaultForm()
         if (this.isTrialCreateMode()) {
           payload.orderInfo = {
@@ -646,12 +676,14 @@ export default {
             : orderInfo.deliveryDates
           payload.orderInfo = {
             parentPackageId: orderInfo.parentPackageId,
+            childPackageId: orderInfo.childPackageId || null,
             breakfastCount,
             lunchDinnerCount,
             totalCount: breakfastCount + lunchDinnerCount,
             scheduleMode: orderInfo.scheduleMode || 'SCHEDULE',
             startDate: orderInfo.startDate,
             startMealType: orderInfo.startMealType || 'BREAKFAST',
+            endDate: orderInfo.endDate || null,
             mealType: orderInfo.mealType || 'ALL',
             customerSource: orderInfo.customerSource || null,
             trialConverted: !!orderInfo.trialConverted,
@@ -676,6 +708,33 @@ export default {
       }
 
       return payload
+    },
+    /** 领取并应用新增客户及首单草稿；异常时不打开空白新增表单。 */
+    async claimAgentDraft(draftId) {
+      try {
+        this.agentDraftLoading = true
+        const response = await claimFormDraft(draftId)
+        const claim = response.data || response
+        const mapped = mapAgentCustomerDraft(claim, defaultForm)
+        if (!mapped) throw new Error('草稿类型或版本不受支持')
+        this.crud.toAdd()
+        await this.$nextTick()
+        Object.assign(this.form, mapped.form)
+        this.form.addresses = this.createAddressesFromForm(this.form)
+        this.agentDraft = mapped
+        this.excludeDatesExpanded = mapped.form.excludedDates && mapped.form.excludedDates.length > 0
+      } catch (e) {
+        this.agentDraft = null
+        this.$message.error((e && e.message) || '草稿领取失败，请返回智能客服重试')
+      } finally {
+        this.agentDraftLoading = false
+      }
+    },
+    /** 返回固定智能客服页面并携带受控来源会话标识。 */
+    returnToAgentSession() {
+      if (!this.agentDraft || !this.agentDraft.sourceSessionId) return false
+      this.$router.push({ path: '/agent/diagnosis', query: { sessionId: this.agentDraft.sourceSessionId }})
+      return true
     },
     cancelDialog() {
       this.crud.cancelCU()
@@ -761,8 +820,14 @@ export default {
           await profileApi.edit(payload)
           this.$message.success('编辑成功')
         } else {
-          await profileApi.add(payload)
+          const sourceSessionId = this.agentDraft && this.agentDraft.sourceSessionId
+          const response = await profileApi.add(payload)
+          const customerId = response.data || response
           this.$message.success('新增成功')
+          this.agentDraft = null
+          if (sourceSessionId && customerId) {
+            this.showAgentDraftSuccess(customerId, sourceSessionId)
+          }
         }
         this.crud.cancelCU()
         this.crud.refresh()
@@ -773,12 +838,29 @@ export default {
         this.submitLoading = false
       }
     },
+    /** 草稿建档成功后允许查看新客户或返回来源会话。 */
+    showAgentDraftSuccess(customerId, sourceSessionId) {
+      this.$confirm('客户及首单已创建，可查看新客户详情或返回原智能客服会话。', '草稿提交成功', {
+        confirmButtonText: '查看新客户',
+        cancelButtonText: '返回原会话',
+        distinguishCancelAndClose: true,
+        type: 'success'
+      }).then(async() => {
+        const response = await profileApi.getProfile(customerId)
+        this.handleDetail(response.data || response)
+      }).catch(action => {
+        if (action === 'cancel') {
+          this.$router.push({ path: '/agent/diagnosis', query: { sessionId: sourceSessionId }})
+        }
+      })
+    },
     [CRUD.HOOK.beforeToAdd]() {
       Object.assign(this.form, JSON.parse(JSON.stringify(defaultForm)))
       this.currentFirstOrderParentPackage = null
       this.intakeText = ''
       this.intakeResult = null
       this.intakeDialogVisible = false
+      this.agentDraft = null
       return true
     },
     [CRUD.HOOK.beforeToCU]() {

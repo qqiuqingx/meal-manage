@@ -35,4 +35,19 @@ class AgentDebugLogFormatterTest {
 
         assertEquals("{\"customerCode\":\"B5600\"}", result);
     }
+
+    /** 草稿敏感字段、控制字段和换行不得以原值进入调试日志。 */
+    @Test
+    void shouldRedactFormDraftPayloadAndControlFields() {
+        String result = AgentDebugLogFormatter.text(
+            "{\"phone\":\"13812345678\",\"addressDetail\":\"天府大道1号\","
+                + "\"authorization\":\"Bearer secret\",\"sql\":\"select * from customer\"}\nnext", true);
+
+        assertFalse(result.contains("13812345678"));
+        assertFalse(result.contains("天府大道1号"));
+        assertFalse(result.contains("Bearer secret"));
+        assertFalse(result.contains("select * from customer"));
+        assertTrue(result.contains("[REDACTED]"));
+        assertTrue(result.contains("\\n"));
+    }
 }

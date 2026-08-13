@@ -31,6 +31,14 @@ export function getChatSession(sessionId) {
   })
 }
 
+/** 查询当前登录客服的草稿脱敏摘要，用于返回会话后的状态刷新。 */
+export function getFormDraftSummary(draftId) {
+  return axios({
+    url: `/api/agent/form-drafts/${encodeURIComponent(draftId)}/summary`,
+    method: 'get'
+  })
+}
+
 export function archiveChatSession(sessionId, archived = true) {
   return axios({
     url: `/api/agent/chat-sessions/${sessionId}/archive`,
@@ -100,6 +108,7 @@ export default {
   queryChatSessions,
   createChatSession,
   getChatSession,
+  getFormDraftSummary,
   archiveChatSession,
   updateChatSessionTitle,
   submitDiagnosisFeedback,
