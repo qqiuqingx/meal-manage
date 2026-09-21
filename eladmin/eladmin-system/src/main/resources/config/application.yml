@@ -68,3 +68,9 @@ wecom:
     token: ${WECOM_CALLBACK_TOKEN:}
     # 企业微信后台生成的 EncodingAESKey（43 位）
     encoding-aes-key: ${WECOM_CALLBACK_AES_KEY:}
+
+# 客户自助资料登记测试接口
+# 仅 enabled=true 时注册 /api/public/customer-intake，默认关闭。
+customer:
+  self-intake:
+    enabled: ${CUSTOMER_SELF_INTAKE_ENABLED:false}

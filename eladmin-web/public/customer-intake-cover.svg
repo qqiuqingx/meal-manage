@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">客户资料登记</title>
+  <desc id="desc">客户自助资料登记测试入口封面</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#102a43"/>
+      <stop offset="58%" stop-color="#1f5f78"/>
+      <stop offset="100%" stop-color="#4ea79c"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8d78b" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#f8d78b" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#071b2c" flood-opacity="0.24"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#background)"/>
+  <circle cx="1060" cy="-20" r="290" fill="url(#glow)"/>
+  <circle cx="110" cy="570" r="230" fill="#4ea79c" opacity="0.18"/>
+
+  <g filter="url(#shadow)">
+    <rect x="84" y="82" width="104" height="104" rx="30" fill="#f8d78b"/>
+    <path d="M111 128h50M111 151h34" stroke="#102a43" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="151" cy="151" r="7" fill="#102a43"/>
+  </g>
+
+  <text x="84" y="296" fill="#ffffff" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="66" font-weight="700" letter-spacing="4">客户资料登记</text>
+  <text x="88" y="370" fill="#d8f0ed" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="32" letter-spacing="2">Customer self-intake</text>
+  <rect x="88" y="432" width="286" height="58" rx="29" fill="#ffffff" fill-opacity="0.14" stroke="#ffffff" stroke-opacity="0.35"/>
+  <text x="231" y="470" text-anchor="middle" fill="#ffffff" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="25" letter-spacing="3">测试登记 · 仅用于链路验证</text>
+
+  <g transform="translate(840 170)" opacity="0.94">
+    <rect x="0" y="0" width="218" height="292" rx="26" fill="#ffffff" fill-opacity="0.96"/>
+    <rect x="22" y="28" width="174" height="16" rx="8" fill="#dcecef"/>
+    <rect x="22" y="76" width="174" height="42" rx="12" fill="#f1f6f8"/>
+    <rect x="22" y="132" width="174" height="42" rx="12" fill="#f1f6f8"/>
+    <rect x="22" y="188" width="174" height="42" rx="12" fill="#f1f6f8"/>
+    <circle cx="170" cy="270" r="18" fill="#4ea79c"/>
+    <path d="M162 270l6 6 11-13" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

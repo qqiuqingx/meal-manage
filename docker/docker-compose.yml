@@ -31,6 +31,8 @@ services:
       WECOM_CORP_ID: ${WECOM_CORP_ID:-}
       WECOM_CALLBACK_TOKEN: ${WECOM_CALLBACK_TOKEN:-}
       WECOM_CALLBACK_AES_KEY: ${WECOM_CALLBACK_AES_KEY:-}
+      # 客户自助资料登记测试接口，默认关闭，联调时由部署环境显式开启
+      CUSTOMER_SELF_INTAKE_ENABLED: ${CUSTOMER_SELF_INTAKE_ENABLED:-false}
       FILE_STORAGE_PATH: /home/eladmin/file
       AVATAR_STORAGE_PATH: /home/eladmin/avatar
       BACKEND_JVM_HEAP_MIN: ${BACKEND_JVM_HEAP_MIN:-256m}

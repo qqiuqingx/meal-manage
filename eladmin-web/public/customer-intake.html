@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#102a43">
+  <meta name="description" content="客户资料登记测试入口，填写最小资料后提交给您的客服确认。">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="客户资料登记｜测试入口">
+  <meta property="og:description" content="填写姓名、手机号和地址，提交后请联系您的客服确认。">
+  <meta property="og:image" content="/customer-intake-cover.svg">
+  <meta property="og:image:alt" content="客户资料登记测试入口封面">
+  <link rel="image_src" href="/customer-intake-cover.svg">
+  <title>客户资料登记｜测试入口</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #102a43;
+      --muted: #627d98;
+      --line: #d9e2ec;
+      --surface: #ffffff;
+      --page: #f4f7fa;
+      --accent: #1f7a78;
+      --accent-dark: #155e5d;
+      --warning-bg: #fff8e6;
+      --warning-ink: #8a5a00;
+      --error-bg: #fff1f0;
+      --error-ink: #b42318;
+      --success-bg: #edf9f5;
+      --success-ink: #176b5c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-width: 320px;
+      background: var(--page);
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 90% 0%, rgba(78, 167, 156, 0.16), transparent 34%),
+        var(--page);
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 24px 16px calc(32px + env(safe-area-inset-bottom));
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 4px 4px 20px;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      color: var(--ink);
+      background: #f8d78b;
+      box-shadow: 0 8px 18px rgba(16, 42, 67, 0.12);
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .brand-text {
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: 0.08em;
+    }
+
+    .card {
+      overflow: hidden;
+      border: 1px solid rgba(217, 226, 236, 0.9);
+      border-radius: 24px;
+      background: var(--surface);
+      box-shadow: 0 18px 48px rgba(16, 42, 67, 0.1);
+    }
+
+    .hero {
+      padding: 28px 24px 24px;
+      color: #ffffff;
+      background: linear-gradient(135deg, #102a43, #1f5f78 68%, #4ea79c);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: #f8d78b;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 8vw, 38px);
+      line-height: 1.25;
+      letter-spacing: 0.04em;
+    }
+
+    .hero p {
+      max-width: 32em;
+      margin: 12px 0 0;
+      color: #d8f0ed;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
+    .content {
+      padding: 24px;
+    }
+
+    .notice {
+      margin-bottom: 22px;
+      padding: 12px 14px;
+      border: 1px solid #f3dfad;
+      border-radius: 14px;
+      color: var(--warning-ink);
+      background: var(--warning-bg);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .field {
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .required {
+      margin-left: 3px;
+      color: #c05640;
+    }
+
+    input,
+    textarea {
+      display: block;
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      outline: none;
+      color: var(--ink);
+      background: #fbfcfd;
+      font: inherit;
+      font-size: 16px;
+      line-height: 1.5;
+      transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+    }
+
+    input {
+      height: 48px;
+      padding: 0 14px;
+    }
+
+    textarea {
+      min-height: 112px;
+      padding: 11px 14px;
+      resize: vertical;
+    }
+
+    input:focus,
+    textarea:focus {
+      border-color: var(--accent);
+      background: #ffffff;
+      box-shadow: 0 0 0 3px rgba(31, 122, 120, 0.12);
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: #9fb3c8;
+    }
+
+    .field-hint {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .error {
+      display: none;
+      margin: 0 0 16px;
+      padding: 11px 13px;
+      border: 1px solid #f6c9c5;
+      border-radius: 12px;
+      color: var(--error-ink);
+      background: var(--error-bg);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .error.visible {
+      display: block;
+    }
+
+    .submit {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 50px;
+      margin-top: 8px;
+      padding: 12px 18px;
+      border: 0;
+      border-radius: 13px;
+      color: #ffffff;
+      background: var(--accent);
+      box-shadow: 0 10px 20px rgba(31, 122, 120, 0.2);
+      cursor: pointer;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 700;
+      transition: background 160ms ease, transform 160ms ease, opacity 160ms ease;
+    }
+
+    .submit:hover {
+      background: var(--accent-dark);
+    }
+
+    .submit:active {
+      transform: translateY(1px);
+    }
+
+    .submit:disabled {
+      cursor: wait;
+      opacity: 0.72;
+    }
+
+    .spinner {
+      display: none;
+      width: 17px;
+      height: 17px;
+      margin-right: 8px;
+      border: 2px solid rgba(255, 255, 255, 0.42);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: spin 700ms linear infinite;
+    }
+
+    .submit.loading .spinner {
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .footnote {
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+      text-align: center;
+    }
+
+    .success {
+      display: none;
+      padding: 8px 0 2px;
+      text-align: center;
+    }
+
+    .success.visible {
+      display: block;
+    }
+
+    .success-icon {
+      display: grid;
+      place-items: center;
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 16px;
+      border-radius: 50%;
+      color: #ffffff;
+      background: var(--accent);
+      box-shadow: 0 10px 22px rgba(31, 122, 120, 0.2);
+      font-size: 30px;
+    }
+
+    .success h2 {
+      margin: 0;
+      color: var(--success-ink);
+      font-size: 22px;
+    }
+
+    .success p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .request-id {
+      overflow-wrap: anywhere;
+      margin: 18px 0 0;
+      padding: 12px;
+      border: 1px dashed #9ed6c9;
+      border-radius: 12px;
+      color: var(--success-ink);
+      background: var(--success-bg);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      user-select: text;
+    }
+
+    .success-note {
+      margin-top: 14px !important;
+      font-size: 12px !important;
+    }
+
+    @media (max-width: 380px) {
+      .page {
+        padding-right: 12px;
+        padding-left: 12px;
+      }
+
+      .hero,
+      .content {
+        padding-right: 18px;
+        padding-left: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="brand" aria-label="客户资料登记">
+      <div class="brand-mark" aria-hidden="true">记</div>
+      <div class="brand-text">CUSTOMER SELF-INTAKE</div>
+    </div>
+
+    <section class="card" aria-labelledby="page-title">
+      <header class="hero">
+        <p class="eyebrow">TEST ENTRY · 测试入口</p>
+        <h1 id="page-title">客户资料登记</h1>
+        <p>请填写最小资料，提交后由您的客服确认。当前页面仅用于登记链路测试。</p>
+      </header>
+
+      <div class="content">
+        <div class="notice" role="note">
+          请勿填写真实客户资料。当前公网测试阶段只接受虚拟姓名、手机号、地址和备注。
+        </div>
+
+        <form id="intake-form" autocomplete="off" novalidate>
+          <div id="form-error" class="error" role="alert" aria-live="polite"></div>
+
+          <div class="field">
+            <label for="customer-name">姓名<span class="required" aria-hidden="true">*</span></label>
+            <input id="customer-name" name="customerName" type="text" maxlength="50" autocomplete="off" placeholder="请输入姓名" required>
+          </div>
+
+          <div class="field">
+            <label for="phone">手机号<span class="required" aria-hidden="true">*</span></label>
+            <input id="phone" name="phone" type="tel" inputmode="numeric" maxlength="11" autocomplete="off" placeholder="请输入大陆手机号" required>
+          </div>
+
+          <div class="field">
+            <label for="address">地址<span class="required" aria-hidden="true">*</span></label>
+            <textarea id="address" name="address" maxlength="500" autocomplete="off" placeholder="请输入收货地址" required></textarea>
+            <p class="field-hint">去除首尾空格后 5～500 个字符</p>
+          </div>
+
+          <div class="field">
+            <label for="remark">备注</label>
+            <textarea id="remark" name="remark" maxlength="1000" autocomplete="off" placeholder="可填写补充说明（选填）"></textarea>
+            <p class="field-hint">选填，最多 1000 个字符</p>
+          </div>
+
+          <button id="submit-button" class="submit" type="submit">
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="submit-label">提交测试资料</span>
+          </button>
+          <p class="footnote">提交后不会创建客户档案或订单，仅用于验证接收链路。</p>
+        </form>
+
+        <section id="success-panel" class="success" aria-live="polite" hidden>
+          <div class="success-icon" aria-hidden="true">✓</div>
+          <h2>提交成功</h2>
+          <p>测试资料已接收，请联系您的客服确认。</p>
+          <p id="request-id" class="request-id"></p>
+          <p class="success-note">请将上方追踪号提供给客服，便于核对测试日志。</p>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var form = document.getElementById('intake-form');
+      var errorBox = document.getElementById('form-error');
+      var submitButton = document.getElementById('submit-button');
+      var submitLabel = submitButton.querySelector('.submit-label');
+      var successPanel = document.getElementById('success-panel');
+      var requestIdBox = document.getElementById('request-id');
+
+      function showError(message) {
+        errorBox.textContent = message;
+        errorBox.classList.add('visible');
+      }
+
+      function clearError() {
+        errorBox.textContent = '';
+        errorBox.classList.remove('visible');
+      }
+
+      function setLoading(loading) {
+        submitButton.disabled = loading;
+        submitButton.classList.toggle('loading', loading);
+        submitLabel.textContent = loading ? '正在提交…' : '提交测试资料';
+      }
+
+      function validate(payload) {
+        if (!payload.customerName || payload.customerName.length > 50) {
+          return '请输入姓名，去除首尾空格后不能超过 50 个字符。';
+        }
+        if (!/^1[3-9]\d{9}$/.test(payload.phone)) {
+          return '请输入正确的大陆手机号。';
+        }
+        if (payload.address.length < 5 || payload.address.length > 500) {
+          return '地址去除首尾空格后需为 5～500 个字符。';
+        }
+        if (payload.remark.length > 1000) {
+          return '备注去除首尾空格后不能超过 1000 个字符。';
+        }
+        return '';
+      }
+
+      function readPayload() {
+        return {
+          customerName: document.getElementById('customer-name').value.trim(),
+          phone: document.getElementById('phone').value.trim(),
+          address: document.getElementById('address').value.trim(),
+          remark: document.getElementById('remark').value.trim()
+        };
+      }
+
+      function responseMessage(responseBody, status) {
+        if (responseBody && responseBody.message) {
+          return responseBody.message;
+        }
+        if (status === 404) {
+          return '当前登记入口暂未开放，请联系您的客服。';
+        }
+        if (status === 400) {
+          return '提交内容未通过校验，请检查后重试。';
+        }
+        return '提交失败，请稍后联系您的客服。';
+      }
+
+      function userError(message) {
+        var error = new Error(message);
+        error.userMessage = true;
+        return error;
+      }
+
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        clearError();
+
+        var payload = readPayload();
+        var validationMessage = validate(payload);
+        if (validationMessage) {
+          showError(validationMessage);
+          return;
+        }
+
+        setLoading(true);
+        fetch('/api/public/customer-intake', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+          .then(function (response) {
+            return response.json()
+              .catch(function () { return {}; })
+              .then(function (body) {
+                if (!response.ok) {
+                  throw userError(responseMessage(body, response.status));
+                }
+                return body;
+              });
+          })
+          .then(function (body) {
+            if (!body.requestId) {
+              throw userError('服务返回内容不完整，请联系您的客服。');
+            }
+            requestIdBox.textContent = '追踪号：' + body.requestId;
+            form.hidden = true;
+            successPanel.hidden = false;
+            successPanel.classList.add('visible');
+          })
+          .catch(function (error) {
+            showError(error && error.userMessage ? error.message : '暂时无法提交，请检查网络后重试。');
+          })
+          .then(function () {
+            setLoading(false);
+          });
+      });
+    }());
+  </script>
+</body>
+</html>
