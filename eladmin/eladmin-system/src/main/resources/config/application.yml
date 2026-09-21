@@ -53,3 +53,18 @@ code:
 #密码加密传输，前端公钥加密，后端私钥解密
 rsa:
   private_key: ${RSA_PRIVATE_KEY:change-me}
+
+# 企业微信消息回调
+# 仅 enabled=true 时才会注册 /api/wecom/callback 接口；
+# 启用后 token/corp-id/encoding-aes-key 任一缺失或格式错误都会导致应用启动失败。
+# 应用 Secret 不参与回调解密，无需在此配置。
+wecom:
+  callback:
+    # 是否启用回调接口，默认关闭，避免未配置时暴露公网接口
+    enabled: ${WECOM_CALLBACK_ENABLED:false}
+    # 企业 ID
+    corp-id: ${WECOM_CORP_ID:}
+    # 企业微信后台「设置 API 接收」中填写的 Token
+    token: ${WECOM_CALLBACK_TOKEN:}
+    # 企业微信后台生成的 EncodingAESKey（43 位）
+    encoding-aes-key: ${WECOM_CALLBACK_AES_KEY:}
