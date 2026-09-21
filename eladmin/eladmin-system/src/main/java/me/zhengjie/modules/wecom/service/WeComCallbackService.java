@@ -25,12 +25,16 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -41,7 +45,8 @@ import java.util.regex.Pattern;
  * 1. 校验请求参数完整性；
  * 2. 校验签名并解密 echostr 或事件报文；
  * 3. 把加解密异常统一转换成业务异常（对外只给出失败类型，不泄露密钥与解密细节）；
- * 4. POST 阶段只提取 MsgType、Event、ChangeType 等事件元数据，当前不落库、不做业务处理。
+ * 4. 把请求参数、原始报文、解密后完整明文与全部明文字段完整打印到日志；
+ * 5. POST 阶段仅记录日志，当前不落库、不做业务处理。
  *
  * @author qqx
  * @date 2026-09-21
@@ -75,8 +80,10 @@ public class WeComCallbackService {
      */
     public String verifyUrl(String msgSignature, String timestamp, String nonce, String echoStr) {
         requireParams(msgSignature, timestamp, nonce, echoStr);
+        logRequestDetail("URL 验证", msgSignature, timestamp, nonce, "echostr（密文）", echoStr);
         checkSignature(msgSignature, timestamp, nonce, echoStr);
         String plain = decrypt(echoStr, "URL 验证");
+        logPlaintextDetail("URL 验证", plain);
         log.info("企业微信回调 URL 验证通过");
         return plain;
     }
@@ -84,7 +91,8 @@ public class WeComCallbackService {
     /**
      * 处理企业微信事件推送请求。
      *
-     * 当前阶段只做签名校验与解密，并记录非敏感的事件元数据，不写数据库。
+     * 先做签名校验与解密，随后完整打印请求参数、原始密文报文、解密后明文以及明文中的全部字段。
+     * 当前不写数据库。
      *
      * @param msgSignature 企业微信计算的签名
      * @param timestamp    时间戳
@@ -94,10 +102,12 @@ public class WeComCallbackService {
      */
     public String handleEvent(String msgSignature, String timestamp, String nonce, String body) {
         requireParams(msgSignature, timestamp, nonce, body);
+        logRequestDetail("事件消息", msgSignature, timestamp, nonce, "请求报文（密文 XML）", body);
         String encrypt = parseEncrypt(body);
         checkSignature(msgSignature, timestamp, nonce, encrypt);
         String plain = decrypt(encrypt, "事件消息");
         logEventMetadata(plain);
+        logPlaintextDetail("事件消息", plain);
         return SUCCESS;
     }
 
@@ -144,14 +154,8 @@ public class WeComCallbackService {
      */
     private String parseEncrypt(String body) {
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
-            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-            factory.setXIncludeAware(false);
-            factory.setExpandEntityReferences(false);
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document document = builder.parse(new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8)));
+            Document document = newDocumentBuilder()
+                    .parse(new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8)));
             NodeList nodes = document.getElementsByTagName(ENCRYPT_TAG);
             if (nodes.getLength() == 0) {
                 throw new BadRequestException("企业微信回调请求缺少 Encrypt 节点");
@@ -170,7 +174,85 @@ public class WeComCallbackService {
     }
 
     /**
-     * 只记录事件元数据，不记录客户姓名、消息正文、手机号与完整 XML。
+     * 构造关闭 DTD 与外部实体的 DocumentBuilder，防止 XXE 攻击。
+     */
+    private DocumentBuilder newDocumentBuilder() throws ParserConfigurationException {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+        return factory.newDocumentBuilder();
+    }
+
+    /**
+     * 打印回调请求的入口参数与原始报文。
+     *
+     * 记录的是企业微信传入的签名、时间戳、随机串与密文，均不含回调 Token 与 EncodingAESKey。
+     *
+     * @param scene       场景标识，用于区分 URL 验证与事件推送
+     * @param payloadName 原始报文的中文名称
+     */
+    private void logRequestDetail(String scene, String msgSignature, String timestamp,
+                                  String nonce, String payloadName, String payload) {
+        log.info("[{}] 回调请求参数：msg_signature={}, timestamp={}, nonce={}", scene, msgSignature, timestamp, nonce);
+        log.info("[{}] 回调原始{}：{}", scene, payloadName, payload);
+    }
+
+    /**
+     * 打印解密后的完整明文与逐字段值。
+     *
+     * URL 验证场景的明文是 echostr 随机串而非 XML，没有字段结构，此时只输出明文本身。
+     */
+    private void logPlaintextDetail(String scene, String plain) {
+        log.info("[{}] 解密后明文：{}", scene, plain);
+        if (!plain.trim().startsWith("<")) {
+            return;
+        }
+        Map<String, String> fields = parseFields(plain);
+        if (fields.isEmpty()) {
+            log.info("[{}] 明文字段解析为空，请以上面的明文原样内容为准", scene);
+            return;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (Map.Entry<String, String> entry : fields.entrySet()) {
+            if (builder.length() > 0) {
+                builder.append(" | ");
+            }
+            builder.append(entry.getKey()).append('=').append(entry.getValue());
+        }
+        log.info("[{}] 回调字段共 {} 项：{}", scene, fields.size(), builder);
+    }
+
+    /**
+     * 解析解密后明文的一级子节点，返回有序的字段名与字段值。
+     *
+     * 按节点名动态解析而非硬编码字段，因此可覆盖企业微信全部事件与消息类型，
+     * 新增事件类型无需改代码。解析失败时返回空结果，不影响正常应答。
+     */
+    private Map<String, String> parseFields(String plain) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        try {
+            Document document = newDocumentBuilder()
+                    .parse(new ByteArrayInputStream(plain.getBytes(StandardCharsets.UTF_8)));
+            NodeList nodes = document.getDocumentElement().getChildNodes();
+            for (int i = 0; i < nodes.getLength(); i++) {
+                Node node = nodes.item(i);
+                if (node.getNodeType() == Node.ELEMENT_NODE) {
+                    fields.put(node.getNodeName(), node.getTextContent().trim());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("企业微信回调明文字段解析失败：{}", e.getClass().getSimpleName());
+        }
+        return fields;
+    }
+
+    /**
+     * 单独打印一行事件类型摘要，便于快速检索回调事件。
+     *
+     * 该行只含 MsgType/Event/ChangeType，作为日志锚点；完整字段见紧随其后的字段明细行。
      */
     private void logEventMetadata(String plain) {
         log.info("企业微信回调事件：MsgType={}, Event={}, ChangeType={}",

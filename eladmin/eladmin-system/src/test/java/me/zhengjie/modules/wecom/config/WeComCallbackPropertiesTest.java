@@ -65,6 +65,24 @@ class WeComCallbackPropertiesTest {
     }
 
     @Test
+    void shouldBindCallbackPropertiesFromKebabCaseKeys() {
+        // 校验 application.yml 的 kebab-case 配置键能正确绑定到字段，
+        // 否则密钥配置会静默失效
+        runner.withPropertyValues(
+                        "wecom.callback.enabled=true",
+                        "wecom.callback.corp-id=" + CORP_ID,
+                        "wecom.callback.token=" + TOKEN,
+                        "wecom.callback.encoding-aes-key=" + AES_KEY)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    WeComCallbackProperties properties = context.getBean(WeComCallbackProperties.class);
+                    assertThat(properties.getCorpId()).isEqualTo(CORP_ID);
+                    assertThat(properties.getToken()).isEqualTo(TOKEN);
+                    assertThat(properties.getEncodingAesKey()).isEqualTo(AES_KEY);
+                });
+    }
+
+    @Test
     void shouldRejectIllegalAesKey() {
         // 长度不足
         assertThrows(IllegalStateException.class,

@@ -86,6 +86,6 @@ public class WeComCallbackProperties {
         } catch (IllegalArgumentException e) {
             throw new IllegalStateException("企业微信回调配置错误：" + e.getMessage() + "，请检查 wecom.callback.encoding-aes-key（WECOM_CALLBACK_AES_KEY）");
         }
-        log.info("企业微信消息回调接口已启用，corpId={}", corpId);
+        log.info("企业微信消息回调接口已启用，corpId={}，回调请求参数、原始报文与解密后明文将完整打印到日志", corpId);
     }
 }
