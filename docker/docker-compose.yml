@@ -26,6 +26,11 @@ services:
       REDIS_PASSWORD: ${REDIS_PWD}
       REDIS_DB: ${REDIS_DB:-1}
       JWT_BASE64_SECRET: ${JWT_BASE64_SECRET}
+      # 企业微信消息回调配置；默认关闭，启用时由现网 .env 注入密钥
+      WECOM_CALLBACK_ENABLED: ${WECOM_CALLBACK_ENABLED:-false}
+      WECOM_CORP_ID: ${WECOM_CORP_ID:-}
+      WECOM_CALLBACK_TOKEN: ${WECOM_CALLBACK_TOKEN:-}
+      WECOM_CALLBACK_AES_KEY: ${WECOM_CALLBACK_AES_KEY:-}
       FILE_STORAGE_PATH: /home/eladmin/file
       AVATAR_STORAGE_PATH: /home/eladmin/avatar
       BACKEND_JVM_HEAP_MIN: ${BACKEND_JVM_HEAP_MIN:-256m}
