@@ -54,6 +54,32 @@
         </encoder>
     </appender>
 
+    <!-- 客户自助资料测试提交日志文件（每天一个文件，保留30天） -->
+    <appender name="CUSTOMER_SELF_INTAKE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${log.path}/customer-self-intake.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${log.path}/customer-self-intake.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 企业微信回调日志文件（每天一个文件，保留30天） -->
+    <appender name="WECOM_CALLBACK_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${log.path}/wecom-callback.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${log.path}/wecom-callback.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
     <!-- 排餐计划服务日志单独写文件 -->
     <logger name="me.zhengjie.modules.meal.service.impl.MealPlanServiceImpl" level="info" additivity="false">
         <appender-ref ref="MEAL_PLAN_FILE" />
@@ -69,6 +95,18 @@
     <!-- 核销服务日志单独写文件 -->
     <logger name="me.zhengjie.modules.meal.service.impl.MealVerificationServiceImpl" level="info" additivity="false">
         <appender-ref ref="MEAL_VERIFICATION_FILE" />
+        <appender-ref ref="console" />
+    </logger>
+
+    <!-- 客户自助资料测试提交日志单独写文件 -->
+    <logger name="me.zhengjie.modules.customer.profile.rest.CustomerSelfIntakeController" level="info" additivity="false">
+        <appender-ref ref="CUSTOMER_SELF_INTAKE_FILE" />
+        <appender-ref ref="console" />
+    </logger>
+
+    <!-- 企业微信回调日志单独写文件 -->
+    <logger name="me.zhengjie.modules.wecom.service.WeComCallbackService" level="info" additivity="false">
+        <appender-ref ref="WECOM_CALLBACK_FILE" />
         <appender-ref ref="console" />
     </logger>
 

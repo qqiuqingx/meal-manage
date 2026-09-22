@@ -11,8 +11,9 @@ fi
 # 尝试设置日志目录权限（如果是挂载的，可能因宿主机权限而失败）
 chmod 777 /app/logs 2>/dev/null || echo "Warning: Cannot change permissions for /app/logs (may be a mounted volume)"
 
-# 解决日志中文乱码
-export JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8 -Duser.language=zh -Duser.country=CN"
+# 统一容器和 JVM 时区，日志、日期转换以及 Quartz 定时任务均使用中国标准时间
+export TZ="${TZ:-Asia/Shanghai}"
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:--Dfile.encoding=UTF-8 -Duser.language=zh -Duser.country=CN} -Duser.timezone=${TZ}"
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 

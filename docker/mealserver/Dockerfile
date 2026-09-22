@@ -5,6 +5,9 @@
 # =============================================================================
 FROM eclipse-temurin:8-jre
 
+# 统一容器和 JVM 使用中国标准时间，避免日志和定时任务按 UTC 执行
+ENV TZ=Asia/Shanghai
+
 # Install dumb-init for proper signal handling and wget for healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
     dumb-init wget \

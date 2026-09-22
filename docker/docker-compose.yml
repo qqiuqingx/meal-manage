@@ -12,6 +12,8 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      # 统一容器时区；entrypoint 会同步设置 JVM 时区
+      TZ: Asia/Shanghai
       # 解决日志中文乱码
       JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8 -Duser.language=zh -Duser.country=CN
       LANG: C.UTF-8
