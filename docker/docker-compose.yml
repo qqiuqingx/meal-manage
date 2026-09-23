@@ -8,8 +8,6 @@ services:
     build:
       context: ../
       dockerfile: docker/mealserver/Dockerfile
-      args:
-        VCS_REF: ${BACKEND_GIT_COMMIT:-unknown}
     container_name: mealserver
     restart: unless-stopped
     environment:

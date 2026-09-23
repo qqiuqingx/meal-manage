@@ -71,7 +71,7 @@ Phase 04 负责把新版运行配置部署到预发目标，再由 Phase 03 发�
 ### Step 3：预发首次切换
 
 1. 记录旧 commit、mealserver/mealweb tag 与 image ID、容器 ID 和业务冒烟结果；确认旧 mealweb 镜像仍可运行。
-2. 在确认部署仓库无 tracked 改动、记录当前 HEAD 并保留旧 commit 后，只执行 `git fetch`、切换目标分支和 `git reset --hard origin/<branch>` 更新预发仓库文件；此步骤不运行旧 deploy-from-github.sh 或 deploy-bootstrap.sh，不启动或停止容器。
+2. 确认部署仓库无 tracked 改动并记录当前 HEAD 后，运行服务器现有的 `/data/meals/deploy-bootstrap.sh` 更新代码。它会执行仓库中的新版 deploy-from-github.sh；本次仅有前端/运行配置变更时，日志应显示需要本地前端发布并跳过 backend 构建/重启和 frontend 重建。如检测到后端源码变更，先核实，不继续切换。
 3. 更新预发 env-file 中的 BACKEND_IMAGE_TAG 为当前正在运行的 mealserver tag，保留其他私有配置。旧共享 IMAGE_TAG 只记录旧 mealweb tag 供恢复命令显式传入，不要求保存在新 env-file。
 4. 使用 Phase 03 本地发布器构建、上传与预发代码提交对应的 release，首次激活并强制重建 frontend。
 5. 验证首页、登录、hash JS、API 代理、上传资源和 release.json；确认静态文件由容器 Nginx worker 读取。

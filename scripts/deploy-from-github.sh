@@ -290,6 +290,30 @@ start_backend_image() {
   return 1
 }
 
+record_backend_revision() {
+  local image_tag="$1" git_commit="$2"
+  local revision_dir="$DEPLOY_BASE_DIR/.deploy/mealserver/revisions"
+  local revision_file temporary_file existing_commit
+  [[ "$image_tag" =~ ^[A-Za-z0-9_.-]+$ ]] || die "invalid backend image tag: $image_tag"
+  [[ "$git_commit" =~ ^[a-f0-9]{40}$ ]] || die "invalid backend Git commit: $git_commit"
+
+  mkdir -p "$revision_dir"
+  revision_file="$revision_dir/$image_tag.commit"
+  if [[ -f "$revision_file" ]]; then
+    existing_commit="$(cat "$revision_file")"
+    [[ "$existing_commit" == "$git_commit" ]] || die "backend image tag $image_tag already maps to another commit"
+    return 0
+  fi
+
+  temporary_file="$(mktemp "$revision_dir/.${image_tag}.commit.XXXXXX")"
+  printf '%s\n' "$git_commit" > "$temporary_file"
+  chmod 0600 "$temporary_file"
+  mv -n -- "$temporary_file" "$revision_file"
+  rm -f -- "$temporary_file"
+  existing_commit="$(cat "$revision_file")"
+  [[ "$existing_commit" == "$git_commit" ]] || die "could not persist backend commit mapping for $image_tag"
+}
+
 deploy_compose() {
   local previous_commit="$1"
   local compose_file="$DEPLOY_BASE_DIR/$COMPOSE_FILE_REL"
@@ -337,6 +361,7 @@ deploy_compose() {
   fi
   build_backend_artifacts
   (cd "$DEPLOY_BASE_DIR" && DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build backend)
+  record_backend_revision "$BACKEND_IMAGE_TAG" "$BACKEND_GIT_COMMIT"
   if ! start_backend_image "$BACKEND_IMAGE_TAG" "$BACKEND_GIT_COMMIT"; then
     die "new backend image did not become healthy"
   fi
@@ -360,6 +385,7 @@ cleanup_old_images() {
       [[ -n "$image_name" ]] || continue
       log "  删除旧后端镜像: $image_name (创建时间: $image_created)"
       if remove_output=$(docker rmi "$image_name" 2>&1); then
+        rm -f -- "$DEPLOY_BASE_DIR/.deploy/mealserver/revisions/${image_name#mealserver:}.commit"
         ((cleaned_count++)) || true
       else
         log "  警告: 无法删除镜像 $image_name: $remove_output"
