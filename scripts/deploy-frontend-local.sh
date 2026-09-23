@@ -159,7 +159,7 @@ check_node_version() {
   expected="$(tr -d '[:space:]' < "$WEB_DIR/.nvmrc")"
   actual="$(node --version)"
   actual="${actual#v}"
-  [[ "$actual" == "$expected" ]] || die "Node 版本必须与 .nvmrc 一致（期望 $expected，当前 $actual）"
+  [[ "$actual" == "$expected" ]] || die "Node 版本必须与 .nvmrc 一致（期望 ${expected}，当前 ${actual}）"
 }
 
 check_worktree() {
@@ -189,7 +189,7 @@ install_dependencies_if_needed() {
   marker="$WEB_DIR/node_modules/.frontend-deploy-dependencies"
 
   if [[ ! -d "$WEB_DIR/node_modules" || ! -f "$marker" || "$(cat "$marker" 2>/dev/null || true)" != "$cache_key" ]]; then
-    log "安装锁定依赖（Node $node_version / npm $npm_version / $platform-$arch）"
+    log "安装锁定依赖（Node ${node_version} / npm ${npm_version} / ${platform}-${arch}）"
     (cd "$WEB_DIR" && npm ci --legacy-peer-deps)
     printf '%s\n' "$cache_key" > "$marker"
   else
@@ -209,7 +209,7 @@ build_release() {
   TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/frontend-release.XXXXXX")"
   local build_dist_dir="$TMP_DIR/dist"
   install_dependencies_if_needed
-  log "构建 release $release_id（$commit）"
+  log "构建 release ${release_id}（${commit}）"
   (cd "$WEB_DIR" && VUE_APP_BASE_API=/ npm run build:prod -- --dest "$build_dist_dir")
   [[ -f "$build_dist_dir/index.html" ]] || die "构建成功但临时 dist/index.html 不存在"
   if find "$build_dist_dir" -type l -print | grep -q .; then
