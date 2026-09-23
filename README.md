@@ -178,7 +178,7 @@ bash /data/meals/deploy-bootstrap.sh
 前端在开发机本地构建，再通过 SSH/rsync 发布静态版本：
 
 ```bash
-DEPLOY_TARGET=deploy@example-host bash scripts/deploy-frontend-local.sh
+./scripts/deploy-frontend-local.sh
 ```
 
 生产环境首次切换步骤、私有 Compose 环境文件、发布、回退和恢复旧镜像方式见[前端静态产物发布与回退手册](docs/deployment/前端静态产物发布与回退.md)。服务器 Compose 环境文件保存在 `/data/meals/.env`，不得提交到仓库；常规后端发布和回退脚本会显式传入镜像 tag。

@@ -45,7 +45,7 @@
 - release 目录不可覆盖。清理只能删除受控 release ID 目录，且不能删除 current 或 previous。
 - current 与 releases 必须在同一文件系统，确保软链接替换原子完成。
 - 所有切换和清理持有 flock 锁，避免并发发布、回退相互覆盖。
-- 不将服务器地址、账号、私钥、密码或业务密钥提交到仓库。本地脚本从 DEPLOY_TARGET 等环境变量读取连接信息。
+- 不将服务器地址、账号、私钥、密码或业务密钥提交到仓库。本地脚本默认使用开发机 SSH config 的 Host 122，也允许通过 DEPLOY_TARGET 覆盖。
 - 用户已确认旧前端 Dockerfile 没有外部调用方，Phase 01 直接删除该构建路径，不保留双链路。deploy-from-github.sh 和 rollback.sh 的服务器定时入口仍需在首次切换前确认并安排窗口。
 - 前端回退只恢复静态资源。联动发布若涉及接口或数据库变化，必须记录兼容版本组合，按操作手册分别回退前端 release 和后端 image。
 - 首次切换前保留当前 mealweb 镜像、旧 Git commit 和镜像 tag；首次自动回退和人工回退演练成功前禁止清理。

@@ -6,7 +6,7 @@ umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 WEB_DIR="$REPO_ROOT/eladmin-web"
-DEPLOY_TARGET="${DEPLOY_TARGET:-}"
+DEPLOY_TARGET="${DEPLOY_TARGET:-122}"
 DEPLOY_BASE_DIR="${DEPLOY_BASE_DIR:-/data/meals/meal-manage}"
 ENV_FILE="${ENV_FILE:-/data/meals/.env}"
 COMPOSE_FILE_REL="${COMPOSE_FILE_REL:-docker/docker-compose.yml}"
@@ -44,7 +44,7 @@ cleanup() {
     rm -rf -- "$TMP_DIR"
   fi
   if [[ "$PUBLISH_REMOTE_FILES" == true ]]; then
-    ssh -o BatchMode=yes -o "ConnectTimeout=$SSH_CONNECT_TIMEOUT" "$DEPLOY_TARGET" \
+    ssh -o "ConnectTimeout=$SSH_CONNECT_TIMEOUT" "$DEPLOY_TARGET" \
       "rm -f -- '$REMOTE_ARCHIVE_TMP' '$REMOTE_CHECKSUM_TMP' '$REMOTE_MANAGER_TMP' '$REMOTE_ARCHIVE' '$REMOTE_CHECKSUM'" \
       >/dev/null 2>&1 || true
   fi
@@ -143,7 +143,6 @@ check_requirements() {
   for command_name in bash git node npm tar shasum rsync ssh find chmod awk dirname mktemp cp rm tr cat sed date grep curl; do
     require_cmd "$command_name"
   done
-  [[ -n "$DEPLOY_TARGET" ]] || die "请设置 DEPLOY_TARGET（例如 deploy@example-host）"
   [[ "$DEPLOY_TARGET" =~ ^[A-Za-z0-9._@:-]+$ && "$DEPLOY_TARGET" != -* ]] || die "DEPLOY_TARGET 格式无效"
   validate_remote_path DEPLOY_BASE_DIR "$DEPLOY_BASE_DIR"
   validate_remote_path ENV_FILE "$ENV_FILE"
@@ -207,18 +206,19 @@ build_release() {
   package_lock_sha="$(shasum -a 256 "$WEB_DIR/package-lock.json" | awk '{print $1}')"
   node_version="$(node --version)"
 
+  TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/frontend-release.XXXXXX")"
+  local build_dist_dir="$TMP_DIR/dist"
   install_dependencies_if_needed
   log "构建 release $release_id（$commit）"
-  (cd "$WEB_DIR" && VUE_APP_BASE_API=/ npm run build:prod)
-  [[ -f "$WEB_DIR/dist/index.html" ]] || die "构建成功但 dist/index.html 不存在"
-  if find "$WEB_DIR/dist" -type l -print | grep -q .; then
+  (cd "$WEB_DIR" && VUE_APP_BASE_API=/ npm run build:prod -- --dest "$build_dist_dir")
+  [[ -f "$build_dist_dir/index.html" ]] || die "构建成功但临时 dist/index.html 不存在"
+  if find "$build_dist_dir" -type l -print | grep -q .; then
     die "dist 中存在符号链接，拒绝打包"
   fi
 
-  TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/frontend-release.XXXXXX")"
   local payload_dir="$TMP_DIR/payload"
   mkdir -m 0755 "$payload_dir"
-  cp -R "$WEB_DIR/dist/." "$payload_dir/"
+  cp -R "$build_dist_dir/." "$payload_dir/"
   RELEASE_ID="$release_id" GIT_COMMIT="$commit" BUILT_AT="$built_at" \
     PACKAGE_LOCK_SHA="$package_lock_sha" NODE_VERSION="${node_version#v}" \
     node -e 'process.stdout.write(JSON.stringify({releaseId:process.env.RELEASE_ID,gitCommit:process.env.GIT_COMMIT,builtAt:process.env.BUILT_AT,packageLockSha256:process.env.PACKAGE_LOCK_SHA,nodeVersion:process.env.NODE_VERSION})+"\n")' \
@@ -254,16 +254,16 @@ publish_release() {
   REMOTE_MANAGER_TMP="$remote_manager_tmp"
   PUBLISH_REMOTE_FILES=true
 
-  ssh -o BatchMode=yes -o "ConnectTimeout=$SSH_CONNECT_TIMEOUT" "$DEPLOY_TARGET" \
+  ssh -o "ConnectTimeout=$SSH_CONNECT_TIMEOUT" "$DEPLOY_TARGET" \
     "mkdir -p -- '$incoming' '$FRONTEND_RELEASE_ROOT/lock' '$DEPLOY_BASE_DIR/scripts'"
-  rsync -e "ssh -o BatchMode=yes -o ConnectTimeout=$SSH_CONNECT_TIMEOUT" -- "$SCRIPT_DIR/manage-frontend-release.sh" "$DEPLOY_TARGET:$remote_manager_tmp"
-  ssh -o BatchMode=yes -o "ConnectTimeout=$SSH_CONNECT_TIMEOUT" "$DEPLOY_TARGET" \
+  rsync -e "ssh -o ConnectTimeout=$SSH_CONNECT_TIMEOUT" -- "$SCRIPT_DIR/manage-frontend-release.sh" "$DEPLOY_TARGET:$remote_manager_tmp"
+  ssh -o "ConnectTimeout=$SSH_CONNECT_TIMEOUT" "$DEPLOY_TARGET" \
     "chmod 0750 -- '$remote_manager_tmp' && mv -f -- '$remote_manager_tmp' '$remote_manager'"
   REMOTE_MANAGER_TMP=""
 
-  rsync -e "ssh -o BatchMode=yes -o ConnectTimeout=$SSH_CONNECT_TIMEOUT" -- "$archive" "$DEPLOY_TARGET:$remote_archive_tmp"
-  rsync -e "ssh -o BatchMode=yes -o ConnectTimeout=$SSH_CONNECT_TIMEOUT" -- "$archive.sha256" "$DEPLOY_TARGET:$remote_checksum_tmp"
-  ssh -o BatchMode=yes -o "ConnectTimeout=$SSH_CONNECT_TIMEOUT" "$DEPLOY_TARGET" \
+  rsync -e "ssh -o ConnectTimeout=$SSH_CONNECT_TIMEOUT" -- "$archive" "$DEPLOY_TARGET:$remote_archive_tmp"
+  rsync -e "ssh -o ConnectTimeout=$SSH_CONNECT_TIMEOUT" -- "$archive.sha256" "$DEPLOY_TARGET:$remote_checksum_tmp"
+  ssh -o "ConnectTimeout=$SSH_CONNECT_TIMEOUT" "$DEPLOY_TARGET" \
     "set -eu; test ! -e '$remote_archive' && test ! -L '$remote_archive'; test ! -e '$remote_checksum' && test ! -L '$remote_checksum'; mv -n -- '$remote_archive_tmp' '$remote_archive'; if test -e '$remote_archive_tmp'; then exit 1; fi; mv -n -- '$remote_checksum_tmp' '$remote_checksum'; if test -e '$remote_checksum_tmp'; then rm -f -- '$remote_archive'; exit 1; fi"
   REMOTE_ARCHIVE="$remote_archive"
   REMOTE_CHECKSUM="$remote_checksum"
@@ -274,7 +274,7 @@ publish_release() {
     keep_option="--keep '$FRONTEND_RELEASE_KEEP'"
   fi
   install_command="'$remote_manager' --root '$FRONTEND_RELEASE_ROOT' --base-dir '$DEPLOY_BASE_DIR' --env-file '$ENV_FILE' --compose-file '$COMPOSE_FILE_REL' $keep_option install '$remote_archive' '$remote_checksum' '$release_id'"
-  ssh -o BatchMode=yes -o "ConnectTimeout=$SSH_CONNECT_TIMEOUT" "$DEPLOY_TARGET" "$install_command"
+  ssh -o "ConnectTimeout=$SSH_CONNECT_TIMEOUT" "$DEPLOY_TARGET" "$install_command"
   REMOTE_ARCHIVE=""
   REMOTE_CHECKSUM=""
 
