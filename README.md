@@ -104,11 +104,12 @@ eladmin-mp/
 
 - JDK 8
 - Maven 3.x
-- Node.js 16 或兼容 Vue CLI 3 的版本
+- Node.js 24.21.0（版本见 `eladmin-web/.nvmrc`）
 - MySQL
 - Redis
 
 前端脚本已内置 `NODE_OPTIONS=--openssl-legacy-provider`，可兼容较新的 Node.js OpenSSL 行为。
+本地前端发布器会在 `eladmin-web/.node-runtime/` 缓存 `.nvmrc` 指定的 Node 24.21.0，只为发布进程设置 PATH，不切换系统默认 Node。
 
 ### 后端启动
 
@@ -147,7 +148,7 @@ REDIS_DB=1
 ```bash
 cd eladmin-web
 
-npm install
+npm ci --legacy-peer-deps
 npm run dev
 ```
 
@@ -162,19 +163,27 @@ mvn clean package -DskipTests
 
 # 前端生产包
 cd ../eladmin-web
-npm run build:prod
+VUE_APP_BASE_API=/ npm run build:prod
 ```
 
 ### Docker 部署
 
+后端由服务器部署脚本独立构建与发布：
+
 ```bash
-cd docker
-cp .env.example .env
-# 按环境修改 .env 中的数据库、Redis、JWT 等配置
-docker compose up -d --build
+# 在部署服务器执行
+bash /data/meals/deploy-bootstrap.sh
 ```
 
-容器部署中前端默认暴露 `18080`，后端在 Docker 网络内监听 `8000`，由前端 Nginx 代理访问。
+前端在开发机本地构建，再通过 SSH/rsync 发布静态版本：
+
+```bash
+DEPLOY_TARGET=deploy@example-host bash scripts/deploy-frontend-local.sh
+```
+
+生产环境首次切换步骤、私有 Compose 环境文件、发布、回退和恢复旧镜像方式见[前端静态产物发布与回退手册](docs/deployment/前端静态产物发布与回退.md)。服务器 Compose 环境文件保存在 `/data/meals/.env`，不得提交到仓库；常规后端发布和回退脚本会显式传入镜像 tag。
+
+frontend 使用固定 Nginx 镜像，只读挂载当前静态 release 并代理后端；服务器不执行 npm、Webpack 或前端 Docker build。前端默认暴露 `18080`，后端在 Docker 网络内监听 `8000`。后端回退使用 `bash scripts/rollback.sh [mealserver-image-tag]`；前端回退使用 `manage-frontend-release.sh rollback [release-id]`。
 
 ## 测试
 

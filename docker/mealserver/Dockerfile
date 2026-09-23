@@ -5,6 +5,9 @@
 # =============================================================================
 FROM eclipse-temurin:8-jre
 
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.revision="${VCS_REF}"
+
 # 统一容器和 JVM 使用中国标准时间，避免日志和定时任务按 UTC 执行
 ENV TZ=Asia/Shanghai
 

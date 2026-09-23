@@ -2,10 +2,10 @@
 
 set -euo pipefail
 
-# Production deployment script:
+# Production backend deployment script:
 # 1. Clone or update the target Git repository
-# 2. Rebuild Docker images from source
-# 3. Restart Docker Compose services
+# 2. Build and restart backend only when backend sources changed
+# 3. Leave frontend releases to deploy-frontend-local.sh
 
 REPO_URL="${REPO_URL:-git@github.com:qqiuqingx/meal-manage.git}"
 BRANCH="${BRANCH:-master}"
@@ -26,6 +26,22 @@ BACKEND_ARTIFACT_DIR="${BACKEND_ARTIFACT_DIR:-$DEPLOY_BASE_DIR/.deploy/mealserve
 BACKEND_JAR_NAME="${BACKEND_JAR_NAME:-eladmin-system-1.1.jar}"
 SKIP_REPO_UPDATE="${SKIP_REPO_UPDATE:-false}"
 PREVIOUS_COMMIT="${PREVIOUS_COMMIT:-}"
+BACKEND_DEPLOYED=false
+BACKEND_STOPPED=false
+PREVIOUS_BACKEND_TAG=""
+
+restore_backend_on_failure() {
+  local status=$?
+  trap - EXIT
+  if [[ "$status" -ne 0 && "$BACKEND_STOPPED" == "true" ]]; then
+    log "backend build/deploy failed; restarting previous backend image mealserver:$PREVIOUS_BACKEND_TAG"
+    if ! start_backend_image "$PREVIOUS_BACKEND_TAG" "${PREVIOUS_COMMIT:-unknown}"; then
+      log "ERROR: previous backend image could not be restarted"
+    fi
+  fi
+  exit "$status"
+}
+trap restore_backend_on_failure EXIT
 
 # 校验 KEEP_IMAGE_COUNT 必须为正整数，且至少为 2（保证回退脚本始终有镜像可选）
 if ! [[ "$KEEP_IMAGE_COUNT" =~ ^[1-9][0-9]*$ ]]; then
@@ -186,49 +202,26 @@ detect_changes() {
   fi
 }
 
-# 根据变更文件确定需要构建的目标
+# 只在后端源码变化时构建后端；前端变更由本地静态产物发布器处理。
 determine_build_targets() {
   local changed_files="$1"
 
   local rebuild_backend=false
-  local rebuild_frontend=false
+  local frontend_changed=false
 
-  # 如果强制全量重建
   if [[ "$changed_files" == "force-full-rebuild" ]]; then
     rebuild_backend=true
-    rebuild_frontend=true
+    frontend_changed=true
   elif [[ -n "$changed_files" ]]; then
-    # 检查后端变更
-    if echo "$changed_files" | grep -qE "^eladmin/"; then
+    if grep -qE '^eladmin/' <<< "$changed_files" || grep -qE '^docker/mealserver/' <<< "$changed_files"; then
       rebuild_backend=true
     fi
-    if echo "$changed_files" | grep -qE "^docker/mealserver/"; then
-      rebuild_backend=true
-    fi
-
-    # 检查前端变更
-    if echo "$changed_files" | grep -qE "^eladmin-web/"; then
-      rebuild_frontend=true
-    fi
-    if echo "$changed_files" | grep -qE "^docker/mealweb/"; then
-      rebuild_frontend=true
-    fi
-
-    # 检查共享变更（同时触发后端和前端重建）
-    if echo "$changed_files" | grep -qE "^docker/docker-compose\.yml$"; then
-      rebuild_backend=true
-      rebuild_frontend=true
-    fi
-
-    # 保守策略：如果有意外的文件变更，重建所有
-    if echo "$changed_files" | grep -qvE "^(eladmin/|eladmin-web/|docker/)"; then
-      log "warning: unexpected file change detected, rebuilding both"
-      rebuild_backend=true
-      rebuild_frontend=true
+    if grep -qE '^(eladmin-web/|docker/mealweb/|docker/docker-compose\.yml$)' <<< "$changed_files"; then
+      frontend_changed=true
     fi
   fi
 
-  echo "backend=$rebuild_backend,frontend=$rebuild_frontend"
+  echo "backend=$rebuild_backend,frontend_changed=$frontend_changed"
 }
 
 # 重试直到成功的辅助函数（用于拉取镜像，网络不稳定时用）
@@ -248,24 +241,6 @@ retry_until_success() {
   done
   log "failed after $max_attempts attempts: $description"
   return 1
-}
-
-get_container_image_tag() {
-  local container_name="$1"
-  local repository="$2"
-  local image
-
-  image=$(docker inspect "$container_name" --format '{{.Config.Image}}' 2>/dev/null || true)
-  if [[ "$image" == "$repository:"* ]]; then
-    printf '%s\n' "${image#"$repository:"}"
-  fi
-}
-
-image_tag_exists() {
-  local repository="$1"
-  local tag="$2"
-
-  docker image inspect "$repository:$tag" >/dev/null 2>&1
 }
 
 build_backend_artifacts() {
@@ -289,6 +264,32 @@ build_backend_artifacts() {
   require_file "$BACKEND_ARTIFACT_DIR/app.jar"
 }
 
+get_container_image_tag() {
+  local image
+  image="$(docker inspect mealserver --format '{{.Config.Image}}' 2>/dev/null || true)"
+  if [[ "$image" == mealserver:* ]]; then
+    printf '%s\n' "${image#mealserver:}"
+  fi
+}
+
+start_backend_image() {
+  local image_tag="$1" git_commit="$2"
+  export BACKEND_IMAGE_TAG="$image_tag"
+  export IMAGE_TAG="$image_tag"
+  export BACKEND_GIT_COMMIT="$git_commit"
+  if ! (cd "$DEPLOY_BASE_DIR" && docker compose -f "$DEPLOY_BASE_DIR/$COMPOSE_FILE_REL" --env-file "$ENV_FILE" up -d --no-build --no-deps backend); then
+    return 1
+  fi
+  local attempt status
+  for ((attempt = 1; attempt <= 180 / 5; attempt++)); do
+    status="$(docker inspect mealserver --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' 2>/dev/null || true)"
+    [[ "$status" == healthy ]] && return 0
+    [[ "$status" == unhealthy ]] && return 1
+    sleep 5
+  done
+  return 1
+}
+
 deploy_compose() {
   local previous_commit="$1"
   local compose_file="$DEPLOY_BASE_DIR/$COMPOSE_FILE_REL"
@@ -302,109 +303,62 @@ deploy_compose() {
   changed_files=$(detect_changes "$previous_commit")
   build_targets=$(determine_build_targets "$changed_files")
 
-  # 解析构建目标
-  local rebuild_backend
-  local rebuild_frontend
+  local rebuild_backend frontend_changed
   rebuild_backend=$(echo "$build_targets" | grep -oP 'backend=\K(true|false)' || echo "false")
-  rebuild_frontend=$(echo "$build_targets" | grep -oP 'frontend=\K(true|false)' || echo "false")
-
-  # docker-compose.yml uses a single IMAGE_TAG for both services. Keep the pair aligned.
-  export IMAGE_TAG
-  if [[ "$rebuild_backend" == "false" && "$rebuild_frontend" == "false" ]]; then
-    local backend_current_tag
-    local frontend_current_tag
-    backend_current_tag=$(get_container_image_tag mealserver mealserver)
-    frontend_current_tag=$(get_container_image_tag mealweb mealweb)
-
-    if [[ -n "$backend_current_tag" && "$backend_current_tag" == "$frontend_current_tag" ]] && \
-       image_tag_exists mealserver "$backend_current_tag" && \
-       image_tag_exists mealweb "$frontend_current_tag"; then
-      IMAGE_TAG="$backend_current_tag"
-      log "no rebuild needed, reusing existing image tag: $IMAGE_TAG"
-    else
-      log "no reusable paired image tag found, forcing full rebuild"
-      rebuild_backend=true
-      rebuild_frontend=true
-      IMAGE_TAG=$(date '+%Y%m%d%H%M%S')
-    fi
-  else
-    if [[ "$rebuild_backend" != "$rebuild_frontend" ]]; then
-      log "partial rebuild requested, rebuilding both services to keep image tags aligned"
-      rebuild_backend=true
-      rebuild_frontend=true
-    fi
-    # 生成镜像 tag，精确到秒（避免同分钟多次部署标签冲突）
-    IMAGE_TAG=$(date '+%Y%m%d%H%M%S')
-  fi
+  frontend_changed=$(echo "$build_targets" | grep -oP 'frontend_changed=\K(true|false)' || echo "false")
 
   log "change analysis complete:"
-  log "  - rebuild backend: $rebuild_backend"
-  log "  - rebuild frontend: $rebuild_frontend"
+  log "  - build backend: $rebuild_backend"
+  log "  - frontend release required: $frontend_changed"
+  if [[ "$frontend_changed" == "true" ]]; then
+    log "前端源码或运行配置有变化；请从开发机执行 scripts/deploy-frontend-local.sh。服务器不会构建或重启 frontend。"
+  fi
+  if [[ "$rebuild_backend" != "true" ]]; then
+    log "后端源码没有变化，不构建、停止或重启任何容器。"
+    return 0
+  fi
 
-  log "rebuilding and starting containers, image tag: $IMAGE_TAG"
-  (
-    cd "$DEPLOY_BASE_DIR"
-    # 停止所有容器，释放内存（4GB 服务器构建时不能有其他容器跑着）
-    docker compose -f "$compose_file" --env-file "$ENV_FILE" down || true
-    cleanup_docker_space
-    check_disk_space
+  local backend_tag backend_commit
+  backend_tag=$(date '+%Y%m%d%H%M%S')
+  backend_commit=$(git -C "$DEPLOY_BASE_DIR" rev-parse HEAD)
+  export BACKEND_IMAGE_TAG="$backend_tag"
+  export BACKEND_GIT_COMMIT="$backend_commit"
 
-    # 先预拉取所有基础镜像（国内访问 Docker Hub 不稳定，提前拉取减少构建失败）
-    log "pre-pulling base images..."
-    if [[ "$rebuild_backend" == "true" ]]; then
-      retry_until_success 3 "pulling $MAVEN_IMAGE" \
-        docker pull "$MAVEN_IMAGE" || true
-    fi
-    retry_until_success 3 "pulling node:16" \
-      docker pull node:16 || true
-    retry_until_success 3 "pulling nginx:1.25-alpine" \
-      docker pull nginx:1.25-alpine || true
-
-    # 根据变更情况条件化构建
-    if [[ "$rebuild_backend" == "true" ]]; then
-      build_backend_artifacts
-      log "building backend..."
-      DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build backend
-    else
-      log "skipping backend build (no changes detected)"
-    fi
-
-    if [[ "$rebuild_frontend" == "true" ]]; then
-      log "building frontend..."
-      DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build frontend
-    else
-      log "skipping frontend build (no changes detected)"
-    fi
-
-    # 始终启动容器
-    log "starting containers..."
-    # 仅在前后端镜像都已存在时跳过构建
-    if docker images --format '{{.Repository}}' | grep -qx 'mealserver' && \
-       docker images --format '{{.Repository}}' | grep -qx 'mealweb'; then
-      DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --no-build
-    else
-      DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d
-    fi
-  )
+  log "building backend image mealserver:$BACKEND_IMAGE_TAG from $BACKEND_GIT_COMMIT"
+  cleanup_docker_space
+  check_disk_space
+  retry_until_success 3 "pulling $MAVEN_IMAGE" docker pull "$MAVEN_IMAGE"
+  retry_until_success 3 "pulling eclipse-temurin:8-jre" docker pull eclipse-temurin:8-jre
+  PREVIOUS_BACKEND_TAG="$(get_container_image_tag)"
+  if [[ -n "$PREVIOUS_BACKEND_TAG" ]]; then
+    log "stopping backend only while Maven builds; frontend stays available"
+    BACKEND_STOPPED=true
+    (cd "$DEPLOY_BASE_DIR" && docker compose -f "$compose_file" --env-file "$ENV_FILE" stop backend)
+  fi
+  build_backend_artifacts
+  (cd "$DEPLOY_BASE_DIR" && DOCKER_BUILDKIT=1 docker compose -f "$compose_file" --env-file "$ENV_FILE" build backend)
+  if ! start_backend_image "$BACKEND_IMAGE_TAG" "$BACKEND_GIT_COMMIT"; then
+    die "new backend image did not become healthy"
+  fi
+  BACKEND_STOPPED=false
+  BACKEND_DEPLOYED=true
 }
 
 # 清理旧版本的 Docker 镜像
 cleanup_old_images() {
-  log "正在清理旧版本 Docker 镜像（保留最近 $KEEP_IMAGE_COUNT 个版本）..."
+  log "正在清理旧后端 Docker 镜像（保留最近 $KEEP_IMAGE_COUNT 个版本）..."
+  log "前端旧 mealweb 镜像保留到首次切换和回退演练完成后，再按操作手册清理。"
 
-  local cleaned_count=0
-
-  # 清理 mealserver 旧镜像
-  local old_mealserver_images
-  old_mealserver_images=$(docker images --format "{{.Repository}}:{{.Tag}}	{{.ID}}	{{.CreatedAt}}" | \
+  local old_mealserver_images cleaned_count=0
+  old_mealserver_images=$(docker images --format '{{.Repository}}:{{.Tag}}|{{.ID}}|{{.CreatedAt}}' | \
     grep "^mealserver:" | \
-    sort -t $'\t' -k3 -r | \
+    sort -t '|' -k3 -r | \
     tail -n +$((KEEP_IMAGE_COUNT + 1)) || true)
 
   if [[ -n "$old_mealserver_images" ]]; then
-    while IFS=$'\t' read -r image_name image_id image_created; do
+    while IFS='|' read -r image_name image_id image_created; do
+      [[ -n "$image_name" ]] || continue
       log "  删除旧后端镜像: $image_name (创建时间: $image_created)"
-      # 按 tag 删除，避免同一 IMAGE ID 被多个版本 tag 引用时删除失败
       if remove_output=$(docker rmi "$image_name" 2>&1); then
         ((cleaned_count++)) || true
       else
@@ -413,25 +367,7 @@ cleanup_old_images() {
     done <<< "$old_mealserver_images"
   fi
 
-  # 清理 mealweb 旧镜像
-  local old_mealweb_images
-  old_mealweb_images=$(docker images --format "{{.Repository}}:{{.Tag}}	{{.ID}}	{{.CreatedAt}}" | \
-    grep "^mealweb:" | \
-    sort -t $'\t' -k3 -r | \
-    tail -n +$((KEEP_IMAGE_COUNT + 1)) || true)
-
-  if [[ -n "$old_mealweb_images" ]]; then
-    while IFS=$'\t' read -r image_name image_id image_created; do
-      log "  删除旧前端镜像: $image_name (创建时间: $image_created)"
-      if remove_output=$(docker rmi "$image_name" 2>&1); then
-        ((cleaned_count++)) || true
-      else
-        log "  警告: 无法删除镜像 $image_name: $remove_output"
-      fi
-    done <<< "$old_mealweb_images"
-  fi
-
-  log "清理完成: 共删除 $cleaned_count 个旧镜像"
+  log "清理完成: 共删除 $cleaned_count 个旧后端镜像"
 }
 
 print_summary() {
@@ -450,6 +386,7 @@ main() {
     log "docker compose plugin is required"
     exit 1
   fi
+  require_file "$ENV_FILE"
 
   local previous_commit
   if [[ "$SKIP_REPO_UPDATE" == "true" ]]; then
@@ -459,8 +396,12 @@ main() {
     previous_commit=$(prepare_repo)
   fi
 
+  require_file "$DEPLOY_BASE_DIR/$COMPOSE_FILE_REL"
+  (cd "$DEPLOY_BASE_DIR" && docker compose -f "$DEPLOY_BASE_DIR/$COMPOSE_FILE_REL" --env-file "$ENV_FILE" config --quiet)
   deploy_compose "$previous_commit"
-  cleanup_old_images
+  if [[ "$BACKEND_DEPLOYED" == "true" ]]; then
+    cleanup_old_images
+  fi
   print_summary
 }
 

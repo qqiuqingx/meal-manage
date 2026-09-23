@@ -1,0 +1,30 @@
+feature: frontend-local-artifact-deployment
+
+current_phase: phase-04-cutover-and-operations
+
+phases:
+  - id: phase-01-runtime-carrier
+    name: 固化本地构建与Nginx运行载体
+    depends_on: []
+    status: in_progress
+
+  - id: phase-02-server-release-lifecycle
+    name: 服务器端版本生命周期与自动回退
+    depends_on:
+      - phase-01-runtime-carrier
+    status: in_progress
+
+  - id: phase-03-local-build-delivery
+    name: 本地构建上传与前端独立发布
+    depends_on:
+      - phase-01-runtime-carrier
+      - phase-02-server-release-lifecycle
+    status: in_progress
+
+  - id: phase-04-cutover-and-operations
+    name: 既有部署链切换、首次上线和回退演练
+    depends_on:
+      - phase-01-runtime-carrier
+      - phase-02-server-release-lifecycle
+      - phase-03-local-build-delivery
+    status: in_progress

@@ -4,10 +4,12 @@ services:
   # Backend (Spring Boot JAR)
   # ------------------------------
   backend:
-    image: mealserver:${IMAGE_TAG:-latest}
+    image: mealserver:${BACKEND_IMAGE_TAG:-latest}
     build:
       context: ../
       dockerfile: docker/mealserver/Dockerfile
+      args:
+        VCS_REF: ${BACKEND_GIT_COMMIT:-unknown}
     container_name: mealserver
     restart: unless-stopped
     environment:
@@ -67,20 +69,16 @@ services:
   # Frontend (Nginx serving Vue SPA)
   # ------------------------------
   frontend:
-    image: mealweb:${IMAGE_TAG:-latest}
-    build:
-      context: ../
-      dockerfile: docker/mealweb/Dockerfile
-      args:
-        VUE_APP_BASE_API: /
+    image: nginx:1.30.5-alpine3.24
     container_name: mealweb
     restart: unless-stopped
     ports:
       - "18080:80"
-    depends_on:
-      - backend
     networks:
       - eladmin-net
+    volumes:
+      - ${FRONTEND_RELEASE_ROOT:-/data/meals/frontend}/current:/usr/share/nginx/html:ro
+      - ./mealweb/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
       interval: 30s
