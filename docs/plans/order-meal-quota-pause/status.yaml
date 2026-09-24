@@ -1,0 +1,15 @@
+feature: order-meal-quota-pause
+current_phase: phase-03
+phases:
+  - id: phase-01
+    name: pause-date
+    depends_on: []
+    status: completed
+  - id: phase-02
+    name: calendar-quota
+    depends_on: [phase-01]
+    status: completed
+  - id: phase-03
+    name: generation-alignment
+    depends_on: [phase-01, phase-02]
+    status: completed

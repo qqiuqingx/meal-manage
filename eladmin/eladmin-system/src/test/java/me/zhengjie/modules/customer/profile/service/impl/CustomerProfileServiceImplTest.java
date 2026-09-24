@@ -521,6 +521,52 @@ class CustomerProfileServiceImplTest {
     }
 
     @Test
+    void shouldAllowExclusionWhenExistingMonthlyBasePlanAlreadyExceedsBalance() throws Exception {
+        CustomerOrder order = buildQuantityCalendarOrder(8);
+        order.setStartDate(LocalDate.of(2026, 5, 1));
+        order.setEndDate(LocalDate.of(2026, 5, 31));
+        order.setScheduleMode("DAILY");
+        CustomerMealScheduleAdjustmentRequest request = buildQuantityCalendarRequest(null);
+        ExcludedDateDto excludedDate = new ExcludedDateDto();
+        excludedDate.setDate("2026-05-25");
+        excludedDate.setMealTypes(Collections.singletonList("LUNCH"));
+        request.setExcludedDates(Collections.singletonList(excludedDate));
+
+        when(profileMapper.selectByIdForScheduleUpdate(1L)).thenReturn(profile);
+        when(customerOrderMapper.findActiveOrdersByCustomerId(1L)).thenReturn(Collections.singletonList(order));
+
+        CustomerMealScheduleAdjustmentResult result = customerProfileService.saveMealScheduleAdjustments(request);
+
+        assertEquals(1, result.getExcludedMealCount());
+        verify(profileMapper).updateById(profile);
+        verify(mealPlanService).deleteUnverifiedCustomerMealForCalendarAdjustment(1L, "2026-05-25", "LUNCH");
+    }
+
+    @Test
+    void shouldRejectIncreaseWhenExistingMonthlyBasePlanAlreadyExceedsBalance() throws Exception {
+        CustomerOrder order = buildQuantityCalendarOrder(8);
+        order.setStartDate(LocalDate.of(2026, 5, 1));
+        order.setEndDate(LocalDate.of(2026, 5, 31));
+        order.setScheduleMode("DAILY");
+        CustomerMealScheduleAdditionDto addition = new CustomerMealScheduleAdditionDto();
+        addition.setOrderId(10L);
+        addition.setDate("2026-05-25");
+        addition.setMealType("LUNCH");
+        addition.setQuantity(2);
+        CustomerMealScheduleAdjustmentRequest request = buildQuantityCalendarRequest(addition);
+
+        when(profileMapper.selectByIdForScheduleUpdate(1L)).thenReturn(profile);
+        when(customerOrderMapper.findActiveOrdersByCustomerId(1L)).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.selectById(10L)).thenReturn(order);
+
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> customerProfileService.saveMealScheduleAdjustments(request));
+
+        assertTrue(exception.getMessage().contains("超过当前可用餐数"));
+        verify(profileMapper, never()).updateById(profile);
+    }
+
+    @Test
     void shouldRejectStaleQuantityCalendarRevision() throws Exception {
         CustomerMealScheduleAdjustmentRequest request = buildQuantityCalendarRequest(null);
         request.setExpectedRevision("stale-revision");
@@ -1020,7 +1066,7 @@ class CustomerProfileServiceImplTest {
         assertEquals(1L, result.getTotalElements());
         assertEquals(1, result.getContent().size());
         assertEquals(Integer.valueOf(5), result.getContent().get(0).getRemainingMealCount());
-        assertEquals(30, result.getContent().get(0).getScheduleDays().size());
+        assertEquals(5, result.getContent().get(0).getScheduleDays().size());
         verify(customerOrderMapper).findMealStatsCalendarOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1));
     }
 

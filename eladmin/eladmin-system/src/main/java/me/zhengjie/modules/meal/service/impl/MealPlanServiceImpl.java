@@ -32,6 +32,7 @@ import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
+import me.zhengjie.modules.customer.profile.util.CustomerMealStatsScheduleUtil;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.meal.domain.Dish;
 import me.zhengjie.modules.meal.domain.DishIngredientRelation;
@@ -413,6 +414,8 @@ public class MealPlanServiceImpl implements MealPlanService {
         candidateOrders = mergeManualAdditionOrders(candidateOrders, targetDate, mealType, manualAdditions);
         log.info("基础条件过滤后的候选订单 - 数量: {}", candidateOrders.size());
 
+        Map<Long, List<CustomerMealScheduleAddition>> planAdditionsByOrder = loadPlanAdditionsByOrder(candidateOrders, targetDate);
+
         // 批量查询各订单的已排餐数量
         Map<Long, Integer> scheduledCountMap = new HashMap<>();
         if (!candidateOrders.isEmpty()) {
@@ -473,7 +476,20 @@ public class MealPlanServiceImpl implements MealPlanService {
             } else {
                 maxCount = order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0;
             }
-            int targetQuantity = resolveTargetQuantity(manualAdditions.get(order.getId()));
+            int targetQuantity = CustomerMealStatsScheduleUtil.buildOrderQuantities(
+                    order,
+                    customer == null ? Collections.emptyList() : customer.getExcludedDates(),
+                    planAdditionsByOrder.getOrDefault(order.getId(), Collections.emptyList()),
+                    targetDate
+            ).getOrDefault(CustomerMealStatsScheduleUtil.cellKey(targetDate, mealType), 0);
+            if (targetQuantity == 0) {
+                if (manualAddition) {
+                    throw new BadRequestException("订单 " + order.getId() + " 当前日期餐次已超过购买餐数计划");
+                }
+                log.info("订单被过滤 - 订单ID: {}, 日期: {}, 餐次: {}, 原因: 购买餐数已按先后顺序分配完毕",
+                        order.getId(), targetDate, mealType);
+                continue;
+            }
             int verifiedCurrentCount = verifiedServings.getOrDefault(order.getId(), Collections.emptyList()).size();
             int projectedScheduledCount = currentScheduled - verifiedCurrentCount + targetQuantity;
             if (projectedScheduledCount > maxCount) {
@@ -589,6 +605,34 @@ public class MealPlanServiceImpl implements MealPlanService {
             return false;
         }
         return order.getEndDate() == null || !targetDate.isAfter(order.getEndDate());
+    }
+
+    /**
+     * 查询候选订单开始以来到本次生成日的人工数量覆盖，供购买餐数顺序分配复用。
+     *
+     * @param orders 当前日期的候选订单
+     * @param endDate 本次生成日期
+     * @return 订单ID到历史数量覆盖列表
+     */
+    private Map<Long, List<CustomerMealScheduleAddition>> loadPlanAdditionsByOrder(List<CustomerOrder> orders,
+                                                                                    LocalDate endDate) {
+        if (orders == null || orders.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        LocalDate startDate = orders.stream().map(CustomerOrder::getStartDate)
+                .filter(Objects::nonNull).min(LocalDate::compareTo).orElse(null);
+        if (startDate == null || endDate == null || startDate.isAfter(endDate)) {
+            return Collections.emptyMap();
+        }
+        List<Long> customerIds = orders.stream().map(CustomerOrder::getCustomerId)
+                .filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        List<CustomerMealScheduleAddition> additions = customerMealScheduleAdditionMapper
+                .selectActiveByCustomerIdsAndDateRange(customerIds, startDate, endDate);
+        if (additions == null || additions.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return additions.stream().filter(addition -> addition != null && addition.getOrderId() != null)
+                .collect(Collectors.groupingBy(CustomerMealScheduleAddition::getOrderId));
     }
 
     /**

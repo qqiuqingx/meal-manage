@@ -1,5 +1,6 @@
 package me.zhengjie.modules.customer.order.service.impl;
 
+import cn.hutool.jwt.JWT;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
@@ -17,6 +18,14 @@ import me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.utils.PageResult;
+import me.zhengjie.utils.SecurityUtils;
+import me.zhengjie.utils.SpringBeanHolder;
+import org.springframework.context.ApplicationContext;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -25,6 +34,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.math.BigDecimal;
@@ -36,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -181,6 +192,49 @@ class CustomerOrderServiceImplTest {
         ArgumentCaptor<CustomerOrder> captor = ArgumentCaptor.forClass(CustomerOrder.class);
         verify(orderMapper).updateById(captor.capture());
         assertEquals("/file/avatar/menu-002.jpg", captor.getValue().getCustomMenuImage());
+    }
+
+    @Test
+    void update_recordsFirstPauseDateAndKeepsItUntilResume() {
+        CustomerOrder existing = new CustomerOrder();
+        existing.setId(50L);
+        existing.setCustomerId(1L);
+        existing.setParentPackageId(40L);
+        existing.setStatus(1);
+
+        CustomerOrderSaveDto dto = buildValidDto();
+        dto.setId(50L);
+        dto.setStatus(4);
+        when(orderMapper.selectById(50L)).thenReturn(existing);
+        when(profileMapper.selectById(1L)).thenReturn(buildProfile());
+
+        ApplicationContext context = mock(ApplicationContext.class);
+        UserDetailsService userDetailsService = mock(UserDetailsService.class);
+        when(context.getBean(UserDetailsService.class)).thenReturn(userDetailsService);
+        when(userDetailsService.loadUserByUsername("tester"))
+                .thenReturn(new User("tester", "", Collections.emptyList()));
+        new SpringBeanHolder().setApplicationContext(context);
+        SecurityUtils.header = "Authorization";
+        SecurityUtils.tokenStartWith = "Bearer ";
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+        servletRequest.addHeader("Authorization", "Bearer " + JWT.create()
+                .setKey("test-key".getBytes(StandardCharsets.UTF_8)).setPayload("sub", "tester").sign());
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(servletRequest));
+        try {
+            orderService.update(dto);
+            assertEquals(LocalDate.now(), existing.getPauseEffectiveDate());
+
+            LocalDate firstPauseDate = existing.getPauseEffectiveDate();
+            orderService.update(dto);
+            assertEquals(firstPauseDate, existing.getPauseEffectiveDate());
+
+            dto.setStatus(1);
+            orderService.update(dto);
+            assertEquals(null, existing.getPauseEffectiveDate());
+        } finally {
+            RequestContextHolder.resetRequestAttributes();
+            new SpringBeanHolder().destroy();
+        }
     }
 
     @Test

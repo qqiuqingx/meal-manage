@@ -109,7 +109,7 @@
       <div class="quantity-cell-editor__heading">
         编辑 {{ editingCell.date }} · {{ mealTypeText(editingCell.mealType) }} · 订单 {{ editingCell.orderId }}
       </div>
-      <div class="quantity-cell-editor__fields">
+      <el-form :model="editingCell" label-position="top" class="quantity-cell-editor__fields">
         <el-form-item label="计划份数">
           <el-input-number v-model="editingCell.quantity" :min="0" :step="1" size="small" />
         </el-form-item>
@@ -127,8 +127,9 @@
         <div class="quantity-cell-editor__note">
           0 份会排除该客户当天该餐次的所有订单；目标份数不会增加订单购买餐数，已核销份不能调低。
         </div>
-      </div>
+      </el-form>
       <div class="quantity-cell-editor__actions">
+        <el-button size="mini" type="danger" plain :disabled="Number(editingCell.verifiedCount) > 0" @click="excludeMeal">排除该餐次</el-button>
         <el-button size="mini" @click="restoreDefault">恢复默认</el-button>
         <el-button size="mini" @click="editingCell = null">取消</el-button>
         <el-button size="mini" type="primary" @click="applyEdit">应用修改</el-button>
@@ -267,6 +268,15 @@ export default {
       }
       this.$emit('cell-change', nextCell)
       this.editingCell = null
+    },
+    /**
+     * 将当前日期餐次的目标份数设为 0，由页面统一保存为客户排除日期。
+     */
+    excludeMeal() {
+      if (!this.editingCell || Number(this.editingCell.verifiedCount) > 0) return
+      this.editingCell.quantity = 0
+      this.inheritSoup = true
+      this.applyEdit()
     },
     restoreDefault() {
       if (!this.editingCell) return

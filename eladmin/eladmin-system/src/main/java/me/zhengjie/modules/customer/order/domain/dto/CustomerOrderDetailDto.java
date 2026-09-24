@@ -69,6 +69,9 @@ public class CustomerOrderDetailDto implements Serializable {
 
     private LocalDate endDate;
 
+    /** 暂停生效日期，订单从进行中首次转为暂停时由服务端写入。 */
+    private LocalDate pauseEffectiveDate;
+
     private Integer status;
 
     private String statusDesc;

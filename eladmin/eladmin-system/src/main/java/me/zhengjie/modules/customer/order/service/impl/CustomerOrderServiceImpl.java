@@ -232,6 +232,11 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         throw new BadRequestException("订单编号生成失败，请重试");
     }
 
+    /**
+     * 更新客户订单并维护暂停生效日期。
+     *
+     * @param dto 订单编辑请求；暂停日期由服务端根据状态转换生成
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void update(CustomerOrderSaveDto dto) {
@@ -249,7 +254,16 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         validateOrderConflict(dto, dto.getId());
         validateAndNormalize(dto, order);
 
+        Integer previousStatus = order.getStatus();
+        LocalDate previousPauseEffectiveDate = order.getPauseEffectiveDate();
         buildOrderEntity(order, dto);
+        if (Integer.valueOf(1).equals(previousStatus) && Integer.valueOf(4).equals(order.getStatus())) {
+            order.setPauseEffectiveDate(LocalDate.now());
+        } else if (Integer.valueOf(4).equals(previousStatus) && Integer.valueOf(1).equals(order.getStatus())) {
+            order.setPauseEffectiveDate(null);
+        } else {
+            order.setPauseEffectiveDate(previousPauseEffectiveDate);
+        }
         if (parentPackageChanged(originalParentPackageId, dto.getParentPackageId())) {
             refreshCustomerCodeForParentPackageChange(order, dto.getParentPackageId());
         }
@@ -591,6 +605,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setStartDate(order.getStartDate());
         dto.setStartMealType(order.getStartMealType());
         dto.setEndDate(order.getEndDate());
+        dto.setPauseEffectiveDate(order.getPauseEffectiveDate());
         dto.setStatus(order.getStatus());
         dto.setStatusDesc(getStatusDesc(order.getStatus()));
         dto.setMealType(order.getMealType());
@@ -718,6 +733,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             case 0: return "已取消";
             case 1: return "进行中";
             case 2: return "已完成";
+            case 4: return "暂停";
             default: return "未知";
         }
     }

@@ -26,9 +26,15 @@
             <el-form-item label="订单状态" prop="status">
               <el-select v-model="form.status" :disabled="readonly" placeholder="请选择状态" style="width: 100%;">
                 <el-option label="进行中" :value="1" />
+                <el-option v-if="form.id" label="暂停" :value="4" />
                 <el-option label="已完成" :value="2" />
                 <el-option label="已取消" :value="0" />
               </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col v-if="Number(form.status) === 4" :span="12">
+            <el-form-item label="暂停生效日">
+              {{ form.pauseEffectiveDate || '本次保存后由系统记录' }}
             </el-form-item>
           </el-col>
         </el-row>
@@ -699,6 +705,7 @@ export function createOrderDefaultForm() {
     firstDeliveryTime: null,
     startDate: null,
     startMealType: 'BREAKFAST',
+    pauseEffectiveDate: null,
     status: 1,
     mealType: 'ALL',
     scheduleMode: 'SCHEDULE',

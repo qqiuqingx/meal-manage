@@ -25,6 +25,7 @@
         <result column="start_date" property="startDate"/>
         <result column="start_meal_type" property="startMealType"/>
         <result column="end_date" property="endDate"/>
+        <result column="pause_effective_date" property="pauseEffectiveDate"/>
         <result column="status" property="status"/>
         <result column="meal_type" property="mealType"/>
         <result column="schedule_mode" property="scheduleMode"/>

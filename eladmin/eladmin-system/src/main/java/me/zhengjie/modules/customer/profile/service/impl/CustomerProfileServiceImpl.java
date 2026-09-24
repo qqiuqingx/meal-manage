@@ -158,6 +158,10 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 statsMonthStart,
                 statsMonthStart.plusMonths(1).minusDays(1)
         );
+        LocalDate earliestOrderStart = calendarOrders.stream().map(CustomerOrder::getStartDate)
+                .filter(Objects::nonNull).min(LocalDate::compareTo).orElse(statsMonthStart);
+        Map<Long, Map<String, List<CustomerMealScheduleAddition>>> historicalAdditionMap = buildManualAdditionMap(
+                customerIds, earliestOrderStart, statsMonthStart.plusMonths(1).minusDays(1));
 
         List<CustomerMealStatsRowDto> rows = new ArrayList<>();
         for (CustomerProfile profile : profiles) {
@@ -165,6 +169,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             if (customerOrders == null || customerOrders.isEmpty()) {
                 continue;
             }
+            List<CustomerMealScheduleAddition> historicalAdditions = flattenManualAdditions(
+                    historicalAdditionMap.get(profile.getId()));
+            Map<Long, List<CustomerMealScheduleAddition>> historicalAdditionsByOrder = historicalAdditions.stream()
+                    .filter(addition -> addition.getOrderId() != null)
+                    .collect(Collectors.groupingBy(CustomerMealScheduleAddition::getOrderId));
 
             List<CustomerOrder> breakfastOrders = customerOrders.stream()
                     .filter(order -> safeInt(order.getBreakfastCount()) > 0)
@@ -176,22 +185,22 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             List<CustomerMealStatsRowDto> customerRows = new ArrayList<>();
             if (!breakfastOrders.isEmpty()) {
                 customerRows.add(buildMealStatsRow(profile, addressMap.get(profile.getId()), breakfastOrders,
-                        verifiedCountMap, "BREAKFAST", criteria.getStatsMonth()));
+                        verifiedCountMap, "BREAKFAST", criteria.getStatsMonth(), historicalAdditionsByOrder));
             }
             if (!lunchDinnerOrders.isEmpty()) {
                 customerRows.add(buildMealStatsRow(profile, addressMap.get(profile.getId()), lunchDinnerOrders,
-                        verifiedCountMap, "LUNCH_DINNER", criteria.getStatsMonth()));
+                        verifiedCountMap, "LUNCH_DINNER", criteria.getStatsMonth(), historicalAdditionsByOrder));
             }
             List<CustomerMealStatsScheduleUtil.ScheduleDay> customerScheduleDays = mergeScheduleDays(customerRows);
             applyBaseAndExcludedMealTypes(customerScheduleDays, customerRows, profile.getExcludedDates());
-            applyManualAdditions(customerScheduleDays, additionMap.get(profile.getId()));
-            applyScheduledMealTypes(customerScheduleDays, scheduledMealMap.get(profile.getId()));
             List<CustomerMealScheduleCellDto> mealScheduleCells = buildMealScheduleCells(
                     lunchDinnerOrders,
                     profile.getExcludedDates(),
                     criteria.getStatsMonth(),
-                    additionMap.get(profile.getId()),
+                    historicalAdditionsByOrder,
                     scheduledCellMap.get(profile.getId()));
+            applyManualAdditions(customerScheduleDays, additionMap.get(profile.getId()));
+            applyScheduledMealTypes(customerScheduleDays, scheduledMealMap.get(profile.getId()));
             List<CustomerMealScheduleOrderDto> mealScheduleOrders = buildMealScheduleOrders(customerOrders, verifiedCountMap);
             List<CustomerMealScheduleAddition> manualAdditions = flattenManualAdditions(additionMap.get(profile.getId()));
             List<CustomerMealScheduleAdditionDto> manualScheduleAdditions = buildManualScheduleAdditionDtos(manualAdditions);
@@ -277,7 +286,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         }
         if (quantityGridRequest) {
             validateQuantityAdditionMonth(request.getAdditions(), adjustmentMonth);
-            quantityPlanChanged = hasQuantityPlanChanges(profile, existingMonthAdditions, normalizedExcludedDates,
+            quantityPlanChanged = hasQuantityPlanChanges(profile, normalizedExcludedDates,
                     request.getAdditions(), adjustmentMonth);
         }
         List<CustomerScheduledMealDto> scheduledMonthRows = mealPlanCustomerMapper.selectScheduledMealsByCustomerIdsAndDateRange(
@@ -286,7 +295,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         Map<String, CustomerMealScheduleCellDto> quantityPlanCells = Collections.emptyMap();
         if (quantityPlanChanged) {
             quantityPlanCells = validateMonthlyQuantityPlan(profile.getId(), request.getAdditions(), normalizedExcludedDates,
-                    adjustmentMonth, scheduledMonthByCell);
+                    profile.getExcludedDates(), adjustmentMonth, scheduledMonthByCell);
         }
 
         int deletedPlanCount = deleteGeneratedMealsForNewExclusions(profile.getId(), profile.getExcludedDates(), normalizedExcludedDates);
@@ -418,10 +427,10 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                     CustomerMealStatsScheduleUtil.ScheduleDay::new
             );
             for (CustomerMealScheduleAddition addition : entry.getValue()) {
-                target.addAddedMealType(addition.getMealType());
-                if (target.getMealTypes() != null && !target.getMealTypes().contains(addition.getMealType())) {
-                    target.getMealTypes().add(addition.getMealType());
+                if (target.getMealTypes() == null || !target.getMealTypes().contains(addition.getMealType())) {
+                    continue;
                 }
+                target.addAddedMealType(addition.getMealType());
             }
         }
         customerScheduleDays.clear();
@@ -484,51 +493,30 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
      * @param orders 客户当前有效订单
      * @param excludedDates 客户排除日期
      * @param statsMonth 查询月份
-     * @param additionsByDate 当前月份人工数量覆盖
+     * @param additionsByOrder 截至查询月底的订单历史人工数量覆盖
      * @param scheduledByCell 当前月份各单元格生成与核销数量
      * @return 按订单、日期和餐次拆分的数量单元格
      */
     private List<CustomerMealScheduleCellDto> buildMealScheduleCells(List<CustomerOrder> orders,
                                                                     List<ExcludedDateDto> excludedDates,
                                                                     String statsMonth,
-                                                                    Map<String, List<CustomerMealScheduleAddition>> additionsByDate,
+                                                                    Map<Long, List<CustomerMealScheduleAddition>> additionsByOrder,
                                                                     Map<String, CustomerScheduledMealDto> scheduledByCell) {
         if (orders == null || orders.isEmpty()) {
             return Collections.emptyList();
         }
-        Map<String, CustomerMealScheduleAddition> additionByCell = new HashMap<>();
-        if (additionsByDate != null) {
-            for (List<CustomerMealScheduleAddition> additions : additionsByDate.values()) {
-                if (additions == null) {
-                    continue;
-                }
-                for (CustomerMealScheduleAddition addition : additions) {
-                    if (addition == null || addition.getOrderId() == null || addition.getRecordDate() == null
-                            || StringUtils.isBlank(addition.getMealType())) {
-                        continue;
-                    }
-                    additionByCell.put(buildScheduleCellKey(addition.getOrderId(),
-                            addition.getRecordDate().toString(), addition.getMealType()), addition);
-                }
-            }
-        }
-
+        Map<Long, List<CustomerMealScheduleAddition>> additionsByOrderMap = additionsByOrder == null
+                ? Collections.emptyMap() : additionsByOrder;
         List<CustomerMealScheduleCellDto> cells = new ArrayList<>();
         for (CustomerOrder order : orders) {
             for (CustomerMealScheduleCellDto cell : CustomerMealStatsScheduleUtil.buildMonthMealScheduleCells(
-                    order, excludedDates, statsMonth)) {
+                    order, excludedDates, statsMonth, additionsByOrderMap.getOrDefault(order.getId(), Collections.emptyList()))) {
                 String cellKey = buildScheduleCellKey(cell.getOrderId(), cell.getDate(), cell.getMealType());
                 CustomerScheduledMealDto scheduled = scheduledByCell == null ? null : scheduledByCell.get(cellKey);
                 if (scheduled != null) {
                     cell.setGeneratedCount(safeInt(scheduled.getGeneratedCount()));
                     cell.setFailedCount(safeInt(scheduled.getFailedCount()));
                     cell.setVerifiedCount(safeInt(scheduled.getVerifiedCount()));
-                }
-                CustomerMealScheduleAddition addition = additionByCell.get(cellKey);
-                if (addition != null && !Boolean.TRUE.equals(cell.getExcluded())) {
-                    cell.setQuantity(addition.getQuantity() == null ? 1 : addition.getQuantity());
-                    cell.setSoupQuantity(addition.getSoupQuantity());
-                    cell.setManualOverride(true);
                 }
                 cells.add(cell);
             }
@@ -693,12 +681,15 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
      * @param customerId 客户ID
      * @param additions 当前月完整的正数覆盖列表
      * @param excludedDates 当前完整排除日期列表
+     * @param previousExcludedDates 保存前的排除日期列表
      * @param month 当前编辑月份
      * @param scheduledByCell 当前月已生成排餐索引
+     * @return 校验后的当前月订单日期餐次目标份数
      */
     private Map<String, CustomerMealScheduleCellDto> validateMonthlyQuantityPlan(Long customerId,
                                                                                  List<CustomerMealScheduleAdditionDto> additions,
                                                                                  List<ExcludedDateDto> excludedDates,
+                                                                                 List<ExcludedDateDto> previousExcludedDates,
                                                                                  YearMonth month,
                                                                                  Map<String, CustomerScheduledMealDto> scheduledByCell) {
         List<CustomerOrder> orders = customerOrderMapper.findActiveOrdersByCustomerId(customerId);
@@ -708,18 +699,21 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         Map<Long, CustomerOrder> ordersById = orders.stream()
                 .filter(order -> order != null && order.getId() != null)
                 .collect(Collectors.toMap(CustomerOrder::getId, order -> order, (left, right) -> left));
-        Map<String, CustomerMealScheduleCellDto> cellsByKey = new LinkedHashMap<>();
-        for (CustomerOrder order : ordersById.values()) {
-            for (CustomerMealScheduleCellDto cell : CustomerMealStatsScheduleUtil.buildMonthMealScheduleCells(
-                    order, excludedDates, month.toString())) {
-                String cellKey = buildScheduleCellKey(cell.getOrderId(), cell.getDate(), cell.getMealType());
-                CustomerScheduledMealDto scheduled = scheduledByCell == null ? null : scheduledByCell.get(cellKey);
-                if (scheduled != null) {
-                    cell.setGeneratedCount(safeInt(scheduled.getGeneratedCount()));
-                    cell.setFailedCount(safeInt(scheduled.getFailedCount()));
-                    cell.setVerifiedCount(safeInt(scheduled.getVerifiedCount()));
-                }
-                cellsByKey.put(cellKey, cell);
+        List<CustomerMealScheduleAddition> planAdditions = loadPlanAdditions(customerId, orders, month.atEndOfMonth());
+        Map<Long, Integer> previousMonthQuantityByOrder = new HashMap<>();
+        for (CustomerMealScheduleCellDto cell : buildQuantityCellMap(new ArrayList<>(ordersById.values()),
+                previousExcludedDates, month, planAdditions, null).values()) {
+            previousMonthQuantityByOrder.merge(cell.getOrderId(), safeInt(cell.getQuantity()), Integer::sum);
+        }
+        Map<String, CustomerMealScheduleCellDto> cellsByKey = buildQuantityCellMap(
+                new ArrayList<>(ordersById.values()), excludedDates, month, planAdditions, additions);
+        for (CustomerMealScheduleCellDto cell : cellsByKey.values()) {
+            String cellKey = buildScheduleCellKey(cell.getOrderId(), cell.getDate(), cell.getMealType());
+            CustomerScheduledMealDto scheduled = scheduledByCell == null ? null : scheduledByCell.get(cellKey);
+            if (scheduled != null) {
+                cell.setGeneratedCount(safeInt(scheduled.getGeneratedCount()));
+                cell.setFailedCount(safeInt(scheduled.getFailedCount()));
+                cell.setVerifiedCount(safeInt(scheduled.getVerifiedCount()));
             }
         }
 
@@ -765,9 +759,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                     throw new BadRequestException(recordDate + " " + mealTypeName(dto.getMealType())
                             + "已核销" + verifiedCount + "份，计划份数不能调低");
                 }
-                cell.setQuantity(quantity);
-                cell.setSoupQuantity(dto.getSoupQuantity());
-                cell.setManualOverride(true);
+                if (safeInt(cell.getQuantity()) != quantity) {
+                    throw new BadRequestException("订单 " + order.getId() + " 本月计划份数超过当前可用餐数");
+                }
             }
         }
 
@@ -803,7 +797,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                     allScheduledCounts.getOrDefault(order.getId(), 0) - verifiedTotal - (monthGenerated - monthVerified), 0);
             int availableForMonth = Math.max(safeInt(order.getLunchDinnerCount())
                     - verifiedOutsideMonth - unverifiedScheduledOutsideMonth, 0);
-            if (monthQuantity > availableForMonth) {
+            if (monthQuantity > availableForMonth
+                    && monthQuantity > previousMonthQuantityByOrder.getOrDefault(order.getId(), 0)) {
                 throw new BadRequestException("订单 " + order.getId() + " 本月计划 " + monthQuantity
                         + " 份，超过当前可用餐数 " + availableForMonth + " 份");
             }
@@ -925,14 +920,12 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
      * 比较当前保存前后的午晚餐计划状态，只有数量、含汤或排除状态实际改变时才执行份数校验。
      *
      * @param profile 当前客户档案
-     * @param currentAdditions 当前月份已保存的数量覆盖
      * @param newExcludedDates 本次提交的完整排除日期
      * @param requestedAdditions 本次提交的完整正数覆盖
      * @param month 当前编辑月份
      * @return true 表示午晚餐数量计划有变化
      */
     private boolean hasQuantityPlanChanges(CustomerProfile profile,
-                                           List<CustomerMealScheduleAddition> currentAdditions,
                                            List<ExcludedDateDto> newExcludedDates,
                                            List<CustomerMealScheduleAdditionDto> requestedAdditions,
                                            YearMonth month) {
@@ -942,10 +935,12 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                     .filter(Objects::nonNull)
                     .anyMatch(addition -> !"BREAKFAST".equals(addition.getMealType()));
         }
+        List<CustomerMealScheduleAddition> planAdditions = loadPlanAdditions(
+                profile.getId(), orders, month.atEndOfMonth());
         Map<String, CustomerMealScheduleCellDto> currentCells = buildQuantityCellMap(
-                orders, profile.getExcludedDates(), month, currentAdditions, Collections.emptyList());
+                orders, profile.getExcludedDates(), month, planAdditions, null);
         Map<String, CustomerMealScheduleCellDto> nextCells = buildQuantityCellMap(
-                orders, newExcludedDates, month, Collections.emptyList(), requestedAdditions);
+                orders, newExcludedDates, month, planAdditions, requestedAdditions);
         if (!currentCells.keySet().equals(nextCells.keySet())) {
             return true;
         }
@@ -967,7 +962,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
      * @param orders 当前有效订单
      * @param excludedDates 客户完整排除日期
      * @param month 查询月份
-     * @param savedAdditions 已保存覆盖
+     * @param savedAdditions 订单开始以来已保存的有效覆盖
      * @param requestedAdditions 本次提交覆盖
      * @return 订单日期餐次计划单元格
      */
@@ -977,60 +972,42 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             YearMonth month,
             List<CustomerMealScheduleAddition> savedAdditions,
             List<CustomerMealScheduleAdditionDto> requestedAdditions) {
+        List<CustomerMealScheduleAddition> planAdditions = savedAdditions == null
+                ? new ArrayList<>() : new ArrayList<>(savedAdditions);
+        if (requestedAdditions != null) {
+            planAdditions.removeIf(existing -> existing != null && existing.getRecordDate() != null
+                    && YearMonth.from(existing.getRecordDate()).equals(month));
+            for (CustomerMealScheduleAdditionDto request : requestedAdditions) {
+                if (request == null || request.getOrderId() == null || StringUtils.isBlank(request.getDate())
+                        || "BREAKFAST".equals(request.getMealType())) {
+                    continue;
+                }
+                LocalDate date = parseLocalDate(request.getDate(), "人工新增日期格式错误");
+                planAdditions.removeIf(existing -> existing != null
+                        && Objects.equals(existing.getOrderId(), request.getOrderId())
+                        && Objects.equals(existing.getRecordDate(), date)
+                        && Objects.equals(existing.getMealType(), request.getMealType()));
+                CustomerMealScheduleAddition addition = new CustomerMealScheduleAddition();
+                addition.setOrderId(request.getOrderId());
+                addition.setRecordDate(date);
+                addition.setMealType(request.getMealType());
+                addition.setQuantity(request.getQuantity());
+                addition.setSoupQuantity(request.getSoupQuantity());
+                planAdditions.add(addition);
+            }
+        }
+        Map<Long, List<CustomerMealScheduleAddition>> additionsByOrder = planAdditions.stream()
+                .filter(addition -> addition != null && addition.getOrderId() != null)
+                .collect(Collectors.groupingBy(CustomerMealScheduleAddition::getOrderId));
         Map<String, CustomerMealScheduleCellDto> cells = new LinkedHashMap<>();
         for (CustomerOrder order : orders) {
             for (CustomerMealScheduleCellDto cell : CustomerMealStatsScheduleUtil.buildMonthMealScheduleCells(
-                    order, excludedDates, month.toString())) {
+                    order, excludedDates, month.toString(),
+                    additionsByOrder.getOrDefault(order.getId(), Collections.emptyList()))) {
                 cells.put(buildScheduleCellKey(cell.getOrderId(), cell.getDate(), cell.getMealType()), cell);
             }
         }
-        if (savedAdditions != null) {
-            for (CustomerMealScheduleAddition addition : savedAdditions) {
-                if (addition == null || addition.getOrderId() == null || addition.getRecordDate() == null
-                        || "BREAKFAST".equals(addition.getMealType())) {
-                    continue;
-                }
-                applyQuantityOverride(cells, addition.getOrderId(), addition.getRecordDate().toString(),
-                        addition.getMealType(), addition.getQuantity(), addition.getSoupQuantity());
-            }
-        }
-        if (requestedAdditions != null) {
-            for (CustomerMealScheduleAdditionDto addition : requestedAdditions) {
-                if (addition == null || addition.getOrderId() == null || StringUtils.isBlank(addition.getDate())
-                        || "BREAKFAST".equals(addition.getMealType())) {
-                    continue;
-                }
-                applyQuantityOverride(cells, addition.getOrderId(), addition.getDate(), addition.getMealType(),
-                        addition.getQuantity(), addition.getSoupQuantity());
-            }
-        }
         return cells;
-    }
-
-    /**
-     * 在未排除的单元格上应用一个正数份数覆盖。
-     *
-     * @param cells 单元格索引
-     * @param orderId 订单ID
-     * @param date 排餐日期
-     * @param mealType 餐次
-     * @param quantity 覆盖份数
-     * @param soupQuantity 显式含汤份数
-     */
-    private void applyQuantityOverride(Map<String, CustomerMealScheduleCellDto> cells,
-                                       Long orderId,
-                                       String date,
-                                       String mealType,
-                                       Integer quantity,
-                                       Integer soupQuantity) {
-        String cellKey = buildScheduleCellKey(orderId, date, mealType);
-        CustomerMealScheduleCellDto cell = cells.get(cellKey);
-        if (cell == null || Boolean.TRUE.equals(cell.getExcluded())) {
-            return;
-        }
-        cell.setQuantity(quantity == null ? 1 : quantity);
-        cell.setSoupQuantity(soupQuantity);
-        cell.setManualOverride(true);
     }
 
     /**
@@ -1091,7 +1068,12 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     }
 
     /**
-     * 查询客户月份内的人工新增餐次。
+     * 查询客户指定日期范围内的有效人工新增餐次。
+     *
+     * @param customerIds 客户ID集合
+     * @param monthStart 查询开始日期
+     * @param monthEnd 查询结束日期
+     * @return 按客户和日期分组的人工新增餐次
      */
     private Map<Long, Map<String, List<CustomerMealScheduleAddition>>> buildManualAdditionMap(List<Long> customerIds,
                                                                                              LocalDate monthStart,
@@ -1114,6 +1096,31 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                     .add(addition);
         }
         return result;
+    }
+
+    /**
+     * 查询订单开始以来截至编辑月末的人工数量覆盖，用于跨月累计购买餐数。
+     *
+     * @param customerId 客户ID
+     * @param orders 客户当前进行中的订单
+     * @param endDate 计算截止日期
+     * @return 按订单日期餐次保存的历史数量覆盖
+     */
+    private List<CustomerMealScheduleAddition> loadPlanAdditions(Long customerId,
+                                                                 List<CustomerOrder> orders,
+                                                                 LocalDate endDate) {
+        LocalDate startDate = orders == null ? null : orders.stream()
+                .filter(Objects::nonNull)
+                .map(CustomerOrder::getStartDate)
+                .filter(Objects::nonNull)
+                .min(LocalDate::compareTo)
+                .orElse(null);
+        if (startDate == null || endDate == null || startDate.isAfter(endDate)) {
+            return Collections.emptyList();
+        }
+        List<CustomerMealScheduleAddition> additions = customerMealScheduleAdditionMapper
+                .selectActiveByCustomerIdsAndDateRange(Collections.singletonList(customerId), startDate, endDate);
+        return additions == null ? Collections.emptyList() : additions;
     }
 
     private LocalDate parseStatsMonthStart(String statsMonth) {
@@ -1982,12 +1989,25 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         }
     }
 
+    /**
+     * 构建客户某个餐数池的统计行及按购买餐数分配后的月度计划日期。
+     *
+     * @param profile 客户档案
+     * @param addresses 客户地址
+     * @param orders 当前餐数池的有效订单
+     * @param verifiedCountMap 各订单餐次核销数
+     * @param mealBucket 早餐或午晚餐餐数池
+     * @param statsMonth 统计月份
+     * @param additionsByOrder 各订单历史人工数量覆盖
+     * @return 客户统计行
+     */
     private CustomerMealStatsRowDto buildMealStatsRow(CustomerProfile profile,
                                                       List<CustomerProfileAddress> addresses,
                                                       List<CustomerOrder> orders,
                                                       Map<Long, Map<String, Integer>> verifiedCountMap,
                                                       String mealBucket,
-                                                      String statsMonth) {
+                                                      String statsMonth,
+                                                      Map<Long, List<CustomerMealScheduleAddition>> additionsByOrder) {
         CustomerMealStatsRowDto row = new CustomerMealStatsRowDto();
         row.setRowKey(profile.getId() + "-" + mealBucket);
         row.setCustomerId(profile.getId());
@@ -2002,7 +2022,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         row.setRemarkInfo(defaultString(profile.getRemark()));
         row.setSpecialRequirementText(buildSpecialRequirementText(profile));
         row.setMealBucket(mealBucket);
-        row.setScheduleDays(CustomerMealStatsScheduleUtil.buildMonthScheduleDays(orders, profile.getExcludedDates(), statsMonth, mealBucket));
+        row.setScheduleDays(CustomerMealStatsScheduleUtil.buildMonthScheduleDays(
+                orders, profile.getExcludedDates(), statsMonth, mealBucket, additionsByOrder));
         row.setBaseScheduleDays(CustomerMealStatsScheduleUtil.buildMonthBaseScheduleDays(orders, statsMonth, mealBucket));
 
         if ("BREAKFAST".equals(mealBucket)) {

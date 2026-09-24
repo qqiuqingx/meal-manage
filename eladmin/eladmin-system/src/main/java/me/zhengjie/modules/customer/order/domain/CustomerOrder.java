@@ -130,7 +130,12 @@ public class CustomerOrder implements Serializable {
     private LocalDate endDate;
 
     /**
-     * 订单状态(0=已取消,1=进行中,2=已完成,3=已退餐)
+     * 订单首次从进行中变为暂停的生效日期；当天及以后不再自动排餐。
+     */
+    private LocalDate pauseEffectiveDate;
+
+    /**
+     * 订单状态(0=已取消,1=进行中,2=已完成,3=已退餐,4=暂停)
      */
     private Integer status;
 

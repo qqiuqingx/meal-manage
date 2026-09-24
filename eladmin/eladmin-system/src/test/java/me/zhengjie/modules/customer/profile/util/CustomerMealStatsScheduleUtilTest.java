@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,7 +33,7 @@ class CustomerMealStatsScheduleUtilTest {
         excluded.setMealTypes(Arrays.asList("DINNER"));
 
         List<CustomerMealStatsScheduleUtil.ScheduleDay> days = CustomerMealStatsScheduleUtil.buildMonthScheduleDays(
-                Arrays.asList(order), Arrays.asList(excluded), "2026-04", "LUNCH_DINNER");
+                Arrays.asList(order), Arrays.asList(excluded), "2026-04", "LUNCH_DINNER", Collections.emptyMap());
 
         assertEquals(5, days.size());
         assertEquals("2026-04-01", days.get(0).getDate());
@@ -63,9 +64,9 @@ class CustomerMealStatsScheduleUtilTest {
         order.setDeliveryDates("[{\"date\":\"2026-04-05\",\"mealTypes\":[\"BREAKFAST\",\"DINNER\"]},{\"date\":\"2026-05-01\",\"mealTypes\":[\"LUNCH\"]}]");
 
         List<CustomerMealStatsScheduleUtil.ScheduleDay> breakfastDays = CustomerMealStatsScheduleUtil.buildMonthScheduleDays(
-                Arrays.asList(order), null, "2026-04", "BREAKFAST");
+                Arrays.asList(order), null, "2026-04", "BREAKFAST", Collections.emptyMap());
         List<CustomerMealStatsScheduleUtil.ScheduleDay> lunchDinnerDays = CustomerMealStatsScheduleUtil.buildMonthScheduleDays(
-                Arrays.asList(order), null, "2026-04", "LUNCH_DINNER");
+                Arrays.asList(order), null, "2026-04", "LUNCH_DINNER", Collections.emptyMap());
 
         assertEquals(1, breakfastDays.size());
         assertEquals("2026-04-05", breakfastDays.get(0).getDate());
@@ -93,7 +94,7 @@ class CustomerMealStatsScheduleUtilTest {
         excluded.setMealTypes(Arrays.asList("DINNER"));
 
         List<CustomerMealStatsScheduleUtil.ScheduleDay> effectiveDays = CustomerMealStatsScheduleUtil.buildMonthScheduleDays(
-                Arrays.asList(order), Arrays.asList(excluded), "2026-04", "LUNCH_DINNER");
+                Arrays.asList(order), Arrays.asList(excluded), "2026-04", "LUNCH_DINNER", Collections.emptyMap());
         List<CustomerMealStatsScheduleUtil.ScheduleDay> baseDays = CustomerMealStatsScheduleUtil.buildMonthBaseScheduleDays(
                 Arrays.asList(order), "2026-04", "LUNCH_DINNER");
 
@@ -126,7 +127,7 @@ class CustomerMealStatsScheduleUtilTest {
         excluded.setMealTypes(Arrays.asList("LUNCH"));
 
         List<me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleCellDto> cells =
-                CustomerMealStatsScheduleUtil.buildMonthMealScheduleCells(order, Arrays.asList(excluded), "2026-04");
+                CustomerMealStatsScheduleUtil.buildMonthMealScheduleCells(order, Arrays.asList(excluded), "2026-04", Collections.emptyList());
 
         assertEquals(4, cells.size());
         assertEquals(0, cells.get(0).getBaseQuantity());

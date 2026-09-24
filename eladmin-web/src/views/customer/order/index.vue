@@ -161,7 +161,7 @@
       <el-table-column label="订单编号" prop="orderCode" width="140" />
       <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="180" align="center" fixed="right">
         <template slot-scope="scope">
-          <el-button size="mini" type="primary" icon="edit" :disabled="scope.row.status !== 1" @click="handleEdit(scope.row)">编辑</el-button>
+          <el-button size="mini" type="primary" icon="edit" :disabled="scope.row.status !== 1 && scope.row.status !== 4" @click="handleEdit(scope.row)">编辑</el-button>
           <el-button v-if="scope.row.status === 1" size="mini" type="danger" icon="refresh" @click="openRefundDialog(scope.row)">退餐</el-button>
         </template>
       </el-table-column>
@@ -511,6 +511,7 @@ export default {
       if (status === 1) return '进行中'
       if (status === 2) return '已完成'
       if (status === 3) return '已退餐'
+      if (status === 4) return '暂停'
       return '未知'
     },
     statusTagType(status) {
@@ -518,6 +519,7 @@ export default {
       if (status === 1) return 'success'
       if (status === 2) return 'info'
       if (status === 3) return 'warning'
+      if (status === 4) return 'warning'
       return 'info'
     },
     mealTypeText(mealType) {
