@@ -234,6 +234,21 @@
         ORDER BY customer_id ASC, start_date ASC, deal_time ASC, id ASC
     </select>
 
+    <select id="findMealStatsCalendarOrdersByCustomerIds" resultMap="BaseResultMap">
+        SELECT *
+        FROM customer_order
+        WHERE status IN (1, 4)
+          AND COALESCE(remaining_count, 0) &gt; 0
+        <if test="startedBeforeDate != null">
+          AND start_date &lt; #{startedBeforeDate}
+        </if>
+          AND customer_id IN
+        <foreach collection="customerIds" item="customerId" open="(" separator="," close=")">
+            #{customerId}
+        </foreach>
+        ORDER BY customer_id ASC, start_date ASC, deal_time ASC, id ASC
+    </select>
+
     <!-- 统计同一客户在同一时间段内的订单数量（去除结束日期限制） -->
     <select id="countOverlappingOrders" resultType="int">
         SELECT COUNT(*)

@@ -111,7 +111,7 @@ public interface MealPlanService {
     List<MealPlanCustomerItemVO> queryCustomerItems(Long customerPlanId);
 
     /**
-     * 根据日期和餐次删除排餐计划（级联删除客户和明细）
+     * 根据日期和餐次删除排餐计划；计划含已核销份时拒绝删除，并级联清理未核销客户份和明细。
      *
      * @param recordDate 排餐日期
      * @param mealType 餐次
@@ -120,14 +120,14 @@ public interface MealPlanService {
     void deleteMealPlan(String recordDate, String mealType, Long customerId);
 
     /**
-     * 根据ID列表批量删除排餐计划（级联删除客户和明细）
+     * 根据ID列表批量删除排餐计划；任一计划含已核销份时拒绝整批删除。
      *
      * @param ids 排餐计划ID列表
      */
     void deleteMealPlans(List<Long> ids);
 
     /**
-     * 根据客户计划ID列表批量删除客户排餐计划（级联删除明细）
+     * 根据客户计划ID列表批量删除未核销份；包含已核销份时拒绝删除。
      *
      * @param customerPlanIds 客户计划ID列表
      */
@@ -142,6 +142,20 @@ public interface MealPlanService {
      * @return 删除的客户排餐记录数量
      */
     int deleteUnverifiedCustomerMealForCalendarAdjustment(Long customerId, String recordDate, String mealType);
+
+    /**
+     * 将指定订单日期餐次的未核销结果行减到目标份数，保留已核销份及优先成功的结果。
+     *
+     * @param customerId 客户ID
+     * @param orderId 订单ID
+     * @param recordDate 排餐日期，格式 yyyy-MM-dd
+     * @param mealType 餐次
+     * @param targetQuantity 当前计划目标份数
+     * @return 软删除的客户排餐份数
+     */
+    int deleteExcessUnverifiedCustomerServingsForCalendarAdjustment(Long customerId, Long orderId,
+                                                                    String recordDate, String mealType,
+                                                                    int targetQuantity);
 
     /**
      * 根据排餐计划ID查询完整详情（含客户列表和菜品明细）

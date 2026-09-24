@@ -25,6 +25,7 @@ create table meal_plan_customer (
     order_id bigint not null,
     parent_package_id bigint not null default 0,
     child_package_id bigint not null default 0,
+    serving_no int not null default 1 comment '同一订单日期餐次下的配送份序号',
     status tinyint not null default 0 comment '0=失败,1=成功',
     fail_reason varchar(255) default '',
     meat_required_count int not null default 0,

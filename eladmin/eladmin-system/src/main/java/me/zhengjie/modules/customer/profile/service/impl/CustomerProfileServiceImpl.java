@@ -1,5 +1,6 @@
 package me.zhengjie.modules.customer.profile.service.impl;
 
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -25,6 +26,8 @@ import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdditionDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleCellDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleOrderDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentRequest;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentResult;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto;
@@ -65,6 +68,7 @@ import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -135,21 +139,20 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         ).stream().collect(Collectors.groupingBy(CustomerProfileAddress::getCustomerId));
 
         LocalDate startedBeforeDate = parseStatsMonthExclusiveEnd(criteria.getStatsMonth());
-        List<CustomerOrder> activeOrders = customerOrderMapper.findActiveOrdersByCustomerIds(customerIds, startedBeforeDate);
-        if (activeOrders == null || activeOrders.isEmpty()) {
+        List<CustomerOrder> calendarOrders = customerOrderMapper.findMealStatsCalendarOrdersByCustomerIds(customerIds, startedBeforeDate);
+        if (calendarOrders == null || calendarOrders.isEmpty()) {
             return new PageResult<>(Collections.emptyList(), 0L);
         }
-        Map<Long, List<CustomerOrder>> ordersByCustomerId = activeOrders.stream()
+        Map<Long, List<CustomerOrder>> ordersByCustomerId = calendarOrders.stream()
                 .collect(Collectors.groupingBy(CustomerOrder::getCustomerId));
 
-        List<Long> orderIds = activeOrders.stream().map(CustomerOrder::getId).collect(Collectors.toList());
+        List<Long> orderIds = calendarOrders.stream().map(CustomerOrder::getId).collect(Collectors.toList());
         Map<Long, Map<String, Integer>> verifiedCountMap = buildVerifiedCountMap(orderIds);
         LocalDate statsMonthStart = parseStatsMonthStart(criteria.getStatsMonth());
-        Map<Long, Map<String, List<String>>> scheduledMealMap = buildScheduledMealMap(
-                customerIds,
-                statsMonthStart,
-                statsMonthStart.plusMonths(1).minusDays(1)
-        );
+        List<CustomerScheduledMealDto> scheduledMealRows = mealPlanCustomerMapper.selectScheduledMealsByCustomerIdsAndDateRange(
+                customerIds, statsMonthStart, statsMonthStart.plusMonths(1).minusDays(1));
+        Map<Long, Map<String, List<String>>> scheduledMealMap = buildScheduledMealMap(scheduledMealRows);
+        Map<Long, Map<String, CustomerScheduledMealDto>> scheduledCellMap = buildScheduledCellMap(scheduledMealRows);
         Map<Long, Map<String, List<CustomerMealScheduleAddition>>> additionMap = buildManualAdditionMap(
                 customerIds,
                 statsMonthStart,
@@ -183,8 +186,22 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             applyBaseAndExcludedMealTypes(customerScheduleDays, customerRows, profile.getExcludedDates());
             applyManualAdditions(customerScheduleDays, additionMap.get(profile.getId()));
             applyScheduledMealTypes(customerScheduleDays, scheduledMealMap.get(profile.getId()));
+            List<CustomerMealScheduleCellDto> mealScheduleCells = buildMealScheduleCells(
+                    lunchDinnerOrders,
+                    profile.getExcludedDates(),
+                    criteria.getStatsMonth(),
+                    additionMap.get(profile.getId()),
+                    scheduledCellMap.get(profile.getId()));
+            List<CustomerMealScheduleOrderDto> mealScheduleOrders = buildMealScheduleOrders(customerOrders, verifiedCountMap);
+            List<CustomerMealScheduleAddition> manualAdditions = flattenManualAdditions(additionMap.get(profile.getId()));
+            List<CustomerMealScheduleAdditionDto> manualScheduleAdditions = buildManualScheduleAdditionDtos(manualAdditions);
+            String calendarRevision = buildCalendarRevision(profile, manualAdditions);
             for (CustomerMealStatsRowDto row : customerRows) {
                 row.setCustomerScheduleDays(customerScheduleDays);
+                row.setMealScheduleCells(mealScheduleCells);
+                row.setMealScheduleOrders(mealScheduleOrders);
+                row.setManualScheduleAdditions(manualScheduleAdditions);
+                row.setCalendarRevision(calendarRevision);
             }
 
             for (int i = 0; i < customerRows.size(); i++) {
@@ -221,10 +238,12 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         }
         int requestExcludedCount = request.getExcludedDates() == null ? 0 : request.getExcludedDates().size();
         int requestAdditionCount = request.getAdditions() == null ? 0 : request.getAdditions().size();
+        boolean quantityGridRequest = isQuantityGridRequest(request);
+        boolean quantityPlanChanged = false;
         SCHEDULE_ADJUSTMENT_LOG.info("开始保存客户排餐日历调整 - 客户ID: {}, 请求排除日期项: {}, 请求人工新增项: {}",
                 request.getCustomerId(), requestExcludedCount, requestAdditionCount);
 
-        CustomerProfile profile = profileMapper.selectById(request.getCustomerId());
+        CustomerProfile profile = profileMapper.selectByIdForScheduleUpdate(request.getCustomerId());
         if (profile == null) {
             SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整失败 - 客户不存在，客户ID: {}", request.getCustomerId());
             throw new BadRequestException("客户不存在");
@@ -239,9 +258,44 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 profile.getId(), oldExcludedKeys.size(), normalizedExcludedKeys.size(),
                 diffKeys(normalizedExcludedKeys, oldExcludedKeys));
 
+        YearMonth adjustmentMonth = resolveAdjustmentMonth(request);
+        LocalDate monthStart = adjustmentMonth.atDay(1);
+        LocalDate monthEnd = adjustmentMonth.atEndOfMonth();
+        validateRequestedAdditionQuantities(request.getAdditions());
+        List<CustomerMealScheduleAddition> existingMonthAdditions = Collections.emptyList();
+        if (quantityGridRequest || StringUtils.isNotBlank(request.getExpectedRevision())) {
+            existingMonthAdditions = customerMealScheduleAdditionMapper.selectActiveByCustomerIdsAndDateRange(
+                    Collections.singletonList(profile.getId()), monthStart, monthEnd);
+            if (quantityGridRequest && StringUtils.isBlank(request.getExpectedRevision())) {
+                throw new BadRequestException("排餐日历缺少修订标记，请刷新后重试");
+            }
+            String currentRevision = buildCalendarRevision(profile, existingMonthAdditions);
+            if (StringUtils.isNotBlank(request.getExpectedRevision())
+                    && !Objects.equals(currentRevision, request.getExpectedRevision())) {
+                throw new BadRequestException("排餐日历已被其他人修改，请刷新后重试");
+            }
+        }
+        if (quantityGridRequest) {
+            validateQuantityAdditionMonth(request.getAdditions(), adjustmentMonth);
+            quantityPlanChanged = hasQuantityPlanChanges(profile, existingMonthAdditions, normalizedExcludedDates,
+                    request.getAdditions(), adjustmentMonth);
+        }
+        List<CustomerScheduledMealDto> scheduledMonthRows = mealPlanCustomerMapper.selectScheduledMealsByCustomerIdsAndDateRange(
+                Collections.singletonList(profile.getId()), monthStart, monthEnd);
+        Map<String, CustomerScheduledMealDto> scheduledMonthByCell = buildScheduleProgressMap(scheduledMonthRows);
+        Map<String, CustomerMealScheduleCellDto> quantityPlanCells = Collections.emptyMap();
+        if (quantityPlanChanged) {
+            quantityPlanCells = validateMonthlyQuantityPlan(profile.getId(), request.getAdditions(), normalizedExcludedDates,
+                    adjustmentMonth, scheduledMonthByCell);
+        }
+
         int deletedPlanCount = deleteGeneratedMealsForNewExclusions(profile.getId(), profile.getExcludedDates(), normalizedExcludedDates);
         SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整已生成排餐清理完成 - 客户ID: {}, 删除未核销客户排餐数: {}",
                 profile.getId(), deletedPlanCount);
+
+        int deletedExcessPlanCount = quantityPlanChanged
+                ? deleteExcessGeneratedMealScheduleCells(profile.getId(), quantityPlanCells, scheduledMonthByCell)
+                : 0;
 
         profile.setExcludedDates(normalizedExcludedDates);
         profile.setUpdateBy(getCurrentUsername());
@@ -249,10 +303,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整排除日期保存完成 - 客户ID: {}, 排除餐次数: {}",
                 profile.getId(), normalizedExcludedKeys.size());
 
-        YearMonth adjustmentMonth = resolveAdjustmentMonth(request);
-        LocalDate monthStart = adjustmentMonth.atDay(1);
-        LocalDate monthEnd = adjustmentMonth.atEndOfMonth();
-        List<Long> keepAdditionIds = saveManualAdditions(profile.getId(), request.getAdditions(), normalizedExcludedDates, monthStart, monthEnd);
+        List<Long> keepAdditionIds = saveManualAdditions(profile.getId(), request.getAdditions(), normalizedExcludedDates,
+                monthStart, monthEnd, scheduledMonthByCell);
         int softDeletedAdditionCount = customerMealScheduleAdditionMapper.softDeleteMissingByCustomerIdAndDateRange(
                 profile.getId(), monthStart, monthEnd, keepAdditionIds);
         SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增同步完成 - 客户ID: {}, 保留人工新增数: {}, 软删除人工新增数: {}, 保留ID: {}",
@@ -262,7 +314,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         result.setCustomerId(profile.getId());
         result.setExcludedMealCount(countExcludedMeals(normalizedExcludedDates));
         result.setAdditionMealCount(keepAdditionIds.size());
-        result.setDeletedUnverifiedPlanCount(deletedPlanCount);
+        result.setDeletedUnverifiedPlanCount(deletedPlanCount + deletedExcessPlanCount);
         SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整保存完成 - 客户ID: {}, 客户编号: {}, 排除餐次数: {}, 人工新增餐次数: {}, 删除未核销排餐数: {}, 耗时: {}ms",
                 profile.getId(), profile.getCustomerCode(), result.getExcludedMealCount(), result.getAdditionMealCount(),
                 result.getDeletedUnverifiedPlanCount(), System.currentTimeMillis() - startTime);
@@ -376,12 +428,13 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         customerScheduleDays.addAll(dayMap.values());
     }
 
-    private Map<Long, Map<String, List<String>>> buildScheduledMealMap(List<Long> customerIds, LocalDate monthStart, LocalDate monthEnd) {
-        if (customerIds == null || customerIds.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        List<CustomerScheduledMealDto> scheduledMeals = mealPlanCustomerMapper.selectScheduledMealsByCustomerIdsAndDateRange(
-                customerIds, monthStart, monthEnd);
+    /**
+     * 将成功排餐行整理为旧日历使用的客户日期餐次集合。
+     *
+     * @param scheduledMeals 按订单、日期和餐次聚合的排餐数据
+     * @return 客户ID -> 日期 -> 餐次集合
+     */
+    private Map<Long, Map<String, List<String>>> buildScheduledMealMap(List<CustomerScheduledMealDto> scheduledMeals) {
         if (scheduledMeals == null || scheduledMeals.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -394,8 +447,644 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             result.computeIfAbsent(scheduledMeal.getCustomerId(), key -> new HashMap<>())
                     .computeIfAbsent(scheduledMeal.getRecordDate().toString(), key -> new ArrayList<>());
             List<String> mealTypes = result.get(scheduledMeal.getCustomerId()).get(scheduledMeal.getRecordDate().toString());
-            if (!mealTypes.contains(scheduledMeal.getMealType())) {
+            if (safeInt(scheduledMeal.getGeneratedCount()) > 0 && !mealTypes.contains(scheduledMeal.getMealType())) {
                 mealTypes.add(scheduledMeal.getMealType());
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 将成功排餐统计整理为逐订单日历单元格进度。
+     *
+     * @param scheduledMeals 按订单、日期和餐次聚合的排餐数据
+     * @return 客户ID -> 单元格键 -> 排餐进度
+     */
+    private Map<Long, Map<String, CustomerScheduledMealDto>> buildScheduledCellMap(List<CustomerScheduledMealDto> scheduledMeals) {
+        if (scheduledMeals == null || scheduledMeals.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, Map<String, CustomerScheduledMealDto>> result = new HashMap<>();
+        for (CustomerScheduledMealDto scheduledMeal : scheduledMeals) {
+            if (scheduledMeal == null || scheduledMeal.getCustomerId() == null || scheduledMeal.getOrderId() == null
+                    || scheduledMeal.getRecordDate() == null || StringUtils.isBlank(scheduledMeal.getMealType())) {
+                continue;
+            }
+            String cellKey = buildScheduleCellKey(scheduledMeal.getOrderId(),
+                    scheduledMeal.getRecordDate().toString(), scheduledMeal.getMealType());
+            result.computeIfAbsent(scheduledMeal.getCustomerId(), key -> new HashMap<>())
+                    .put(cellKey, scheduledMeal);
+        }
+        return result;
+    }
+
+    /**
+     * 按订单日历规则、人工覆盖和当前排餐进度生成午晚餐数量网格。
+     *
+     * @param orders 客户当前有效订单
+     * @param excludedDates 客户排除日期
+     * @param statsMonth 查询月份
+     * @param additionsByDate 当前月份人工数量覆盖
+     * @param scheduledByCell 当前月份各单元格生成与核销数量
+     * @return 按订单、日期和餐次拆分的数量单元格
+     */
+    private List<CustomerMealScheduleCellDto> buildMealScheduleCells(List<CustomerOrder> orders,
+                                                                    List<ExcludedDateDto> excludedDates,
+                                                                    String statsMonth,
+                                                                    Map<String, List<CustomerMealScheduleAddition>> additionsByDate,
+                                                                    Map<String, CustomerScheduledMealDto> scheduledByCell) {
+        if (orders == null || orders.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<String, CustomerMealScheduleAddition> additionByCell = new HashMap<>();
+        if (additionsByDate != null) {
+            for (List<CustomerMealScheduleAddition> additions : additionsByDate.values()) {
+                if (additions == null) {
+                    continue;
+                }
+                for (CustomerMealScheduleAddition addition : additions) {
+                    if (addition == null || addition.getOrderId() == null || addition.getRecordDate() == null
+                            || StringUtils.isBlank(addition.getMealType())) {
+                        continue;
+                    }
+                    additionByCell.put(buildScheduleCellKey(addition.getOrderId(),
+                            addition.getRecordDate().toString(), addition.getMealType()), addition);
+                }
+            }
+        }
+
+        List<CustomerMealScheduleCellDto> cells = new ArrayList<>();
+        for (CustomerOrder order : orders) {
+            for (CustomerMealScheduleCellDto cell : CustomerMealStatsScheduleUtil.buildMonthMealScheduleCells(
+                    order, excludedDates, statsMonth)) {
+                String cellKey = buildScheduleCellKey(cell.getOrderId(), cell.getDate(), cell.getMealType());
+                CustomerScheduledMealDto scheduled = scheduledByCell == null ? null : scheduledByCell.get(cellKey);
+                if (scheduled != null) {
+                    cell.setGeneratedCount(safeInt(scheduled.getGeneratedCount()));
+                    cell.setFailedCount(safeInt(scheduled.getFailedCount()));
+                    cell.setVerifiedCount(safeInt(scheduled.getVerifiedCount()));
+                }
+                CustomerMealScheduleAddition addition = additionByCell.get(cellKey);
+                if (addition != null && !Boolean.TRUE.equals(cell.getExcluded())) {
+                    cell.setQuantity(addition.getQuantity() == null ? 1 : addition.getQuantity());
+                    cell.setSoupQuantity(addition.getSoupQuantity());
+                    cell.setManualOverride(true);
+                }
+                cells.add(cell);
+            }
+        }
+        return cells;
+    }
+
+    /**
+     * 生成订单日期餐次日历的稳定键。
+     *
+     * @param orderId 订单ID
+     * @param date 排餐日期
+     * @param mealType 餐次
+     * @return 唯一单元格键
+     */
+    private String buildScheduleCellKey(Long orderId, String date, String mealType) {
+        return orderId + "#" + date + "#" + mealType;
+    }
+
+    /**
+     * 将当前有效午晚餐订单转换为日历订单摘要，分别呈现购买数与核销后余额。
+     *
+     * @param orders 客户用餐统计日历可见的未完订单
+     * @param verifiedCountMap 订单餐次核销数量
+     * @return 日历网格来源订单摘要
+     */
+    private List<CustomerMealScheduleOrderDto> buildMealScheduleOrders(
+            List<CustomerOrder> orders, Map<Long, Map<String, Integer>> verifiedCountMap) {
+        if (orders == null || orders.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<CustomerMealScheduleOrderDto> result = new ArrayList<>();
+        for (CustomerOrder order : orders) {
+            if (order == null || order.getId() == null) {
+                continue;
+            }
+            int mealCount = safeInt(order.getLunchDinnerCount());
+            int verifiedCount = getVerifiedCount(verifiedCountMap, order.getId(), "LUNCH")
+                    + getVerifiedCount(verifiedCountMap, order.getId(), "DINNER");
+            CustomerMealScheduleOrderDto summary = new CustomerMealScheduleOrderDto();
+            summary.setOrderId(order.getId());
+            summary.setStatus(order.getStatus());
+            summary.setMealType(order.getMealType());
+            summary.setStartMealType(order.getStartMealType());
+            summary.setStartDate(order.getStartDate());
+            summary.setEndDate(order.getEndDate());
+            summary.setMealCount(mealCount);
+            summary.setRemainingMealCount(Math.max(mealCount - verifiedCount, 0));
+            int breakfastCount = safeInt(order.getBreakfastCount());
+            int breakfastVerified = getVerifiedCount(verifiedCountMap, order.getId(), "BREAKFAST");
+            summary.setBreakfastCount(breakfastCount);
+            summary.setRemainingBreakfastCount(Math.max(breakfastCount - breakfastVerified, 0));
+            summary.setDefaultIncludesSoup(safeInt(order.getSoupCount()) > 0);
+            result.add(summary);
+        }
+        return result;
+    }
+
+    /**
+     * 将月内已生成排餐统计整理为日历单元格进度索引。
+     *
+     * @param scheduledMeals 已生成排餐统计
+     * @return 订单日期餐次 -> 已生成和已核销数量
+     */
+    private Map<String, CustomerScheduledMealDto> buildScheduleProgressMap(List<CustomerScheduledMealDto> scheduledMeals) {
+        if (scheduledMeals == null || scheduledMeals.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, CustomerScheduledMealDto> result = new HashMap<>();
+        for (CustomerScheduledMealDto scheduledMeal : scheduledMeals) {
+            if (scheduledMeal == null || scheduledMeal.getOrderId() == null || scheduledMeal.getRecordDate() == null
+                    || StringUtils.isBlank(scheduledMeal.getMealType())) {
+                continue;
+            }
+            result.put(buildScheduleCellKey(scheduledMeal.getOrderId(), scheduledMeal.getRecordDate().toString(),
+                    scheduledMeal.getMealType()), scheduledMeal);
+        }
+        return result;
+    }
+
+    /**
+     * 将客户月度人工数量覆盖整理为稳定顺序，供日历修订标记计算使用。
+     *
+     * @param additionsByDate 按日期分组的人工覆盖
+     * @return 按记录ID排序的人工覆盖列表
+     */
+    private List<CustomerMealScheduleAddition> flattenManualAdditions(
+            Map<String, List<CustomerMealScheduleAddition>> additionsByDate) {
+        if (additionsByDate == null || additionsByDate.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return additionsByDate.values().stream()
+                .filter(Objects::nonNull)
+                .flatMap(List::stream)
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(CustomerMealScheduleAddition::getId, Comparator.nullsLast(Long::compareTo)))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 计算客户排餐日历当前状态的 SHA-256 修订标记。
+     *
+     * @param profile 客户档案及完整排除日期
+     * @param additions 当前月份有效人工数量覆盖
+     * @return 仅用于并发校验的十六进制标记
+     */
+    private String buildCalendarRevision(CustomerProfile profile, List<CustomerMealScheduleAddition> additions) {
+        StringBuilder canonical = new StringBuilder(JSON.toJSONString(profile == null ? null : profile.getExcludedDates()));
+        if (additions != null) {
+            additions.stream()
+                    .filter(Objects::nonNull)
+                    .sorted(Comparator.comparing(CustomerMealScheduleAddition::getId, Comparator.nullsLast(Long::compareTo)))
+                    .forEach(addition -> canonical.append('|')
+                            .append(addition.getId()).append(':')
+                            .append(addition.getOrderId()).append(':')
+                            .append(addition.getRecordDate()).append(':')
+                            .append(addition.getMealType()).append(':')
+                            .append(addition.getQuantity()).append(':')
+                            .append(addition.getSoupQuantity()));
+        }
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder revision = new StringBuilder(digest.length * 2);
+            for (byte value : digest) {
+                revision.append(String.format("%02x", value & 0xff));
+            }
+            return revision.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("无法计算排餐日历修订标记", e);
+        }
+    }
+
+    /**
+     * 将当前月人工数量覆盖转换为保留订单绑定关系的响应 DTO。
+     *
+     * @param additions 当前月人工数量覆盖实体
+     * @return 可回传保存的人工数量覆盖项
+     */
+    private List<CustomerMealScheduleAdditionDto> buildManualScheduleAdditionDtos(
+            List<CustomerMealScheduleAddition> additions) {
+        if (additions == null || additions.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<CustomerMealScheduleAdditionDto> result = new ArrayList<>();
+        for (CustomerMealScheduleAddition addition : additions) {
+            CustomerMealScheduleAdditionDto dto = new CustomerMealScheduleAdditionDto();
+            dto.setOrderId(addition.getOrderId());
+            dto.setDate(addition.getRecordDate() == null ? null : addition.getRecordDate().toString());
+            dto.setMealType(addition.getMealType());
+            dto.setQuantity(addition.getQuantity() == null ? 1 : addition.getQuantity());
+            dto.setSoupQuantity(addition.getSoupQuantity());
+            dto.setRemark(addition.getRemark());
+            result.add(dto);
+        }
+        return result;
+    }
+
+    /**
+     * 校验当前月数量计划未减少已核销份数，且不超过订单扣除其他月份占用后的可用份数。
+     *
+     * @param customerId 客户ID
+     * @param additions 当前月完整的正数覆盖列表
+     * @param excludedDates 当前完整排除日期列表
+     * @param month 当前编辑月份
+     * @param scheduledByCell 当前月已生成排餐索引
+     */
+    private Map<String, CustomerMealScheduleCellDto> validateMonthlyQuantityPlan(Long customerId,
+                                                                                 List<CustomerMealScheduleAdditionDto> additions,
+                                                                                 List<ExcludedDateDto> excludedDates,
+                                                                                 YearMonth month,
+                                                                                 Map<String, CustomerScheduledMealDto> scheduledByCell) {
+        List<CustomerOrder> orders = customerOrderMapper.findActiveOrdersByCustomerId(customerId);
+        if (orders == null) {
+            orders = Collections.emptyList();
+        }
+        Map<Long, CustomerOrder> ordersById = orders.stream()
+                .filter(order -> order != null && order.getId() != null)
+                .collect(Collectors.toMap(CustomerOrder::getId, order -> order, (left, right) -> left));
+        Map<String, CustomerMealScheduleCellDto> cellsByKey = new LinkedHashMap<>();
+        for (CustomerOrder order : ordersById.values()) {
+            for (CustomerMealScheduleCellDto cell : CustomerMealStatsScheduleUtil.buildMonthMealScheduleCells(
+                    order, excludedDates, month.toString())) {
+                String cellKey = buildScheduleCellKey(cell.getOrderId(), cell.getDate(), cell.getMealType());
+                CustomerScheduledMealDto scheduled = scheduledByCell == null ? null : scheduledByCell.get(cellKey);
+                if (scheduled != null) {
+                    cell.setGeneratedCount(safeInt(scheduled.getGeneratedCount()));
+                    cell.setFailedCount(safeInt(scheduled.getFailedCount()));
+                    cell.setVerifiedCount(safeInt(scheduled.getVerifiedCount()));
+                }
+                cellsByKey.put(cellKey, cell);
+            }
+        }
+
+        Set<String> requestCellKeys = new HashSet<>();
+        Set<String> excludedKeys = buildExcludedKeys(excludedDates);
+        if (additions != null) {
+            for (CustomerMealScheduleAdditionDto dto : additions) {
+                if (dto == null) {
+                    continue;
+                }
+                if (!isSupportedMealType(dto.getMealType())) {
+                    throw new BadRequestException("不支持的餐次：" + dto.getMealType());
+                }
+                int quantity = dto.getQuantity() == null ? 1 : dto.getQuantity();
+                validateQuantityAndSoupQuantity(quantity, dto.getSoupQuantity());
+                if ("BREAKFAST".equals(dto.getMealType())) {
+                    continue;
+                }
+                LocalDate recordDate = parseLocalDate(dto.getDate(), "人工新增日期格式错误");
+                if (!YearMonth.from(recordDate).equals(month)) {
+                    throw new BadRequestException("人工数量覆盖日期不在当前编辑月份");
+                }
+                if (excludedKeys.contains(recordDate + "#" + dto.getMealType())) {
+                    continue;
+                }
+
+                if (findUnchangedPausedQuantityOverride(customerId, dto, recordDate, quantity) != null) {
+                    continue;
+                }
+
+                CustomerOrder order = resolveManualAdditionOrder(customerId, dto.getOrderId(), recordDate, dto.getMealType());
+                dto.setOrderId(order.getId());
+                String cellKey = buildScheduleCellKey(order.getId(), recordDate.toString(), dto.getMealType());
+                if (!requestCellKeys.add(cellKey)) {
+                    throw new BadRequestException("同一订单、日期和餐次不能重复设置数量");
+                }
+                CustomerMealScheduleCellDto cell = cellsByKey.get(cellKey);
+                if (cell == null) {
+                    throw new BadRequestException("排餐日期不在订单有效期内或早于订单开始餐次");
+                }
+                int verifiedCount = safeInt(cell.getVerifiedCount());
+                if (quantity < verifiedCount) {
+                    throw new BadRequestException(recordDate + " " + mealTypeName(dto.getMealType())
+                            + "已核销" + verifiedCount + "份，计划份数不能调低");
+                }
+                cell.setQuantity(quantity);
+                cell.setSoupQuantity(dto.getSoupQuantity());
+                cell.setManualOverride(true);
+            }
+        }
+
+        for (CustomerMealScheduleCellDto cell : cellsByKey.values()) {
+            if (safeInt(cell.getQuantity()) < safeInt(cell.getVerifiedCount())) {
+                throw new BadRequestException(cell.getDate() + " " + mealTypeName(cell.getMealType())
+                        + "已核销" + safeInt(cell.getVerifiedCount()) + "份，计划份数不能调低");
+            }
+        }
+        if (ordersById.isEmpty()) {
+            return cellsByKey;
+        }
+        List<Long> orderIds = new ArrayList<>(ordersById.keySet());
+        Map<Long, Map<String, Integer>> verifiedCounts = buildVerifiedCountMap(orderIds);
+        Map<Long, Integer> allScheduledCounts = buildSuccessfulScheduledCountMap(orderIds);
+        for (CustomerOrder order : ordersById.values()) {
+            int monthQuantity = 0;
+            int monthGenerated = 0;
+            int monthVerified = 0;
+            for (CustomerMealScheduleCellDto cell : cellsByKey.values()) {
+                if (!Objects.equals(order.getId(), cell.getOrderId())) {
+                    continue;
+                }
+                monthQuantity += safeInt(cell.getQuantity());
+                monthGenerated += safeInt(cell.getGeneratedCount());
+                monthVerified += safeInt(cell.getVerifiedCount());
+            }
+
+            Map<String, Integer> orderVerified = verifiedCounts.getOrDefault(order.getId(), Collections.emptyMap());
+            int verifiedTotal = safeInt(orderVerified.get("LUNCH")) + safeInt(orderVerified.get("DINNER"));
+            int verifiedOutsideMonth = Math.max(verifiedTotal - monthVerified, 0);
+            int unverifiedScheduledOutsideMonth = Math.max(
+                    allScheduledCounts.getOrDefault(order.getId(), 0) - verifiedTotal - (monthGenerated - monthVerified), 0);
+            int availableForMonth = Math.max(safeInt(order.getLunchDinnerCount())
+                    - verifiedOutsideMonth - unverifiedScheduledOutsideMonth, 0);
+            if (monthQuantity > availableForMonth) {
+                throw new BadRequestException("订单 " + order.getId() + " 本月计划 " + monthQuantity
+                        + " 份，超过当前可用餐数 " + availableForMonth + " 份");
+            }
+        }
+        return cellsByKey;
+    }
+
+    /**
+     * 删除目标份数减少后多出的未核销结果行，避免日历计划低于活动排餐份数。
+     *
+     * @param customerId 客户ID
+     * @param quantityPlanCells 本月订单日期餐次目标份数
+     * @param scheduledByCell 保存前的已生成、失败和核销份数
+     * @return 清理的超额未核销结果行数
+     */
+    private int deleteExcessGeneratedMealScheduleCells(Long customerId,
+                                                       Map<String, CustomerMealScheduleCellDto> quantityPlanCells,
+                                                       Map<String, CustomerScheduledMealDto> scheduledByCell) {
+        if (quantityPlanCells == null || quantityPlanCells.isEmpty() || scheduledByCell == null || scheduledByCell.isEmpty()) {
+            return 0;
+        }
+        int deletedCount = 0;
+        for (Map.Entry<String, CustomerMealScheduleCellDto> entry : quantityPlanCells.entrySet()) {
+            CustomerMealScheduleCellDto cell = entry.getValue();
+            if (cell == null || Boolean.TRUE.equals(cell.getExcluded())) {
+                continue;
+            }
+            CustomerScheduledMealDto progress = scheduledByCell.get(entry.getKey());
+            if (progress == null) {
+                continue;
+            }
+            int existingResultCount = safeInt(progress.getGeneratedCount()) + safeInt(progress.getFailedCount());
+            int targetQuantity = safeInt(cell.getQuantity());
+            if (existingResultCount > targetQuantity) {
+                deletedCount += mealPlanService.deleteExcessUnverifiedCustomerServingsForCalendarAdjustment(
+                        customerId, cell.getOrderId(), cell.getDate(), cell.getMealType(), targetQuantity);
+            }
+        }
+        return deletedCount;
+    }
+
+    /**
+     * 校验目标份数及显式含汤份数。
+     *
+     * @param quantity 目标份数
+     * @param soupQuantity 显式含汤份数
+     */
+    private void validateQuantityAndSoupQuantity(int quantity, Integer soupQuantity) {
+        if (quantity < 1) {
+            throw new BadRequestException("目标份数必须大于等于 1；零份请使用排除日期");
+        }
+        if (soupQuantity != null && (soupQuantity < 0 || soupQuantity > quantity)) {
+            throw new BadRequestException("含汤份数必须在 0 到目标份数之间");
+        }
+    }
+
+    /**
+     * 在读取修订标记前验证请求中的餐次、日期和份数格式，优先返回明确的字段错误。
+     *
+     * @param additions 请求中的数量覆盖列表
+     */
+    private void validateRequestedAdditionQuantities(List<CustomerMealScheduleAdditionDto> additions) {
+        if (additions == null || additions.isEmpty()) {
+            return;
+        }
+        for (CustomerMealScheduleAdditionDto addition : additions) {
+            if (addition == null) {
+                continue;
+            }
+            if (!isSupportedMealType(addition.getMealType())) {
+                throw new BadRequestException("不支持的餐次：" + addition.getMealType());
+            }
+            int quantity = addition.getQuantity() == null ? 1 : addition.getQuantity();
+            validateQuantityAndSoupQuantity(quantity, addition.getSoupQuantity());
+            parseLocalDate(addition.getDate(), "人工新增日期格式错误");
+        }
+    }
+
+    /**
+     * 判断请求是否使用数量网格契约，避免显式数量字段绕过余额和修订检查。
+     *
+     * @param request 日历调整请求
+     * @return true 表示使用数量网格校验
+     */
+    private boolean isQuantityGridRequest(CustomerMealScheduleAdjustmentRequest request) {
+        if (request == null) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(request.getQuantityMode())) {
+            return true;
+        }
+        return request.getAdditions() != null && request.getAdditions().stream()
+                .filter(Objects::nonNull)
+                .anyMatch(addition -> addition.getQuantity() != null || addition.getSoupQuantity() != null);
+    }
+
+    /**
+     * 校验数量网格中的午晚餐覆盖都属于本次编辑月份，早餐维持旧请求语义。
+     *
+     * @param additions 数量覆盖请求
+     * @param month 当前编辑月份
+     */
+    private void validateQuantityAdditionMonth(List<CustomerMealScheduleAdditionDto> additions, YearMonth month) {
+        if (additions == null) {
+            return;
+        }
+        for (CustomerMealScheduleAdditionDto addition : additions) {
+            if (addition == null || "BREAKFAST".equals(addition.getMealType())) {
+                continue;
+            }
+            LocalDate date = parseLocalDate(addition.getDate(), "人工新增日期格式错误");
+            if (!YearMonth.from(date).equals(month)) {
+                throw new BadRequestException("人工数量覆盖日期不在当前编辑月份");
+            }
+        }
+    }
+
+    /**
+     * 比较当前保存前后的午晚餐计划状态，只有数量、含汤或排除状态实际改变时才执行份数校验。
+     *
+     * @param profile 当前客户档案
+     * @param currentAdditions 当前月份已保存的数量覆盖
+     * @param newExcludedDates 本次提交的完整排除日期
+     * @param requestedAdditions 本次提交的完整正数覆盖
+     * @param month 当前编辑月份
+     * @return true 表示午晚餐数量计划有变化
+     */
+    private boolean hasQuantityPlanChanges(CustomerProfile profile,
+                                           List<CustomerMealScheduleAddition> currentAdditions,
+                                           List<ExcludedDateDto> newExcludedDates,
+                                           List<CustomerMealScheduleAdditionDto> requestedAdditions,
+                                           YearMonth month) {
+        List<CustomerOrder> orders = customerOrderMapper.findActiveOrdersByCustomerId(profile.getId());
+        if (orders == null || orders.isEmpty()) {
+            return requestedAdditions != null && requestedAdditions.stream()
+                    .filter(Objects::nonNull)
+                    .anyMatch(addition -> !"BREAKFAST".equals(addition.getMealType()));
+        }
+        Map<String, CustomerMealScheduleCellDto> currentCells = buildQuantityCellMap(
+                orders, profile.getExcludedDates(), month, currentAdditions, Collections.emptyList());
+        Map<String, CustomerMealScheduleCellDto> nextCells = buildQuantityCellMap(
+                orders, newExcludedDates, month, Collections.emptyList(), requestedAdditions);
+        if (!currentCells.keySet().equals(nextCells.keySet())) {
+            return true;
+        }
+        for (String cellKey : currentCells.keySet()) {
+            CustomerMealScheduleCellDto current = currentCells.get(cellKey);
+            CustomerMealScheduleCellDto next = nextCells.get(cellKey);
+            if (!Objects.equals(current.getQuantity(), next.getQuantity())
+                    || !Objects.equals(current.getExcluded(), next.getExcluded())
+                    || effectiveSoupQuantity(current) != effectiveSoupQuantity(next)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 根据基础规则、排除日期及当前/请求数量覆盖构建比较用的午晚餐单元格。
+     *
+     * @param orders 当前有效订单
+     * @param excludedDates 客户完整排除日期
+     * @param month 查询月份
+     * @param savedAdditions 已保存覆盖
+     * @param requestedAdditions 本次提交覆盖
+     * @return 订单日期餐次计划单元格
+     */
+    private Map<String, CustomerMealScheduleCellDto> buildQuantityCellMap(
+            List<CustomerOrder> orders,
+            List<ExcludedDateDto> excludedDates,
+            YearMonth month,
+            List<CustomerMealScheduleAddition> savedAdditions,
+            List<CustomerMealScheduleAdditionDto> requestedAdditions) {
+        Map<String, CustomerMealScheduleCellDto> cells = new LinkedHashMap<>();
+        for (CustomerOrder order : orders) {
+            for (CustomerMealScheduleCellDto cell : CustomerMealStatsScheduleUtil.buildMonthMealScheduleCells(
+                    order, excludedDates, month.toString())) {
+                cells.put(buildScheduleCellKey(cell.getOrderId(), cell.getDate(), cell.getMealType()), cell);
+            }
+        }
+        if (savedAdditions != null) {
+            for (CustomerMealScheduleAddition addition : savedAdditions) {
+                if (addition == null || addition.getOrderId() == null || addition.getRecordDate() == null
+                        || "BREAKFAST".equals(addition.getMealType())) {
+                    continue;
+                }
+                applyQuantityOverride(cells, addition.getOrderId(), addition.getRecordDate().toString(),
+                        addition.getMealType(), addition.getQuantity(), addition.getSoupQuantity());
+            }
+        }
+        if (requestedAdditions != null) {
+            for (CustomerMealScheduleAdditionDto addition : requestedAdditions) {
+                if (addition == null || addition.getOrderId() == null || StringUtils.isBlank(addition.getDate())
+                        || "BREAKFAST".equals(addition.getMealType())) {
+                    continue;
+                }
+                applyQuantityOverride(cells, addition.getOrderId(), addition.getDate(), addition.getMealType(),
+                        addition.getQuantity(), addition.getSoupQuantity());
+            }
+        }
+        return cells;
+    }
+
+    /**
+     * 在未排除的单元格上应用一个正数份数覆盖。
+     *
+     * @param cells 单元格索引
+     * @param orderId 订单ID
+     * @param date 排餐日期
+     * @param mealType 餐次
+     * @param quantity 覆盖份数
+     * @param soupQuantity 显式含汤份数
+     */
+    private void applyQuantityOverride(Map<String, CustomerMealScheduleCellDto> cells,
+                                       Long orderId,
+                                       String date,
+                                       String mealType,
+                                       Integer quantity,
+                                       Integer soupQuantity) {
+        String cellKey = buildScheduleCellKey(orderId, date, mealType);
+        CustomerMealScheduleCellDto cell = cells.get(cellKey);
+        if (cell == null || Boolean.TRUE.equals(cell.getExcluded())) {
+            return;
+        }
+        cell.setQuantity(quantity == null ? 1 : quantity);
+        cell.setSoupQuantity(soupQuantity);
+        cell.setManualOverride(true);
+    }
+
+    /**
+     * 将当前单元格计划解析为有效含汤份数，用于比较继承配置与显式覆盖。
+     *
+     * @param cell 数量日历单元格
+     * @return 实际含汤份数
+     */
+    private int effectiveSoupQuantity(CustomerMealScheduleCellDto cell) {
+        int quantity = safeInt(cell.getQuantity());
+        if (Boolean.TRUE.equals(cell.getExcluded()) || quantity == 0) {
+            return 0;
+        }
+        if (cell.getSoupQuantity() != null) {
+            return safeInt(cell.getSoupQuantity());
+        }
+        return Boolean.TRUE.equals(cell.getDefaultIncludesSoup()) ? quantity : 0;
+    }
+
+    /**
+     * 将餐次代码转换为日历错误提示使用的中文名称。
+     *
+     * @param mealType 餐次代码
+     * @return 餐次中文名称
+     */
+    private String mealTypeName(String mealType) {
+        if ("LUNCH".equals(mealType)) {
+            return "午餐";
+        }
+        if ("DINNER".equals(mealType)) {
+            return "晚餐";
+        }
+        return mealType;
+    }
+
+    /**
+     * 查询所有有效订单的成功排餐数并整理为订单计数索引。
+     *
+     * @param orderIds 订单ID列表
+     * @return 订单ID -> 成功排餐数量
+     */
+    private Map<Long, Integer> buildSuccessfulScheduledCountMap(List<Long> orderIds) {
+        if (orderIds == null || orderIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> counts =
+                mealPlanCustomerMapper.countSuccessfulScheduledByOrderIds(orderIds);
+        if (counts == null || counts.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, Integer> result = new HashMap<>();
+        for (me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto count : counts) {
+            if (count != null && count.getOrderId() != null) {
+                result.put(count.getOrderId(), safeInt(count.getScheduledCount()));
             }
         }
         return result;
@@ -1544,12 +2233,14 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                                            List<CustomerMealScheduleAdditionDto> additions,
                                            List<ExcludedDateDto> excludedDates,
                                            LocalDate monthStart,
-                                           LocalDate monthEnd) {
+                                           LocalDate monthEnd,
+                                           Map<String, CustomerScheduledMealDto> scheduledByCell) {
         if (additions == null || additions.isEmpty()) {
             SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增为空 - 客户ID: {}", customerId);
             return Collections.emptyList();
         }
         Set<String> excludedKeys = buildExcludedKeys(excludedDates);
+        Set<String> requestCellKeys = new HashSet<>();
         List<Long> keepIds = new ArrayList<>();
         SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整开始同步人工新增 - 客户ID: {}, 请求人工新增数: {}, 排除餐次: {}",
                 customerId, additions.size(), excludedKeys);
@@ -1564,6 +2255,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 throw new BadRequestException("不支持的餐次：" + dto.getMealType());
             }
             LocalDate recordDate = parseLocalDate(dto.getDate(), "人工新增日期格式错误");
+            int quantity = dto.getQuantity() == null ? 1 : dto.getQuantity();
+            validateQuantityAndSoupQuantity(quantity, dto.getSoupQuantity());
+            dto.setQuantity(quantity);
             if (recordDate.isBefore(monthStart) || recordDate.isAfter(monthEnd)) {
                 SCHEDULE_ADJUSTMENT_LOG.debug("客户排餐日历调整人工新增跳过非当前月份项 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 当前月份范围: {}~{}",
                         customerId, dto.getOrderId(), recordDate, dto.getMealType(), monthStart, monthEnd);
@@ -1574,10 +2268,29 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                         customerId, dto.getOrderId(), recordDate, dto.getMealType());
                 continue;
             }
+            CustomerMealScheduleAddition pausedAddition = findUnchangedPausedQuantityOverride(
+                    customerId, dto, recordDate, quantity);
+            if (pausedAddition != null) {
+                if (pausedAddition.getId() == null) {
+                    throw new BadRequestException("暂停订单只能查看来源计划，不能修改数量");
+                }
+                keepIds.add(pausedAddition.getId());
+                continue;
+            }
             SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增校验开始 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}",
                     customerId, dto.getOrderId(), recordDate, dto.getMealType());
             CustomerOrder manualOrder = resolveManualAdditionOrder(customerId, dto.getOrderId(), recordDate, dto.getMealType());
             Long orderId = manualOrder.getId();
+            String cellKey = buildScheduleCellKey(orderId, recordDate.toString(), dto.getMealType());
+            if (!requestCellKeys.add(cellKey)) {
+                throw new BadRequestException("同一订单、日期和餐次不能重复设置数量");
+            }
+            CustomerScheduledMealDto scheduled = scheduledByCell == null ? null : scheduledByCell.get(cellKey);
+            int verifiedCount = scheduled == null ? 0 : safeInt(scheduled.getVerifiedCount());
+            if (quantity < verifiedCount) {
+                throw new BadRequestException(recordDate + " " + mealTypeName(dto.getMealType())
+                        + "已核销" + verifiedCount + "份，计划份数不能调低");
+            }
             CustomerMealScheduleAddition existing = customerMealScheduleAdditionMapper
                     .selectActiveByOrderDateMeal(orderId, recordDate, dto.getMealType());
             if (existing == null) {
@@ -1589,6 +2302,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                     existing.setOrderId(orderId);
                     existing.setRecordDate(recordDate);
                     existing.setMealType(dto.getMealType());
+                    existing.setQuantity(quantity);
+                    existing.setSoupQuantity(dto.getSoupQuantity());
                     existing.setRemark(dto.getRemark());
                     existing.setDeleted(false);
                     existing.setUpdateBy(getCurrentUsername());
@@ -1601,6 +2316,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                     existing.setOrderId(orderId);
                     existing.setRecordDate(recordDate);
                     existing.setMealType(dto.getMealType());
+                    existing.setQuantity(quantity);
+                    existing.setSoupQuantity(dto.getSoupQuantity());
                     existing.setRemark(dto.getRemark());
                     existing.setDeleted(false);
                     existing.setCreateBy(getCurrentUsername());
@@ -1609,6 +2326,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                             customerId, orderId, recordDate, dto.getMealType(), existing.getId());
                 }
             } else {
+                existing.setQuantity(quantity);
+                existing.setSoupQuantity(dto.getSoupQuantity());
                 existing.setRemark(dto.getRemark());
                 existing.setUpdateBy(getCurrentUsername());
                 customerMealScheduleAdditionMapper.updateById(existing);
@@ -1649,6 +2368,37 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         }
         validateManualAdditionOrder(customerId, preferredOrder, recordDate, mealType);
         return preferredOrder;
+    }
+
+    /**
+     * 对暂停订单仅允许原样保留既有数量来源记录，拒绝新增或修改其排餐计划。
+     *
+     * @param customerId 当前客户ID
+     * @param dto 数量覆盖请求
+     * @param recordDate 排餐日期
+     * @param quantity 目标份数
+     * @return 未变化的现存暂停订单覆盖；非暂停订单返回 null
+     */
+    private CustomerMealScheduleAddition findUnchangedPausedQuantityOverride(Long customerId,
+                                                                              CustomerMealScheduleAdditionDto dto,
+                                                                              LocalDate recordDate,
+                                                                              int quantity) {
+        if (dto.getOrderId() == null) {
+            return null;
+        }
+        CustomerOrder order = customerOrderMapper.selectById(dto.getOrderId());
+        if (order == null || !Objects.equals(order.getCustomerId(), customerId)
+                || !Integer.valueOf(4).equals(order.getStatus())) {
+            return null;
+        }
+        CustomerMealScheduleAddition existing = customerMealScheduleAdditionMapper
+                .selectActiveByOrderDateMeal(dto.getOrderId(), recordDate, dto.getMealType());
+        if (existing != null
+                && Objects.equals(existing.getQuantity() == null ? 1 : existing.getQuantity(), quantity)
+                && Objects.equals(existing.getSoupQuantity(), dto.getSoupQuantity())) {
+            return existing;
+        }
+        throw new BadRequestException("暂停订单只能查看来源计划，不能修改数量");
     }
 
     /**

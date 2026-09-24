@@ -161,49 +161,67 @@
     <el-dialog
       :visible.sync="calendarDialogVisible"
       :title="calendarDialogTitle"
-      width="760px"
+      width="92%"
       append-to-body
       class="schedule-calendar-dialog"
     >
       <div class="schedule-calendar-meta">
         <span>统计月份：{{ query.statsMonth || '-' }}</span>
-        <span>应排餐：{{ selectedScheduleDays.length }} 天</span>
+        <span>午晚餐订单：{{ lunchDinnerOrderCount }} 笔</span>
+        <span>购买 / 剩余：{{ lunchDinnerPurchaseCount }} / {{ lunchDinnerRemainingCount }} 份</span>
+        <span v-if="selectedRow && selectedRow.specialRequirementText">特殊要求：{{ selectedRow.specialRequirementText }}</span>
       </div>
-      <div class="readonly-calendar">
-        <div
-          v-for="weekday in weekdays"
-          :key="weekday"
-          class="readonly-calendar__weekday"
-        >
-          {{ weekday }}
+      <customer-meal-quantity-grid
+        :orders="calendarScheduleOrders"
+        :cells="calendarScheduleCells"
+        :stats-month="query.statsMonth"
+        @cell-change="handleScheduleCellChange"
+      />
+
+      <div v-if="hasEditableBreakfastOrder || pausedBreakfastOrderCount > 0" class="breakfast-calendar-section">
+        <div class="breakfast-calendar-section__heading">
+          <strong>早餐调整</strong>
+          <span>沿用原有日历操作；早餐不参与份数编辑。</span>
         </div>
-        <div
-          v-for="day in calendarDays"
-          :key="day.date"
-          class="readonly-calendar__day"
-          :class="{
-            'readonly-calendar__day--outside': !day.currentMonth,
-            'readonly-calendar__day--scheduled': day.mealTypes.length > 0
-          }"
-        >
-          <div class="readonly-calendar__date">{{ day.day }}</div>
-          <div class="readonly-calendar__tags">
-            <button
-              v-for="mealType in mealTypes"
-              :key="mealType"
-              type="button"
-              class="readonly-calendar__meal-button"
-              :class="mealButtonClass(day, mealType)"
-              :disabled="!day.currentMonth"
-              @click="toggleMeal(day, mealType)"
-            >
-              <span class="readonly-calendar__tag-label">{{ mealTypeName(mealType) }}</span>
-            </button>
+        <el-alert
+          v-if="pausedBreakfastOrderCount > 0 && !hasEditableBreakfastOrder"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="暂停订单的早餐计划仅供查看，恢复前不能调整或排餐。"
+          style="margin-bottom: 8px;"
+        />
+        <div class="readonly-calendar readonly-calendar--breakfast">
+          <div
+            v-for="weekday in weekdays"
+            :key="weekday"
+            class="readonly-calendar__weekday"
+          >
+            {{ weekday }}
+          </div>
+          <div
+            v-for="day in calendarDays"
+            :key="day.date"
+            class="readonly-calendar__day"
+            :class="{
+              'readonly-calendar__day--outside': !day.currentMonth,
+              'readonly-calendar__day--scheduled': day.mealTypes.includes('BREAKFAST')
+            }"
+          >
+            <div class="readonly-calendar__date">{{ day.day }}</div>
+            <div class="readonly-calendar__tags">
+              <button
+                type="button"
+                class="readonly-calendar__meal-button"
+                :class="mealButtonClass(day, 'BREAKFAST')"
+                :disabled="!day.currentMonth || !hasEditableBreakfastOrder"
+                @click="toggleMeal(day, 'BREAKFAST')"
+              >
+                <span class="readonly-calendar__tag-label">早</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-      <div v-if="selectedScheduleDays.length === 0" class="schedule-calendar-empty">
-        当前月份没有需要排餐的日期
       </div>
       <span slot="footer" class="dialog-footer">
         <el-button size="small" @click="calendarDialogVisible = false">取消</el-button>
@@ -216,6 +234,7 @@
 <script>
 import { getMealStats, saveMealScheduleAdjustments } from '@/api/customer/profile'
 import { getDepletionWarnings } from '@/api/mealPlan'
+import CustomerMealQuantityGrid from './CustomerMealQuantityGrid'
 
 const defaultQuery = () => ({
   customerCode: '',
@@ -232,6 +251,7 @@ function formatCurrentMonth() {
 
 export default {
   name: 'CustomerMealStats',
+  components: { CustomerMealQuantityGrid },
   data() {
     return {
       loading: false,
@@ -249,9 +269,11 @@ export default {
       selectedScheduleDays: [],
       calendarExcludedDates: [],
       calendarAdditions: [],
-      mealTypes: ['BREAKFAST', 'LUNCH', 'DINNER'],
       weekdays: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'],
-      depletionWarnings: []
+      depletionWarnings: [],
+      calendarScheduleOrders: [],
+      calendarScheduleCells: [],
+      calendarRevision: ''
     }
   },
   computed: {
@@ -317,6 +339,25 @@ export default {
         cells.push({ date, day, currentMonth: false, mealTypes: [], baseMealTypes: [], excludedMealTypes: [], addedMealTypes: [], scheduledMealTypes: [] })
       }
       return cells
+    },
+    breakfastStatsRow() {
+      if (!this.selectedRow) return null
+      return this.rows.find(row => row.customerId === this.selectedRow.customerId && row.mealBucket === 'BREAKFAST') || null
+    },
+    lunchDinnerPurchaseCount() {
+      return this.calendarScheduleOrders.reduce((total, order) => total + (Number(order.mealCount) || 0), 0)
+    },
+    lunchDinnerRemainingCount() {
+      return this.calendarScheduleOrders.reduce((total, order) => total + (Number(order.remainingMealCount) || 0), 0)
+    },
+    lunchDinnerOrderCount() {
+      return this.calendarScheduleOrders.filter(order => Number(order.mealCount) > 0).length
+    },
+    hasEditableBreakfastOrder() {
+      return this.calendarScheduleOrders.some(order => Number(order.breakfastCount) > 0 && Number(order.status) === 1)
+    },
+    pausedBreakfastOrderCount() {
+      return this.calendarScheduleOrders.filter(order => Number(order.breakfastCount) > 0 && Number(order.status) === 4).length
     }
   },
   created() {
@@ -395,8 +436,22 @@ export default {
       this.selectedRow = row
       this.selectedScheduleDays = Array.isArray(row.customerScheduleDays) ? row.customerScheduleDays : []
       this.calendarExcludedDates = this.extractExcludedDates(this.selectedScheduleDays)
-      this.calendarAdditions = this.extractAdditions(this.selectedScheduleDays)
+      const quantityCells = Array.isArray(row.mealScheduleCells) ? row.mealScheduleCells : []
+      const overriddenCellKeys = new Set(quantityCells
+        .filter(cell => cell.manualOverride)
+        .map(cell => this.scheduleCellKey(cell.orderId, cell.date, cell.mealType)))
+      const savedAdditions = Array.isArray(row.manualScheduleAdditions)
+        ? row.manualScheduleAdditions.map(item => ({ ...item }))
+        : this.extractAdditions(this.selectedScheduleDays)
+      this.calendarAdditions = savedAdditions
+        .filter(item => item.mealType === 'BREAKFAST' || !overriddenCellKeys.has(this.scheduleCellKey(item.orderId, item.date, item.mealType)))
+      this.calendarScheduleOrders = Array.isArray(row.mealScheduleOrders) ? row.mealScheduleOrders.map(order => ({ ...order })) : []
+      this.calendarScheduleCells = quantityCells.map(cell => ({ ...cell }))
+      this.calendarRevision = row.calendarRevision || ''
       this.calendarDialogVisible = true
+    },
+    scheduleCellKey(orderId, date, mealType) {
+      return `${orderId}#${date}#${mealType}`
     },
     parseStatsMonth(value) {
       if (!value || !/^\d{4}-\d{2}$/.test(value)) {
@@ -461,7 +516,7 @@ export default {
         this.addExcludedMeal(day.date, mealType)
         return
       }
-      const orderId = this.resolveAdditionOrderId(mealType)
+      const orderId = this.resolveAdditionOrderId(mealType, day.date)
       if (!orderId) {
         this.$message.warning('没有可用于该餐次的进行中订单')
         return
@@ -488,9 +543,17 @@ export default {
         this.calendarExcludedDates = this.calendarExcludedDates.filter(value => value.date !== date)
       }
     },
-    resolveAdditionOrderId(mealType) {
+    resolveAdditionOrderId(mealType, date) {
       if (!this.selectedRow) {
         return null
+      }
+      if (mealType === 'BREAKFAST') {
+        const breakfastOrders = this.calendarScheduleOrders.filter(order =>
+          Number(order.status) === 1 && Number(order.breakfastCount) > 0)
+        const order = breakfastOrders.find(candidate =>
+          (!candidate.startDate || date >= candidate.startDate) &&
+          (!candidate.endDate || date <= candidate.endDate)) || breakfastOrders[0]
+        return order && order.orderId
       }
       const row = this.rows.find(item => item.customerId === this.selectedRow.customerId && (
         (mealType === 'BREAKFAST' && item.mealBucket === 'BREAKFAST') ||
@@ -510,10 +573,59 @@ export default {
           return
         }
         day.addedMealTypes.forEach(mealType => {
-          result.push({ orderId: this.resolveAdditionOrderId(mealType), date: day.date, mealType, remark: '' })
+          if (mealType === 'BREAKFAST') {
+            result.push({ orderId: this.resolveAdditionOrderId(mealType, day.date), date: day.date, mealType, remark: '' })
+          }
         })
       })
       return result.filter(item => item.orderId)
+    },
+    handleScheduleCellChange(cell) {
+      if (!cell) return
+      const wasExcluded = this.hasExcludedMeal(cell.date, cell.mealType)
+      if (cell.excluded) {
+        this.addExcludedMeal(cell.date, cell.mealType)
+        this.calendarScheduleCells = this.calendarScheduleCells.map(current => {
+          if (current.date !== cell.date || current.mealType !== cell.mealType) return current
+          return { ...current, quantity: 0, soupQuantity: null, excluded: true, manualOverride: false }
+        })
+      } else {
+        if (wasExcluded) {
+          this.calendarScheduleCells = this.calendarScheduleCells.map(current => {
+            if (current.date !== cell.date || current.mealType !== cell.mealType) return current
+            return {
+              ...current,
+              quantity: Number(current.baseQuantity) || 0,
+              soupQuantity: null,
+              excluded: false,
+              manualOverride: false
+            }
+          })
+        }
+        this.removeExcludedMeal(cell.date, cell.mealType)
+        const index = this.calendarScheduleCells.findIndex(current =>
+          this.scheduleCellKey(current.orderId, current.date, current.mealType) ===
+          this.scheduleCellKey(cell.orderId, cell.date, cell.mealType))
+        if (index >= 0) {
+          this.$set(this.calendarScheduleCells, index, { ...cell, excluded: false })
+        }
+      }
+    },
+    buildQuantityOverrides() {
+      return this.calendarScheduleCells
+        .filter(cell => !cell.excluded && !this.hasExcludedMeal(cell.date, cell.mealType) && Number(cell.quantity) > 0 && (
+          cell.manualOverride ||
+          Number(cell.quantity) !== Number(cell.baseQuantity) ||
+          cell.soupQuantity != null
+        ))
+        .map(cell => ({
+          orderId: cell.orderId,
+          date: cell.date,
+          mealType: cell.mealType,
+          quantity: cell.quantity,
+          soupQuantity: cell.soupQuantity,
+          remark: ''
+        }))
     },
     saveCalendarAdjustments() {
       if (!this.selectedRow) {
@@ -523,12 +635,17 @@ export default {
       saveMealScheduleAdjustments({
         customerId: this.selectedRow.customerId,
         statsMonth: this.query.statsMonth,
+        quantityMode: true,
+        expectedRevision: this.calendarRevision,
         excludedDates: this.calendarExcludedDates,
-        additions: this.calendarAdditions
+        additions: this.calendarAdditions.concat(this.buildQuantityOverrides())
       }).then(() => {
         this.$message.success('排餐日历已保存')
         this.calendarDialogVisible = false
         this.loadData()
+      }).catch(err => {
+        const message = err && err.response && err.response.data && err.response.data.message
+        this.$message.error(message || '排餐日历保存失败，请刷新后重试')
       }).finally(() => {
         this.calendarSaving = false
       })
@@ -538,6 +655,16 @@ export default {
 </script>
 
 <style scoped>
+.schedule-calendar-dialog /deep/ .el-dialog {
+  max-width: 1500px;
+  margin-top: 3vh !important;
+}
+
+.schedule-calendar-dialog /deep/ .el-dialog__body {
+  max-height: 78vh;
+  overflow: auto;
+}
+
 .meal-stats-table {
   margin-bottom: 16px;
 }
@@ -562,10 +689,36 @@ export default {
 
 .schedule-calendar-meta {
   display: flex;
+  flex-wrap: wrap;
   gap: 20px;
   margin-bottom: 12px;
   color: #606266;
   font-size: 13px;
+}
+
+.breakfast-calendar-section {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid #ebeef5;
+}
+
+.breakfast-calendar-section__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 9px;
+  color: #405776;
+  font-size: 13px;
+}
+
+.breakfast-calendar-section__heading span {
+  color: #98a3b1;
+  font-size: 12px;
+}
+
+.readonly-calendar--breakfast .readonly-calendar__day {
+  min-height: 58px;
+  padding: 6px;
 }
 
 .readonly-calendar {

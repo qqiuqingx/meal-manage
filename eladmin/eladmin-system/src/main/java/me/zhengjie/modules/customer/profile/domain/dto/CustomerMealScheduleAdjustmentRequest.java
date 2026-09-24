@@ -27,6 +27,16 @@ public class CustomerMealScheduleAdjustmentRequest implements Serializable {
     private String statsMonth;
 
     /**
+     * 是否由数量日历提交；旧调用方省略时继续按单份人工新增请求处理。
+     */
+    private Boolean quantityMode;
+
+    /**
+     * 查询日历时返回的修订标记，用于拒绝覆盖他人刚保存的变更。
+     */
+    private String expectedRevision;
+
+    /**
      * 页面保存后的排除日期完整列表
      */
     private List<ExcludedDateDto> excludedDates = new ArrayList<>();

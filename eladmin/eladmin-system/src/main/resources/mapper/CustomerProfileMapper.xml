@@ -39,6 +39,10 @@
         SELECT * FROM customer_profile WHERE id = #{id}
     </select>
 
+    <select id="selectByIdForScheduleUpdate" resultMap="BaseResultMap">
+        SELECT * FROM customer_profile WHERE id = #{id} FOR UPDATE
+    </select>
+
     <!-- 条件查询客户档案列表 -->
     <select id="findAll" resultMap="BaseResultMap">
         SELECT cp.*,

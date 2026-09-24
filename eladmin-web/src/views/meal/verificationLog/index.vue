@@ -99,6 +99,7 @@
         </el-table-column>
         <el-table-column label="客户名称" prop="customerName" align="center" width="90" />
         <el-table-column label="客户编码" prop="customerCode" align="center" width="90" />
+        <el-table-column label="份序" prop="servingNo" align="center" width="70" />
         <el-table-column label="订单ID" prop="orderId" align="center" width="80" />
         <el-table-column label="套餐名称" prop="parentPackageName" align="center" width="110" />
         <el-table-column label="核销餐数" prop="verificationCount" align="center" width="80" />
@@ -138,6 +139,7 @@
         <el-descriptions-item label="餐次">{{ mealTypeText(detail.mealType) }}</el-descriptions-item>
         <el-descriptions-item label="客户名称">{{ detail.customerName }}</el-descriptions-item>
         <el-descriptions-item label="客户编码">{{ detail.customerCode }}</el-descriptions-item>
+        <el-descriptions-item label="份序">{{ detail.servingNo || 1 }}</el-descriptions-item>
         <el-descriptions-item label="订单ID">{{ detail.orderId }}</el-descriptions-item>
         <el-descriptions-item label="套餐名称">{{ detail.parentPackageName }}</el-descriptions-item>
         <el-descriptions-item label="核销餐数">{{ detail.verificationCount }}</el-descriptions-item>

@@ -55,8 +55,8 @@
           <span class="cell-value">{{ mealTypeText }}</span>
         </div>
         <div class="sheet-header__cell sheet-header__cell--right">
-          <span class="cell-label">总人数</span>
-          <span class="cell-value cell-value--hero">{{ planData.totalCustomers }}</span>
+          <span class="cell-label">总份数</span>
+          <span class="cell-value cell-value--hero">{{ totalServingCount }}</span>
         </div>
       </div>
 
@@ -79,7 +79,7 @@
               }"
             >
               <div class="code-main">
-                <span class="code-text">{{ customer.customerCode || customer.customerName }}</span>
+                <span class="code-text">{{ servingLabel(customer) }}</span>
                 <span v-if="customer.firstMealOfOrder" class="code-first-badge">首</span>
               </div>
             </div>
@@ -95,7 +95,7 @@
                 <tr>
                   <th class="col-category">类目</th>
                   <th class="col-name">菜名</th>
-                  <th class="col-count">人数</th>
+                  <th class="col-count">份数</th>
                   <th class="col-codes">编号明细</th>
                 </tr>
               </thead>
@@ -127,7 +127,7 @@
                 <tr>
                   <th class="col-category">换菜</th>
                   <th class="col-name">替换项目</th>
-                  <th class="col-count">人数</th>
+                  <th class="col-count">份数</th>
                   <th class="col-codes">目标编号</th>
                 </tr>
               </thead>
@@ -242,7 +242,7 @@
             <el-option
               v-for="c in planData.customers"
               :key="c.id"
-              :label="`${c.customerCode || c.customerName}（${c.customerName}）`"
+              :label="`${servingLabel(c)}（${c.customerName}）`"
               :value="c.id"
             />
           </el-select>
@@ -300,6 +300,11 @@ export default {
     }
   },
   computed: {
+    totalServingCount() {
+      return this.planData && this.planData.totalServings != null
+        ? this.planData.totalServings
+        : ((this.planData && this.planData.customers) || []).length
+    },
     mealTypeText() {
       const type = (this.planData && this.planData.mealPlan && this.planData.mealPlan.mealType) || this.queryMealType
       return MealTypeName[type] || type
@@ -307,12 +312,12 @@ export default {
     // 所有客户列表（含是否有换菜标记）
     allCustomers() {
       if (!this.planData) return []
-      const manualCodes = new Set(this.manualReplaces.map(r => r.customerCode).filter(Boolean))
+      const manualCustomerPlanIds = new Set(this.manualReplaces.map(r => r.customerPlanId).filter(Boolean))
       const decorated = (this.planData.customers || []).map(c => ({
         ...c,
         hasAutoReplaced: (c.items || []).some(i => i.isReplaced),
-        hasManualReplaced: manualCodes.has(c.customerCode),
-        hasReplaced: (c.items || []).some(i => i.isReplaced) || manualCodes.has(c.customerCode)
+        hasManualReplaced: manualCustomerPlanIds.has(c.id),
+        hasReplaced: (c.items || []).some(i => i.isReplaced) || manualCustomerPlanIds.has(c.id)
       }))
       const firstCustomers = decorated.filter(item => item.firstMealOfOrder)
       const normalCustomers = decorated.filter(item => !item.firstMealOfOrder)
@@ -328,7 +333,7 @@ export default {
       // replacedCodesByOriginalName[originalDishName] = Set<customerCode>
       const replacedCodesByOriginalName = {}
       ;(this.planData.customers || []).forEach(customer => {
-        const code = customer.customerCode || customer.customerName || ''
+        const code = this.servingLabel(customer)
         ;(customer.items || []).filter(item => item.isReplaced && item.originalDishName).forEach(item => {
           const origName = item.originalDishName
           if (!replacedCodesByOriginalName[origName]) {
@@ -341,7 +346,7 @@ export default {
       // 第二步：按标准菜（isReplaced=false）聚合人数
       const groups = {}
       ;(this.planData.customers || []).forEach(customer => {
-        const code = customer.customerCode || customer.customerName || ''
+        const code = this.servingLabel(customer)
         ;(customer.items || []).filter(item => !item.isReplaced).forEach(item => {
           const key = `${item.dishType}__${item.dishName}`
           if (!groups[key]) {
@@ -382,7 +387,7 @@ export default {
       if (!this.planData) return []
       const groups = {}
       ;(this.planData.customers || []).forEach(customer => {
-        const code = customer.customerCode || customer.customerName || ''
+        const code = this.servingLabel(customer)
         ;(customer.items || []).filter(item => item.isReplaced).forEach(item => {
           // 用替换后的菜名作为 key（即实际吃的菜）
           const key = item.dishName
@@ -408,10 +413,12 @@ export default {
     // 按类目汇总手工换菜客户编号（用于右上角菜单汇总展示）
     manualCodesByDishType() {
       const map = {}
+      const customerByPlanId = new Map(((this.planData && this.planData.customers) || []).map(c => [c.id, c]))
       this.manualReplaces.forEach(r => {
-        if (!r.dishType || !r.customerCode) return
+        const code = this.servingLabel(customerByPlanId.get(r.customerPlanId) || r)
+        if (!r.dishType || !code) return
         if (!map[r.dishType]) map[r.dishType] = new Set()
-        map[r.dishType].add(r.customerCode)
+        map[r.dishType].add(code)
       })
       const result = {}
       Object.keys(map).forEach(type => {
@@ -422,7 +429,9 @@ export default {
     // 手工换菜明细，按菜品聚合
     manualReplaceDishes() {
       const groups = {}
+      const customerByPlanId = new Map(((this.planData && this.planData.customers) || []).map(c => [c.id, c]))
       this.manualReplaces.forEach(r => {
+        const code = this.servingLabel(customerByPlanId.get(r.customerPlanId) || r)
         const key = `${r.dishType}__${r.dishName}`
         if (!groups[key]) {
           groups[key] = {
@@ -431,8 +440,8 @@ export default {
             codes: []
           }
         }
-        if (r.customerCode && !groups[key].codes.includes(r.customerCode)) {
-          groups[key].codes.push(r.customerCode)
+        if (code && !groups[key].codes.includes(code)) {
+          groups[key].codes.push(code)
         }
       })
       return Object.values(groups)
@@ -457,6 +466,12 @@ export default {
     }
   },
   methods: {
+    servingLabel(customer) {
+      if (!customer) return '-'
+      const code = customer.customerCode || customer.customerName || '-'
+      const servingNo = Number(customer.servingNo || 1)
+      return servingNo > 1 ? `${code}（第${servingNo}份）` : code
+    },
     loadById(id) {
       const requestId = ++this.latestLoadRequestId
       this.loading = true

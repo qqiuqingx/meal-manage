@@ -5,7 +5,7 @@ import io.swagger.annotations.ApiModelProperty;
 import java.util.List;
 
 /**
- * 当天客户总数按套餐和餐次分组统计
+ * 当天去重客户数与成功配送份数按套餐、餐次和来源分组统计
  * @author qqx
  * @date 2026-03-23
  **/
@@ -17,6 +17,9 @@ public class DailyCustomerStats {
 
     @ApiModelProperty(value = "当天总客户数（午餐+晚餐去重）")
     private Integer totalCustomerCount;
+
+    @ApiModelProperty(value = "当天成功排餐份数")
+    private Integer totalServingCount;
 
     @ApiModelProperty(value = "按餐次+套餐分组列表")
     private List<MealPackageGroup> groups;
@@ -37,6 +40,9 @@ public class DailyCustomerStats {
 
         @ApiModelProperty(value = "客户数")
         private Integer customerCount;
+
+        @ApiModelProperty(value = "成功排餐份数")
+        private Integer servingCount;
     }
 
     @Data
@@ -49,5 +55,8 @@ public class DailyCustomerStats {
 
         @ApiModelProperty(value = "客户数")
         private Integer customerCount;
+
+        @ApiModelProperty(value = "成功排餐份数")
+        private Integer servingCount;
     }
 }

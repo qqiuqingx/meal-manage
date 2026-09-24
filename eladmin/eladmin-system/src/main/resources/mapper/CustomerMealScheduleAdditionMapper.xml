@@ -3,7 +3,7 @@
 <mapper namespace="me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper">
 
     <select id="selectActiveByCustomerIdsAndDateRange" resultType="me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition">
-        select id, customer_id, order_id, record_date, meal_type, remark, deleted, create_by, update_by, create_time, update_time
+        select id, customer_id, order_id, record_date, meal_type, quantity, soup_quantity, remark, deleted, create_by, update_by, create_time, update_time
         from customer_meal_schedule_addition
         where deleted = 0
           and record_date &gt;= #{startDate}
@@ -16,7 +16,7 @@
     </select>
 
     <select id="selectActiveByDateMeal" resultType="me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition">
-        select id, customer_id, order_id, record_date, meal_type, remark, deleted, create_by, update_by, create_time, update_time
+        select id, customer_id, order_id, record_date, meal_type, quantity, soup_quantity, remark, deleted, create_by, update_by, create_time, update_time
         from customer_meal_schedule_addition
         where deleted = 0
           and record_date = #{recordDate}
@@ -25,7 +25,7 @@
     </select>
 
     <select id="selectActiveByOrderDateMeal" resultType="me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition">
-        select id, customer_id, order_id, record_date, meal_type, remark, deleted, create_by, update_by, create_time, update_time
+        select id, customer_id, order_id, record_date, meal_type, quantity, soup_quantity, remark, deleted, create_by, update_by, create_time, update_time
         from customer_meal_schedule_addition
         where deleted = 0
           and order_id = #{orderId}
@@ -35,7 +35,7 @@
     </select>
 
     <select id="selectAnyByOrderDateMeal" resultType="me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition">
-        select id, customer_id, order_id, record_date, meal_type, remark, deleted, create_by, update_by, create_time, update_time
+        select id, customer_id, order_id, record_date, meal_type, quantity, soup_quantity, remark, deleted, create_by, update_by, create_time, update_time
         from customer_meal_schedule_addition
         where order_id = #{orderId}
           and record_date = #{recordDate}

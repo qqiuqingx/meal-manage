@@ -91,7 +91,7 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
     int revertVerified(@Param("id") Long id);
 
     /**
-     * 批量查询各订单当前餐数池的已排餐数量。
+     * 批量查询各订单当前餐数池成功且有效的已排份数。
      * 早餐按 BREAKFAST 单独统计；午餐/晚餐按共享餐池合并统计 LUNCH + DINNER。
      *
      * @param orderIds 订单ID列表
@@ -110,6 +110,14 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
     List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countAllScheduledByOrderIds(@Param("orderIds") List<Long> orderIds);
 
     /**
+     * 批量统计各订单成功且未删除的排餐份数。
+     *
+     * @param orderIds 订单ID列表
+     * @return 订单ID -> 成功排餐份数
+     */
+    List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countSuccessfulScheduledByOrderIds(@Param("orderIds") List<Long> orderIds);
+
+    /**
      * 批量查询各订单今天已排餐但未核销的数量。
      * @param orderIds 订单ID列表
      * @param recordDate 统计日期
@@ -119,19 +127,19 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
                                                                                                              @Param("recordDate") LocalDate recordDate);
 
     /**
-     * 查询客户在日期范围内已生成的排餐日期和餐次。
+     * 按客户、订单、日期和餐次聚合查询有效排餐成功份数、失败份数及核销份数。
      */
     List<CustomerScheduledMealDto> selectScheduledMealsByCustomerIdsAndDateRange(@Param("customerIds") List<Long> customerIds,
                                                                                  @Param("startDate") LocalDate startDate,
                                                                                  @Param("endDate") LocalDate endDate);
 
     /**
-     * 查询客户指定日期餐次的有效已生成排餐记录。
+     * 查询客户指定日期餐次的有效成功或失败排餐结果，供份数下调和排除日历清理使用。
      *
      * @param customerId 客户ID
      * @param recordDate 排餐日期
      * @param mealType 餐次
-     * @return 已生成排餐记录
+     * @return 含份序、订单、生成状态和核销状态的结果行
      */
     List<me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto> selectGeneratedByCustomerDateMeal(@Param("customerId") Long customerId,
                                                                                                             @Param("recordDate") LocalDate recordDate,

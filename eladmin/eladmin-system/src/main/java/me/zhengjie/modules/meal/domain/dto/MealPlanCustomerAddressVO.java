@@ -34,6 +34,9 @@ public class MealPlanCustomerAddressVO implements Serializable {
     @ApiModelProperty(value = "客户ID")
     private Long customerId;
 
+    @ApiModelProperty(value = "配送份序号")
+    private Integer servingNo;
+
     @ApiModelProperty(value = "客户编号")
     private String customerCode;
 

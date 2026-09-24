@@ -51,6 +51,26 @@ public class CustomerMealStatsRowDto {
 
     private List<CustomerMealStatsScheduleUtil.ScheduleDay> customerScheduleDays;
 
+    /**
+     * 按订单、日期和餐次拆分的午晚餐数量网格数据。
+     */
+    private List<CustomerMealScheduleCellDto> mealScheduleCells;
+
+    /**
+     * 当前客户午晚餐日历涉及的订单摘要。
+     */
+    private List<CustomerMealScheduleOrderDto> mealScheduleOrders;
+
+    /**
+     * 当前月已保存的人工数量覆盖，兼容早餐旧日历编辑。
+     */
+    private List<CustomerMealScheduleAdditionDto> manualScheduleAdditions;
+
+    /**
+     * 当前客户排餐日历修订标记，保存时用于并发修改校验。
+     */
+    private String calendarRevision;
+
     private String mealBucket;
 
     private Boolean firstRowInGroup;

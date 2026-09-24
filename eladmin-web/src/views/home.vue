@@ -23,7 +23,7 @@
         <el-col :xs="24" :sm="24" :lg="12">
           <div class="stats-card">
             <div class="stats-card-header">
-              <span class="stats-title">当日客户统计</span>
+              <span class="stats-title">当日配送份数</span>
             </div>
             <el-tabs v-model="activeMealType" style="margin-top: 12px;" @tab-click="handleTabChange">
               <el-tab-pane label="午餐" name="LUNCH" />
@@ -45,7 +45,7 @@
         <el-col :xs="24" :sm="24" :lg="12">
           <div class="stats-card">
             <div class="stats-card-header">
-              <span class="stats-title">客户来源统计</span>
+              <span class="stats-title">当月配送来源份数</span>
             </div>
             <div v-if="!sourceLoading && sourceGroups.length === 0" style="text-align: center; color: #909399; padding: 20px 0;">
               暂无数据

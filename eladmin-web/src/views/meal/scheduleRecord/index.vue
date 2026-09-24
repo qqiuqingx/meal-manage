@@ -96,8 +96,8 @@
           <span class="cell-value">{{ mealTypeText }}</span>
         </div>
         <div class="sheet-header__cell sheet-header__cell--right">
-          <span class="cell-label">总人数</span>
-          <span class="cell-value cell-value--hero">{{ planData.totalCustomers }}</span>
+          <span class="cell-label">总份数</span>
+          <span class="cell-value cell-value--hero">{{ totalServingCount }}</span>
         </div>
       </div>
 
@@ -125,13 +125,13 @@
                   <span
                     class="code-text code-text--tooltip"
                     :class="{ 'code-text--soup-missing': customer.isSoupMissing }"
-                  >{{ customer.customerCode || customer.customerName }}</span>
+                  >{{ servingLabel(customer) }}</span>
                 </el-tooltip>
                 <span
                   v-else
                   class="code-text"
                   :class="{ 'code-text--soup-missing': customer.isSoupMissing }"
-                >{{ customer.customerCode || customer.customerName }}</span>
+                >{{ servingLabel(customer) }}</span>
                 <div v-if="customer.firstMealOfOrder || customer.nearProductionDate" class="code-badges">
                   <span v-if="customer.firstMealOfOrder" class="code-first-badge">首</span>
                   <el-tooltip
@@ -172,7 +172,7 @@
                 <tr>
                   <th class="col-category">类目</th>
                   <th class="col-name">菜名</th>
-                  <th class="col-count">人数</th>
+                  <th class="col-count">份数</th>
                   <th class="col-codes">编号明细</th>
                 </tr>
               </thead>
@@ -206,7 +206,7 @@
                 <tr>
                   <th class="col-category">换菜</th>
                   <th class="col-name">替换项目</th>
-                  <th class="col-count">人数</th>
+                  <th class="col-count">份数</th>
                   <th class="col-codes">目标编号</th>
                 </tr>
               </thead>
@@ -334,7 +334,7 @@
             <el-option
               v-for="customer in customerOptions"
               :key="customer.id"
-              :label="`${customer.customerName} - ${customer.customerCode || '无编码'} - ${customer.phone || '无手机号'}`"
+              :label="`${servingLabel(customer)} - ${customer.customerName} - ${customer.phone || '无手机号'}`"
               :value="customer.id"
             >
               <span style="float: left">{{ customer.customerName }}</span>
@@ -449,7 +449,7 @@
             <el-option
               v-for="customer in planData.customers"
               :key="customer.id"
-              :label="`${customer.customerCode || customer.customerName}（${customer.customerName}）`"
+              :label="`${servingLabel(customer)}（${customer.customerName}）`"
               :value="customer.id"
             />
           </el-select>
@@ -491,9 +491,10 @@
         <el-table-column type="selection" width="55" align="center" />
         <el-table-column label="客户编号" prop="customerCode" align="center" min-width="120">
           <template slot-scope="scope">
-            {{ scope.row.customerCode || '-' }}
+            {{ servingLabel(scope.row) }}
           </template>
         </el-table-column>
+        <el-table-column label="份序" prop="servingNo" align="center" width="70" />
         <el-table-column label="核销状态" prop="isVerified" align="center" width="100">
           <template slot-scope="scope">
             <el-tag v-if="scope.row.isVerified != null && scope.row.isVerified === 1" type="success" size="mini">已核销</el-tag>
@@ -534,8 +535,12 @@
     <!-- 核销确认对话框 -->
     <el-dialog title="核销确认" :visible.sync="verifyDialog.visible" width="500px">
       <div v-if="verifyDialog.records && verifyDialog.records.length > 0">
-        <p>即将核销以下 {{ verifyDialog.records.length }} 个客户的排餐：</p>
+        <p>即将核销以下 {{ verifyDialog.records.length }} 份排餐：</p>
         <el-table :data="verifyDialog.records" border size="mini" style="margin-top: 10px;">
+          <el-table-column label="客户编号" align="center">
+            <template slot-scope="scope">{{ servingLabel(scope.row) }}</template>
+          </el-table-column>
+          <el-table-column label="份序" prop="servingNo" align="center" width="70" />
           <el-table-column label="客户名称" prop="customerName" align="center" />
           <el-table-column label="核销餐数" align="center" width="100">
             <template>1</template>
@@ -561,7 +566,7 @@
         <el-table-column label="客户信息" align="left" min-width="260">
           <template slot-scope="scope">
             <div class="customer-contact-info">
-              <div>联系人：{{ scope.row.customerCode || '-' }}</div>
+              <div>客户编号 / 份序：{{ servingLabel(scope.row) }}</div>
               <div>电话：{{ scope.row.phone || '-' }}</div>
               <div>地址：{{ scope.row.addressDetail || '暂无地址' }}</div>
             </div>
@@ -727,7 +732,7 @@ export default {
         {
           title: '编号区',
           items: [
-            '首餐客户优先展示，普通客户排在后面。',
+            '首餐客户优先展示，普通客户排在后面；同一客户多份会标出份序。',
             '客户缺汤时，客户编号显示红色胶囊圈。',
             '客户是首餐时，编号右上角显示绿色“首”标记。',
             '黄色标签表示加菜或补充数量，如“加主菜×1”“加副菜×99”。',
@@ -739,7 +744,7 @@ export default {
           title: '右上今日菜单汇总',
           items: [
             '按“类目 + 菜名”聚合展示汤品、主菜、副菜、蔬菜、米饭。',
-            '人数表示当前实际吃该菜的客户数量。',
+            '份数表示当前实际配送的份数；同一客户的不同份分别计数。',
             '屏幕上的编号明细允许带运营说明信息。',
             '普通菜会汇总过敏过滤、自动换菜、缺菜、特殊要求和手工换菜提示。',
             '汤品额外包含缺汤客户编号。',
@@ -751,8 +756,8 @@ export default {
           items: [
             '分为手工换菜和自动换菜两部分。',
             '每一行按菜品类目和替换后的菜名聚合展示。',
-            '第一列展示菜品类目，第二列展示替换后的菜名，第三列展示人数，第四列展示目标客户编号。',
-            '米饭自动替换超过一种时只占一条米饭行，替换项目、人数和目标编号列内分别按行展示明细。'
+            '第一列展示菜品类目，第二列展示替换后的菜名，第三列展示份数，第四列展示目标份序编号。',
+            '米饭自动替换超过一种时只占一条米饭行，替换项目、份数和目标份序编号列内分别按行展示明细。'
           ]
         },
         {
@@ -760,7 +765,7 @@ export default {
           items: [
             '打印时隐藏操作栏、导航栏、标签栏等非打印内容。',
             '右上编号明细切换为打印专用编号列表。',
-            '打印只显示客户编号，不显示“无素菜”“无副菜”“白米饭”“换菜:”等说明文字。',
+            '打印显示客户编号和份序，不显示“无素菜”“无副菜”“白米饭”“换菜:”等说明文字。',
             '打印编号会自动去重。'
           ],
           examples: [
@@ -771,6 +776,11 @@ export default {
     }
   },
   computed: {
+    totalServingCount() {
+      return this.planData && this.planData.totalServings != null
+        ? this.planData.totalServings
+        : ((this.planData && this.planData.customers) || []).length
+    },
     mealTypeText() {
       // 优先用已加载数据中的 mealType，其次用搜索框值
       const type = (this.planData && this.planData.mealPlan && this.planData.mealPlan.mealType) || this.queryMealType
@@ -813,7 +823,7 @@ export default {
         })
       })
       customers.forEach(customer => {
-        const code = customer.customerCode || customer.customerName || ''
+        const code = this.servingLabel(customer)
         const items = customer.items || []
         const specialRequirementTags = this.getSpecialRequirementTags(customer)
         specialRequirementTags.forEach(tag => {
@@ -879,7 +889,7 @@ export default {
 
       const groups = {}
       ;(this.planData.customers || []).forEach(customer => {
-        const code = customer.customerCode || customer.customerName || ''
+        const code = this.servingLabel(customer)
         ;(customer.items || []).filter(item => !item.isReplaced || item.dishType === 'RICE').forEach(item => {
           const displayName = item.dishType === 'RICE' ? (menuRiceName || item.originalDishName || item.dishName) : item.dishName
           const key = `${item.dishType}__${displayName}`
@@ -928,7 +938,7 @@ export default {
       if (!this.planData) return []
       const groups = {}
       ;(this.planData.customers || []).forEach(customer => {
-        const code = customer.customerCode || customer.customerName || ''
+        const code = this.servingLabel(customer)
         ;(customer.items || []).filter(item => item.isReplaced).forEach(item => {
           const key = item.dishName
           if (!groups[key]) {
@@ -970,12 +980,14 @@ export default {
     },
     manualCodesByDishType() {
       const map = {}
+      const customerByPlanId = new Map(((this.planData && this.planData.customers) || []).map(c => [c.id, c]))
       this.manualReplaces.forEach(item => {
-        if (!item.dishType || !item.customerCode) return
+        const code = this.servingLabel(customerByPlanId.get(item.customerPlanId) || item)
+        if (!item.dishType || !code) return
         if (!map[item.dishType]) {
           map[item.dishType] = new Set()
         }
-        map[item.dishType].add(item.customerCode)
+        map[item.dishType].add(code)
       })
       return Object.keys(map).reduce((result, type) => {
         result[type] = Array.from(map[type])
@@ -984,7 +996,9 @@ export default {
     },
     manualReplaceDishes() {
       const groups = {}
+      const customerByPlanId = new Map(((this.planData && this.planData.customers) || []).map(c => [c.id, c]))
       this.manualReplaces.forEach(item => {
+        const code = this.servingLabel(customerByPlanId.get(item.customerPlanId) || item)
         const key = `${item.dishType}__${item.dishName}`
         if (!groups[key]) {
           groups[key] = {
@@ -993,8 +1007,8 @@ export default {
             codes: []
           }
         }
-        if (item.customerCode && !groups[key].codes.includes(item.customerCode)) {
-          groups[key].codes.push(item.customerCode)
+        if (code && !groups[key].codes.includes(code)) {
+          groups[key].codes.push(code)
         }
       })
       return Object.values(groups)
@@ -1019,6 +1033,12 @@ export default {
     }
   },
   methods: {
+    servingLabel(customer) {
+      if (!customer) return '-'
+      const code = customer.customerCode || customer.customerName || '-'
+      const servingNo = Number(customer.servingNo || 1)
+      return servingNo > 1 ? `${code}（第${servingNo}份）` : code
+    },
     // ─── 数据加载 ───────────────────────────────
     handleQuery() {
       this.loadByDateAndMeal()
@@ -1219,14 +1239,14 @@ export default {
       // 过滤掉已核销的客户，只允许删除未核销的
       const toDelete = this.customerDialog.selections.filter(item => item.isVerified !== 1)
       if (toDelete.length === 0) {
-        this.$message.warning('选中的客户均已核销，无法删除')
+        this.$message.warning('选中的份数均已核销，无法删除')
         return
       }
       const ids = toDelete.map(item => item.id)
       const skipCount = this.customerDialog.selections.length - toDelete.length
       const msg = skipCount > 0
-        ? `选中的 ${this.customerDialog.selections.length} 个客户中有 ${skipCount} 个已核销，将只删除未核销的 ${ids.length} 个客户，确认继续？`
-        : `确认删除选定的 ${ids.length} 个客户的排餐计划吗？将同时删除相关的明细数据！`
+        ? `选中的 ${this.customerDialog.selections.length} 份排餐中有 ${skipCount} 份已核销，将只删除未核销的 ${ids.length} 份，确认继续？`
+        : `确认删除选定的 ${ids.length} 份排餐吗？将同时删除相关的明细数据！`
       this.$confirm(msg, '危险操作',
         { confirmButtonText: '确定删除', cancelButtonText: '取消', type: 'error' }
       ).then(() => {
@@ -1236,11 +1256,11 @@ export default {
     handleDeleteSingleCustomer(row) {
       // 校验：已核销的客户不允许删除
       if (row.isVerified === 1) {
-        this.$message.warning(`客户 "${row.customerName}" 已核销，无法删除排餐计划`)
+        this.$message.warning(`客户 "${this.servingLabel(row)}" 已核销，无法删除该份排餐`)
         return
       }
       this.$confirm(
-        `确认删除客户 "${row.customerName}" 的排餐计划吗？将同时删除相关的明细数据！`,
+        `确认删除客户 "${this.servingLabel(row)}" 的这份排餐吗？将同时删除相关的明细数据！`,
         '危险操作',
         { confirmButtonText: '确定删除', cancelButtonText: '取消', type: 'error' }
       ).then(() => {

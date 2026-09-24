@@ -1359,6 +1359,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         dishScheduleRecordMapper.updateById(record);
     }
 
+    /**
+     * 统计指定日期成功排餐中的去重客户人数和配送份数，按套餐餐次及来源分组。
+     *
+     * @param date 排餐日期，格式 yyyy-MM-dd
+     * @return 日期、去重人数、份数及分组统计
+     */
     @Override
     public DailyCustomerStats getDailyCustomerStats(String date) {
         DailyCustomerStats stats = new DailyCustomerStats();
@@ -1371,6 +1377,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
         if (mealPlans.isEmpty()) {
             stats.setTotalCustomerCount(0);
+            stats.setTotalServingCount(0);
             stats.setGroups(Collections.emptyList());
             stats.setSourceGroups(Collections.emptyList());
             return stats;
@@ -1382,11 +1389,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 .collect(Collectors.toList());
 
         QueryWrapper<MealPlanCustomer> customerWrapper = new QueryWrapper<>();
-        customerWrapper.in("meal_plan_id", mealPlanIds).eq("deleted", false);
+        customerWrapper.in("meal_plan_id", mealPlanIds).eq("deleted", false).eq("status", 1);
         List<MealPlanCustomer> planCustomers = mealPlanCustomerMapper.selectList(customerWrapper);
 
         if (planCustomers.isEmpty()) {
             stats.setTotalCustomerCount(0);
+            stats.setTotalServingCount(0);
             stats.setGroups(Collections.emptyList());
             stats.setSourceGroups(Collections.emptyList());
             return stats;
@@ -1446,6 +1454,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         // 5. 按 (mealType, mealPackage) 分组，统计 distinct customerId
         // 复合键: mealType|mealPackage
         Map<String, Set<Long>> groupCustomerIds = new LinkedHashMap<>();
+        Map<String, Integer> groupServingCounts = new HashMap<>();
 
         for (MealPlanCustomer pc : planCustomers) {
             String mealType = mealPlanMealTypeMap.get(pc.getMealPlanId());
@@ -1460,11 +1469,11 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
             String key = mealType + "|" + mealPackage;
             groupCustomerIds.computeIfAbsent(key, k -> new HashSet<>()).add(pc.getCustomerId());
+            groupServingCounts.merge(key, 1, Integer::sum);
         }
 
         // 6. 组装结果 - 按 (餐次, 套餐) 分组
         List<DailyCustomerStats.MealPackageGroup> groups = new ArrayList<>();
-        int totalCount = 0;
 
         List<String> sortedKeys = groupCustomerIds.keySet().stream()
                 .sorted((a, b) -> {
@@ -1483,7 +1492,6 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
             Set<Long> customerIdSet = groupCustomerIds.get(key);
             int count = customerIdSet != null ? customerIdSet.size() : 0;
-            totalCount += count;
 
             DailyCustomerStats.MealPackageGroup group = new DailyCustomerStats.MealPackageGroup();
             group.setMealType(mealType);
@@ -1496,17 +1504,20 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                     .orElse(mealPackage);
             group.setMealPackageDesc(pkgDesc);
             group.setCustomerCount(count);
+            group.setServingCount(groupServingCounts.getOrDefault(key, 0));
             groups.add(group);
         }
 
         // 7. 按来源分组，统计 distinct customerId
         Map<String, Set<Long>> sourceCustomerIds = new LinkedHashMap<>();
+        Map<String, Integer> sourceServingCounts = new HashMap<>();
         for (MealPlanCustomer pc : planCustomers) {
             me.zhengjie.modules.customer.order.domain.CustomerOrder order = orderMap.get(pc.getOrderId());
             if (order == null) continue;
             String source = (order.getCustomerSource() != null && !order.getCustomerSource().isEmpty())
                     ? order.getCustomerSource() : "未知来源";
             sourceCustomerIds.computeIfAbsent(source, k -> new HashSet<>()).add(pc.getCustomerId());
+            sourceServingCounts.merge(source, 1, Integer::sum);
         }
 
         // 8. 获取字典label映射
@@ -1524,15 +1535,23 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             sg.setSource(entry.getKey());
             sg.setSourceDesc(sourceLabelMap.getOrDefault(entry.getKey(), entry.getKey()));
             sg.setCustomerCount(entry.getValue().size());
+            sg.setServingCount(sourceServingCounts.getOrDefault(entry.getKey(), 0));
             sourceGroups.add(sg);
         }
 
-        stats.setTotalCustomerCount(totalCount);
+        stats.setTotalCustomerCount(customerIds.size());
+        stats.setTotalServingCount(planCustomers.size());
         stats.setGroups(groups);
         stats.setSourceGroups(sourceGroups);
         return stats;
     }
 
+    /**
+     * 按客户来源统计指定月份成功排餐中的去重客户人数和配送份数。
+     *
+     * @param dateOrMonth 排餐日期或月份，日期输入按其所在月统计
+     * @return 来源名称、去重人数与成功份数
+     */
     @Override
     public List<Map<String, Object>> getCustomerSourceStats(String dateOrMonth) {
         // 兼容日期格式和月份格式：yyyy-MM-dd 或 yyyy-MM
@@ -1557,7 +1576,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 .collect(Collectors.toList());
 
         QueryWrapper<MealPlanCustomer> customerWrapper = new QueryWrapper<>();
-        customerWrapper.in("meal_plan_id", mealPlanIds).eq("deleted", false);
+        customerWrapper.in("meal_plan_id", mealPlanIds).eq("deleted", false).eq("status", 1);
         List<MealPlanCustomer> planCustomers = mealPlanCustomerMapper.selectList(customerWrapper);
 
         if (planCustomers.isEmpty()) {
@@ -1565,24 +1584,10 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         }
 
         // 3. 收集客户ID和订单ID，查询客户档案和订单
-        Set<Long> customerIds = planCustomers.stream()
-                .map(MealPlanCustomer::getCustomerId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
         Set<Long> orderIds = planCustomers.stream()
                 .map(MealPlanCustomer::getOrderId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-
-        Map<Long, me.zhengjie.modules.customer.profile.domain.CustomerProfile> customerProfileMap = new HashMap<>();
-        if (!customerIds.isEmpty()) {
-            QueryWrapper<me.zhengjie.modules.customer.profile.domain.CustomerProfile> profileWrapper = new QueryWrapper<>();
-            profileWrapper.in("id", customerIds);
-            List<me.zhengjie.modules.customer.profile.domain.CustomerProfile> profiles = customerProfileMapper.selectList(profileWrapper);
-            for (me.zhengjie.modules.customer.profile.domain.CustomerProfile p : profiles) {
-                customerProfileMap.put(p.getId(), p);
-            }
-        }
 
         Map<Long, me.zhengjie.modules.customer.order.domain.CustomerOrder> orderMap = new HashMap<>();
         if (!orderIds.isEmpty()) {
@@ -1594,14 +1599,16 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
             }
         }
 
-        // 4. 按来源分组计数（从订单获取客户来源）
-        Map<String, Integer> sourceCountMap = new LinkedHashMap<>();
+        // 4. 按来源统计去重客户数和配送份数（从订单获取客户来源）
+        Map<String, Set<Long>> sourceCustomerIds = new LinkedHashMap<>();
+        Map<String, Integer> sourceServingCounts = new HashMap<>();
         for (MealPlanCustomer pc : planCustomers) {
             me.zhengjie.modules.customer.order.domain.CustomerOrder order = orderMap.get(pc.getOrderId());
             if (order == null) continue;
             String source = (order.getCustomerSource() != null && !order.getCustomerSource().isEmpty())
                     ? order.getCustomerSource() : "other";
-            sourceCountMap.merge(source, 1, Integer::sum);
+            sourceCustomerIds.computeIfAbsent(source, key -> new HashSet<>()).add(pc.getCustomerId());
+            sourceServingCounts.merge(source, 1, Integer::sum);
         }
 
         // 5. 获取字典label映射
@@ -1615,11 +1622,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
         // 6. 组装结果
         List<Map<String, Object>> result = new ArrayList<>();
-        for (Map.Entry<String, Integer> entry : sourceCountMap.entrySet()) {
+        for (Map.Entry<String, Set<Long>> entry : sourceCustomerIds.entrySet()) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("source", entry.getKey());
             item.put("sourceDesc", sourceLabelMap.getOrDefault(entry.getKey(), entry.getKey()));
-            item.put("customerCount", entry.getValue());
+            item.put("customerCount", entry.getValue().size());
+            item.put("servingCount", sourceServingCounts.getOrDefault(entry.getKey(), 0));
             result.add(item);
         }
         return result;

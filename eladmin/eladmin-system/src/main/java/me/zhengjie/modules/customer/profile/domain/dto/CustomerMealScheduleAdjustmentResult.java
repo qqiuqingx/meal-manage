@@ -28,7 +28,7 @@ public class CustomerMealScheduleAdjustmentResult implements Serializable {
     private Integer additionMealCount;
 
     /**
-     * 因取消排餐而软删除的未核销客户排餐记录数
+     * 因排除日期或份数下调而软删除的未核销结果行数
      */
     private Integer deletedUnverifiedPlanCount;
 }

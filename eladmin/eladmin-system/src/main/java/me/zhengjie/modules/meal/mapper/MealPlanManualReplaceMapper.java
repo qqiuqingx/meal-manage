@@ -52,4 +52,12 @@ public interface MealPlanManualReplaceMapper extends BaseMapper<MealPlanManualRe
      * 根据客户排餐记录ID列表查询关联的手工换菜关系
      */
     List<MealPlanManualReplace> selectByCustomerPlanIds(@Param("customerPlanIds") List<Long> customerPlanIds);
+
+    /**
+     * 根据客户排餐记录ID列表软删除对应的手工换菜关系。
+     *
+     * @param customerPlanIds 客户排餐记录ID列表
+     * @return 更新行数
+     */
+    int softDeleteByCustomerPlanIds(@Param("customerPlanIds") List<Long> customerPlanIds);
 }

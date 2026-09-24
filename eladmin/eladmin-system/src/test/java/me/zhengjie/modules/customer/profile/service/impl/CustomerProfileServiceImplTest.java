@@ -14,6 +14,7 @@ import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
 import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdditionDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentRequest;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentResult;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
@@ -175,6 +176,68 @@ class CustomerProfileServiceImplTest {
         return (CustomerProfileSaveDto.OrderInfoDto) method.invoke(customerProfileService, dto, createMode);
     }
 
+    /**
+     * 读取当前测试档案对应的日历修订标记。
+     *
+     * @return 与服务端相同的当前日历修订标记
+     */
+    private String invokeCalendarRevision() throws Exception {
+        return invokeCalendarRevision(Collections.emptyList());
+    }
+
+    /**
+     * 按指定的当前月份数量覆盖计算日历修订标记。
+     *
+     * @param additions 当前月份有效覆盖列表
+     * @return 服务端当前日历修订标记
+     */
+    private String invokeCalendarRevision(List<CustomerMealScheduleAddition> additions) throws Exception {
+        Method method = CustomerProfileServiceImpl.class.getDeclaredMethod(
+                "buildCalendarRevision", CustomerProfile.class, List.class);
+        method.setAccessible(true);
+        return (String) method.invoke(customerProfileService, profile, additions);
+    }
+
+    /**
+     * 创建只在 2026 年 5 月 25 日午餐送餐的测试订单。
+     *
+     * @param lunchDinnerCount 订单午晚餐购买数
+     * @return 可用于数量网格测试的订单
+     */
+    private CustomerOrder buildQuantityCalendarOrder(int lunchDinnerCount) {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(10L);
+        order.setCustomerId(1L);
+        order.setStatus(1);
+        order.setMealType("LUNCH_DINNER");
+        order.setLunchDinnerCount(lunchDinnerCount);
+        order.setSoupCount(1);
+        order.setStartDate(LocalDate.of(2026, 5, 25));
+        order.setEndDate(LocalDate.of(2026, 5, 25));
+        order.setStartMealType("LUNCH");
+        order.setScheduleMode("SCHEDULE");
+        order.setDeliveryDates("[{\"date\":\"2026-05-25\",\"mealTypes\":[\"LUNCH\"]}]");
+        return order;
+    }
+
+    /**
+     * 创建启用数量网格校验且携带当前修订标记的日历请求。
+     *
+     * @param addition 数量覆盖项
+     * @return 可用于测试数量保存路径的请求
+     */
+    private CustomerMealScheduleAdjustmentRequest buildQuantityCalendarRequest(
+            CustomerMealScheduleAdditionDto addition) throws Exception {
+        CustomerMealScheduleAdjustmentRequest request = new CustomerMealScheduleAdjustmentRequest();
+        request.setCustomerId(1L);
+        request.setStatsMonth("2026-05");
+        request.setQuantityMode(true);
+        request.setExpectedRevision(invokeCalendarRevision());
+        request.setExcludedDates(Collections.emptyList());
+        request.setAdditions(addition == null ? Collections.emptyList() : Collections.singletonList(addition));
+        return request;
+    }
+
     @Test
     void testFillDefaultAddress_WithMultipleAddresses() throws Exception {
         List<CustomerProfileAddress> addresses = Arrays.asList(address1, address2, address3);
@@ -256,7 +319,7 @@ class CustomerProfileServiceImplTest {
         request.setExcludedDates(Arrays.asList(excludedDate));
         request.setAdditions(Collections.emptyList());
 
-        when(profileMapper.selectById(1L)).thenReturn(profile);
+        when(profileMapper.selectByIdForScheduleUpdate(1L)).thenReturn(profile);
         when(mealPlanService.deleteUnverifiedCustomerMealForCalendarAdjustment(1L, "2026-05-24", "LUNCH"))
                 .thenReturn(1);
 
@@ -276,16 +339,20 @@ class CustomerProfileServiceImplTest {
     }
 
     @Test
-    void shouldRestoreSoftDeletedManualAdditionInsteadOfInsertingDuplicate() {
+    void shouldRestoreSoftDeletedManualAdditionInsteadOfInsertingDuplicate() throws Exception {
         CustomerMealScheduleAdditionDto additionDto = new CustomerMealScheduleAdditionDto();
         additionDto.setOrderId(10L);
         additionDto.setDate("2026-05-25");
         additionDto.setMealType("LUNCH");
+        additionDto.setQuantity(2);
+        additionDto.setSoupQuantity(1);
         additionDto.setRemark("恢复新增");
 
         CustomerMealScheduleAdjustmentRequest request = new CustomerMealScheduleAdjustmentRequest();
         request.setCustomerId(1L);
         request.setStatsMonth("2026-05");
+        request.setQuantityMode(true);
+        request.setExpectedRevision(invokeCalendarRevision());
         request.setExcludedDates(Collections.emptyList());
         request.setAdditions(Collections.singletonList(additionDto));
 
@@ -295,8 +362,12 @@ class CustomerProfileServiceImplTest {
         order.setStatus(1);
         order.setMealType("LUNCH_DINNER");
         order.setLunchDinnerCount(10);
+        order.setSoupCount(1);
         order.setStartDate(LocalDate.of(2026, 5, 1));
         order.setEndDate(LocalDate.of(2026, 5, 31));
+        order.setStartMealType("LUNCH");
+        order.setScheduleMode("SCHEDULE");
+        order.setDeliveryDates("[{\"date\":\"2026-05-25\",\"mealTypes\":[\"LUNCH\"]}]");
 
         CustomerMealScheduleAddition deletedAddition = new CustomerMealScheduleAddition();
         deletedAddition.setId(99L);
@@ -306,7 +377,8 @@ class CustomerProfileServiceImplTest {
         deletedAddition.setMealType("LUNCH");
         deletedAddition.setDeleted(true);
 
-        when(profileMapper.selectById(1L)).thenReturn(profile);
+        when(profileMapper.selectByIdForScheduleUpdate(1L)).thenReturn(profile);
+        when(customerOrderMapper.findActiveOrdersByCustomerId(1L)).thenReturn(Collections.singletonList(order));
         when(customerOrderMapper.selectById(10L)).thenReturn(order);
         when(customerMealScheduleAdditionMapper.selectActiveByOrderDateMeal(10L, LocalDate.of(2026, 5, 25), "LUNCH"))
                 .thenReturn(null);
@@ -317,6 +389,8 @@ class CustomerProfileServiceImplTest {
 
         assertEquals(1, result.getAdditionMealCount());
         assertFalse(deletedAddition.getDeleted());
+        assertEquals(2, deletedAddition.getQuantity());
+        assertEquals(1, deletedAddition.getSoupQuantity());
         assertEquals("恢复新增", deletedAddition.getRemark());
         verify(customerMealScheduleAdditionMapper).updateById(deletedAddition);
         verify(customerMealScheduleAdditionMapper).softDeleteMissingByCustomerIdAndDateRange(
@@ -358,7 +432,7 @@ class CustomerProfileServiceImplTest {
         coveringOrder.setStartDate(LocalDate.of(2026, 5, 1));
         coveringOrder.setEndDate(LocalDate.of(2026, 5, 31));
 
-        when(profileMapper.selectById(1L)).thenReturn(profile);
+        when(profileMapper.selectByIdForScheduleUpdate(1L)).thenReturn(profile);
         when(customerOrderMapper.selectById(10L)).thenReturn(expiredOrder);
         when(customerOrderMapper.findActiveOrdersByCustomerId(1L)).thenReturn(Arrays.asList(expiredOrder, coveringOrder));
         when(customerMealScheduleAdditionMapper.selectActiveByOrderDateMeal(11L, LocalDate.of(2026, 5, 25), "DINNER"))
@@ -372,6 +446,160 @@ class CustomerProfileServiceImplTest {
         ArgumentCaptor<CustomerMealScheduleAddition> captor = ArgumentCaptor.forClass(CustomerMealScheduleAddition.class);
         verify(customerMealScheduleAdditionMapper).insert(captor.capture());
         assertEquals(11L, captor.getValue().getOrderId());
+        assertEquals(1, captor.getValue().getQuantity());
+    }
+
+    @Test
+    void shouldRejectQuantityPlanWhenSoupCountExceedsTargetQuantity() {
+        CustomerMealScheduleAdditionDto addition = new CustomerMealScheduleAdditionDto();
+        addition.setDate("2026-05-25");
+        addition.setMealType("LUNCH");
+        addition.setQuantity(2);
+        addition.setSoupQuantity(3);
+
+        CustomerMealScheduleAdjustmentRequest request = new CustomerMealScheduleAdjustmentRequest();
+        request.setCustomerId(1L);
+        request.setStatsMonth("2026-05");
+        request.setQuantityMode(true);
+        request.setExcludedDates(Collections.emptyList());
+        request.setAdditions(Collections.singletonList(addition));
+
+        when(profileMapper.selectByIdForScheduleUpdate(1L)).thenReturn(profile);
+
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> customerProfileService.saveMealScheduleAdjustments(request));
+
+        assertEquals("含汤份数必须在 0 到目标份数之间", exception.getMessage());
+        verify(profileMapper, never()).updateById(profile);
+    }
+
+    @Test
+    void shouldSaveTwoServingQuantityAndSoupOverrideWithinOrderBalance() throws Exception {
+        CustomerOrder order = buildQuantityCalendarOrder(2);
+        CustomerMealScheduleAdditionDto addition = new CustomerMealScheduleAdditionDto();
+        addition.setOrderId(10L);
+        addition.setDate("2026-05-25");
+        addition.setMealType("LUNCH");
+        addition.setQuantity(2);
+        addition.setSoupQuantity(1);
+        CustomerMealScheduleAdjustmentRequest request = buildQuantityCalendarRequest(addition);
+
+        when(profileMapper.selectByIdForScheduleUpdate(1L)).thenReturn(profile);
+        when(customerOrderMapper.findActiveOrdersByCustomerId(1L)).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.selectById(10L)).thenReturn(order);
+
+        CustomerMealScheduleAdjustmentResult result = customerProfileService.saveMealScheduleAdjustments(request);
+
+        assertEquals(1, result.getAdditionMealCount());
+        ArgumentCaptor<CustomerMealScheduleAddition> captor = ArgumentCaptor.forClass(CustomerMealScheduleAddition.class);
+        verify(customerMealScheduleAdditionMapper).insert(captor.capture());
+        assertEquals(2, captor.getValue().getQuantity());
+        assertEquals(1, captor.getValue().getSoupQuantity());
+    }
+
+    @Test
+    void shouldRejectMonthlyQuantityPlanAboveAvailableOrderBalance() throws Exception {
+        CustomerOrder order = buildQuantityCalendarOrder(1);
+        CustomerMealScheduleAdditionDto addition = new CustomerMealScheduleAdditionDto();
+        addition.setOrderId(10L);
+        addition.setDate("2026-05-25");
+        addition.setMealType("LUNCH");
+        addition.setQuantity(2);
+        addition.setSoupQuantity(1);
+        CustomerMealScheduleAdjustmentRequest request = buildQuantityCalendarRequest(addition);
+
+        when(profileMapper.selectByIdForScheduleUpdate(1L)).thenReturn(profile);
+        when(customerOrderMapper.findActiveOrdersByCustomerId(1L)).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.selectById(10L)).thenReturn(order);
+
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> customerProfileService.saveMealScheduleAdjustments(request));
+
+        assertEquals("订单 10 本月计划 2 份，超过当前可用餐数 1 份", exception.getMessage());
+        verify(customerMealScheduleAdditionMapper, never()).insert(any(CustomerMealScheduleAddition.class));
+        verify(profileMapper, never()).updateById(profile);
+    }
+
+    @Test
+    void shouldRejectStaleQuantityCalendarRevision() throws Exception {
+        CustomerMealScheduleAdjustmentRequest request = buildQuantityCalendarRequest(null);
+        request.setExpectedRevision("stale-revision");
+        when(profileMapper.selectByIdForScheduleUpdate(1L)).thenReturn(profile);
+
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> customerProfileService.saveMealScheduleAdjustments(request));
+
+        assertEquals("排餐日历已被其他人修改，请刷新后重试", exception.getMessage());
+        verify(profileMapper, never()).updateById(profile);
+    }
+
+    @Test
+    void shouldRejectQuantityOverrideOutsideEditedMonth() throws Exception {
+        CustomerMealScheduleAdditionDto addition = new CustomerMealScheduleAdditionDto();
+        addition.setDate("2026-06-01");
+        addition.setMealType("LUNCH");
+        addition.setQuantity(1);
+        CustomerMealScheduleAdjustmentRequest request = buildQuantityCalendarRequest(addition);
+        when(profileMapper.selectByIdForScheduleUpdate(1L)).thenReturn(profile);
+
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> customerProfileService.saveMealScheduleAdjustments(request));
+
+        assertEquals("人工数量覆盖日期不在当前编辑月份", exception.getMessage());
+        verify(profileMapper, never()).updateById(profile);
+    }
+
+    @Test
+    void shouldDeleteExcessUnverifiedServingWhenQuantityReturnsToBasePlan() throws Exception {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(10L);
+        order.setCustomerId(1L);
+        order.setStatus(1);
+        order.setMealType("LUNCH_DINNER");
+        order.setLunchDinnerCount(3);
+        order.setStartDate(LocalDate.of(2026, 5, 25));
+        order.setEndDate(LocalDate.of(2026, 5, 25));
+        order.setStartMealType("LUNCH");
+        order.setScheduleMode("SCHEDULE");
+        order.setDeliveryDates("[{\"date\":\"2026-05-25\",\"mealTypes\":[\"LUNCH\"]}]");
+
+        CustomerScheduledMealDto progress = new CustomerScheduledMealDto();
+        progress.setCustomerId(1L);
+        progress.setOrderId(10L);
+        progress.setRecordDate(LocalDate.of(2026, 5, 25));
+        progress.setMealType("LUNCH");
+        progress.setGeneratedCount(2);
+        progress.setFailedCount(0);
+        progress.setVerifiedCount(1);
+
+        CustomerMealScheduleAddition savedOverride = new CustomerMealScheduleAddition();
+        savedOverride.setId(99L);
+        savedOverride.setCustomerId(1L);
+        savedOverride.setOrderId(10L);
+        savedOverride.setRecordDate(LocalDate.of(2026, 5, 25));
+        savedOverride.setMealType("LUNCH");
+        savedOverride.setQuantity(2);
+
+        CustomerMealScheduleAdjustmentRequest request = buildQuantityCalendarRequest(null);
+        request.setExpectedRevision(invokeCalendarRevision(Collections.singletonList(savedOverride)));
+        when(profileMapper.selectByIdForScheduleUpdate(1L)).thenReturn(profile);
+        when(customerOrderMapper.findActiveOrdersByCustomerId(1L)).thenReturn(Collections.singletonList(order));
+        when(customerMealScheduleAdditionMapper.selectActiveByCustomerIdsAndDateRange(
+                eq(Collections.singletonList(1L)), eq(LocalDate.of(2026, 5, 1)), eq(LocalDate.of(2026, 5, 31))))
+                .thenReturn(Collections.singletonList(savedOverride));
+        when(mealPlanCustomerMapper.selectScheduledMealsByCustomerIdsAndDateRange(
+                eq(Collections.singletonList(1L)), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(Collections.singletonList(progress));
+        when(mealPlanService.deleteExcessUnverifiedCustomerServingsForCalendarAdjustment(
+                1L, 10L, "2026-05-25", "LUNCH", 1)).thenReturn(1);
+
+        CustomerMealScheduleAdjustmentResult result = customerProfileService.saveMealScheduleAdjustments(request);
+
+        assertEquals(1, result.getDeletedUnverifiedPlanCount());
+        verify(mealPlanService).deleteExcessUnverifiedCustomerServingsForCalendarAdjustment(
+                1L, 10L, "2026-05-25", "LUNCH", 1);
+        verify(customerMealScheduleAdditionMapper).softDeleteMissingByCustomerIdAndDateRange(
+                eq(1L), eq(LocalDate.of(2026, 5, 1)), eq(LocalDate.of(2026, 5, 31)), eq(Collections.emptyList()));
     }
 
     @Test
@@ -782,7 +1010,7 @@ class CustomerProfileServiceImplTest {
 
         when(profileMapper.findAll(any())).thenReturn(Collections.singletonList(customer));
         when(addressMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(address1));
-        when(customerOrderMapper.findActiveOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1)))
+        when(customerOrderMapper.findMealStatsCalendarOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1)))
             .thenReturn(Collections.singletonList(order));
         when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(10L)))
             .thenReturn(Collections.emptyList());
@@ -793,7 +1021,7 @@ class CustomerProfileServiceImplTest {
         assertEquals(1, result.getContent().size());
         assertEquals(Integer.valueOf(5), result.getContent().get(0).getRemainingMealCount());
         assertEquals(30, result.getContent().get(0).getScheduleDays().size());
-        verify(customerOrderMapper).findActiveOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1));
+        verify(customerOrderMapper).findMealStatsCalendarOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1));
     }
 
     @Test
@@ -826,7 +1054,7 @@ class CustomerProfileServiceImplTest {
 
         when(profileMapper.findAll(any())).thenReturn(Collections.singletonList(customer));
         when(addressMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(address1));
-        when(customerOrderMapper.findActiveOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1)))
+        when(customerOrderMapper.findMealStatsCalendarOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1)))
             .thenReturn(Collections.singletonList(order));
         when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(10L)))
             .thenReturn(Collections.emptyList());
@@ -865,15 +1093,19 @@ class CustomerProfileServiceImplTest {
         me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto scheduled =
                 new me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto();
         scheduled.setCustomerId(1L);
+        scheduled.setOrderId(10L);
         scheduled.setRecordDate(LocalDate.of(2026, 4, 1));
         scheduled.setMealType("LUNCH");
+        scheduled.setGeneratedCount(1);
+        scheduled.setFailedCount(0);
+        scheduled.setVerifiedCount(0);
 
         CustomerMealStatsQueryCriteria criteria = new CustomerMealStatsQueryCriteria();
         criteria.setStatsMonth("2026-04");
 
         when(profileMapper.findAll(any())).thenReturn(Collections.singletonList(customer));
         when(addressMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(address1));
-        when(customerOrderMapper.findActiveOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1)))
+        when(customerOrderMapper.findMealStatsCalendarOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1)))
             .thenReturn(Collections.singletonList(order));
         when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(10L)))
             .thenReturn(Collections.emptyList());
@@ -886,6 +1118,41 @@ class CustomerProfileServiceImplTest {
         CustomerMealStatsRowDto firstRow = result.getContent().get(0);
         assertEquals(Collections.singletonList("LUNCH"), firstRow.getCustomerScheduleDays().get(0).getScheduledMealTypes());
         assertEquals(Collections.emptyList(), firstRow.getCustomerScheduleDays().get(1).getScheduledMealTypes());
+    }
+
+    @Test
+    void shouldReturnPausedOrderCalendarAsReadOnlySourcePlan() {
+        CustomerProfile customer = new CustomerProfile();
+        customer.setId(1L);
+        customer.setCustomerCode("B596");
+        customer.setCustomerName("示例客户");
+
+        CustomerOrder pausedOrder = new CustomerOrder();
+        pausedOrder.setId(200L);
+        pausedOrder.setCustomerId(1L);
+        pausedOrder.setStatus(4);
+        pausedOrder.setLunchDinnerCount(2);
+        pausedOrder.setRemainingCount(2);
+        pausedOrder.setStartDate(LocalDate.of(2026, 4, 1));
+        pausedOrder.setEndDate(LocalDate.of(2026, 4, 2));
+        pausedOrder.setStartMealType("LUNCH");
+        pausedOrder.setMealType("LUNCH_DINNER");
+        pausedOrder.setScheduleMode("SCHEDULE");
+        pausedOrder.setDeliveryDates("[\"2026-04-01\",\"2026-04-02\"]");
+
+        CustomerMealStatsQueryCriteria criteria = new CustomerMealStatsQueryCriteria();
+        criteria.setStatsMonth("2026-04");
+        when(profileMapper.findAll(any())).thenReturn(Collections.singletonList(customer));
+        when(addressMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(address1));
+        when(customerOrderMapper.findMealStatsCalendarOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1)))
+                .thenReturn(Collections.singletonList(pausedOrder));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(200L))).thenReturn(Collections.emptyList());
+
+        PageResult<CustomerMealStatsRowDto> result = customerProfileService.queryMealStats(criteria, 1, 20);
+
+        assertEquals(1, result.getContent().size());
+        assertEquals(4, result.getContent().get(0).getMealScheduleOrders().get(0).getStatus());
+        assertTrue(result.getContent().get(0).getMealScheduleCells().stream().anyMatch(cell -> cell.getQuantity() == 1));
     }
 
     // ========== scheduleMode 填充测试 ==========

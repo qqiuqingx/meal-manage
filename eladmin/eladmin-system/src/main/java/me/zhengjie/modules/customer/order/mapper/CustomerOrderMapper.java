@@ -64,6 +64,16 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
                                                       @Param("startedBeforeDate") LocalDate startedBeforeDate);
 
     /**
+     * 查询客户用餐统计日历可见的未完订单，包含进行中和暂停订单。
+     *
+     * @param customerIds 客户ID集合
+     * @param startedBeforeDate 订单开始日期上界（不含）
+     * @return 进行中或暂停且仍有剩余餐数的订单
+     */
+    List<CustomerOrder> findMealStatsCalendarOrdersByCustomerIds(@Param("customerIds") List<Long> customerIds,
+                                                                  @Param("startedBeforeDate") LocalDate startedBeforeDate);
+
+    /**
      * 统计同一客户在同一时间段内的订单数量
      */
     int countOverlappingOrders(@Param("customerId") Long customerId,

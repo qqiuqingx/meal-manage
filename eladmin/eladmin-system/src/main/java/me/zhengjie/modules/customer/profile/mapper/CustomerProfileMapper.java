@@ -56,4 +56,12 @@ public interface CustomerProfileMapper extends BaseMapper<CustomerProfile> {
      * 根据ID查询（带JSON字段）
      */
     CustomerProfile selectByIdWithJson(@Param("id") Long id);
+
+    /**
+     * 锁定客户档案行并读取排餐日历所需字段，串行化同一客户的日历修改事务。
+     *
+     * @param id 客户ID
+     * @return 当前客户档案
+     */
+    CustomerProfile selectByIdForScheduleUpdate(@Param("id") Long id);
 }

@@ -56,6 +56,9 @@ public class MealPlanGenerateResult {
     @Setter
     public static class FailDetail {
 
+        @ApiModelProperty(value = "配送份序号")
+        private Integer servingNo;
+
         @ApiModelProperty(value = "失败原因")
         private String failReason;
     }

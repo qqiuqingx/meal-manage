@@ -59,6 +59,12 @@ public class MealPlanCustomer extends BaseEntity {
     @ApiModelProperty(value = "订单ID")
     private Long orderId;
 
+    /**
+     * 同一订单日期餐次下的配送份序号，从 1 开始。
+     */
+    @ApiModelProperty(value = "配送份序号")
+    private Integer servingNo;
+
     @ApiModelProperty(value = "父套餐ID")
     private Long parentPackageId;
 

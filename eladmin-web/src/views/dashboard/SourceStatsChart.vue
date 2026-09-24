@@ -68,14 +68,15 @@ export default {
 
       const pieData = this.chartData.map(item => ({
         name: item.sourceDesc,
-        value: item.customerCount
+        value: item.servingCount != null ? item.servingCount : item.customerCount,
+        customerCount: item.customerCount
       }))
 
       this.chart.setOption({
         tooltip: {
           trigger: 'item',
           formatter: (params) => {
-            return `${params.name}<br/>客户数：<strong>${params.value}</strong> 人<br/>占比：${params.percent}%`
+            return `${params.name}<br/>配送份数：<strong>${params.value}</strong> 份<br/>客户数：${params.data.customerCount || 0} 人<br/>占比：${params.percent}%`
           }
         },
         legend: {
@@ -102,7 +103,7 @@ export default {
           },
           label: {
             show: true,
-            formatter: '{b}: {c} 人',
+            formatter: '{b}: {c} 份',
             fontSize: 12,
             color: '#666'
           },

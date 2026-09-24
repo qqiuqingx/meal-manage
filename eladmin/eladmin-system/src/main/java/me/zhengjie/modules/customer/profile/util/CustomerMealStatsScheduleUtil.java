@@ -5,6 +5,7 @@ import lombok.Data;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleCellDto;
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
 import me.zhengjie.modules.meal.util.ScheduleKeyUtil;
 import me.zhengjie.utils.StringUtils;
@@ -73,6 +74,62 @@ public final class CustomerMealStatsScheduleUtil {
                                                                String statsMonth,
                                                                String mealBucket) {
         return buildMonthScheduleDays(orders, Collections.emptyList(), statsMonth, mealBucket);
+    }
+
+    /**
+     * 按订单、日期和午晚餐生成数量日历单元格，基础计划为一份，未命中的日期为零份。
+     *
+     * @param order 客户订单
+     * @param excludedDates 客户排除日期
+     * @param statsMonth 查询月份
+     * @return 订单有效期内的午晚餐数量单元格
+     */
+    public static List<CustomerMealScheduleCellDto> buildMonthMealScheduleCells(CustomerOrder order,
+                                                                                List<ExcludedDateDto> excludedDates,
+                                                                                String statsMonth) {
+        if (order == null) {
+            return Collections.emptyList();
+        }
+        YearMonth month = parseMonth(statsMonth);
+        LocalDate start = maxDate(month.atDay(1), order.getStartDate());
+        LocalDate end = minDate(month.atEndOfMonth(), order.getEndDate());
+        if (start == null || end == null || start.isAfter(end)) {
+            return Collections.emptyList();
+        }
+
+        List<CustomerMealScheduleCellDto> cells = new ArrayList<>();
+        LocalDate current = start;
+        while (!current.isAfter(end)) {
+            for (String mealType : Arrays.asList("LUNCH", "DINNER")) {
+                if (!orderContainsMealType(order, mealType)) {
+                    continue;
+                }
+                String startMealType = OrderStartMealTypeUtil.normalizeStartMealType(order.getMealType(), order.getStartMealType());
+                if (!OrderStartMealTypeUtil.hasStartedForMeal(order.getStartDate(), startMealType, current, mealType)) {
+                    continue;
+                }
+
+                boolean baseScheduled = scheduleModeMatches(order, current)
+                        && scheduledDeliveryDateContainsMealType(order, current, mealType);
+                boolean excluded = isExcluded(excludedDates, current, mealType);
+                int baseQuantity = baseScheduled ? 1 : 0;
+                CustomerMealScheduleCellDto cell = new CustomerMealScheduleCellDto();
+                cell.setOrderId(order.getId());
+                cell.setDate(current.toString());
+                cell.setMealType(mealType);
+                cell.setBaseQuantity(baseQuantity);
+                cell.setQuantity(excluded ? 0 : baseQuantity);
+                cell.setDefaultIncludesSoup(safeInt(order.getSoupCount()) > 0);
+                cell.setGeneratedCount(0);
+                cell.setFailedCount(0);
+                cell.setVerifiedCount(0);
+                cell.setManualOverride(false);
+                cell.setExcluded(excluded);
+                cells.add(cell);
+            }
+            current = current.plusDays(1);
+        }
+        return cells;
     }
 
     private static YearMonth parseMonth(String statsMonth) {

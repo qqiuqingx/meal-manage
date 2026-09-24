@@ -10,6 +10,7 @@
         <result column="phone" property="phone"/>
         <result column="customer_code" property="customerCode"/>
         <result column="order_id" property="orderId"/>
+        <result column="serving_no" property="servingNo"/>
         <result column="parent_package_id" property="parentPackageId"/>
         <result column="child_package_id" property="childPackageId"/>
         <result column="status" property="status"/>
@@ -43,7 +44,7 @@
 
     <select id="selectPageByCriteria" resultMap="BaseResultMap">
         select mpc.id, mpc.meal_plan_id, mpc.customer_id, mpc.customer_name, mpc.phone,
-               cp.customer_code, mpc.order_id, mpc.parent_package_id, mpc.child_package_id,
+               cp.customer_code, mpc.order_id, mpc.serving_no, mpc.parent_package_id, mpc.child_package_id,
                mpc.status, mpc.is_verified, mpc.verification_time, mpc.verification_operator, mpc.fail_reason,
                mpc.meat_required_count, mpc.veg_required_count, mpc.include_soup, mpc.include_rice,
                mpc.supplementary_main_count, mpc.supplementary_side_count, mpc.supplementary_veg_count,
@@ -67,11 +68,11 @@
                 and mpc.status = #{criteria.status}
             </if>
         </where>
-        order by mpc.id asc
+        order by mpc.meal_plan_id asc, mpc.order_id asc, mpc.serving_no asc, mpc.id asc
     </select>
 
     <select id="selectById" resultMap="BaseResultMap">
-        select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
+        select id, meal_plan_id, customer_id, customer_name, phone, order_id, serving_no, parent_package_id, child_package_id,
                status, is_verified, verification_time, verification_operator, fail_reason,
                meat_required_count, veg_required_count, include_soup, include_rice,
                supplementary_main_count, supplementary_side_count, supplementary_veg_count,
@@ -83,7 +84,7 @@
     </select>
 
     <select id="selectByIds" resultMap="BaseResultMap">
-        select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
+        select id, meal_plan_id, customer_id, customer_name, phone, order_id, serving_no, parent_package_id, child_package_id,
                status, is_verified, verification_time, verification_operator, fail_reason,
                meat_required_count, veg_required_count, include_soup, include_rice,
                supplementary_main_count, supplementary_side_count, supplementary_veg_count,
@@ -109,7 +110,7 @@
 
     <select id="selectByMealPlanId" resultMap="BaseResultMap">
         select mpc.id, mpc.meal_plan_id, mpc.customer_id, mpc.customer_name, mpc.phone,
-               cp.customer_code, mpc.order_id, mpc.parent_package_id, mpc.child_package_id,
+               cp.customer_code, mpc.order_id, mpc.serving_no, mpc.parent_package_id, mpc.child_package_id,
                mpc.status, mpc.is_verified, mpc.verification_time, mpc.verification_operator,
                mpc.fail_reason, mpc.meat_required_count, mpc.veg_required_count,
                mpc.include_soup, mpc.include_rice, mpc.supplementary_main_count,
@@ -122,12 +123,12 @@
         left join customer_profile cp on mpc.customer_id = cp.id
         where mpc.meal_plan_id = #{mealPlanId}
           and mpc.deleted = 0
-        order by mpc.id asc
+        order by mpc.order_id asc, mpc.serving_no asc, mpc.id asc
     </select>
 
     <select id="selectByMealPlanIds" resultMap="BaseResultMap">
         select mpc.id, mpc.meal_plan_id, mpc.customer_id, mpc.customer_name, mpc.phone,
-               cp.customer_code, mpc.order_id, mpc.parent_package_id, mpc.child_package_id,
+               cp.customer_code, mpc.order_id, mpc.serving_no, mpc.parent_package_id, mpc.child_package_id,
                mpc.status, mpc.is_verified, mpc.verification_time, mpc.verification_operator,
                mpc.fail_reason, mpc.meat_required_count, mpc.veg_required_count,
                mpc.include_soup, mpc.include_rice, mpc.supplementary_main_count,
@@ -143,7 +144,7 @@
         <foreach collection="mealPlanIds" item="mealPlanId" open="(" separator="," close=")">
             #{mealPlanId}
         </foreach>
-        order by mpc.meal_plan_id asc, mpc.id asc
+        order by mpc.meal_plan_id asc, mpc.order_id asc, mpc.serving_no asc, mpc.id asc
     </select>
 
     <select id="statByDate" resultMap="MealPackageStatResultMap">
@@ -157,6 +158,7 @@
         where mp.record_date = #{date}
           and mp.deleted = 0
           and mpc.deleted = 0
+          and mpc.status = 1
         group by pp.id, pp.package_code, pp.package_name
         order by meal_count desc
     </select>
@@ -185,6 +187,7 @@
 
     <resultMap id="MealPlanCustomerAddressVOMap" type="me.zhengjie.modules.meal.domain.dto.MealPlanCustomerAddressVO">
         <result column="customer_id" property="customerId"/>
+        <result column="serving_no" property="servingNo"/>
         <result column="customer_code" property="customerCode"/>
         <result column="phone" property="phone"/>
         <result column="address_detail" property="addressDetail"/>
@@ -198,6 +201,7 @@
     <select id="selectCustomerAddresses" resultMap="MealPlanCustomerAddressVOMap">
         SELECT
             mpc.customer_id,
+            mpc.serving_no,
             cp.customer_code,
             mpc.phone,
             COALESCE(
@@ -230,7 +234,7 @@
         LEFT JOIN customer_order co ON mpc.order_id = co.id
         WHERE mpc.meal_plan_id = #{mealPlanId}
           AND mpc.deleted = 0
-        ORDER BY mpc.id ASC
+        ORDER BY mpc.order_id ASC, mpc.serving_no ASC, mpc.id ASC
     </select>
 
     <!--
@@ -243,6 +247,7 @@
         join meal_plan mp on mpc.meal_plan_id = mp.id
         where mpc.deleted = 0
           and mp.deleted = 0
+          and mpc.status = 1
           and (
               (#{mealType} = 'BREAKFAST' and mp.meal_type = 'BREAKFAST')
               or
@@ -269,6 +274,21 @@
         group by mpc.order_id
     </select>
 
+    <select id="countSuccessfulScheduledByOrderIds" resultType="me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto">
+        select mpc.order_id as orderId, count(*) as scheduledCount
+        from meal_plan_customer mpc
+        join meal_plan mp on mpc.meal_plan_id = mp.id
+        where mpc.deleted = 0
+          and mp.deleted = 0
+          and mpc.status = 1
+          and mp.meal_type in ('LUNCH', 'DINNER')
+          and mpc.order_id in
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+        group by mpc.order_id
+    </select>
+
     <!-- 批量查询各订单今天已排餐但未核销的数量 -->
     <select id="countTodayUnverifiedScheduledByOrderIds" resultType="me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto">
         select mpc.order_id as orderId, count(*) as scheduledCount
@@ -287,22 +307,26 @@
     </select>
 
     <select id="selectScheduledMealsByCustomerIdsAndDateRange" resultType="me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto">
-        select distinct
+        select
             mpc.customer_id as customerId,
+            mpc.order_id as orderId,
             mp.record_date as recordDate,
-            mp.meal_type as mealType
+            mp.meal_type as mealType,
+            sum(case when mpc.status = 1 then 1 else 0 end) as generatedCount,
+            sum(case when mpc.status = 0 then 1 else 0 end) as failedCount,
+            sum(case when mpc.is_verified = 1 then 1 else 0 end) as verifiedCount
         from meal_plan_customer mpc
         join meal_plan mp on mpc.meal_plan_id = mp.id
         where mpc.deleted = 0
           and mp.deleted = 0
-          and mpc.status = 1
           and mp.record_date &gt;= #{startDate}
           and mp.record_date &lt;= #{endDate}
           and mpc.customer_id in
         <foreach collection="customerIds" item="customerId" open="(" separator="," close=")">
             #{customerId}
         </foreach>
-        order by mpc.customer_id asc, mp.record_date asc, mp.meal_type asc
+        group by mpc.customer_id, mpc.order_id, mp.record_date, mp.meal_type
+        order by mpc.customer_id asc, mpc.order_id asc, mp.record_date asc, mp.meal_type asc
     </select>
 
     <select id="selectGeneratedByCustomerDateMeal" resultType="me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto">
@@ -310,6 +334,9 @@
             mp.id as mealPlanId,
             mpc.id as customerPlanId,
             mpc.customer_id as customerId,
+            mpc.order_id as orderId,
+            mpc.serving_no as servingNo,
+            mpc.status as status,
             mp.record_date as recordDate,
             mp.meal_type as mealType,
             case when mpc.is_verified = 1 then true else false end as verified
@@ -317,7 +344,6 @@
         join meal_plan mp on mpc.meal_plan_id = mp.id
         where mpc.deleted = 0
           and mp.deleted = 0
-          and mpc.status = 1
           and mpc.customer_id = #{customerId}
           and mp.record_date = #{recordDate}
           and mp.meal_type = #{mealType}
@@ -326,7 +352,7 @@
 
     <!-- 根据排餐计划ID查询所有未核销的客户排餐记录 -->
     <select id="selectUnverifiedByMealPlanId" resultMap="BaseResultMap">
-        select id, meal_plan_id, customer_id, customer_name, phone, order_id, parent_package_id, child_package_id,
+        select id, meal_plan_id, customer_id, customer_name, phone, order_id, serving_no, parent_package_id, child_package_id,
                status, is_verified, verification_time, verification_operator, fail_reason,
                meat_required_count, veg_required_count, include_soup, include_rice,
                supplementary_main_count, supplementary_side_count, supplementary_veg_count,
@@ -336,7 +362,7 @@
         where meal_plan_id = #{mealPlanId}
           and deleted = 0
           and (is_verified = 0 or is_verified is null)
-        order by id asc
+        order by serving_no asc, id asc
     </select>
 
     <!-- 批量查询哪些客户排餐记录属于订单当前餐次的首次成功排餐 -->
@@ -362,7 +388,8 @@
               and previous_plan.meal_type = current_plan.meal_type
               and (
                   previous_plan.record_date &lt; current_plan.record_date
-                  or (previous_plan.record_date = current_plan.record_date and previous_rec.id &lt; current_rec.id)
+                  or (previous_plan.record_date = current_plan.record_date and previous_rec.serving_no &lt; current_rec.serving_no)
+                  or (previous_plan.record_date = current_plan.record_date and previous_rec.serving_no = current_rec.serving_no and previous_rec.id &lt; current_rec.id)
               )
           )
     </select>

@@ -12,7 +12,15 @@ public class CustomerScheduledMealDto {
 
     private Long customerId;
 
+    private Long orderId;
+
     private LocalDate recordDate;
 
     private String mealType;
+
+    private Integer generatedCount;
+
+    private Integer failedCount;
+
+    private Integer verifiedCount;
 }

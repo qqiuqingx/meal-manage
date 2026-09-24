@@ -33,6 +33,16 @@ public class CustomerMealScheduleAdditionDto implements Serializable {
     private String mealType;
 
     /**
+     * 目标配送份数，兼容旧请求时默认为一份。
+     */
+    private Integer quantity;
+
+    /**
+     * 目标份数中含汤的份数；为空时沿用订单汤品配置。
+     */
+    private Integer soupQuantity;
+
+    /**
      * 备注
      */
     private String remark;

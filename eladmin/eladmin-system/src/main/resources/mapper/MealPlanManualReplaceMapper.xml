@@ -29,4 +29,16 @@
         </if>
     </select>
 
+    <update id="softDeleteByCustomerPlanIds">
+        <if test="customerPlanIds != null and customerPlanIds.size() > 0">
+            update meal_plan_manual_replace
+            set deleted = 1
+            where deleted = 0
+              and customer_plan_id in
+            <foreach collection="customerPlanIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+        </if>
+    </update>
+
 </mapper>

@@ -55,6 +55,9 @@ public class MealPlanListDetailVO {
     @ApiModelProperty(value = "客户总数")
     private Integer totalCustomers;
 
+    @ApiModelProperty(value = "排餐总份数")
+    private Integer totalServings;
+
     @ApiModelProperty(value = "客户排餐列表")
     private List<MealPlanDetailVO.CustomerPlanDetail> customers;
 }

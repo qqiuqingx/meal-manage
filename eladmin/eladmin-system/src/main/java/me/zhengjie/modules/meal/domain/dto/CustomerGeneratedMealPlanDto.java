@@ -29,6 +29,21 @@ public class CustomerGeneratedMealPlanDto implements Serializable {
     private Long customerId;
 
     /**
+     * 关联订单ID
+     */
+    private Long orderId;
+
+    /**
+     * 配送份序号
+     */
+    private Integer servingNo;
+
+    /**
+     * 排餐结果状态：0失败/1成功
+     */
+    private Integer status;
+
+    /**
      * 排餐日期
      */
     private LocalDate recordDate;

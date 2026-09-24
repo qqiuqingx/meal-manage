@@ -45,6 +45,16 @@ public class CustomerMealScheduleAddition implements Serializable {
     private String mealType;
 
     /**
+     * 该订单日期餐次的目标配送份数，历史记录缺省为一份。
+     */
+    private Integer quantity;
+
+    /**
+     * 目标份数中含汤的份数；为空时沿用订单汤品配置。
+     */
+    private Integer soupQuantity;
+
+    /**
      * 人工新增原因或备注
      */
     private String remark;

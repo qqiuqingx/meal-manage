@@ -303,6 +303,8 @@ class MealPlanServiceImplTest {
 
     @Test
     void shouldRejectCalendarAdjustmentDeleteWhenGeneratedMealIsVerified() {
+        MealPlan lockedPlan = new MealPlan();
+        lockedPlan.setId(10L);
         CustomerGeneratedMealPlanDto generated = new CustomerGeneratedMealPlanDto();
         generated.setMealPlanId(10L);
         generated.setCustomerPlanId(20L);
@@ -311,6 +313,8 @@ class MealPlanServiceImplTest {
         generated.setMealType("LUNCH");
         generated.setVerified(true);
 
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 5, 24), "LUNCH"))
+                .thenReturn(lockedPlan);
         when(mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(30L, LocalDate.of(2026, 5, 24), "LUNCH"))
                 .thenReturn(Collections.singletonList(generated));
 
@@ -333,6 +337,8 @@ class MealPlanServiceImplTest {
         MealPlan mealPlan = new MealPlan();
         mealPlan.setId(10L);
         mealPlan.setDeleted(false);
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 5, 24), "LUNCH"))
+                .thenReturn(mealPlan);
         when(mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(30L, LocalDate.of(2026, 5, 24), "LUNCH"))
                 .thenReturn(Collections.singletonList(generated));
         when(mealPlanMapper.selectById(10L)).thenReturn(mealPlan);
@@ -364,13 +370,38 @@ class MealPlanServiceImplTest {
         when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(LocalDate.of(2026, 5, 25), "LUNCH"))
                 .thenReturn(Collections.singletonList(addition));
         when(customerOrderMapper.selectById(10L)).thenReturn(expiredOrder);
+        java.util.Map<Long, CustomerMealScheduleAddition> additionsByOrder =
+                Collections.singletonMap(10L, addition);
 
         Method method = MealPlanServiceImpl.class.getDeclaredMethod(
-                "mergeManualAdditionOrders", List.class, LocalDate.class, String.class);
+                "mergeManualAdditionOrders", List.class, LocalDate.class, String.class, java.util.Map.class);
         method.setAccessible(true);
         @SuppressWarnings("unchecked")
         List<CustomerOrder> result = (List<CustomerOrder>) method.invoke(
-                mealPlanService, Collections.emptyList(), LocalDate.of(2026, 5, 25), "LUNCH");
+                mealPlanService, Collections.emptyList(), LocalDate.of(2026, 5, 25), "LUNCH", additionsByOrder);
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void shouldNotMergePausedManualAdditionOrder() throws Exception {
+        CustomerMealScheduleAddition addition = new CustomerMealScheduleAddition();
+        addition.setOrderId(10L);
+        addition.setCustomerId(1L);
+        addition.setRecordDate(LocalDate.of(2026, 5, 25));
+        addition.setMealType("LUNCH");
+        addition.setQuantity(2);
+
+        CustomerOrder pausedOrder = buildOrder();
+        pausedOrder.setStatus(4);
+        when(customerOrderMapper.selectById(10L)).thenReturn(pausedOrder);
+
+        Method method = MealPlanServiceImpl.class.getDeclaredMethod(
+                "mergeManualAdditionOrders", List.class, LocalDate.class, String.class, java.util.Map.class);
+        method.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<CustomerOrder> result = (List<CustomerOrder>) method.invoke(mealPlanService, Collections.emptyList(),
+                LocalDate.of(2026, 5, 25), "LUNCH", Collections.singletonMap(10L, addition));
 
         assertTrue(result.isEmpty());
     }
@@ -399,13 +430,15 @@ class MealPlanServiceImplTest {
         when(mealPlanCustomerMapper.countScheduledByOrderIds(Collections.singletonList(10L), "DINNER"))
                 .thenReturn(Collections.singletonList(buildScheduledCount(10L, "LUNCH", 1)));
         when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        java.util.Map<Long, CustomerMealScheduleAddition> additionsByOrder = Collections.emptyMap();
+        java.util.Map<Long, List<MealPlanCustomer>> verifiedServings = Collections.emptyMap();
 
         Method method = MealPlanServiceImpl.class.getDeclaredMethod(
-                "loadValidOrders", LocalDate.class, String.class, Long.class);
+                "loadValidOrders", LocalDate.class, String.class, Long.class, java.util.Map.class, java.util.Map.class);
         method.setAccessible(true);
         @SuppressWarnings("unchecked")
         List<CustomerOrder> result = (List<CustomerOrder>) method.invoke(
-                mealPlanService, LocalDate.of(2026, 4, 2), "DINNER", null);
+                mealPlanService, LocalDate.of(2026, 4, 2), "DINNER", null, additionsByOrder, verifiedServings);
 
         assertTrue(result.isEmpty());
     }
@@ -440,6 +473,9 @@ class MealPlanServiceImplTest {
                 .thenReturn(Arrays.asList(additionA, additionB));
         when(customerOrderMapper.selectById(10L)).thenReturn(orderA);
         when(customerOrderMapper.selectById(11L)).thenReturn(orderB);
+        java.util.Map<Long, CustomerMealScheduleAddition> additionsByOrder = new java.util.LinkedHashMap<>();
+        additionsByOrder.put(10L, additionA);
+        additionsByOrder.put(11L, additionB);
 
         Logger logger = (Logger) LoggerFactory.getLogger(MealPlanServiceImpl.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
@@ -447,11 +483,11 @@ class MealPlanServiceImplTest {
         logger.addAppender(appender);
         try {
             Method method = MealPlanServiceImpl.class.getDeclaredMethod(
-                    "mergeManualAdditionOrders", List.class, LocalDate.class, String.class);
+                    "mergeManualAdditionOrders", List.class, LocalDate.class, String.class, java.util.Map.class);
             method.setAccessible(true);
             @SuppressWarnings("unchecked")
             List<CustomerOrder> result = (List<CustomerOrder>) method.invoke(
-                    mealPlanService, Collections.emptyList(), LocalDate.of(2026, 4, 1), "LUNCH");
+                    mealPlanService, Collections.emptyList(), LocalDate.of(2026, 4, 1), "LUNCH", additionsByOrder);
 
             assertEquals(2, result.size());
             String logOutput = appender.list.stream()
@@ -655,6 +691,143 @@ class MealPlanServiceImplTest {
     }
 
     @Test
+    void shouldGenerateTwoIndependentServingsAndPutSoupOnSecondServing() {
+        CustomerOrder order = buildOrderWithDishCounts(1, 0, 0, 0, 1);
+        order.setLunchDinnerCount(2);
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
+        Dish soupDish = buildDish(13, "玉米排骨汤", "SOUP", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 3);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+        DishIngredientRelation soupIngredient = buildIngredient(13, "玉米");
+        CustomerMealScheduleAddition addition = new CustomerMealScheduleAddition();
+        addition.setOrderId(order.getId());
+        addition.setCustomerId(order.getCustomerId());
+        addition.setRecordDate(LocalDate.of(2026, 4, 1));
+        addition.setMealType("LUNCH");
+        addition.setQuantity(2);
+        addition.setSoupQuantity(1);
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.findByDateRangeAndMealType(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Collections.singletonList(order));
+        when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Collections.singletonList(addition));
+        when(customerOrderMapper.selectById(order.getId())).thenReturn(order);
+        when(mealPlanCustomerMapper.countScheduledByOrderIds(Collections.singletonList(order.getId()), "LUNCH"))
+                .thenReturn(Collections.emptyList());
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Arrays.asList(mainDish, soupDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Arrays.asList(mainIngredient, soupIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(2, result.getTotalCount());
+        assertEquals(2, result.getSuccessCount());
+        assertEquals(0, result.getFailCount());
+        ArgumentCaptor<MealPlanCustomer> captor = ArgumentCaptor.forClass(MealPlanCustomer.class);
+        verify(mealPlanCustomerMapper, org.mockito.Mockito.times(2)).insert(captor.capture());
+        List<MealPlanCustomer> servings = captor.getAllValues();
+        assertEquals(1, servings.get(0).getServingNo());
+        assertEquals(0, servings.get(0).getIncludeSoup());
+        assertEquals(2, servings.get(1).getServingNo());
+        assertEquals(1, servings.get(1).getIncludeSoup());
+        verify(mealPlanCustomerItemMapper, org.mockito.Mockito.times(3)).insert(any());
+    }
+
+    @Test
+    void shouldKeepFirstServingWhenSecondServingFailsForMissingSoup() {
+        CustomerOrder order = buildOrderWithDishCounts(1, 0, 0, 0, 1);
+        order.setLunchDinnerCount(2);
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Arrays.asList("LUNCH"), Arrays.asList("1"), Arrays.asList("1-3"), 1);
+        DishIngredientRelation mainIngredient = buildIngredient(11, "鸡肉");
+        CustomerMealScheduleAddition addition = new CustomerMealScheduleAddition();
+        addition.setOrderId(order.getId());
+        addition.setCustomerId(order.getCustomerId());
+        addition.setRecordDate(LocalDate.of(2026, 4, 1));
+        addition.setMealType("LUNCH");
+        addition.setQuantity(2);
+        addition.setSoupQuantity(1);
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(null);
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.findByDateRangeAndMealType(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Collections.singletonList(order));
+        when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Collections.singletonList(addition));
+        when(customerOrderMapper.selectById(order.getId())).thenReturn(order);
+        when(mealPlanCustomerMapper.countScheduledByOrderIds(Collections.singletonList(order.getId()), "LUNCH"))
+                .thenReturn(Collections.emptyList());
+        lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
+            MealPlan p = inv.getArgument(0);
+            p.setId(100L);
+            return 1;
+        });
+        lenient().when(mealPlanMapper.selectById(anyLong())).thenAnswer(inv -> {
+            MealPlan p = new MealPlan();
+            p.setId(inv.getArgument(0));
+            p.setRecordDate(LocalDate.of(2026, 4, 1));
+            p.setMealType("LUNCH");
+            p.setSuccessCount(0);
+            p.setFailCount(0);
+            p.setTotalCount(0);
+            return p;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(mainDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.singletonList(mainIngredient));
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(2, result.getTotalCount());
+        assertEquals(1, result.getSuccessCount());
+        assertEquals(1, result.getFailCount());
+        assertEquals(2, result.getFailDetails().get(0).getServingNo());
+        assertEquals("SOUP类型菜品不足", result.getFailDetails().get(0).getFailReason());
+        ArgumentCaptor<MealPlanCustomer> captor = ArgumentCaptor.forClass(MealPlanCustomer.class);
+        verify(mealPlanCustomerMapper, org.mockito.Mockito.times(2)).insert(captor.capture());
+        assertEquals(Arrays.asList(1, 2), Arrays.asList(
+                captor.getAllValues().get(0).getServingNo(), captor.getAllValues().get(1).getServingNo()));
+        assertEquals(1, captor.getAllValues().get(1).getIncludeSoup());
+    }
+
+    @Test
+    void shouldRejectDeletingVerifiedServing() {
+        MealPlanCustomer verifiedServing = new MealPlanCustomer();
+        verifiedServing.setId(501L);
+        verifiedServing.setIsVerified(1);
+        when(mealPlanCustomerMapper.selectByIds(Collections.singletonList(501L)))
+                .thenReturn(Collections.singletonList(verifiedServing));
+
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> mealPlanService.deleteMealPlanCustomers(Collections.singletonList(501L)));
+
+        assertEquals("排餐计划包含已核销份，不能删除", exception.getMessage());
+        verify(mealPlanCustomerMapper, never()).softDeleteByIds(Collections.singletonList(501L));
+        verify(mealPlanCustomerItemMapper, never()).softDeleteByCustomerPlanIds(Collections.singletonList(501L));
+    }
+
+    @Test
     void shouldRecordFailureWhenRequiredDishMissing() {
         CustomerOrder order = buildOrder();
         order.setMainDishCount(2);
@@ -702,57 +875,95 @@ class MealPlanServiceImplTest {
     }
 
     @Test
-    void shouldRebuildFailDetailsForPartialRerunWhenSummaryAndCurrentDetailsMismatch() {
+    void shouldRetainVerifiedServingAndRegenerateOnlyTheMissingServing() {
         MealPlan existingPlan = new MealPlan();
         existingPlan.setId(99L);
         existingPlan.setRecordDate(LocalDate.of(2026, 4, 1));
         existingPlan.setMealType("LUNCH");
 
         CustomerOrder order = buildOrder();
+        order.setLunchDinnerCount(2);
 
         MealPlan refreshPlan = new MealPlan();
         refreshPlan.setId(99L);
         refreshPlan.setRecordDate(LocalDate.of(2026, 4, 1));
         refreshPlan.setMealType("LUNCH");
-        refreshPlan.setSuccessCount(0);
-        refreshPlan.setFailCount(1);
+        refreshPlan.setSuccessCount(1);
+        refreshPlan.setFailCount(0);
         refreshPlan.setTotalCount(1);
 
-        MealPlanCustomer historicalFail = new MealPlanCustomer();
-        historicalFail.setStatus(0);
-        historicalFail.setFailReason("历史失败");
+        MealPlanCustomer verifiedServing = new MealPlanCustomer();
+        verifiedServing.setId(500L);
+        verifiedServing.setCustomerId(1L);
+        verifiedServing.setOrderId(10L);
+        verifiedServing.setServingNo(1);
+        verifiedServing.setStatus(1);
+        verifiedServing.setIsVerified(1);
 
-        MealPlanCustomer latestFail1 = new MealPlanCustomer();
-        latestFail1.setStatus(0);
-        latestFail1.setFailReason("历史失败");
-        MealPlanCustomer latestFail2 = new MealPlanCustomer();
-        latestFail2.setStatus(0);
-        latestFail2.setFailReason("客户档案不存在");
+        MealPlanCustomer unverifiedOldServing = new MealPlanCustomer();
+        unverifiedOldServing.setId(501L);
+        unverifiedOldServing.setCustomerId(1L);
+        unverifiedOldServing.setOrderId(10L);
+        unverifiedOldServing.setServingNo(2);
+        unverifiedOldServing.setStatus(0);
+        unverifiedOldServing.setFailReason("旧失败");
+
+        CustomerMealScheduleAddition addition = new CustomerMealScheduleAddition();
+        addition.setOrderId(10L);
+        addition.setCustomerId(1L);
+        addition.setRecordDate(LocalDate.of(2026, 4, 1));
+        addition.setMealType("LUNCH");
+        addition.setQuantity(2);
+        addition.setSoupQuantity(1);
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(existingPlan);
-        when(mealPlanMapper.findCustomerPlanIdsByMealPlanIdAndCustomerId(99L, 1L)).thenReturn(Collections.singletonList(501L));
         when(mealPlanMapper.selectById(99L)).thenReturn(refreshPlan);
         when(mealPlanCustomerMapper.selectByMealPlanId(99L))
-                .thenReturn(Collections.singletonList(historicalFail))
-                .thenReturn(Arrays.asList(latestFail1, latestFail2));
+                .thenReturn(Arrays.asList(verifiedServing, unverifiedOldServing))
+                .thenReturn(Collections.singletonList(verifiedServing))
+                .thenReturn(Collections.singletonList(verifiedServing));
+        when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Collections.singletonList(addition));
+        when(customerOrderMapper.selectById(10L)).thenReturn(order);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.findByDateRangeAndMealType(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Collections.singletonList(order));
+        when(mealPlanCustomerMapper.countScheduledByOrderIds(Collections.singletonList(10L), "LUNCH"))
+                .thenReturn(Collections.singletonList(buildScheduledCount(10L, "LUNCH", 1)));
         when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.emptyList());
         when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.emptyList());
 
         MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", 1L);
 
-        assertEquals(2, result.getFailCount());
-        assertEquals(2, result.getFailDetails().size());
-        assertEquals("历史失败", result.getFailDetails().get(0).getFailReason());
-        assertEquals("客户档案不存在", result.getFailDetails().get(1).getFailReason());
+        assertEquals(2, result.getTotalCount());
+        assertEquals(1, result.getSuccessCount());
+        assertEquals(1, result.getFailCount());
+        assertEquals(1, result.getFailDetails().size());
+        assertEquals("客户档案不存在", result.getFailDetails().get(0).getFailReason());
+        assertEquals(2, result.getFailDetails().get(0).getServingNo());
         verify(mealPlanCustomerItemMapper).softDeleteByCustomerPlanIds(Collections.singletonList(501L));
+        verify(mealPlanManualReplaceMapper).softDeleteByCustomerPlanIds(Collections.singletonList(501L));
         verify(mealPlanCustomerMapper).softDeleteByIds(Collections.singletonList(501L));
+        verify(mealPlanCustomerMapper, never()).softDeleteByIds(Collections.singletonList(500L));
+        ArgumentCaptor<MealPlanCustomer> generatedCaptor = ArgumentCaptor.forClass(MealPlanCustomer.class);
+        verify(mealPlanCustomerMapper).insert(generatedCaptor.capture());
+        assertEquals(2, generatedCaptor.getValue().getServingNo());
+        assertEquals(1, generatedCaptor.getValue().getIncludeSoup());
     }
 
     @Test
-    void shouldSoftDeleteExistingPlanBeforeInsert() {
+    void shouldDeleteUnverifiedServingsAndDeleteEmptyParentPlan() {
         MealPlan existingPlan = new MealPlan();
         existingPlan.setId(99L);
+        MealPlanCustomer unverified = new MealPlanCustomer();
+        unverified.setId(501L);
+        unverified.setCustomerId(1L);
+        unverified.setIsVerified(0);
+        unverified.setStatus(1);
+        when(mealPlanCustomerMapper.selectByMealPlanId(99L))
+                .thenReturn(Collections.singletonList(unverified))
+                .thenReturn(Collections.emptyList());
+        when(mealPlanMapper.selectById(99L)).thenReturn(existingPlan);
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(existingPlan);
         when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.emptyList());
@@ -761,10 +972,54 @@ class MealPlanServiceImplTest {
 
         mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
 
-        verify(mealPlanMapper).softDeleteItemsByMealPlanId(99L);
-        verify(mealPlanMapper).softDeleteCustomersByMealPlanId(99L);
+        verify(mealPlanCustomerItemMapper).softDeleteByCustomerPlanIds(Collections.singletonList(501L));
+        verify(mealPlanCustomerMapper).softDeleteByIds(Collections.singletonList(501L));
         verify(mealPlanMapper).softDeletePlanById(99L);
         verify(mealPlanMapper).insert(any(MealPlan.class));
+    }
+
+    @Test
+    void shouldDeleteFailedServingBeforeSuccessfulUnverifiedServingWhenReducingPlan() {
+        LocalDate recordDate = LocalDate.of(2026, 5, 25);
+        MealPlan plan = new MealPlan();
+        plan.setId(77L);
+        plan.setRecordDate(recordDate);
+        plan.setMealType("LUNCH");
+
+        CustomerGeneratedMealPlanDto verified = generatedServing(101L, 1, 1, true);
+        CustomerGeneratedMealPlanDto successful = generatedServing(102L, 2, 1, false);
+        CustomerGeneratedMealPlanDto failed = generatedServing(103L, 3, 0, false);
+
+        MealPlanCustomer remainingVerified = new MealPlanCustomer();
+        remainingVerified.setId(101L);
+        remainingVerified.setCustomerId(1L);
+        remainingVerified.setOrderId(10L);
+        remainingVerified.setServingNo(1);
+        remainingVerified.setStatus(1);
+        remainingVerified.setIsVerified(1);
+        MealPlanCustomer remainingSuccessful = new MealPlanCustomer();
+        remainingSuccessful.setId(102L);
+        remainingSuccessful.setCustomerId(1L);
+        remainingSuccessful.setOrderId(10L);
+        remainingSuccessful.setServingNo(2);
+        remainingSuccessful.setStatus(1);
+        remainingSuccessful.setIsVerified(0);
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(recordDate, "LUNCH")).thenReturn(plan);
+        when(mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(1L, recordDate, "LUNCH"))
+                .thenReturn(Arrays.asList(verified, successful, failed));
+        when(mealPlanMapper.selectById(77L)).thenReturn(plan);
+        when(mealPlanCustomerMapper.selectByMealPlanId(77L)).thenReturn(Arrays.asList(remainingVerified, remainingSuccessful));
+
+        int deletedCount = mealPlanService.deleteExcessUnverifiedCustomerServingsForCalendarAdjustment(
+                1L, 10L, recordDate.toString(), "LUNCH", 2);
+
+        assertEquals(1, deletedCount);
+        verify(mealPlanCustomerItemMapper).softDeleteByCustomerPlanIds(Collections.singletonList(103L));
+        verify(mealPlanManualReplaceMapper).softDeleteByCustomerPlanIds(Collections.singletonList(103L));
+        verify(mealPlanCustomerMapper).softDeleteByIds(Collections.singletonList(103L));
+        verify(mealPlanCustomerMapper, never()).softDeleteByIds(Collections.singletonList(101L));
+        verify(mealPlanCustomerMapper, never()).softDeleteByIds(Collections.singletonList(102L));
     }
 
     @Test
@@ -1455,7 +1710,8 @@ class MealPlanServiceImplTest {
     @Test
     void testAssembleCustomerDetail_setsDishCounts() throws Exception {
         Method method = MealPlanServiceImpl.class.getDeclaredMethod(
-                "assembleCustomerDetail", MealPlanCustomer.class, java.util.Map.class, java.util.Map.class, java.util.Set.class);
+                "assembleCustomerDetail", MealPlanCustomer.class, LocalDate.class,
+                java.util.Map.class, java.util.Map.class, java.util.Set.class);
         method.setAccessible(true);
 
         MealPlanCustomer customer = new MealPlanCustomer();
@@ -1474,7 +1730,8 @@ class MealPlanServiceImplTest {
         customer.setSupplementarySoupCount(1);
 
         MealPlanDetailVO.CustomerPlanDetail detail = (MealPlanDetailVO.CustomerPlanDetail) method.invoke(
-                mealPlanService, customer, Collections.emptyMap(), Collections.emptyMap(), Collections.emptySet());
+                mealPlanService, customer, LocalDate.of(2026, 4, 1),
+                Collections.emptyMap(), Collections.emptyMap(), Collections.emptySet());
 
         assertEquals(Integer.valueOf(1), detail.getSupplementaryMainCount());
         assertEquals(Integer.valueOf(0), detail.getSupplementarySideCount());
@@ -1491,6 +1748,29 @@ class MealPlanServiceImplTest {
         order.setRiceCount(rice);
         order.setSoupCount(soup);
         return order;
+    }
+
+    /**
+     * 构建指定份序和状态的生成排餐测试行。
+     *
+     * @param customerPlanId 客户排餐记录ID
+     * @param servingNo 配送份序号
+     * @param status 生成状态，0失败/1成功
+     * @param verified 是否已核销
+     * @return 排餐进度记录
+     */
+    private CustomerGeneratedMealPlanDto generatedServing(Long customerPlanId, int servingNo, int status, boolean verified) {
+        CustomerGeneratedMealPlanDto row = new CustomerGeneratedMealPlanDto();
+        row.setMealPlanId(77L);
+        row.setCustomerPlanId(customerPlanId);
+        row.setCustomerId(1L);
+        row.setOrderId(10L);
+        row.setServingNo(servingNo);
+        row.setRecordDate(LocalDate.of(2026, 5, 25));
+        row.setMealType("LUNCH");
+        row.setStatus(status);
+        row.setVerified(verified);
+        return row;
     }
 
     private CustomerOrder buildOrder() {

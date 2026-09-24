@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CustomerMealStatsScheduleUtilTest {
 
@@ -104,5 +105,37 @@ class CustomerMealStatsScheduleUtilTest {
         assertEquals(Arrays.asList("LUNCH", "DINNER"), baseDays.get(0).getBaseMealTypes());
         assertEquals(Arrays.asList("DINNER"), baseDays.get(0).getExcludedMealTypes());
         assertEquals(Arrays.asList("BREAKFAST"), baseDays.get(0).getAddedMealTypes());
+    }
+
+    @Test
+    void shouldBuildQuantityCellsWithBaseExcludedAndOffScheduleValues() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(4L);
+        order.setCustomerId(10L);
+        order.setLunchDinnerCount(10);
+        order.setSoupCount(1);
+        order.setStartDate(LocalDate.of(2026, 4, 1));
+        order.setEndDate(LocalDate.of(2026, 4, 2));
+        order.setStartMealType("LUNCH");
+        order.setMealType("ALL");
+        order.setScheduleMode("SCHEDULE");
+        order.setDeliveryDates("[{\"date\":\"2026-04-02\",\"mealTypes\":[\"LUNCH\"]}]");
+
+        ExcludedDateDto excluded = new ExcludedDateDto();
+        excluded.setDate("2026-04-02");
+        excluded.setMealTypes(Arrays.asList("LUNCH"));
+
+        List<me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleCellDto> cells =
+                CustomerMealStatsScheduleUtil.buildMonthMealScheduleCells(order, Arrays.asList(excluded), "2026-04");
+
+        assertEquals(4, cells.size());
+        assertEquals(0, cells.get(0).getBaseQuantity());
+        assertEquals(0, cells.get(0).getQuantity());
+        assertEquals("2026-04-02", cells.get(2).getDate());
+        assertEquals("LUNCH", cells.get(2).getMealType());
+        assertEquals(1, cells.get(2).getBaseQuantity());
+        assertEquals(0, cells.get(2).getQuantity());
+        assertTrue(cells.get(2).getExcluded());
+        assertTrue(cells.get(2).getDefaultIncludesSoup());
     }
 }

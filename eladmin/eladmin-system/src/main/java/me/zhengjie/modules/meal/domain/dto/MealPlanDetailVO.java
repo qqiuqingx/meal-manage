@@ -40,6 +40,9 @@ public class MealPlanDetailVO {
     @ApiModelProperty(value = "客户总数")
     private Integer totalCustomers;
 
+    @ApiModelProperty(value = "排餐总份数")
+    private Integer totalServings;
+
     @ApiModelProperty(value = "成功数")
     private Integer successCount;
 
@@ -89,6 +92,9 @@ public class MealPlanDetailVO {
 
         @ApiModelProperty(value = "订单ID")
         private Long orderId;
+
+        @ApiModelProperty(value = "订单当日餐次配送份序号，从1开始")
+        private Integer servingNo;
 
         @ApiModelProperty(value = "父套餐ID")
         private Long parentPackageId;

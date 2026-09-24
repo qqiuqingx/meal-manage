@@ -71,7 +71,7 @@ export default {
       if (!this.chart) return
 
       const xData = this.chartData.map(item => item.mealPackageDesc)
-      const yData = this.chartData.map(item => item.customerCount)
+      const yData = this.chartData.map(item => item.servingCount != null ? item.servingCount : item.customerCount)
 
       this.chart.setOption({
         tooltip: {
@@ -81,7 +81,8 @@ export default {
           },
           formatter: (params) => {
             const item = params[0]
-            return `${item.name}<br/>客户数：<strong>${item.value}</strong> 人`
+            const group = this.chartData[item.dataIndex] || {}
+            return `${item.name}<br/>配送份数：<strong>${item.value}</strong> 份<br/>客户数：${group.customerCount || 0} 人`
           }
         },
         grid: {
@@ -112,7 +113,7 @@ export default {
           minInterval: 1,
           axisLabel: {
             fontSize: 12,
-            formatter: '{value} 人'
+            formatter: '{value} 份'
           },
           splitLine: {
             lineStyle: {
@@ -121,7 +122,7 @@ export default {
           }
         },
         series: [{
-          name: '客户数',
+          name: '配送份数',
           type: 'bar',
           barWidth: '50%',
           data: yData,

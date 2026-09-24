@@ -34,6 +34,9 @@ public class MealVerificationLogVO {
     @ApiModelProperty(value = "客户排餐ID")
     private Long mealPlanCustomerId;
 
+    @ApiModelProperty(value = "配送份序号")
+    private Integer servingNo;
+
     @ApiModelProperty(value = "排餐计划ID")
     private Long mealPlanId;
 
