@@ -32,6 +32,6 @@ USER ubuntu
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget -q --spider http://localhost:8000/ || exit 1
+  CMD wget -q -O /dev/null http://localhost:8000/ || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]

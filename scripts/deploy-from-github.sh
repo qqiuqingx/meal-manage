@@ -61,6 +61,11 @@ log() {
   printf '[%s] %s\n' "$(timestamp)" "$*" >&2
 }
 
+die() {
+  log "ERROR: $*"
+  exit 1
+}
+
 get_free_disk_mb() {
   df -Pm "$DOCKER_DISK_PATH" 2>/dev/null | awk 'NR==2 {print $4}'
 }
