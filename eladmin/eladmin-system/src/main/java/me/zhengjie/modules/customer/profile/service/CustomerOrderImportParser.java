@@ -464,7 +464,7 @@ public class CustomerOrderImportParser {
      * 合并各行的送餐描述，得到送餐模式与餐次类型。
      *
      * <p>同一客户的多行可能分别描述午餐与晚餐，餐次取并集；任一送餐描述含「等通知」时，
-     * 订单采用待通知模式且餐次留空。</p>
+     * 订单采用待通知模式且餐次留空；送餐描述缺失的行默认按「午餐+晚餐」处理。</p>
      *
      * @param customer 客户草稿
      * @param rows 明细行
@@ -477,13 +477,16 @@ public class CustomerOrderImportParser {
         boolean hasProblem = false;
         boolean waitNotice = false;
         List<Integer> breakfastRows = new ArrayList<>();
+        List<Integer> missingDeliveryRows = new ArrayList<>();
 
         for (RawRow row : rows) {
             String deliveryText = row.delivery;
             if (isBlank(deliveryText)) {
-                customer.addIssue(CustomerImportIssueCategory.PROFILE_ERROR,
-                        "第 " + row.sourceRow + " 行「" + HEADER_DELIVERY + "」列送餐描述缺失");
-                hasProblem = true;
+                missingDeliveryRows.add(row.sourceRow);
+                lunch = true;
+                dinner = true;
+                row.mealLine = true;
+                hasMealLine = true;
                 continue;
             }
             boolean rowBreakfast = deliveryText.contains("早餐");
@@ -527,6 +530,10 @@ public class CustomerOrderImportParser {
         }
         if (!breakfastRows.isEmpty()) {
             customer.addWarning("第 " + joinRows(breakfastRows) + " 行为早餐计划，本批次不导入早餐");
+        }
+        if (!missingDeliveryRows.isEmpty()) {
+            customer.addWarning("第 " + joinRows(missingDeliveryRows) + " 行「" + HEADER_DELIVERY
+                    + "」列送餐描述缺失，默认按午餐+晚餐处理");
         }
         if (scheduleModes.size() > 1 && !waitNotice) {
             customer.addWarning("同编号多行送餐模式不一致（" + String.join("/", scheduleModes) + "），已采用首行取值，请业务确认");

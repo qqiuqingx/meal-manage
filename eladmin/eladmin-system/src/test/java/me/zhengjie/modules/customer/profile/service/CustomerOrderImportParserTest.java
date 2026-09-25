@@ -460,7 +460,7 @@ class CustomerOrderImportParserTest {
     }
 
     @Test
-    void parseShouldRejectMissingDeliveryDescription() throws IOException {
+    void parseShouldDefaultMissingDeliveryToLunchDinner() throws IOException {
         byte[] content = buildWorkbook(sheet -> {
             Row row = dataRow(sheet, 3, null, "B17", "13800138017",
                     "联系人：B17\n电话：13800138017\n地址：示例路1号", null, null, "含汤",
@@ -471,9 +471,10 @@ class CustomerOrderImportParserTest {
         ParsedWorkbook workbook = parser.parse(content, "hash", IMPORT_DATE);
 
         ParsedCustomer customer = workbook.getCustomers().get(0);
-        assertFalse(customer.isImportable());
-        assertTrue(customer.getIssues().stream()
-                .anyMatch(issue -> issue.getMessage().contains("送餐描述缺失")));
+        assertTrue(customer.isImportable());
+        assertEquals("LUNCH_DINNER", customer.getMealType());
+        assertTrue(customer.getWarnings().stream()
+                .anyMatch(warning -> warning.contains("送餐描述缺失")));
     }
 
     /**
