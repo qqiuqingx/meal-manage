@@ -97,6 +97,7 @@ public class ParentPackageServiceImpl implements ParentPackageService {
         if (resources.getPoolEnd() <= resources.getPoolStart()) {
             throw new BadRequestException("结束号必须大于起始号");
         }
+        validatePoolOverlap(resources);
         parentPackageMapper.insert(resources);
         insertSubRelations(resources.getId(), subPackageIds);
     }
@@ -119,6 +120,7 @@ public class ParentPackageServiceImpl implements ParentPackageService {
             if (resources.getPoolEnd() <= resources.getPoolStart()) {
                 throw new BadRequestException("结束号必须大于起始号");
             }
+            validatePoolOverlap(resources);
         }
         parentPackageMapper.updateById(resources);
         // 先删旧关联，再批量插入新关联
@@ -140,6 +142,10 @@ public class ParentPackageServiceImpl implements ParentPackageService {
             if (hasEnabledRelation) {
                 throw new BadRequestException("请先停用所有子套餐关联");
             }
+        }
+        // 启用时校验编号池区间不与其他启用父套餐重叠，保证客户编号可唯一归属
+        if (status == 1) {
+            validatePoolOverlap(parent);
         }
         parent.setStatus(status == 1);
         parentPackageMapper.updateById(parent);
@@ -186,6 +192,44 @@ public class ParentPackageServiceImpl implements ParentPackageService {
             return record;
         }).collect(Collectors.toList());
         parentPackageSubMapper.batchInsert(records);
+    }
+
+    /**
+     * 校验编号池区间不与其他启用父套餐的同前缀区间重叠。
+     *
+     * <p>客户编号（含批量导入）按「编号池前缀 + 数字区间」唯一归属父套餐，
+     * 同前缀启用池区间重叠会产生归属歧义，必须在配置入口拦截。</p>
+     *
+     * @param resources 待保存或启用的父套餐；池字段不完整时跳过校验
+     */
+    private void validatePoolOverlap(ParentPackage resources) {
+        if (resources == null || resources.getPoolPrefix() == null
+                || resources.getPoolStart() == null || resources.getPoolEnd() == null) {
+            return;
+        }
+        List<ParentPackage> all = parentPackageMapper.selectList(null);
+        if (all == null) {
+            return;
+        }
+        for (ParentPackage other : all) {
+            if (Objects.equals(other.getId(), resources.getId())) {
+                continue;
+            }
+            if (!Boolean.TRUE.equals(other.getStatus())) {
+                continue;
+            }
+            if (other.getPoolPrefix() == null || other.getPoolStart() == null || other.getPoolEnd() == null) {
+                continue;
+            }
+            if (!other.getPoolPrefix().equals(resources.getPoolPrefix())) {
+                continue;
+            }
+            if (resources.getPoolStart() <= other.getPoolEnd() && other.getPoolStart() <= resources.getPoolEnd()) {
+                throw new BadRequestException("编号池区间与启用父套餐「" + other.getPackageName()
+                        + "」的编号池 " + other.getPoolPrefix() + other.getPoolStart()
+                        + "～" + other.getPoolPrefix() + other.getPoolEnd() + " 重叠，无法唯一归属客户编号");
+            }
+        }
     }
 
     private ParentPackageDto toDto(ParentPackage entity) {

@@ -224,6 +224,90 @@ class CustomerProfileImportFlowTest {
         assertEquals(Integer.valueOf(CustomerOrderStatus.COMPLETED.getCode()), orderCaptor.getValue().getStatus());
     }
 
+    /**
+     * 套餐名称与编号字母不存在既定映射时，编号池唯一命中即可归属父套餐（C65 场景回归）。
+     */
+    @Test
+    void previewShouldMatchPackageByPoolPrefixRegardlessOfName() {
+        ParsedCustomer parsed = parsedCustomer();
+        parsed.setEffectiveCode("C65");
+        ParsedWorkbook workbook = new ParsedWorkbook();
+        workbook.setFileHash("hash");
+        workbook.setStructureValid(true);
+        workbook.setCustomerCount(1);
+        workbook.setCustomers(Collections.singletonList(parsed));
+        when(parser.parse(any(byte[].class), any(String.class), any(LocalDate.class))).thenReturn(workbook);
+        ParentPackage smallYuezi = parentPackage();
+        smallYuezi.setPackageName("小月子");
+        smallYuezi.setPoolPrefix("C");
+        when(parentPackageMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(smallYuezi));
+        when(profileMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        CustomerImportPreviewDto preview = importService.preview(new byte[]{1}, "sample.xlsx", LocalDate.of(2026, 9, 25));
+
+        assertEquals(1, preview.getImportableCount());
+        assertEquals(0, preview.getErrorCount());
+        assertTrue(preview.getIssues().isEmpty());
+        assertEquals("小月子", preview.getDrafts().get(0).getParentPackageName());
+    }
+
+    /**
+     * 编号不落在任何启用编号池时按 PACKAGE_CONFIG_ERROR 报可读原因。
+     */
+    @Test
+    void previewShouldReportCodeOutsideEnabledPools() {
+        ParsedCustomer parsed = parsedCustomer();
+        parsed.setEffectiveCode("C65");
+        ParsedWorkbook workbook = new ParsedWorkbook();
+        workbook.setFileHash("hash");
+        workbook.setStructureValid(true);
+        workbook.setCustomerCount(1);
+        workbook.setCustomers(Collections.singletonList(parsed));
+        when(parser.parse(any(byte[].class), any(String.class), any(LocalDate.class))).thenReturn(workbook);
+        when(parentPackageMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(parentPackage()));
+        when(profileMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        CustomerImportPreviewDto preview = importService.preview(new byte[]{1}, "sample.xlsx", LocalDate.of(2026, 9, 25));
+
+        assertEquals(0, preview.getImportableCount());
+        assertEquals(1, preview.getErrorCount());
+        assertEquals(1, preview.getIssues().size());
+        assertEquals("PACKAGE_CONFIG_ERROR", preview.getIssues().get(0).getCategory());
+    }
+
+    /**
+     * 编号同时命中多个启用编号池时报告歧义，不静默选择其一。
+     */
+    @Test
+    void previewShouldReportAmbiguousPoolMatch() {
+        ParsedCustomer parsed = parsedCustomer();
+        parsed.setEffectiveCode("C65");
+        ParsedWorkbook workbook = new ParsedWorkbook();
+        workbook.setFileHash("hash");
+        workbook.setStructureValid(true);
+        workbook.setCustomerCount(1);
+        workbook.setCustomers(Collections.singletonList(parsed));
+        when(parser.parse(any(byte[].class), any(String.class), any(LocalDate.class))).thenReturn(workbook);
+        ParentPackage first = parentPackage();
+        first.setPoolPrefix("C");
+        first.setPoolStart(1);
+        first.setPoolEnd(1000);
+        ParentPackage second = parentPackage();
+        second.setId(2L);
+        second.setPackageName("试餐");
+        second.setPoolPrefix("C");
+        second.setPoolStart(60);
+        second.setPoolEnd(99);
+        when(parentPackageMapper.selectList(any(QueryWrapper.class))).thenReturn(Arrays.asList(first, second));
+        when(profileMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        CustomerImportPreviewDto preview = importService.preview(new byte[]{1}, "sample.xlsx", LocalDate.of(2026, 9, 25));
+
+        assertEquals(0, preview.getImportableCount());
+        assertEquals(1, preview.getErrorCount());
+        assertTrue(preview.getIssues().get(0).getMessage().contains("同时落在多个父套餐编号池内"));
+    }
+
     private ParsedCustomer parsedCustomer() {
         ParsedCustomer parsed = new ParsedCustomer();
         parsed.setSourceRows(Collections.singletonList(4));

@@ -33,12 +33,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -47,17 +44,6 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class CustomerProfileImportWriter {
-
-    private static final Pattern CODE_PATTERN = Pattern.compile("^([A-Za-z]+)(\\d+)$");
-    private static final Map<String, String> CODE_PREFIX_PACKAGE_NAME = new LinkedHashMap<>();
-
-    static {
-        CODE_PREFIX_PACKAGE_NAME.put("A", "月子餐");
-        CODE_PREFIX_PACKAGE_NAME.put("B", "孕期餐");
-        CODE_PREFIX_PACKAGE_NAME.put("C", "小月子餐");
-        CODE_PREFIX_PACKAGE_NAME.put("D", "营养餐");
-        CODE_PREFIX_PACKAGE_NAME.put("F", "营养餐");
-    }
 
     private final CustomerProfileMapper profileMapper;
     private final CustomerProfileAddressMapper addressMapper;
@@ -120,6 +106,9 @@ public class CustomerProfileImportWriter {
     /**
      * 锁定父套餐并确认它仍启用且编号位于当前编号池。
      *
+     * <p>套餐名称不参与校验，编号归属以套餐管理中的编号池配置为准；
+     * 防止预览到确认提交之间配置被修改导致编号错档。</p>
+     *
      * @param candidate 当前客户导入候选
      * @return 已锁定并通过校验的父套餐
      */
@@ -130,13 +119,10 @@ public class CustomerProfileImportWriter {
             throw new BadRequestException("父套餐已不存在或已停用，请重新预览");
         }
         String code = candidate.getDraft().getCustomerCode();
-        Matcher matcher = CODE_PATTERN.matcher(code == null ? "" : code);
-        if (!matcher.matches()) {
-            throw new BadRequestException("客户编号格式已变化，请重新预览");
+        if (code == null) {
+            throw new BadRequestException("客户编号缺失，请重新预览");
         }
-        String expectedName = CODE_PREFIX_PACKAGE_NAME.get(matcher.group(1).toUpperCase(Locale.ROOT));
-        if (expectedName == null || !expectedName.equals(parent.getPackageName())
-                || parent.getPoolPrefix() == null || parent.getPoolStart() == null || parent.getPoolEnd() == null
+        if (parent.getPoolPrefix() == null || parent.getPoolStart() == null || parent.getPoolEnd() == null
                 || !code.startsWith(parent.getPoolPrefix())) {
             throw new BadRequestException("父套餐编号池配置已变化，请重新预览");
         }

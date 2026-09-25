@@ -33,9 +33,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -64,19 +62,6 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
      * 允许上传的最大字节数，第三版工作簿约 24MB
      */
     private static final long MAX_UPLOAD_BYTES = 40L * 1024 * 1024;
-
-    /**
-     * 编号字母前缀到父套餐名称的映射，仅用于在编号池不匹配时给出可读的业务提示
-     */
-    private static final Map<String, String> CODE_PREFIX_PACKAGE_NAME = new LinkedHashMap<>();
-
-    static {
-        CODE_PREFIX_PACKAGE_NAME.put("A", "月子餐");
-        CODE_PREFIX_PACKAGE_NAME.put("B", "孕期餐");
-        CODE_PREFIX_PACKAGE_NAME.put("C", "小月子餐");
-        CODE_PREFIX_PACKAGE_NAME.put("D", "营养餐");
-        CODE_PREFIX_PACKAGE_NAME.put("F", "营养餐");
-    }
 
     private static final Pattern CODE_PATTERN = Pattern.compile("^([A-Za-z]+)(\\d+)$");
 
@@ -345,7 +330,8 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
     /**
      * 在启用的父套餐中匹配编号所属套餐。
      *
-     * <p>匹配规则：编号以套餐编号池前缀开头、数字部分落在池范围内，且结果唯一。</p>
+     * <p>匹配规则：编号以套餐编号池前缀开头、数字部分落在池范围内，且结果唯一。
+     * 套餐名称不参与匹配，编号归属完全以套餐管理中的编号池配置为准。</p>
      *
      * @param code 有效编号
      * @param enabledPackages 启用父套餐列表
@@ -355,19 +341,20 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
         if (isBlank(code)) {
             return null;
         }
-        Matcher matcher = CODE_PATTERN.matcher(code);
-        if (!matcher.matches()) {
-            return null;
-        }
-        String expectedName = CODE_PREFIX_PACKAGE_NAME.get(matcher.group(1).toUpperCase(Locale.ROOT));
-        if (expectedName == null) {
-            return null;
-        }
+        List<ParentPackage> hits = findPoolHits(code, enabledPackages);
+        return hits.size() == 1 ? hits.get(0) : null;
+    }
+
+    /**
+     * 收集编号池覆盖该编号的启用父套餐：前缀命中、剩余部分为纯数字且落在池区间内。
+     *
+     * @param code 有效编号
+     * @param enabledPackages 启用父套餐列表
+     * @return 编号池覆盖该编号的父套餐列表
+     */
+    private List<ParentPackage> findPoolHits(String code, List<ParentPackage> enabledPackages) {
         List<ParentPackage> hits = new ArrayList<>();
         for (ParentPackage parent : enabledPackages) {
-            if (!expectedName.equals(trim(parent.getPackageName()))) {
-                continue;
-            }
             if (isBlank(parent.getPoolPrefix()) || parent.getPoolStart() == null || parent.getPoolEnd() == null) {
                 continue;
             }
@@ -382,71 +369,51 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
             try {
                 number = Integer.parseInt(numberPart);
             } catch (NumberFormatException e) {
+                // 超长数字不可能落在 Integer 编号池范围内，保留可读的不匹配原因
                 continue;
             }
             if (number >= parent.getPoolStart() && number <= parent.getPoolEnd()) {
                 hits.add(parent);
             }
         }
-        return hits.size() == 1 ? hits.get(0) : null;
+        return hits;
     }
 
     /**
      * 生成编号与父套餐编号池不匹配的可读原因。
+     *
+     * <p>口径与 {@link #matchParentPackage} 一致：只看启用父套餐的编号池前缀与区间，
+     * 套餐名称仅用于提示文案，不参与匹配。</p>
      *
      * @param code 有效编号
      * @param enabledPackages 启用父套餐列表
      * @return 原因描述
      */
     private String describePackageMismatch(String code, List<ParentPackage> enabledPackages) {
-        Matcher matcher = code == null ? null : CODE_PATTERN.matcher(code);
-        if (matcher == null || !matcher.matches()) {
+        if (isBlank(code)) {
+            return "编号缺失，无法匹配父套餐编号池";
+        }
+        Matcher matcher = CODE_PATTERN.matcher(code);
+        if (!matcher.matches()) {
             return "编号「" + code + "」不是「字母前缀+数字」格式，无法匹配父套餐编号池";
         }
-        String letters = matcher.group(1).toUpperCase(Locale.ROOT);
-        String expectedName = CODE_PREFIX_PACKAGE_NAME.get(letters);
-        List<ParentPackage> hits = new ArrayList<>();
-        for (ParentPackage parent : enabledPackages) {
-            if (isBlank(parent.getPoolPrefix()) || parent.getPoolStart() == null || parent.getPoolEnd() == null) {
-                continue;
-            }
-            if (code.startsWith(parent.getPoolPrefix())) {
-                String numberPart = code.substring(parent.getPoolPrefix().length());
-                if (numberPart.matches("\\d+")) {
-                    // 与 matchParentPackage 保持同一口径：必须同时落在数值区间内
-                    try {
-                        int number = Integer.parseInt(numberPart);
-                        if (number >= parent.getPoolStart() && number <= parent.getPoolEnd()) {
-                            hits.add(parent);
-                        }
-                    } catch (NumberFormatException ignored) {
-                        // 超长数字不可能落在 Integer 编号池范围内，保留可读的不匹配原因。
-                    }
-                }
-            }
-        }
+        List<ParentPackage> hits = findPoolHits(code, enabledPackages);
         if (hits.size() > 1) {
             return "编号「" + code + "」同时落在多个父套餐编号池内（"
                     + hits.stream().map(this::describePool).collect(Collectors.joining("、"))
                     + "），无法唯一确认套餐，请业务确认";
         }
-        if (expectedName == null) {
-            return "编号前缀「" + letters + "」没有对应的父套餐映射，且不落在任何启用套餐编号池内，请业务确认";
-        }
-        List<ParentPackage> named = enabledPackages.stream()
-                .filter(parent -> expectedName.equals(trim(parent.getPackageName())))
+        List<ParentPackage> prefixMatched = enabledPackages.stream()
+                .filter(parent -> !isBlank(parent.getPoolPrefix())
+                        && code.startsWith(parent.getPoolPrefix())
+                        && code.substring(parent.getPoolPrefix().length()).matches("\\d+"))
                 .collect(Collectors.toList());
-        if (named.isEmpty()) {
-            return "系统中没有启用且名称匹配「" + expectedName + "」的父套餐，编号「" + code + "」无法归属";
+        if (!prefixMatched.isEmpty()) {
+            return "编号「" + code + "」不在父套餐编号池 "
+                    + prefixMatched.stream().map(this::describePoolWithName).collect(Collectors.joining("、"))
+                    + " 内";
         }
-        if (named.size() > 1) {
-            return "系统中存在多个启用且名称匹配「" + expectedName + "」的父套餐，无法唯一匹配";
-        }
-        ParentPackage expected = named.get(0);
-        if (isBlank(expected.getPoolPrefix()) || expected.getPoolStart() == null || expected.getPoolEnd() == null) {
-            return "父套餐「" + expectedName + "」未配置编号池，无法校验编号「" + code + "」";
-        }
-        return "编号「" + code + "」不在父套餐「" + expectedName + "」的编号池 " + describePool(expected) + " 内";
+        return "编号「" + code + "」不落在任何启用父套餐的编号池内，请先在套餐管理中配置对应编号池";
     }
 
     /**
@@ -460,6 +427,17 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
         String start = parent.getPoolPrefix() + String.format("%0" + width + "d", parent.getPoolStart());
         String end = parent.getPoolPrefix() + String.format("%0" + width + "d", parent.getPoolEnd());
         return start + "～" + end;
+    }
+
+    /**
+     * 描述编号池区间并附上套餐名称，用于面向操作人的提示文案。
+     *
+     * @param parent 父套餐
+     * @return 形如「C001～C1000（小月子）」的描述
+     */
+    private String describePoolWithName(ParentPackage parent) {
+        String name = trim(parent.getPackageName());
+        return describePool(parent) + (isBlank(name) ? "" : "（" + name + "）");
     }
 
     /**
