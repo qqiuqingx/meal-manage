@@ -132,12 +132,6 @@
             </template>
           </el-table-column>
         </el-table>
-        <el-table v-if="importPreview.issues && importPreview.issues.length" :data="importPreview.issues" size="mini" border max-height="160" style="margin-top: 12px;">
-          <el-table-column label="类别" prop="category" width="150" />
-          <el-table-column label="来源行" prop="sourceRow" width="90" />
-          <el-table-column label="客户编号" prop="customerCode" width="110" />
-          <el-table-column label="说明" prop="message" min-width="300" />
-        </el-table>
       </template>
 
       <template v-if="importResult">
