@@ -34,8 +34,8 @@ public interface NumberPoolMapper {
     ParentPackage selectForUpdate(@Param("packageId") Long packageId);
 
     /**
-     * 查询 [pool_start, pool_end] 范围内已使用（且有进行中订单）的编号.
-     * INNER JOIN customer_order WHERE status=1 — 只有进行中订单才占住编号.
+     * 查询 [pool_start, pool_end] 范围内被未完订单（进行中或暂停）使用的编号.
+     * INNER JOIN customer_order WHERE status IN (1,4) — 暂停订单仍占住编号.
      * 结果集按编号升序，用于在 Java 中扫描最小可用号.
      */
     List<String> findUsedCodesInRange(

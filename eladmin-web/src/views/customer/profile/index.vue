@@ -9,7 +9,150 @@
         <rrOperation />
       </div>
       <crudOperation :permission="permission" />
+      <el-button
+        v-if="checkPer(['admin', 'customerProfile:import'])"
+        size="small"
+        type="primary"
+        icon="el-icon-upload2"
+        @click="openCustomerImport"
+      >
+        客户 Excel 导入
+      </el-button>
     </div>
+
+    <el-dialog
+      title="客户批量导入"
+      :visible.sync="importDialogVisible"
+      width="1050px"
+      append-to-body
+      :close-on-click-modal="false"
+    >
+      <el-alert
+        title="先预览并核对编号池、地址和逐餐计划。原审计快照截至 2026-09-24；导入日期晚于快照或 9 月 25—30 日已有送餐时，必须使用更新后的业务工作簿重新预览。确认提交会真实创建客户；有待导入餐数时还会创建首单及未来计划。导入前请完成业务备份。"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px;"
+      />
+      <el-row :gutter="16" type="flex" align="middle" style="margin-bottom: 14px;">
+        <el-col :span="10">
+          <el-upload
+            ref="customerImportUpload"
+            action=""
+            accept=".xlsx"
+            :auto-upload="false"
+            :limit="1"
+            :file-list="importFileList"
+            :on-change="handleImportFileChange"
+            :on-remove="handleImportFileRemove"
+            :on-exceed="handleImportFileExceed"
+          >
+            <el-button size="small" icon="el-icon-folder-opened">选择 xlsx 文件</el-button>
+            <div slot="tip" class="el-upload__tip">最多 40MB。预览和提交使用同一文件及导入日期。</div>
+          </el-upload>
+        </el-col>
+        <el-col :span="7">
+          <el-date-picker
+            v-model="importDate"
+            type="date"
+            value-format="yyyy-MM-dd"
+            placeholder="实际导入日期"
+            size="small"
+            style="width: 100%;"
+            @change="resetImportPreview"
+          />
+        </el-col>
+        <el-col :span="7">
+          <el-button
+            type="primary"
+            size="small"
+            :disabled="!importFile || !importDate || importLoading || importConfirmLoading"
+            :loading="importLoading"
+            @click="previewCustomerImport"
+          >
+            生成只读预览
+          </el-button>
+        </el-col>
+      </el-row>
+
+      <template v-if="importPreview">
+        <el-alert
+          v-if="!importPreview.structureValid"
+          title="工作簿结构无效，无法提交。请按问题列表修正模板后重新上传。"
+          type="error"
+          :closable="false"
+          show-icon
+        />
+        <div v-else class="customer-import-summary">
+          <span>文件摘要：{{ importPreview.fileHash }}</span>
+          <span>数据行：{{ importPreview.dataRowCount }}</span>
+          <span>客户：{{ importPreview.customerCount }}</span>
+          <span>可新增：{{ importPreview.importableCount }}</span>
+          <span>已存在：{{ importPreview.alreadyExistsCount }}</span>
+          <span>资料错误：{{ importPreview.errorCount }}</span>
+          <span>未来份数：{{ importPreview.futureMealQuantity }}</span>
+        </div>
+        <el-table :data="importPreview.drafts" size="mini" border max-height="300" style="margin-top: 12px;">
+          <el-table-column label="来源行" width="100">
+            <template slot-scope="scope">{{ (scope.row.sourceRows || []).join('、') }}</template>
+          </el-table-column>
+          <el-table-column label="客户编号" prop="customerCode" width="110" />
+          <el-table-column label="手机号" prop="phoneMasked" width="120" />
+          <el-table-column label="父套餐" prop="parentPackageName" width="120" />
+          <el-table-column label="午晚餐数" prop="lunchDinnerCount" width="95" />
+          <el-table-column label="未来计划" width="90">
+            <template slot-scope="scope">{{ scope.row.futureMealCount || 0 }} 份</template>
+          </el-table-column>
+          <el-table-column label="订单状态" width="90">
+            <template slot-scope="scope">{{ scope.row.lunchDinnerCount === 0 ? '-' : (scope.row.paused ? '暂停 / 待通知' : '进行中') }}</template>
+          </el-table-column>
+          <el-table-column label="问题与提示" min-width="260">
+            <template slot-scope="scope">
+              <div v-for="(error, index) in scope.row.errors" :key="'e' + index" class="customer-import-error">{{ error }}</div>
+              <div v-for="(warning, index) in scope.row.warnings" :key="'w' + index" class="customer-import-warning">{{ warning }}</div>
+              <span v-if="(!scope.row.errors || !scope.row.errors.length) && (!scope.row.warnings || !scope.row.warnings.length)">-</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-table v-if="importPreview.issues && importPreview.issues.length" :data="importPreview.issues" size="mini" border max-height="160" style="margin-top: 12px;">
+          <el-table-column label="类别" prop="category" width="150" />
+          <el-table-column label="来源行" prop="sourceRow" width="90" />
+          <el-table-column label="客户编号" prop="customerCode" width="110" />
+          <el-table-column label="说明" prop="message" min-width="300" />
+        </el-table>
+      </template>
+
+      <template v-if="importResult">
+        <el-divider content-position="left">提交结果</el-divider>
+        <div class="customer-import-summary">
+          <span>新建：{{ importResult.createdCount }}</span>
+          <span>已存在：{{ importResult.alreadyExistsCount }}</span>
+          <span>跳过：{{ importResult.skippedCount }}</span>
+          <span>失败：{{ importResult.failedCount }}</span>
+          <el-button size="mini" :disabled="!hasImportErrors" @click="downloadImportErrors">下载异常清单</el-button>
+        </div>
+        <el-table :data="importResult.results" size="mini" border max-height="220" style="margin-top: 10px;">
+          <el-table-column label="来源行" width="100">
+            <template slot-scope="scope">{{ (scope.row.sourceRows || []).join('、') }}</template>
+          </el-table-column>
+          <el-table-column label="客户编号" prop="customerCode" width="110" />
+          <el-table-column label="结果" prop="status" width="125" />
+          <el-table-column label="说明" prop="message" min-width="300" />
+        </el-table>
+      </template>
+
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="importDialogVisible = false">关闭</el-button>
+        <el-button
+          type="danger"
+          :loading="importConfirmLoading"
+          :disabled="!canConfirmImport"
+          @click="confirmCustomerImport"
+        >
+          确认提交 {{ importPreview ? importPreview.importableCount : 0 }} 位客户
+        </el-button>
+      </span>
+    </el-dialog>
 
     <!--表格渲染-->
     <el-table
@@ -143,6 +286,13 @@
           <el-col :span="isTrialCreateMode() ? 16 : 8">
             <el-form-item label="手机号" prop="phone">
               <el-input v-model="form.phone" style="width: 100%;" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="配送电话信息">
+              <el-input v-model="form.deliveryPhoneInfo" type="textarea" :rows="2" placeholder="配送信息中的电话，可填写多条；与客户手机号分别保存" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -424,6 +574,7 @@ const defaultForm = {
   customerCode: null,
   customerName: null,
   phone: null,
+  deliveryPhoneInfo: null,
   gestationalWeek: null,
   allergyTags: [],
   excludedDishIds: [],
@@ -523,7 +674,15 @@ export default {
       intakeDialogVisible: false,
       intakeText: '',
       intakeParsing: false,
-      intakeResult: null
+      intakeResult: null,
+      importDialogVisible: false,
+      importFile: null,
+      importFileList: [],
+      importDate: null,
+      importLoading: false,
+      importConfirmLoading: false,
+      importPreview: null,
+      importResult: null
     }
   },
   computed: {
@@ -552,9 +711,130 @@ export default {
         this.currentFirstOrderParentPackage &&
         this.currentFirstOrderParentPackage.packageName &&
         this.currentFirstOrderParentPackage.packageName.includes('试餐')
+    },
+    canConfirmImport() {
+      return Boolean(
+        this.importPreview &&
+        this.importPreview.structureValid &&
+        Number(this.importPreview.importableCount) > 0 &&
+        this.importFile &&
+        this.importDate &&
+        !this.importLoading &&
+        !this.importConfirmLoading &&
+        !this.importResult
+      )
+    },
+    hasImportErrors() {
+      return Boolean(this.importResult &&
+        (Number(this.importResult.failedCount) > 0 || Number(this.importResult.skippedCount) > 0))
     }
   },
   methods: {
+    openCustomerImport() {
+      this.importFile = null
+      this.importFileList = []
+      this.importDate = this.currentDateString()
+      this.importPreview = null
+      this.importResult = null
+      this.importDialogVisible = true
+    },
+    currentDateString() {
+      const today = new Date()
+      const month = String(today.getMonth() + 1).padStart(2, '0')
+      const day = String(today.getDate()).padStart(2, '0')
+      return `${today.getFullYear()}-${month}-${day}`
+    },
+    handleImportFileChange(file, fileList) {
+      if (!file || !file.raw) return
+      if (!/\.xlsx$/i.test(file.name || '')) {
+        this.$message.error('请上传 xlsx 格式的客户用餐计划表')
+        if (this.$refs.customerImportUpload) this.$refs.customerImportUpload.clearFiles()
+        this.importFile = null
+        this.importFileList = []
+        this.resetImportPreview()
+        return
+      }
+      if (file.raw.size > 40 * 1024 * 1024) {
+        this.$message.error('文件不能超过 40MB')
+        if (this.$refs.customerImportUpload) this.$refs.customerImportUpload.clearFiles()
+        this.importFile = null
+        this.importFileList = []
+        this.resetImportPreview()
+        return
+      }
+      this.importFile = file.raw
+      this.importFileList = [file]
+      this.resetImportPreview()
+    },
+    handleImportFileRemove() {
+      this.importFile = null
+      this.importFileList = []
+      this.resetImportPreview()
+    },
+    handleImportFileExceed() {
+      this.$message.warning('请先移除当前文件，再选择新的工作簿')
+    },
+    resetImportPreview() {
+      this.importPreview = null
+      this.importResult = null
+    },
+    async previewCustomerImport() {
+      if (!this.importFile || !this.importDate) return
+      this.importLoading = true
+      this.importResult = null
+      try {
+        const response = await profileApi.previewCustomerImport(this.importFile, this.importDate)
+        this.importPreview = response.data || response
+      } catch (e) {
+        this.importPreview = null
+        this.$message.error((e.message || '') || '工作簿预览失败')
+      } finally {
+        this.importLoading = false
+      }
+    },
+    async confirmCustomerImport() {
+      if (!this.canConfirmImport) return
+      try {
+        await this.$confirm(
+          `将按 ${this.importDate} 为 ${this.importPreview.importableCount} 位客户创建档案；有待导入餐数时还会创建首单和未来计划。请确认工作簿反映当前配送情况，并已核对编号池配置和业务备份。`,
+          '确认批量导入',
+          { type: 'warning', confirmButtonText: '确认提交', cancelButtonText: '返回预览' }
+        )
+      } catch (e) {
+        return
+      }
+      this.importConfirmLoading = true
+      try {
+        const response = await profileApi.confirmCustomerImport(
+          this.importFile, this.importPreview.fileHash, this.importDate)
+        this.importResult = response.data || response
+        this.importPreview = this.importResult.preview || this.importPreview
+        if (Number(this.importResult.createdCount) > 0) {
+          this.crud.refresh()
+        }
+        this.$message.success(`导入处理完成：新建 ${this.importResult.createdCount} 位，失败 ${this.importResult.failedCount} 位`)
+      } catch (e) {
+        this.$message.error((e.message || '') || '客户批量导入失败')
+      } finally {
+        this.importConfirmLoading = false
+      }
+    },
+    downloadImportErrors() {
+      if (!this.importResult) return
+      const rows = (this.importResult.results || []).filter(item => item.status === 'FAILED' || item.status === 'SKIPPED')
+      const escapeCsv = value => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`
+      const lines = [['来源行', '客户编号', '结果', '说明']]
+        .concat(rows.map(item => [
+          (item.sourceRows || []).join('、'), item.customerCode, item.status, item.message
+        ]))
+      const csv = '\uFEFF' + lines.map(row => row.map(escapeCsv).join(',')).join('\r\n')
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `客户导入异常-${this.importDate}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+    },
     isTrialCreateMode() {
       return !!this.isTrialCreate
     },
@@ -956,6 +1236,23 @@ export default {
 }
 .head-container .filter-item {
   margin-right: 10px;
+}
+.customer-import-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin: 10px 0;
+  color: #606266;
+  font-size: 12px;
+}
+.customer-import-error {
+  color: #f56c6c;
+  line-height: 1.5;
+}
+.customer-import-warning {
+  color: #e6a23c;
+  line-height: 1.5;
 }
 .dialog-top-actions {
   display: flex;

@@ -39,7 +39,7 @@
             <div class="quantity-grid-order">
               <div class="quantity-grid-order__id">订单 {{ row.orderId }}</div>
               <el-tag :type="orderStatusTagType(row.status)" size="mini">
-                {{ orderStatusText(row.status) }}
+                {{ orderStatusText(row.status, row.mealType) }}
               </el-tag>
               <div class="quantity-grid-order__balance">剩余 {{ row.remainingMealCount || 0 }} / {{ row.mealCount || 0 }} 份</div>
             </div>
@@ -201,7 +201,7 @@ export default {
       return this.cellMap[this.cellKey(order.orderId, date, mealType)] || null
     },
     isEditable(order, date, mealType) {
-      return Boolean(this.getCell(order, date, mealType)) && Number(order.status) === 1
+      return Boolean(this.getCell(order, date, mealType)) && Number(order.status) === 1 && Boolean(order.mealType)
     },
     cellClass(order, date, mealType) {
       const cell = this.getCell(order, date, mealType)
@@ -229,9 +229,9 @@ export default {
     mealTypeText(mealType) {
       return mealType === 'LUNCH' ? '午餐' : '晚餐'
     },
-    orderStatusText(status) {
+    orderStatusText(status, mealType) {
       const statusNumber = Number(status)
-      if (statusNumber === 4) return '待通知'
+      if (statusNumber === 4 || !mealType) return '待通知'
       if (statusNumber === 1) return '进行中'
       return '不可排餐'
     },

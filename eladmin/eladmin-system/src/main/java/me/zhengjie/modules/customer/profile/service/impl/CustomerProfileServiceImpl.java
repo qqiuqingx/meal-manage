@@ -537,7 +537,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     }
 
     /**
-     * 将当前有效午晚餐订单转换为日历订单摘要，分别呈现购买数与核销后余额。
+     * 将当前有效午晚餐订单转换为日历订单摘要，分别呈现购买数与扣除历史及实际核销后的余额。
      *
      * @param orders 客户用餐统计日历可见的未完订单
      * @param verifiedCountMap 订单餐次核销数量
@@ -564,7 +564,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             summary.setStartDate(order.getStartDate());
             summary.setEndDate(order.getEndDate());
             summary.setMealCount(mealCount);
-            summary.setRemainingMealCount(Math.max(mealCount - verifiedCount, 0));
+            summary.setRemainingMealCount(Math.max(mealCount - safeInt(order.getImportedVerifiedCount())
+                    - verifiedCount, 0));
             int breakfastCount = safeInt(order.getBreakfastCount());
             int breakfastVerified = getVerifiedCount(verifiedCountMap, order.getId(), "BREAKFAST");
             summary.setBreakfastCount(breakfastCount);
@@ -743,6 +744,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 if (findUnchangedPausedQuantityOverride(customerId, dto, recordDate, quantity) != null) {
                     continue;
                 }
+                if (findUnchangedUnspecifiedMealOverride(customerId, dto, recordDate, quantity) != null) {
+                    continue;
+                }
 
                 CustomerOrder order = resolveManualAdditionOrder(customerId, dto.getOrderId(), recordDate, dto.getMealType());
                 dto.setOrderId(order.getId());
@@ -791,10 +795,13 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             }
 
             Map<String, Integer> orderVerified = verifiedCounts.getOrDefault(order.getId(), Collections.emptyMap());
-            int verifiedTotal = safeInt(orderVerified.get("LUNCH")) + safeInt(orderVerified.get("DINNER"));
+            int actualVerifiedTotal = safeInt(orderVerified.get("LUNCH"))
+                    + safeInt(orderVerified.get("DINNER"));
+            int verifiedTotal = safeInt(order.getImportedVerifiedCount()) + actualVerifiedTotal;
             int verifiedOutsideMonth = Math.max(verifiedTotal - monthVerified, 0);
             int unverifiedScheduledOutsideMonth = Math.max(
-                    allScheduledCounts.getOrDefault(order.getId(), 0) - verifiedTotal - (monthGenerated - monthVerified), 0);
+                    allScheduledCounts.getOrDefault(order.getId(), 0) - actualVerifiedTotal
+                            - (monthGenerated - monthVerified), 0);
             int availableForMonth = Math.max(safeInt(order.getLunchDinnerCount())
                     - verifiedOutsideMonth - unverifiedScheduledOutsideMonth, 0);
             if (monthQuantity > availableForMonth
@@ -1161,6 +1168,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         detail.setCustomerCode(profile.getCustomerCode());
         detail.setCustomerName(profile.getCustomerName());
         detail.setPhone(profile.getPhone());
+        detail.setDeliveryPhoneInfo(profile.getDeliveryPhoneInfo());
         detail.setGestationalWeek(profile.getGestationalWeek());
         detail.setAllergyTags(profile.getAllergyTags());
         detail.setExcludedDishIds(profile.getExcludedDishIds());
@@ -1198,6 +1206,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profile.setCustomerCode(customerCode);
         profile.setCustomerName(dto.getCustomerName());
         profile.setPhone(dto.getPhone());
+        profile.setDeliveryPhoneInfo(dto.getDeliveryPhoneInfo());
         profile.setGestationalWeek(dto.getGestationalWeek());
         profile.setAllergyTags(dto.getAllergyTags());
         profile.setExcludedDishIds(dto.getExcludedDishIds());
@@ -1231,6 +1240,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
         profile.setCustomerName(dto.getCustomerName());
         profile.setPhone(dto.getPhone());
+        if (dto.getDeliveryPhoneInfo() != null) {
+            profile.setDeliveryPhoneInfo(dto.getDeliveryPhoneInfo());
+        }
         profile.setGestationalWeek(dto.getGestationalWeek());
         profile.setAllergyTags(dto.getAllergyTags());
         profile.setExcludedDishIds(dto.getExcludedDishIds());
@@ -1277,7 +1289,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         }
 
         if (!blockedCustomers.isEmpty()) {
-            throw new BadRequestException("以下客户存在进行中的订单，无法删除：" + String.join("、", blockedCustomers));
+            throw new BadRequestException("以下客户存在进行中或暂停的订单，无法删除：" + String.join("、", blockedCustomers));
         }
 
         // Step 2: 级联删除
@@ -2044,7 +2056,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             row.setSoupLabel(orders.stream().anyMatch(order -> safeInt(order.getSoupCount()) > 0) ? "含汤" : "");
             row.setDeliveryInfo(buildLunchDinnerDeliveryInfo(orders));
             row.setMealCount(totalCount);
-            row.setRemainingMealCount(Math.max(totalCount - verifiedCount, 0));
+            int importedVerifiedCount = orders.stream()
+                    .mapToInt(order -> safeInt(order.getImportedVerifiedCount())).sum();
+            row.setRemainingMealCount(Math.max(totalCount - importedVerifiedCount - verifiedCount, 0));
         }
 
         row.setPurchaseDateText(formatDisplayDate(orders.stream()
@@ -2151,9 +2165,15 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         }
     }
 
+    /**
+     * 将午晚餐订单餐次转换为客户统计页文案。
+     *
+     * @param mealType 订单餐次编码
+     * @return 餐次名称；空值表示待通知
+     */
     private String mapLunchDinnerMealTypeLabel(String mealType) {
         if (StringUtils.isBlank(mealType)) {
-            return "";
+            return "待通知";
         }
         switch (mealType) {
             case "ALL":
@@ -2298,6 +2318,15 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 keepIds.add(pausedAddition.getId());
                 continue;
             }
+            CustomerMealScheduleAddition unspecifiedAddition = findUnchangedUnspecifiedMealOverride(
+                    customerId, dto, recordDate, quantity);
+            if (unspecifiedAddition != null) {
+                if (unspecifiedAddition.getId() == null) {
+                    throw new BadRequestException("未指定餐次的订单只能查看来源计划，请先确认餐次后再修改");
+                }
+                keepIds.add(unspecifiedAddition.getId());
+                continue;
+            }
             SCHEDULE_ADJUSTMENT_LOG.info("客户排餐日历调整人工新增校验开始 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}",
                     customerId, dto.getOrderId(), recordDate, dto.getMealType());
             CustomerOrder manualOrder = resolveManualAdditionOrder(customerId, dto.getOrderId(), recordDate, dto.getMealType());
@@ -2423,6 +2452,37 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     }
 
     /**
+     * 对未指定餐次的订单仅保留来源计划，餐次确认前不允许人工新增或调整份数。
+     *
+     * @param customerId 当前客户ID
+     * @param dto 数量覆盖请求
+     * @param recordDate 排餐日期
+     * @param quantity 目标份数
+     * @return 未变化的现存导入计划覆盖；非未指定餐次订单返回 null
+     */
+    private CustomerMealScheduleAddition findUnchangedUnspecifiedMealOverride(Long customerId,
+                                                                               CustomerMealScheduleAdditionDto dto,
+                                                                               LocalDate recordDate,
+                                                                               int quantity) {
+        if (dto.getOrderId() == null) {
+            return null;
+        }
+        CustomerOrder order = customerOrderMapper.selectById(dto.getOrderId());
+        if (order == null || !Objects.equals(order.getCustomerId(), customerId)
+                || StringUtils.isNotBlank(order.getMealType())) {
+            return null;
+        }
+        CustomerMealScheduleAddition existing = customerMealScheduleAdditionMapper
+                .selectActiveByOrderDateMeal(dto.getOrderId(), recordDate, dto.getMealType());
+        if (existing != null
+                && Objects.equals(existing.getQuantity() == null ? 1 : existing.getQuantity(), quantity)
+                && Objects.equals(existing.getSoupQuantity(), dto.getSoupQuantity())) {
+            return existing;
+        }
+        throw new BadRequestException("订单餐次尚未指定，只能查看来源计划；请先确认午餐或晚餐");
+    }
+
+    /**
      * 判断订单是否可用于指定人工新增餐次。
      */
     private boolean isManualAdditionOrderUsable(CustomerOrder order, Long customerId, LocalDate recordDate, String mealType) {
@@ -2441,6 +2501,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
      * 校验人工新增绑定订单是否属于当前客户且餐次类型可用。
      */
     private void validateManualAdditionOrder(Long customerId, CustomerOrder order, LocalDate recordDate, String mealType) {
+        if (StringUtils.isBlank(order.getMealType())) {
+            throw new BadRequestException("订单餐次尚未指定，请先确认午餐或晚餐");
+        }
         if (order.getStatus() == null || order.getStatus() != 1) {
             SCHEDULE_ADJUSTMENT_LOG.warn("客户排餐日历调整人工新增校验失败 - 客户ID: {}, 订单ID: {}, 日期: {}, 餐次: {}, 订单状态: {}, 原因: 非进行中订单",
                     customerId, order.getId(), recordDate, mealType, order.getStatus());
@@ -2656,6 +2719,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         }
     }
 
+    /**
+     * 汇总客户有效订单的购买数与剩余数，午晚餐剩余数扣除导入前已核销基数。
+     *
+     * @param profile 待填充统计字段的客户档案
+     */
     private void fillLatestOrderInfo(CustomerProfile profile) {
         List<CustomerOrder> activeOrders = customerOrderMapper.findActiveOrdersByCustomerId(profile.getId());
         if (activeOrders != null && !activeOrders.isEmpty()) {
@@ -2689,7 +2757,10 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                 }
             }
             profile.setRemainingBreakfastCount(Math.max(totalBreakfast - breakfastVerified, 0));
-            profile.setRemainingLunchDinnerCount(Math.max(totalLunchDinner - lunchDinnerVerified, 0));
+            int importedVerifiedCount = activeOrders.stream()
+                    .mapToInt(order -> safeInt(order.getImportedVerifiedCount())).sum();
+            profile.setRemainingLunchDinnerCount(Math.max(totalLunchDinner - importedVerifiedCount
+                    - lunchDinnerVerified, 0));
 
             // 填充送餐模式（从最新订单获取）
             CustomerOrder latestOrder = customerOrderMapper.findLatestByCustomerId(profile.getId());

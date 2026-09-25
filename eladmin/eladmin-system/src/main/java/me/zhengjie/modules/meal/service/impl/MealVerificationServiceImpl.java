@@ -144,7 +144,7 @@ public class MealVerificationServiceImpl implements MealVerificationService {
             price = order.getBreakfastPrice();
         }
 
-        if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+        if (price == null || price.compareTo(BigDecimal.ZERO) < 0) {
             throw new BadRequestException("订单单价配置异常，无法核销");
         }
 
@@ -266,6 +266,12 @@ public class MealVerificationServiceImpl implements MealVerificationService {
         }
     }
 
+    /**
+     * 将订单状态码转换为核销错误提示文案。
+     *
+     * @param status 订单状态码
+     * @return 状态名称；未识别时返回「未知」
+     */
     private String getStatusDesc(Integer status) {
         if (status == null) {
             return "未知";
@@ -279,6 +285,8 @@ public class MealVerificationServiceImpl implements MealVerificationService {
                 return "已完成";
             case 3:
                 return "已退餐";
+            case 4:
+                return "暂停";
             default:
                 return "未知";
         }

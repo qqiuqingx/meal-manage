@@ -51,9 +51,9 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
     CustomerOrder findLatestByCustomerId(@Param("customerId") Long customerId);
 
     /**
-     * 根据客户ID查询所有有效订单（status=1）
+     * 根据客户ID查询有效未完订单（status=1 或 status=4）
      * @param customerId 客户ID
-     * @return 有效订单列表，按成交时间倒序
+     * @return 进行中或暂停订单列表，按成交时间倒序
      */
     List<CustomerOrder> findActiveOrdersByCustomerId(@Param("customerId") Long customerId);
 
@@ -96,9 +96,9 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
                            @Param("excludeId") Long excludeId);
 
     /**
-     * 批量统计每个客户的进行中订单数量（status=1）
+     * 批量统计每个客户的有效未完订单数量（status=1 或 status=4）
      * @param customerIds 客户ID集合
-     * @return Map: key=customerId, value=有效订单数
+     * @return Map: key=customerId, value=进行中或暂停订单数
      */
     List<java.util.Map<String, Object>> countActiveOrdersByCustomerIds(@Param("customerIds") java.util.Set<Long> customerIds);
 

@@ -17,6 +17,7 @@
         <result column="breakfast_price" property="breakfastPrice"/>
         <result column="lunch_dinner_price" property="lunchDinnerPrice"/>
         <result column="verified_count" property="verifiedCount"/>
+        <result column="imported_verified_count" property="importedVerifiedCount"/>
         <result column="verified_amount" property="verifiedAmount"/>
         <result column="meal_balance" property="mealBalance"/>
         <result column="remaining_count" property="remainingCount"/>
@@ -205,18 +206,18 @@
         LIMIT #{limit}
     </select>
 
-    <!-- 根据客户ID查询最新订单（按成交时间倒序，只查询进行中的订单） -->
+    <!-- 根据客户ID查询最新有效未完订单（进行中或暂停） -->
     <select id="findLatestByCustomerId" resultMap="BaseResultMap">
         SELECT * FROM customer_order
-        WHERE customer_id = #{customerId} AND status = 1
+        WHERE customer_id = #{customerId} AND status IN (1, 4)
         ORDER BY deal_time DESC
         LIMIT 1
     </select>
 
-    <!-- 根据客户ID查询所有有效订单（status=1，按成交时间倒序） -->
+    <!-- 根据客户ID查询有效未完订单（进行中或暂停，按成交时间倒序） -->
     <select id="findActiveOrdersByCustomerId" resultMap="BaseResultMap">
         SELECT * FROM customer_order
-        WHERE customer_id = #{customerId} AND status = 1
+        WHERE customer_id = #{customerId} AND status IN (1, 4)
         ORDER BY deal_time DESC
     </select>
 
@@ -255,7 +256,7 @@
         SELECT COUNT(*)
         FROM customer_order
         WHERE customer_id = #{customerId}
-          AND status = 1
+          AND status IN (1, 4)
           AND start_date &gt;= #{startDate}
         <if test="excludeId != null">
             AND id != #{excludeId}
@@ -267,8 +268,8 @@
         SELECT COUNT(*)
         FROM customer_order
         WHERE customer_id = #{customerId}
-          AND meal_type = 'ALL'
-          AND status =1
+          AND (meal_type = 'ALL' OR meal_type IS NULL)
+          AND status IN (1, 4)
           AND start_date &gt;= #{startDate}
         <if test="excludeId != null">
             AND id != #{excludeId}
@@ -281,7 +282,7 @@
         FROM customer_order
         WHERE customer_id = #{customerId}
           AND meal_type = #{mealType}
-          AND status =1
+          AND status IN (1, 4)
           AND start_date &gt;= #{startDate}
         <if test="excludeId != null">
             AND id != #{excludeId}
@@ -296,7 +297,7 @@
         <foreach collection="customerIds" item="id" open="(" separator="," close=")">
             #{id}
         </foreach>
-        AND status = 1
+        AND status IN (1, 4)
         GROUP BY customer_id
     </select>
 
@@ -435,6 +436,7 @@
         SET status = 3,
             update_time = NOW()
         WHERE id = #{orderId}
+          AND status IN (1, 4)
     </update>
 
 </mapper>

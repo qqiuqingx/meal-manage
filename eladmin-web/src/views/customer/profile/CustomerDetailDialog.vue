@@ -254,6 +254,7 @@ export default {
         case 0: return 'danger'
         case 1: return 'warning'
         case 2: return 'success'
+        case 4: return 'warning'
         default: return 'info'
       }
     },
@@ -263,26 +264,34 @@ export default {
         case 0: return '已取消'
         case 1: return '进行中'
         case 2: return '已完成'
+        case 3: return '已退餐'
+        case 4: return '暂停'
         default: return '未知'
       }
     },
+    /**
+     * 将订单送餐日期的字符串数组或带餐次对象数组格式化为日期文本。
+     * @param {string|Array} value 订单接口返回的送餐日期 JSON 或数组
+     * @returns {string} 日期列表；无可用日期时返回占位符
+     */
     formatDeliveryDates(value) {
       if (!value) return '-'
-      if (Array.isArray(value)) {
-        return value.length ? value.join(', ') : '-'
-      }
       if (typeof value === 'string') {
         try {
-          const parsed = JSON.parse(value)
-          return Array.isArray(parsed) && parsed.length ? parsed.join(', ') : '-'
+          value = JSON.parse(value)
         } catch (e) {
           return value
         }
       }
-      return '-'
+      if (!Array.isArray(value)) return '-'
+      const dates = value
+        .map(item => typeof item === 'string' ? item : item && item.date)
+        .filter(date => typeof date === 'string' && date.trim())
+      return dates.length ? dates.join(', ') : '-'
     },
     orderMealTypeText(mealType) {
-      if (!mealType || mealType === 'ALL') return '-'
+      if (!mealType) return '待通知'
+      if (mealType === 'ALL') return '-'
       const map = { LUNCH: '午餐', DINNER: '晚餐', LUNCH_DINNER: '午+晚' }
       return map[mealType] || mealType
     },

@@ -474,7 +474,8 @@ public class MealPlanServiceImpl implements MealPlanService {
             if (MEAL_TYPE_BREAKFAST.equals(mealType)) {
                 maxCount = order.getBreakfastCount() != null ? order.getBreakfastCount() : 0;
             } else {
-                maxCount = order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0;
+                maxCount = Math.max((order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0)
+                        - (order.getImportedVerifiedCount() != null ? order.getImportedVerifiedCount() : 0), 0);
             }
             int targetQuantity = CustomerMealStatsScheduleUtil.buildOrderQuantities(
                     order,
@@ -592,10 +593,13 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
-     * 判断人工新增记录绑定的订单在生成日期仍可用。
+     * 判断人工新增记录绑定的订单在生成日期仍可用，且餐次已明确。
      */
     private boolean isManualAdditionOrderAvailable(CustomerOrder order, LocalDate targetDate) {
         if (order == null || order.getStatus() == null || order.getStatus() != 1) {
+            return false;
+        }
+        if (StringUtils.isBlank(order.getMealType())) {
             return false;
         }
         if (order.getRemainingCount() == null || order.getRemainingCount() <= 0) {
@@ -2955,13 +2959,14 @@ public class MealPlanServiceImpl implements MealPlanService {
      *
      * @param order 客户订单
      * @param verifiedByMealType 订单各餐次已核销数
-     * @return 午晚餐剩余餐数，最小为0
+     * @return 扣除导入前历史基数与系统核销日志后的午晚餐剩余数，最小为0
      */
     private int calculateLunchDinnerRemaining(CustomerOrder order, Map<String, Integer> verifiedByMealType) {
         int lunchDinnerCount = order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0;
         int verified = getScheduledCount(verifiedByMealType, MEAL_TYPE_LUNCH)
                 + getScheduledCount(verifiedByMealType, MEAL_TYPE_DINNER);
-        return Math.max(lunchDinnerCount - verified, 0);
+        int importedVerified = order.getImportedVerifiedCount() != null ? order.getImportedVerifiedCount() : 0;
+        return Math.max(lunchDinnerCount - importedVerified - verified, 0);
     }
 
     /**

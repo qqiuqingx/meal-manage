@@ -47,6 +47,29 @@ export function parseIntakeText(data) {
   })
 }
 
+export function previewCustomerImport(file, importDate) {
+  const data = new FormData()
+  data.append('file', file)
+  if (importDate) data.append('importDate', importDate)
+  return axios({
+    url: '/api/customerProfile/import/preview',
+    method: 'post',
+    data
+  })
+}
+
+export function confirmCustomerImport(file, fileHash, importDate) {
+  const data = new FormData()
+  data.append('file', file)
+  data.append('fileHash', fileHash)
+  if (importDate) data.append('importDate', importDate)
+  return axios({
+    url: '/api/customerProfile/import/confirm',
+    method: 'post',
+    data
+  })
+}
+
 export function add(data) {
   return axios({
     url: '/api/customerProfile',
@@ -71,4 +94,16 @@ export function del(ids) {
   })
 }
 
-export default { getProfiles, getMealStats, getProfile, generateCode, parseIntakeText, add, edit, del, saveMealScheduleAdjustments }
+export default {
+  getProfiles,
+  getMealStats,
+  getProfile,
+  generateCode,
+  parseIntakeText,
+  previewCustomerImport,
+  confirmCustomerImport,
+  add,
+  edit,
+  del,
+  saveMealScheduleAdjustments
+}

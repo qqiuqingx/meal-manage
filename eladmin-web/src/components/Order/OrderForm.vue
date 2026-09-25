@@ -26,9 +26,7 @@
             <el-form-item label="订单状态" prop="status">
               <el-select v-model="form.status" :disabled="readonly" placeholder="请选择状态" style="width: 100%;">
                 <el-option label="进行中" :value="1" />
-                <el-option v-if="form.id" label="暂停" :value="4" />
-                <el-option label="已完成" :value="2" />
-                <el-option label="已取消" :value="0" />
+                <el-option label="暂停" :value="4" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -38,6 +36,14 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-alert
+          v-if="mode === 'order' && form.id && (form.mealType === null || form.mealType === undefined)"
+          title="当前订单餐次为待通知，来源计划只读。请先确认午餐或晚餐，再恢复订单或调整排餐日期。"
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 12px;"
+        />
       </template>
 
       <!-- ===== 公共字段：销售渠道 + 排餐模式（两种模式均显示） ===== -->
@@ -62,6 +68,7 @@
         <el-col :span="8">
           <el-form-item label="餐次类型">
             <el-select v-model="form.mealType" :disabled="readonly" placeholder="请选择餐次类型" style="width: 100%;">
+              <el-option v-if="form.id && (form.mealType === null || form.mealType === undefined)" label="未指定（待通知）" :value="null" />
               <el-option label="早+午餐+晚餐（默认）" value="ALL" />
               <el-option label="午餐+晚餐" value="LUNCH_DINNER" />
               <el-option label="午餐订单" value="LUNCH" />
@@ -113,7 +120,7 @@
               v-model="form.deliveryDatesWithMealTypes"
               :start-date="form.startDate"
               :start-meal-type="form.startMealType"
-              :readonly="readonly"
+              :readonly="readonly || !form.mealType"
               :order-meal-type="form.mealType"
               @selection-change="onCalendarSelectionChange"
             />
@@ -613,7 +620,7 @@
             />
           </el-form-item>
         </el-col>
-        <el-col :span="12">
+        <el-col v-if="form.mealType" :span="12">
           <el-form-item label="开始餐次">
             <el-select v-model="form.startMealType" :disabled="readonly" placeholder="请选择开始餐次" style="width: 100%;">
               <el-option

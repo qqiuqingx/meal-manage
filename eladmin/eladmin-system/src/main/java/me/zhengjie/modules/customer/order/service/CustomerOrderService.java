@@ -1,5 +1,6 @@
 package me.zhengjie.modules.customer.order.service;
 
+import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
@@ -27,6 +28,14 @@ public interface CustomerOrderService {
      * 创建订单
      */
     void create(CustomerOrderSaveDto dto);
+
+    /**
+     * 保存导入流程构造的首单并生成订单编号，复用正常订单编号规则。
+     *
+     * @param order 已完成业务字段校验的导入首单
+     * @return 新建订单主键
+     */
+    Long createImportedFirstOrder(CustomerOrder order);
 
     /**
      * 更新订单

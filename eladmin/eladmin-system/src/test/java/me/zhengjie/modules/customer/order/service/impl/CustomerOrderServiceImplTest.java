@@ -119,6 +119,32 @@ class CustomerOrderServiceImplTest {
     }
 
     @Test
+    void query_displaysImportedSourceTotalWithHistoricalVerification() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(11L);
+        order.setBreakfastCount(0);
+        order.setLunchDinnerCount(7);
+        order.setImportedVerifiedCount(3);
+        order.setVerifiedCount(3);
+        order.setRemainingCount(4);
+        when(orderMapper.findAll(any(CustomerOrderQueryCriteria.class), any(Page.class)))
+                .thenReturn(Collections.singletonList(order));
+
+        setTestSecurityContext();
+        try {
+            PageResult<?> result = orderService.query(new CustomerOrderQueryCriteria(), 1, 10);
+
+            @SuppressWarnings("unchecked")
+            List<CustomerOrder> orders = (List<CustomerOrder>) result.getContent();
+            assertEquals(Integer.valueOf(7), orders.get(0).getTotalCount());
+            assertEquals(Integer.valueOf(3), orders.get(0).getVerifiedCount());
+            assertEquals(Integer.valueOf(4), orders.get(0).getRemainingCount());
+        } finally {
+            clearTestSecurityContext();
+        }
+    }
+
+    @Test
     void create_rejectsTrialConversionWhenLinkedOrderParentPackageIsNotTrialPackage() {
         CustomerProfile profile = new CustomerProfile();
         profile.setId(1L);
@@ -192,6 +218,39 @@ class CustomerOrderServiceImplTest {
         ArgumentCaptor<CustomerOrder> captor = ArgumentCaptor.forClass(CustomerOrder.class);
         verify(orderMapper).updateById(captor.capture());
         assertEquals("/file/avatar/menu-002.jpg", captor.getValue().getCustomMenuImage());
+    }
+
+    @Test
+    void update_keepsImportedHistoricalVerificationWhenRequestOmitsVerifiedCount() {
+        CustomerOrder existing = new CustomerOrder();
+        existing.setId(51L);
+        existing.setCustomerId(1L);
+        existing.setParentPackageId(40L);
+        existing.setStatus(1);
+        existing.setBreakfastCount(0);
+        existing.setLunchDinnerCount(7);
+        existing.setImportedVerifiedCount(3);
+        existing.setVerifiedCount(3);
+        existing.setRemainingCount(4);
+        CustomerOrderSaveDto dto = buildValidDto();
+        dto.setId(51L);
+        dto.setBreakfastCount(0);
+        dto.setLunchDinnerCount(7);
+        dto.setMealType("LUNCH_DINNER");
+        dto.setStatus(1);
+        when(orderMapper.selectById(51L)).thenReturn(existing);
+        when(profileMapper.selectById(1L)).thenReturn(buildProfile());
+
+        setTestSecurityContext();
+        try {
+            orderService.update(dto);
+
+            assertEquals(Integer.valueOf(3), existing.getImportedVerifiedCount());
+            assertEquals(Integer.valueOf(3), existing.getVerifiedCount());
+            assertEquals(Integer.valueOf(4), existing.getRemainingCount());
+        } finally {
+            clearTestSecurityContext();
+        }
     }
 
     @Test
@@ -378,5 +437,31 @@ class CustomerOrderServiceImplTest {
         dto.setVegCount(1);
         dto.setSoupCount(0);
         return dto;
+    }
+
+    /**
+     * 为真实订单查询与编辑路径准备登录上下文。
+     */
+    private void setTestSecurityContext() {
+        ApplicationContext context = mock(ApplicationContext.class);
+        UserDetailsService userDetailsService = mock(UserDetailsService.class);
+        when(context.getBean(UserDetailsService.class)).thenReturn(userDetailsService);
+        when(userDetailsService.loadUserByUsername("tester"))
+                .thenReturn(new User("tester", "", Collections.emptyList()));
+        new SpringBeanHolder().setApplicationContext(context);
+        SecurityUtils.header = "Authorization";
+        SecurityUtils.tokenStartWith = "Bearer ";
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+        servletRequest.addHeader("Authorization", "Bearer " + JWT.create()
+                .setKey("test-key".getBytes(StandardCharsets.UTF_8)).setPayload("sub", "tester").sign());
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(servletRequest));
+    }
+
+    /**
+     * 清理当前测试建立的登录上下文。
+     */
+    private void clearTestSecurityContext() {
+        RequestContextHolder.resetRequestAttributes();
+        new SpringBeanHolder().destroy();
     }
 }

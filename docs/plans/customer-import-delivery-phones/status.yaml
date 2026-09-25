@@ -1,0 +1,15 @@
+feature: customer-import-delivery-phones
+current_phase: complete
+phases:
+  - id: phase-01
+    name: data-model
+    depends_on: []
+    status: complete
+  - id: phase-02
+    name: import
+    depends_on: [phase-01]
+    status: complete
+  - id: phase-03
+    name: profile-surface
+    depends_on: [phase-01, phase-02]
+    status: complete

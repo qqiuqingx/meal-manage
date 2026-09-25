@@ -59,8 +59,8 @@ public class NumberPoolServiceImpl implements NumberPoolService {
         }
 
         // Step 2: 查询 [pool_start, pool_end] 范围内已被占用的编号
-        // 只有 customer_order.status = 1（进行中）的订单才算"占用"
-        // 已取消/已完成订单的编号视为可用，可被重新分配（per POOL-11）
+        // customer_order.status=1（进行中）与 4（暂停）的订单都占用编号。
+        // 已取消、已完成或已退餐订单的编号可重新分配。
         int codeWidth = resolveCodeWidth(config.getPoolStart(), config.getPoolEnd());
         List<String> usedCodes = numberPoolMapper.findUsedCodesInRange(
             config.getPoolPrefix(),

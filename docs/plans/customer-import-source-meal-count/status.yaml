@@ -1,0 +1,15 @@
+feature: customer-import-source-meal-count
+current_phase: complete
+phases:
+  - id: phase-01
+    name: import
+    depends_on: []
+    status: complete
+  - id: phase-02
+    name: operational-counts
+    depends_on: [phase-01]
+    status: complete
+  - id: phase-03
+    name: acceptance
+    depends_on: [phase-01, phase-02]
+    status: complete

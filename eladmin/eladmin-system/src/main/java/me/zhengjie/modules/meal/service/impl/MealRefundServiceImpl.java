@@ -62,6 +62,12 @@ public class MealRefundServiceImpl implements MealRefundService {
         return new PageResult<>(page.getRecords(), page.getTotal());
     }
 
+    /**
+     * 退还未核销的订单餐数，导入前历史已核销基数不计入可退份数。
+     *
+     * @param dto 退餐订单与原因
+     * @return 本次退餐日志和退款餐数
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MealRefundLog refund(MealRefundDto dto) {
@@ -71,15 +77,17 @@ public class MealRefundServiceImpl implements MealRefundService {
             throw new BadRequestException("订单不存在");
         }
 
-        // 2. 校验订单状态（只有进行中的订单可以退餐）
-        if (order.getStatus() != 1) {
-            throw new BadRequestException("只有进行中的订单可以退餐，当前状态：" + getStatusDesc(order.getStatus()));
+        // 2. 校验订单状态（进行中与暂停订单都可以按剩余餐数退餐）
+        if (order.getStatus() == null || (order.getStatus() != 1 && order.getStatus() != 4)) {
+            throw new BadRequestException("只有进行中或暂停的订单可以退餐，当前状态：" + getStatusDesc(order.getStatus()));
         }
 
         // 3. 查询该订单的核销日志，统计已核销的早餐和午晚餐数量
         Map<String, Integer> verifiedCounts = getVerifiedCountsByOrderId(dto.getOrderId());
         int verifiedBreakfastCount = verifiedCounts.getOrDefault("BREAKFAST", 0);
-        int verifiedLunchDinnerCount = verifiedCounts.getOrDefault("LUNCH", 0) + verifiedCounts.getOrDefault("DINNER", 0);
+        int importedVerified = order.getImportedVerifiedCount() != null ? order.getImportedVerifiedCount() : 0;
+        int verifiedLunchDinnerCount = importedVerified + verifiedCounts.getOrDefault("LUNCH", 0)
+                + verifiedCounts.getOrDefault("DINNER", 0);
 
         // 4. 计算剩余餐数
         int breakfastCount = order.getBreakfastCount() != null ? order.getBreakfastCount() : 0;
@@ -103,7 +111,9 @@ public class MealRefundServiceImpl implements MealRefundService {
         String operator = SecurityUtils.getCurrentUsername();
 
         // 7. 更新订单状态为已退餐
-        customerOrderMapper.updateStatusToRefunded(order.getId());
+        if (customerOrderMapper.updateStatusToRefunded(order.getId()) == 0) {
+            throw new BadRequestException("订单状态已被其他操作修改，请刷新后重试");
+        }
 
         // 8. 标记核销日志为已退餐
         verificationLogMapper.markAsRefunded(order.getId());
@@ -160,6 +170,12 @@ public class MealRefundServiceImpl implements MealRefundService {
     /**
      * 获取订单状态描述
      */
+    /**
+     * 将订单状态码转换为退餐错误提示文案。
+     *
+     * @param status 订单状态码
+     * @return 状态名称；未识别时返回「未知」
+     */
     private String getStatusDesc(Integer status) {
         if (status == null) {
             return "未知";
@@ -173,6 +189,8 @@ public class MealRefundServiceImpl implements MealRefundService {
                 return "已完成";
             case 3:
                 return "已退餐";
+            case 4:
+                return "暂停";
             default:
                 return "未知";
         }

@@ -18,6 +18,9 @@ public class CustomerProfileDetailDto implements Serializable {
     private String customerCode;
     private String customerName;
     private String phone;
+
+    /** 配送信息中的全部电话原文，与客户手机号分开保存。 */
+    private String deliveryPhoneInfo;
     private Integer gestationalWeek;
     private List<String> allergyTags;
     private List<Integer> excludedDishIds;

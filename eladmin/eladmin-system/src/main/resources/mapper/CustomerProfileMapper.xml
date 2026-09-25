@@ -7,6 +7,7 @@
         <result column="customer_code" property="customerCode"/>
         <result column="customer_name" property="customerName"/>
         <result column="phone" property="phone"/>
+        <result column="delivery_phone_info" property="deliveryPhoneInfo"/>
         <result column="gestational_week" property="gestationalWeek"/>
         <result column="allergy_tags" property="allergyTags"
                 typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>

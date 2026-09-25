@@ -90,6 +90,11 @@ public class CustomerOrder implements Serializable {
     private Integer verifiedCount;
 
     /**
+     * 批量导入前已核销餐数基数，不对应系统内逐餐核销日志；普通订单为 0。
+     */
+    private Integer importedVerifiedCount;
+
+    /**
      * 核销金额
      */
     private BigDecimal verifiedAmount;

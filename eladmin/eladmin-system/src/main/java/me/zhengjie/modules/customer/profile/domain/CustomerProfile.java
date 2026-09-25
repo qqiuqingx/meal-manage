@@ -43,6 +43,12 @@ public class CustomerProfile implements Serializable {
     private String phone;
 
     /**
+     * 配送信息中的电话原文，可包含多个号码；与客户手机号分别保存。
+     */
+    @TableField("delivery_phone_info")
+    private String deliveryPhoneInfo;
+
+    /**
      * 孕周(正整数)
      */
     private Integer gestationalWeek;

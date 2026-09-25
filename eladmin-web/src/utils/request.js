@@ -18,7 +18,8 @@ service.interceptors.request.use(
     if (getToken()) {
       config.headers['Authorization'] = getToken() // 让每个请求携带自定义token 请根据实际情况自行修改
     }
-    config.headers['Content-Type'] = 'application/json'
+    // FormData 需要由浏览器生成包含 boundary 的 Content-Type，才能被后端按文件上传解析。
+    config.headers['Content-Type'] = config.data instanceof FormData ? undefined : 'application/json'
     return config
   },
   error => {

@@ -53,6 +53,11 @@ public class CustomerOrderDetailDto implements Serializable {
 
     private Integer verifiedCount;
 
+    /**
+     * 批量导入前已核销餐数基数；包含在 verifiedCount 中，不对应系统内逐餐核销日志。
+     */
+    private Integer importedVerifiedCount;
+
     private BigDecimal verifiedAmount;
 
     private BigDecimal mealBalance;

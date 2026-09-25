@@ -168,6 +168,34 @@ class MealPlanServiceImplTest {
     }
 
     @Test
+    void shouldIncludeImportedHistoricalVerificationInLunchDinnerPool() {
+        LocalDate targetDate = LocalDate.of(2026, 9, 27);
+        CustomerOrder order = buildOrder();
+        order.setId(111L);
+        order.setCustomerId(211L);
+        order.setCustomerCode("C211");
+        order.setBreakfastCount(0);
+        order.setLunchDinnerCount(7);
+        order.setImportedVerifiedCount(3);
+        order.setVerifiedCount(3);
+        order.setRemainingCount(4);
+
+        CustomerProfile customer = buildCustomer();
+        customer.setId(211L);
+        when(customerOrderMapper.selectList(any())).thenReturn(Collections.singletonList(order));
+        when(customerOrderMapper.sumVerifiedCountByOrderIds(Collections.singletonList(111L)))
+                .thenReturn(Collections.emptyList());
+        when(mealPlanCustomerMapper.countSuccessfulScheduledByOrderIdsAndDate(Collections.singletonList(111L), targetDate))
+                .thenReturn(Collections.singletonList(buildScheduledCount(111L, "LUNCH", 4)));
+        when(customerProfileMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(customer));
+
+        List<MealDepletionWarningDto> warnings = mealPlanService.getDepletionWarnings(targetDate);
+
+        assertEquals(1, warnings.size());
+        assertEquals(Integer.valueOf(4), warnings.get(0).getRemainingCount());
+    }
+
+    @Test
     void shouldWarnLunchDinnerPoolEvenWhenTotalRemainingCountIsHigh() {
         LocalDate targetDate = LocalDate.of(2026, 5, 29);
         CustomerOrder order = buildOrder();

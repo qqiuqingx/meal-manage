@@ -22,6 +22,7 @@ CREATE TABLE customer_order (
     breakfast_price DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '早餐单价',
     lunch_dinner_price DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '午餐晚餐单价',
     verified_count INT NOT NULL DEFAULT 0 COMMENT '核销餐数(合计)',
+    imported_verified_count INT NOT NULL DEFAULT 0 COMMENT '批量导入前已核销餐数基数，不对应系统内逐餐核销日志',
     verified_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '核销金额',
     meal_balance DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '餐费余额(成交金额-核销金额)',
     remaining_count INT NOT NULL DEFAULT 0 COMMENT '剩余餐数(合计餐数-核销餐数)',

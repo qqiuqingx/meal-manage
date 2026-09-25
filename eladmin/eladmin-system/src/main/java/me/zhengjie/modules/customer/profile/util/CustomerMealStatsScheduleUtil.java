@@ -156,7 +156,7 @@ public final class CustomerMealStatsScheduleUtil {
     }
 
     /**
-     * 从首次送餐起按早餐和午晚餐两个购买池顺序分配目标份数。
+     * 从首次送餐起按早餐和午晚餐两个购买池顺序分配目标份数，午晚餐池先扣除导入前历史核销基数。
      *
      * @param order 来源订单
      * @param excludedDates 客户完整排除日期
@@ -172,9 +172,7 @@ public final class CustomerMealStatsScheduleUtil {
             return Collections.emptyMap();
         }
         LocalDate lastDate = minDate(endDate, order.getEndDate());
-        if (Integer.valueOf(4).equals(order.getStatus()) && order.getPauseEffectiveDate() != null) {
-            lastDate = minDate(lastDate, order.getPauseEffectiveDate().minusDays(1));
-        }
+        boolean paused = Integer.valueOf(4).equals(order.getStatus());
         if (lastDate.isBefore(order.getStartDate())) {
             return Collections.emptyMap();
         }
@@ -188,7 +186,8 @@ public final class CustomerMealStatsScheduleUtil {
             }
         }
         int breakfastRemaining = safeInt(order.getBreakfastCount());
-        int lunchDinnerRemaining = safeInt(order.getLunchDinnerCount());
+        int lunchDinnerRemaining = Math.max(safeInt(order.getLunchDinnerCount())
+                - safeInt(order.getImportedVerifiedCount()), 0);
         Map<String, Integer> result = new LinkedHashMap<>();
         for (LocalDate date = order.getStartDate(); !date.isAfter(lastDate); date = date.plusDays(1)) {
             for (String mealType : ALL_MEAL_TYPES) {
@@ -199,7 +198,9 @@ public final class CustomerMealStatsScheduleUtil {
                     continue;
                 }
                 CustomerMealScheduleAddition addition = additionByCell.get(cellKey(date, mealType));
-                boolean baseScheduled = scheduleModeMatches(order, date)
+                boolean baseScheduleActive = !paused || order.getPauseEffectiveDate() != null
+                        && !date.isAfter(order.getPauseEffectiveDate().minusDays(1));
+                boolean baseScheduled = baseScheduleActive && scheduleModeMatches(order, date)
                         && scheduledDeliveryDateContainsMealType(order, date, mealType);
                 if (!baseScheduled && addition == null) {
                     continue;

@@ -22,6 +22,9 @@ public class CustomerProfileSaveDto implements Serializable {
 
     private String phone;
 
+    /** 可选的配送电话信息；编辑时不传保持原值，传空字符串清空。 */
+    private String deliveryPhoneInfo;
+
     private Integer gestationalWeek;
 
     private List<String> allergyTags;

@@ -49,6 +49,31 @@ class CustomerMealStatsScheduleUtilTest {
     }
 
     @Test
+    void shouldOnlyScheduleFutureMealsAfterImportedHistoricalVerification() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(11L);
+        order.setCustomerId(12L);
+        order.setBreakfastCount(0);
+        order.setLunchDinnerCount(7);
+        order.setImportedVerifiedCount(3);
+        order.setVerifiedCount(3);
+        order.setRemainingCount(4);
+        order.setStartDate(LocalDate.of(2026, 9, 26));
+        order.setEndDate(LocalDate.of(2026, 9, 30));
+        order.setMealType("LUNCH_DINNER");
+        order.setScheduleMode("DAILY");
+
+        java.util.Map<String, Integer> quantities = CustomerMealStatsScheduleUtil.buildOrderQuantities(
+                order, Collections.emptyList(), Collections.emptyList(), LocalDate.of(2026, 9, 30));
+
+        assertEquals(4, quantities.size());
+        assertEquals(Integer.valueOf(1), quantities.get("2026-09-26#LUNCH"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-09-26#DINNER"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-09-27#LUNCH"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-09-27#DINNER"));
+    }
+
+    @Test
     void shouldRespectScheduledDeliveryDatesWithMealTypes() {
         CustomerOrder order = new CustomerOrder();
         order.setId(2L);

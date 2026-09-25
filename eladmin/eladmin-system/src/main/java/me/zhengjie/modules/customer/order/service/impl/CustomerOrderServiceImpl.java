@@ -2,6 +2,7 @@ package me.zhengjie.modules.customer.order.service.impl;
 
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.CustomerOrderStatus;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
@@ -209,6 +210,9 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         for (int attempt = 0; attempt < 3; attempt++) {
             CustomerOrder order = new CustomerOrder();
             buildOrderEntity(order, dto);
+            if (Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()).equals(order.getStatus())) {
+                order.setPauseEffectiveDate(LocalDate.now());
+            }
             order.setCustomerCode(profile.getCustomerCode());
             order.setOrderCode(generateOrderCode());
             order.setCreateBy(getCurrentUsername());
@@ -226,6 +230,62 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     throw new BadRequestException("订单编号生成被中断");
+                }
+            }
+        }
+        throw new BadRequestException("订单编号生成失败，请重试");
+    }
+
+    /**
+     * 保存已由导入器完成字段转换的首单，核对来源购买数、历史核销基数与剩余数，并使用普通订单编号规则。
+     *
+     * @param order 导入首单实体
+     * @return 新建订单主键
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long createImportedFirstOrder(CustomerOrder order) {
+        if (order == null || order.getCustomerId() == null || order.getParentPackageId() == null
+                || order.getStartDate() == null || order.getLunchDinnerCount() == null
+                || order.getLunchDinnerCount() <= 0 || order.getRemainingCount() == null) {
+            throw new BadRequestException("导入首单信息不完整");
+        }
+        if (order.getStatus() == null || (order.getStatus() != CustomerOrderStatus.ACTIVE.getCode()
+                && order.getStatus() != CustomerOrderStatus.PAUSED.getCode()
+                && !(order.getStatus() == CustomerOrderStatus.COMPLETED.getCode()
+                && Integer.valueOf(0).equals(order.getRemainingCount())))) {
+            throw new BadRequestException("导入首单状态与剩余餐数不匹配");
+        }
+        int importedVerified = order.getImportedVerifiedCount() == null ? 0 : order.getImportedVerifiedCount();
+        int verifiedCount = order.getVerifiedCount() == null ? 0 : order.getVerifiedCount();
+        int lunchDinnerCount = order.getLunchDinnerCount();
+        if (importedVerified < 0 || verifiedCount < importedVerified
+                || lunchDinnerCount - verifiedCount != order.getRemainingCount()) {
+            throw new BadRequestException("导入首单餐数与核销基数不一致");
+        }
+        CustomerProfile profile = profileMapper.selectById(order.getCustomerId());
+        if (profile == null) {
+            throw new BadRequestException("客户档案不存在，无法创建首单");
+        }
+        order.setCustomerCode(profile.getCustomerCode());
+
+        CustomerOrderSaveDto conflictCheck = new CustomerOrderSaveDto();
+        conflictCheck.setCustomerId(order.getCustomerId());
+        conflictCheck.setStartDate(order.getStartDate());
+        conflictCheck.setMealType(order.getMealType());
+        conflictCheck.setBreakfastCount(order.getBreakfastCount());
+        conflictCheck.setLunchDinnerCount(order.getLunchDinnerCount());
+        validateOrderConflict(conflictCheck, null);
+
+        for (int attempt = 0; attempt < 3; attempt++) {
+            order.setOrderCode(generateOrderCode());
+            order.setCreateBy(getCurrentUsername());
+            try {
+                orderMapper.insert(order);
+                return order.getId();
+            } catch (DuplicateKeyException e) {
+                if (attempt == 2) {
+                    throw new BadRequestException("订单编号生成失败，请重试或联系管理员");
                 }
             }
         }
@@ -280,6 +340,13 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     public void delete(Set<Long> ids) {
         if (ids == null || ids.isEmpty()) {
             throw new BadRequestException("请选择要删除的订单");
+        }
+        List<CustomerOrder> orders = orderMapper.selectBatchIds(ids);
+        boolean hasUnfinishedOrder = orders.stream().anyMatch(order ->
+                order.getStatus() != null && (order.getStatus() == CustomerOrderStatus.ACTIVE.getCode()
+                        || order.getStatus() == CustomerOrderStatus.PAUSED.getCode()));
+        if (hasUnfinishedOrder) {
+            throw new BadRequestException("进行中或暂停的订单不能删除，请先完成或退餐");
         }
         orderMapper.deleteBatchIds(ids);
     }
@@ -346,7 +413,10 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     }
 
     /**
-     * 校验并规范化 DTO
+     * 校验订单字段、允许的状态转换并规范化餐次与金额。
+     *
+     * @param dto 订单保存参数
+     * @param existingOrder 原订单；创建时为空
      */
     private void validateAndNormalize(CustomerOrderSaveDto dto, CustomerOrder existingOrder) {
         // 客户校验
@@ -371,7 +441,14 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
         // 核销数校验
         int totalCount = getTotalCount(dto);
-        int verifiedCount = dto.getVerifiedCount() != null ? dto.getVerifiedCount() : 0;
+        int importedVerified = existingOrder == null || existingOrder.getImportedVerifiedCount() == null
+                ? 0 : existingOrder.getImportedVerifiedCount();
+        int verifiedCount = dto.getVerifiedCount() != null ? dto.getVerifiedCount()
+                : importedVerified > 0 && existingOrder != null && existingOrder.getVerifiedCount() != null
+                ? existingOrder.getVerifiedCount() : 0;
+        if (verifiedCount < importedVerified) {
+            throw new BadRequestException("核销餐数不能小于导入前已核销餐数");
+        }
         if (verifiedCount > totalCount) {
             throw new BadRequestException("核销餐数不能超过合计餐数");
         }
@@ -396,20 +473,57 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         if (dto.getBreakfastPrice() == null) dto.setBreakfastPrice(BigDecimal.ZERO);
         if (dto.getLunchDinnerPrice() == null) dto.setLunchDinnerPrice(BigDecimal.ZERO);
         if (dto.getVerifiedAmount() == null) dto.setVerifiedAmount(BigDecimal.ZERO);
-        if (dto.getVerifiedCount() == null) dto.setVerifiedCount(0);
+        if (dto.getVerifiedCount() == null) dto.setVerifiedCount(verifiedCount);
 
         validateTrialConversion(dto);
 
         // 状态默认值
         if (dto.getStatus() == null) {
-            dto.setStatus(1);
+            dto.setStatus(CustomerOrderStatus.ACTIVE.getCode());
         }
+        validateStatusChange(existingOrder, dto.getStatus());
 
-        dto.setMealType(OrderStartMealTypeUtil.normalizeOrderMealType(dto.getMealType()));
-        dto.setStartMealType(OrderStartMealTypeUtil.normalizeStartMealType(dto.getMealType(), dto.getStartMealType()));
-        if (!OrderStartMealTypeUtil.isStartMealTypeAllowed(dto.getMealType(), dto.getStartMealType())) {
-            throw new BadRequestException("开始餐次与订单餐次类型不匹配，可选开始餐次：" +
-                    String.join("、", toMealTypeDescList(OrderStartMealTypeUtil.allowedStartMealTypes(dto.getMealType()))));
+        boolean keepUnspecifiedMealType = dto.getMealType() == null
+                && (existingOrder != null && existingOrder.getMealType() == null
+                || existingOrder == null && Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()).equals(dto.getStatus()));
+        if (keepUnspecifiedMealType) {
+            if (existingOrder != null && Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()).equals(existingOrder.getStatus())
+                    && Integer.valueOf(CustomerOrderStatus.ACTIVE.getCode()).equals(dto.getStatus())) {
+                throw new BadRequestException("该订单餐次尚未指定，请先确认午餐或晚餐后再恢复");
+            }
+            dto.setStartMealType(null);
+        } else {
+            dto.setMealType(OrderStartMealTypeUtil.normalizeOrderMealType(dto.getMealType()));
+            dto.setStartMealType(OrderStartMealTypeUtil.normalizeStartMealType(dto.getMealType(), dto.getStartMealType()));
+            if (!OrderStartMealTypeUtil.isStartMealTypeAllowed(dto.getMealType(), dto.getStartMealType())) {
+                throw new BadRequestException("开始餐次与订单餐次类型不匹配，可选开始餐次：" +
+                        String.join("、", toMealTypeDescList(OrderStartMealTypeUtil.allowedStartMealTypes(dto.getMealType()))));
+            }
+        }
+    }
+
+    /**
+     * 校验创建和编辑允许的订单状态，暂停订单只能通过编辑从进行中暂停或恢复。
+     *
+     * @param existingOrder 原订单；创建时为空
+     * @param requestedStatus 请求状态
+     */
+    private void validateStatusChange(CustomerOrder existingOrder, Integer requestedStatus) {
+        if (existingOrder == null) {
+            if (!Integer.valueOf(CustomerOrderStatus.ACTIVE.getCode()).equals(requestedStatus)
+                    && !Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()).equals(requestedStatus)) {
+                throw new BadRequestException("新订单状态只能是进行中或暂停");
+            }
+            return;
+        }
+        Integer currentStatus = existingOrder.getStatus();
+        boolean unchanged = requestedStatus.equals(currentStatus);
+        boolean pause = Integer.valueOf(CustomerOrderStatus.ACTIVE.getCode()).equals(currentStatus)
+                && Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()).equals(requestedStatus);
+        boolean resume = Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()).equals(currentStatus)
+                && Integer.valueOf(CustomerOrderStatus.ACTIVE.getCode()).equals(requestedStatus);
+        if (!unchanged && !pause && !resume) {
+            throw new BadRequestException("订单状态只能在进行中与暂停之间切换，已结束订单不能恢复");
         }
     }
 
@@ -597,6 +711,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         dto.setBreakfastPrice(order.getBreakfastPrice());
         dto.setLunchDinnerPrice(order.getLunchDinnerPrice());
         dto.setVerifiedCount(order.getVerifiedCount());
+        dto.setImportedVerifiedCount(order.getImportedVerifiedCount());
         dto.setVerifiedAmount(order.getVerifiedAmount());
         dto.setMealBalance(order.getMealBalance());
         dto.setRemainingCount(order.getRemainingCount());
@@ -727,19 +842,25 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             + (order.getLunchDinnerCount() != null ? order.getLunchDinnerCount() : 0);
     }
 
+    /**
+     * 将订单状态码转换为页面展示名称。
+     *
+     * @param status 数据库存储状态码
+     * @return 状态名称；未知状态返回「未知」
+     */
     private String getStatusDesc(Integer status) {
-        if (status == null) return "未知";
-        switch (status) {
-            case 0: return "已取消";
-            case 1: return "进行中";
-            case 2: return "已完成";
-            case 4: return "暂停";
-            default: return "未知";
-        }
+        CustomerOrderStatus orderStatus = CustomerOrderStatus.fromCode(status);
+        return orderStatus == null ? "未知" : orderStatus.getDescription();
     }
 
+    /**
+     * 将订单餐次转换为页面展示名称，空值保留待通知含义。
+     *
+     * @param mealType 订单餐次编码
+     * @return 餐次名称；空值返回「待通知」
+     */
     private String getMealTypeDesc(String mealType) {
-        if (mealType == null) return "早+午餐+晚餐";
+        if (mealType == null) return "待通知";
         switch (mealType) {
             case "LUNCH": return "午餐";
             case "DINNER": return "晚餐";

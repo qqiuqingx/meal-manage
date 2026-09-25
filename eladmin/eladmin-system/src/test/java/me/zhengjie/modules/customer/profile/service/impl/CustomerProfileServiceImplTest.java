@@ -20,6 +20,7 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjus
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsRowDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
@@ -150,6 +151,39 @@ class CustomerProfileServiceImplTest {
         address3.setAddressDetail("北京市西城区xxx胡同789号");
         address3.setContactName("王五");
         address3.setContactPhone("13700137000");
+    }
+
+    @Test
+    void getDetailShouldReturnDeliveryPhoneInfoSeparatelyFromCustomerPhone() {
+        profile.setDeliveryPhoneInfo("13900139000\n13700137000");
+        when(profileMapper.selectByIdWithJson(1L)).thenReturn(profile);
+        when(addressMapper.selectList(any())).thenReturn(Collections.singletonList(address1));
+
+        CustomerProfileDetailDto detail = customerProfileService.getDetail(1L);
+
+        assertEquals("13800138000", detail.getPhone());
+        assertEquals("13900139000\n13700137000", detail.getDeliveryPhoneInfo());
+    }
+
+    @Test
+    void updateShouldPreserveOmittedDeliveryPhonesAndAllowExplicitClear() {
+        profile.setDeliveryPhoneInfo("13900139000\n13700137000");
+        CustomerProfileSaveDto dto = new CustomerProfileSaveDto();
+        dto.setId(1L);
+        dto.setCustomerName("张三");
+        dto.setPhone("13800138000");
+        CustomerProfileSaveDto.AddressDto address = new CustomerProfileSaveDto.AddressDto();
+        address.setAddressType("DEFAULT");
+        address.setAddressDetail("示例路1号");
+        dto.setAddresses(Collections.singletonList(address));
+        when(profileMapper.selectById(1L)).thenReturn(profile);
+
+        customerProfileService.update(dto);
+        assertEquals("13900139000\n13700137000", profile.getDeliveryPhoneInfo());
+
+        dto.setDeliveryPhoneInfo("");
+        customerProfileService.update(dto);
+        assertEquals("", profile.getDeliveryPhoneInfo());
     }
 
     private void invokeFillDefaultAddress(CustomerProfile profile) throws Exception {
@@ -1202,6 +1236,26 @@ class CustomerProfileServiceImplTest {
     }
 
     // ========== scheduleMode 填充测试 ==========
+
+    @Test
+    void fillLatestOrderInfoShouldExcludeImportedHistoricalVerifiedMeals() throws Exception {
+        CustomerOrder importedOrder = new CustomerOrder();
+        importedOrder.setId(10L);
+        importedOrder.setCustomerId(1L);
+        importedOrder.setBreakfastCount(0);
+        importedOrder.setLunchDinnerCount(7);
+        importedOrder.setImportedVerifiedCount(3);
+        importedOrder.setScheduleMode("DAILY");
+        when(customerOrderMapper.findActiveOrdersByCustomerId(1L))
+                .thenReturn(Collections.singletonList(importedOrder));
+        when(customerOrderMapper.findLatestByCustomerId(1L)).thenReturn(importedOrder);
+        when(customerOrderMapper.sumVerifiedCountByOrderId(10L)).thenReturn(Collections.emptyList());
+
+        invokeFillLatestOrderInfo(profile);
+
+        assertEquals(Integer.valueOf(7), profile.getLunchDinnerCount());
+        assertEquals(Integer.valueOf(4), profile.getRemainingLunchDinnerCount());
+    }
 
     @Test
     void testFillLatestOrderInfo_WithScheduleMode() throws Exception {

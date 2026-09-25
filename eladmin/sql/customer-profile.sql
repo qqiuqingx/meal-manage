@@ -35,6 +35,7 @@ CREATE TABLE customer_profile (
     customer_code VARCHAR(16) NOT NULL COMMENT '客户编号(唯一,如A001)',
     customer_name VARCHAR(50) NOT NULL COMMENT '客户姓名',
     phone VARCHAR(20) NOT NULL COMMENT '手机号',
+    delivery_phone_info TEXT NULL COMMENT '配送信息中的电话原文，可包含多个号码',
     gestational_week INT NULL COMMENT '孕周(正整数)',
     allergy_tags JSON NULL COMMENT '过敏食物标签(JSON数组)',
     medical_requirements VARCHAR(500) NULL COMMENT '医嘱要求',

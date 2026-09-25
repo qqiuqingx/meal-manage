@@ -23,6 +23,11 @@ mybatis-plus:
 spring:
   freemarker:
     check-template-location: false
+  servlet:
+    multipart:
+      # 客户用餐计划表批量导入需要上传约 24MB 的 xlsx，放宽默认的 1MB 限制
+      max-file-size: 40MB
+      max-request-size: 48MB
   profiles:
     # 激活的环境，如果需要 quartz 分布式支持，需要修改 active: dev,quartz
     active: dev

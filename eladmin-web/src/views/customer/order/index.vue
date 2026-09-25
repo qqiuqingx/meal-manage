@@ -11,6 +11,7 @@
           <el-option label="已完成" :value="2" />
           <el-option label="已取消" :value="0" />
           <el-option label="已退餐" :value="3" />
+          <el-option label="暂停" :value="4" />
         </el-select>
         <el-select v-model="query.customerSource" clearable size="small" placeholder="销售渠道" class="filter-item" style="width: 120px" @change="crud.toQuery">
           <el-option v-for="item in customerSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -93,7 +94,18 @@
       <el-table-column label="早餐" prop="breakfastCount" width="60" align="center" />
       <el-table-column label="午晚" prop="lunchDinnerCount" width="60" align="center" />
       <el-table-column label="合计" prop="totalCount" width="60" align="center" />
-      <el-table-column label="核销" prop="verifiedCount" width="60" align="center" />
+      <el-table-column label="核销" prop="verifiedCount" width="60" align="center">
+        <template slot-scope="scope">
+          <el-tooltip
+            v-if="scope.row.importedVerifiedCount > 0"
+            :content="`含导入前已核销 ${scope.row.importedVerifiedCount} 餐`"
+            placement="top"
+          >
+            <span>{{ scope.row.verifiedCount }}</span>
+          </el-tooltip>
+          <span v-else>{{ scope.row.verifiedCount }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="已排餐" prop="scheduledCount" width="80" align="center" />
       <el-table-column prop="remainingCount" width="70" align="center">
         <template slot="header">
@@ -129,7 +141,7 @@
       </el-table-column>
       <el-table-column label="餐次" width="70" align="center">
         <template slot-scope="scope">
-          {{ mealTypeText(scope.row.mealType) }}
+          {{ mealTypeText(scope.row.mealType, scope.row.status) }}
         </template>
       </el-table-column>
       <el-table-column label="销售渠道" width="100">
@@ -162,7 +174,7 @@
       <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="180" align="center" fixed="right">
         <template slot-scope="scope">
           <el-button size="mini" type="primary" icon="edit" :disabled="scope.row.status !== 1 && scope.row.status !== 4" @click="handleEdit(scope.row)">编辑</el-button>
-          <el-button v-if="scope.row.status === 1" size="mini" type="danger" icon="refresh" @click="openRefundDialog(scope.row)">退餐</el-button>
+          <el-button v-if="scope.row.status === 1 || scope.row.status === 4" size="mini" type="danger" icon="refresh" @click="openRefundDialog(scope.row)">退餐</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -522,8 +534,9 @@ export default {
       if (status === 4) return 'warning'
       return 'info'
     },
-    mealTypeText(mealType) {
-      if (!mealType || mealType === 'ALL') return '-'
+    mealTypeText(mealType, status) {
+      if (!mealType) return '待通知'
+      if (mealType === 'ALL') return '-'
       const map = { LUNCH: '午餐', DINNER: '晚餐', LUNCH_DINNER: '午+晚' }
       return map[mealType] || mealType
     },
@@ -547,6 +560,7 @@ export default {
     formatOrderPeriod(row) {
       if (!row.startDate) return '-'
       const startDate = this.formatDate(row.startDate)
+      if (!row.mealType) return `${startDate}（待通知）起`
       return `${startDate}（${this.startMealTypeText(row.startMealType)}）起`
     },
     checkboxT() {
