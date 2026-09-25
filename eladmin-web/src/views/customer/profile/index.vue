@@ -92,7 +92,25 @@
           <span>资料错误：{{ importPreview.errorCount }}</span>
           <span>未来份数：{{ importPreview.futureMealQuantity }}</span>
         </div>
-        <el-table :data="importPreview.drafts" size="mini" border max-height="300" style="margin-top: 12px;">
+        <div v-if="importPreview.drafts && importPreview.drafts.length" class="customer-import-filter">
+          <el-radio-group v-model="importDraftFilter" size="mini">
+            <el-radio-button label="all">全部 {{ importDraftCounts.all }}</el-radio-button>
+            <el-radio-button label="error" :disabled="!importDraftCounts.error">仅错误 {{ importDraftCounts.error }}</el-radio-button>
+            <el-radio-button label="warning" :disabled="!importDraftCounts.warning">仅提示 {{ importDraftCounts.warning }}</el-radio-button>
+            <el-radio-button label="issue" :disabled="!importDraftCounts.issue">有问题 {{ importDraftCounts.issue }}</el-radio-button>
+          </el-radio-group>
+          <el-input
+            v-model="importDraftKeyword"
+            size="mini"
+            clearable
+            placeholder="按客户编号 / 来源行筛选"
+            style="width: 200px; margin-left: 12px;"
+          />
+          <span v-if="filteredImportDrafts.length !== importDraftCounts.all" class="customer-import-filter-count">
+            显示 {{ filteredImportDrafts.length }} / {{ importDraftCounts.all }} 条
+          </span>
+        </div>
+        <el-table :data="filteredImportDrafts" size="mini" border max-height="300" style="margin-top: 8px;" :row-class-name="importDraftRowClass">
           <el-table-column label="来源行" width="100">
             <template slot-scope="scope">{{ (scope.row.sourceRows || []).join('、') }}</template>
           </el-table-column>
@@ -682,7 +700,9 @@ export default {
       importLoading: false,
       importConfirmLoading: false,
       importPreview: null,
-      importResult: null
+      importResult: null,
+      importDraftFilter: 'all',
+      importDraftKeyword: ''
     }
   },
   computed: {
@@ -727,6 +747,44 @@ export default {
     hasImportErrors() {
       return Boolean(this.importResult &&
         (Number(this.importResult.failedCount) > 0 || Number(this.importResult.skippedCount) > 0))
+    },
+    /**
+     * 导入预览草稿的分组计数：全部 / 仅错误 / 仅提示（无错误但有提示）/ 有问题（错误+提示）
+     */
+    importDraftCounts() {
+      const drafts = (this.importPreview && this.importPreview.drafts) || []
+      let error = 0
+      let warning = 0
+      drafts.forEach((d) => {
+        if (d.errors && d.errors.length) {
+          error += 1
+        } else if (d.warnings && d.warnings.length) {
+          warning += 1
+        }
+      })
+      return { all: drafts.length, error, warning, issue: error + warning }
+    },
+    /**
+     * 按「错误/提示筛选 + 客户编号/来源行关键字」过滤后的导入预览草稿列表
+     */
+    filteredImportDrafts() {
+      const drafts = (this.importPreview && this.importPreview.drafts) || []
+      let list = drafts
+      if (this.importDraftFilter === 'error') {
+        list = drafts.filter((d) => d.errors && d.errors.length)
+      } else if (this.importDraftFilter === 'warning') {
+        list = drafts.filter((d) => (!d.errors || !d.errors.length) && d.warnings && d.warnings.length)
+      } else if (this.importDraftFilter === 'issue') {
+        list = drafts.filter((d) => (d.errors && d.errors.length) || (d.warnings && d.warnings.length))
+      }
+      const keyword = (this.importDraftKeyword || '').trim()
+      if (keyword) {
+        list = list.filter((d) =>
+          String(d.customerCode || '').includes(keyword) ||
+          ((d.sourceRows || []).some((row) => String(row).includes(keyword)))
+        )
+      }
+      return list
     }
   },
   methods: {
@@ -736,7 +794,17 @@ export default {
       this.importDate = this.currentDateString()
       this.importPreview = null
       this.importResult = null
+      this.importDraftFilter = 'all'
+      this.importDraftKeyword = ''
       this.importDialogVisible = true
+    },
+    /**
+     * 导入预览表格行样式：含错误的行标红底、仅提示的行标黄底，便于快速定位问题行
+     */
+    importDraftRowClass({ row }) {
+      if (row.errors && row.errors.length) return 'customer-import-row-error'
+      if (row.warnings && row.warnings.length) return 'customer-import-row-warning'
+      return ''
     },
     currentDateString() {
       const today = new Date()
@@ -1249,6 +1317,24 @@ export default {
 .customer-import-error {
   color: #f56c6c;
   line-height: 1.5;
+}
+.customer-import-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.customer-import-filter-count {
+  color: #909399;
+  font-size: 12px;
+  margin-left: 4px;
+}
+::v-deep .el-table .customer-import-row-error {
+  background-color: #fef0f0;
+}
+::v-deep .el-table .customer-import-row-warning {
+  background-color: #fdf6ec;
 }
 .customer-import-warning {
   color: #e6a23c;
