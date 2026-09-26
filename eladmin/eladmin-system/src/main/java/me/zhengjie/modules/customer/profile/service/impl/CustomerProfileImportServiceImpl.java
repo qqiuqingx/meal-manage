@@ -128,7 +128,7 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
                 } catch (Exception e) {
                     log.warn("客户批量导入单客户事务失败: sourceRow={}, code={}, errorType={}",
                             candidate.getParsed().getSourceRows().get(0), candidate.getParsed().getEffectiveCode(),
-                            e.getClass().getSimpleName());
+                            e.getClass().getSimpleName(), e);
                     item = buildItemResult(candidate, "FAILED", "数据库写入失败，请检查配置后重试", null, null);
                     result.setFailedCount(result.getFailedCount() + 1);
                 }
