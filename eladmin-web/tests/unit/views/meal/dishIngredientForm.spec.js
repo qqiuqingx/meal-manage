@@ -26,7 +26,7 @@ describe('dish ingredient form tags', () => {
     jest.clearAllMocks()
   })
 
-  test('remote search loads pages and preserves selected options', async () => {
+  test('remote search loads pages and preserves selected options', async() => {
     queryIngredientTags
       .mockResolvedValueOnce({ content: [{ id: 2, name: '谷物' }], totalElements: 21 })
       .mockResolvedValueOnce({ content: [{ id: 3, name: '低盐' }], totalElements: 21 })
@@ -47,7 +47,7 @@ describe('dish ingredient form tags', () => {
     expect(vm.tagOptions.map(item => item.id)).toEqual([88, 2, 3])
   })
 
-  test('edit loads tags outside the first option page into the selected cache', async () => {
+  test('edit loads tags outside the first option page into the selected cache', async() => {
     getIngredient.mockResolvedValue({
       id: 30,
       name: '燕麦',
@@ -77,12 +77,36 @@ describe('dish ingredient form tags', () => {
     expect(vm.tagOptions).toEqual([])
   })
 
-  test('submits selected tag IDs with the ingredient request', async () => {
+  test('new ingredient inherits the selected parent and child category', () => {
+    const vm = createVm()
+    vm.level1Categories = [{ id: 2, name: '蔬菜', children: [{ id: 21, name: '瓜类' }] }]
+    vm.handleAdd(2, 21)
+
+    expect(vm.form).toEqual(expect.objectContaining({
+      parentCategoryId: 2,
+      parentCategoryName: '蔬菜',
+      categoryId: 21,
+      categoryName: '瓜类'
+    }))
+    expect(vm.currentLevel2Categories).toEqual([{ id: 21, name: '瓜类' }])
+  })
+
+  test('new ingredient under a parent leaves the child unselected', () => {
+    const vm = createVm()
+    vm.level1Categories = [{ id: 2, name: '蔬菜', children: [{ id: 21, name: '瓜类' }] }]
+    vm.handleAdd(2, null)
+
+    expect(vm.form.parentCategoryName).toBe('蔬菜')
+    expect(vm.form.categoryId).toBeNull()
+    expect(vm.form.categoryName).toBeNull()
+  })
+
+  test('submits selected tag IDs with the ingredient request', async() => {
     addIngredient.mockResolvedValue({})
     const vm = createVm()
     vm.form.name = '鸡肉'
     vm.form.tagIds = [2, 8]
-    vm.$refs = { form: { validate: callback => callback(true) } }
+    vm.$refs = { form: { validate: callback => callback(true) }}
     vm.$message = { success: jest.fn() }
     vm.$emit = jest.fn()
 
@@ -93,7 +117,7 @@ describe('dish ingredient form tags', () => {
     expect(vm.$emit).toHaveBeenCalledWith('refresh')
   })
 
-  test('ignores a stale remote search response after the query changes', async () => {
+  test('ignores a stale remote search response after the query changes', async() => {
     let resolveFirst
     queryIngredientTags
       .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))

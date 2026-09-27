@@ -66,7 +66,7 @@
             :value="item.id"
           />
         </el-select>
-        <div class="form-tip">标签由标签管理页面维护，可选择多个；标签不会自动从分类继承</div>
+        <div class="form-tip">标签可在卡片「+」气泡或标签管理弹窗中维护，可选择多个；标签不会自动从分类继承</div>
       </el-form-item>
       <el-form-item label="单位" prop="unit">
         <el-select v-model="form.unit" placeholder="请选择单位" clearable style="width: 100%">
@@ -241,9 +241,13 @@ export default {
         this.currentLevel2Categories = existing.children
       }
     },
-    handleAdd() {
+    /** 新增配料时按当前筛选的分类ID预填表单；一级分类下的“全部”不预选二级分类。 */
+    handleAdd(parentCategoryId, categoryId) {
       this.title = '新增配料'
       this.resetForm()
+      this.form.parentCategoryId = parentCategoryId || null
+      this.form.categoryId = categoryId || null
+      this.syncCategoryOptions()
       this.dialogVisible = true
     },
     handleUpdate(id) {

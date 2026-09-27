@@ -6,14 +6,15 @@ jest.mock('@/api/dishIngredientTag', () => ({
 }))
 
 import { addIngredientTag, queryIngredientTags } from '@/api/dishIngredientTag'
-import component from '@/views/meal/dishIngredientTag/index'
+import component from '@/views/meal/dishIngredient/tagManager'
 
 const flushPromises = () => new Promise(resolve => setTimeout(resolve, 0))
 
 function createVm() {
   return Object.assign(component.data(), component.methods, {
     $message: { success: jest.fn() },
-    $refs: { tagForm: { validate: callback => callback(true), resetFields: jest.fn() } }
+    $emit: jest.fn(),
+    $refs: { tagForm: { validate: callback => callback(true), resetFields: jest.fn() }}
   })
 }
 
@@ -22,7 +23,7 @@ describe('dishIngredientTag page', () => {
     jest.clearAllMocks()
   })
 
-  test('loads the default tag page and total count', async () => {
+  test('loads the default tag page and total count', async() => {
     queryIngredientTags.mockResolvedValue({
       content: [{ id: 4, name: '清真' }],
       totalElements: 1
@@ -38,7 +39,7 @@ describe('dishIngredientTag page', () => {
     expect(vm.loading).toBe(false)
   })
 
-  test('creates a trimmed tag through the add API', async () => {
+  test('creates a trimmed tag through the add API', async() => {
     addIngredientTag.mockResolvedValue({ id: 8, name: '无麸质' })
     const vm = createVm()
     vm.form = { id: null, name: '无麸质' }
@@ -49,8 +50,9 @@ describe('dishIngredientTag page', () => {
 
     expect(addIngredientTag).toHaveBeenCalledWith({ name: '无麸质' })
     expect(vm.$message.success).toHaveBeenCalledWith('保存成功')
-    expect(vm.dialogVisible).toBe(false)
+    expect(vm.formVisible).toBe(false)
     expect(vm.getList).toHaveBeenCalled()
+    expect(vm.$emit).toHaveBeenCalledWith('refresh-tags')
   })
 
   test('editing reuses the selected tag ID', () => {
@@ -60,6 +62,6 @@ describe('dishIngredientTag page', () => {
 
     expect(vm.form).toEqual({ id: 17, name: '低盐' })
     expect(vm.dialogTitle).toBe('编辑标签')
-    expect(vm.dialogVisible).toBe(true)
+    expect(vm.formVisible).toBe(true)
   })
 })
