@@ -1,7 +1,7 @@
 <template>
-  <div class="app-container">
-    <!-- 搜索区域 -->
-    <el-card class="search-card" shadow="never">
+  <div :class="{ 'app-container': !isTagManagementRoute }">
+    <router-view v-if="isTagManagementRoute" />
+    <el-card v-else class="search-card" shadow="never">
       <el-form ref="queryForm" :model="queryParams" :inline="true">
         <el-form-item label="配料名称" prop="name">
           <el-input
@@ -75,7 +75,7 @@
     </el-card>
 
     <!-- 操作按钮 -->
-    <el-card class="table-card" shadow="never">
+    <el-card v-if="!isTagManagementRoute" class="table-card" shadow="never">
       <div slot="header" class="clearfix">
         <el-button type="primary" icon="el-icon-plus" @click="handleAdd">新增</el-button>
         <el-button icon="el-icon-collection-tag" @click="handleCategoryManage">分类管理</el-button>
@@ -147,9 +147,10 @@
     </el-card>
 
     <!-- 新增/编辑弹窗 -->
-    <ingredient-form ref="ingredientForm" :category-tree="categoryTree" @refresh="getList" />
+    <ingredient-form v-if="!isTagManagementRoute" ref="ingredientForm" :category-tree="categoryTree" @refresh="getList" />
 
     <category-manager
+      v-if="!isTagManagementRoute"
       :visible.sync="categoryManagerVisible"
       :category-tree="categoryTree"
       @refresh-categories="refreshCategories"
@@ -206,6 +207,12 @@ export default {
         SPICE: { label: '调料', type: 'info' },
         OTHER: { label: '其他', type: '' }
       }
+    }
+  },
+  computed: {
+    /** 当前子路由是标签管理页时，由子路由组件占据主视图。 */
+    isTagManagementRoute() {
+      return this.$route.path.replace(/\/+$/, '').endsWith('/dishIngredientTag')
     }
   },
   created() {
@@ -343,7 +350,8 @@ export default {
     },
     /** 打开标签维护页。 */
     handleTagManage() {
-      this.$router.push({ path: '/meal/dishIngredientTag' })
+      const parentPath = this.$route.path.replace(/\/+$/, '')
+      this.$router.push({ path: `${parentPath}/dishIngredientTag` })
     },
     handleUpdate(row) {
       this.$refs.ingredientForm.handleUpdate(row.id)

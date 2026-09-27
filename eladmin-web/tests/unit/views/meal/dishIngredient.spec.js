@@ -42,6 +42,19 @@ describe('dish ingredient tag filter', () => {
     expect(vm.tagOptions).toEqual([{ id: 12, name: '清真' }])
   })
 
+  test('opens tag management under the current ingredient route', () => {
+    const vm = createVm()
+    vm.$route = { path: '/customer/dishIngredient' }
+    vm.$router = { push: jest.fn() }
+
+    vm.handleTagManage()
+
+    expect(vm.$router.push).toHaveBeenCalledWith({ path: '/customer/dishIngredient/dishIngredientTag' })
+    expect(component.computed.isTagManagementRoute.call({
+      $route: { path: '/customer/dishIngredient/dishIngredientTag' }
+    })).toBe(true)
+  })
+
   test('applies tagId with the other list filters and resets the page', async () => {
     queryIngredients.mockResolvedValue({ content: [], totalElements: 0 })
     const vm = createVm()
