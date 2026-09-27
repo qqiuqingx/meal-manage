@@ -4,10 +4,6 @@
     <template v-else>
       <header class="ingredient-header">
         <div class="page-title">配菜管理 <small>配料字典 · 分类分级</small></div>
-        <div class="view-tabs" role="group" aria-label="展示方式">
-          <button :class="{ active: viewMode === 'table' }" @click="setViewMode('table')">表格视图</button>
-          <button :class="{ active: viewMode === 'market' }" @click="setViewMode('market')">商超视图</button>
-        </div>
       </header>
       <el-card class="search-card" shadow="never">
         <el-form ref="queryForm" :model="queryParams" :inline="true">
@@ -18,36 +14,6 @@
               clearable
               @keyup.enter.native="handleQuery"
             />
-          </el-form-item>
-          <el-form-item v-show="viewMode === 'table'" label="一级分类" prop="parentCategoryId">
-            <el-select
-              v-model="queryParams.parentCategoryId"
-              placeholder="请选择一级分类"
-              clearable
-              @change="handleParentCategoryChange"
-            >
-              <el-option
-                v-for="item in level1Categories"
-                :key="item.id"
-                :label="item.name"
-                :value="item.id"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item v-show="viewMode === 'table'" label="二级分类" prop="categoryId">
-            <el-select
-              v-model="queryParams.categoryId"
-              placeholder="请选择二级分类"
-              clearable
-              :disabled="!queryParams.parentCategoryId"
-            >
-              <el-option
-                v-for="item in level2Categories"
-                :key="item.id"
-                :label="item.name"
-                :value="item.id"
-              />
-            </el-select>
           </el-form-item>
           <el-form-item label="标签" prop="tagId">
             <el-select
@@ -82,31 +48,29 @@
         </el-form>
       </el-card>
 
-      <div :class="{ 'market-layout': viewMode === 'market' }">
-        <aside v-if="viewMode === 'market'" class="category-sidebar">
+      <div class="market-layout">
+        <aside class="category-sidebar">
           <div class="side-head">商品分类</div>
           <button class="category-item" :class="{ active: !queryParams.parentCategoryId }" @click="selectParentCategory(null)">全部配料</button>
           <button v-for="item in level1Categories" :key="item.id" class="category-item" :class="{ active: queryParams.parentCategoryId === item.id }" @click="selectParentCategory(item.id)">{{ item.name }}</button>
           <div class="side-foot"><el-button type="success" plain icon="el-icon-setting" @click="handleCategoryManage">分类管理</el-button></div>
         </aside>
         <!-- 操作按钮 -->
-        <el-card class="table-card" :class="{ 'market-content': viewMode === 'market' }" shadow="never">
+        <el-card class="table-card market-content" shadow="never">
           <div slot="header" class="clearfix action-toolbar">
-            <div v-if="viewMode === 'market'" class="current-category">{{ currentCategoryName }} <small>共 {{ total }} 种配料（当前筛选）</small></div>
+            <div class="current-category">{{ currentCategoryName }} <small>共 {{ total }} 种配料（当前筛选）</small></div>
             <div class="toolbar-buttons">
               <el-button type="success" icon="el-icon-plus" @click="handleAdd">新增配料</el-button>
-              <el-button v-if="viewMode === 'table'" icon="el-icon-collection-tag" @click="handleCategoryManage">分类管理</el-button>
               <el-button
                 v-permission="['dishIngredientTag:list']"
                 icon="el-icon-collection-tag"
                 @click="handleTagManage"
               >标签管理</el-button>
-              <el-button v-if="viewMode === 'table'" type="danger" icon="el-icon-delete" :disabled="multiple" @click="handleDelete">删除</el-button>
               <el-button type="warning" icon="el-icon-download" @click="handleDownload">导出</el-button>
             </div>
           </div>
 
-          <div v-if="viewMode === 'market'">
+          <div>
             <div v-if="queryParams.parentCategoryId" class="category-chips">
               <button :class="{ active: !queryParams.categoryId }" @click="selectCategory(null)">全部</button>
               <button v-for="item in level2Categories" :key="item.id" :class="{ active: queryParams.categoryId === item.id }" @click="selectCategory(item.id)">{{ item.name }}</button>
@@ -129,54 +93,6 @@
               <div v-if="!loading && !ingredientList.length" class="empty-state">暂无符合条件的配料</div>
             </div>
           </div>
-          <!-- 表格 -->
-          <el-table v-if="viewMode === 'table'" v-loading="loading" :data="ingredientList" @selection-change="handleSelectionChange">
-            <el-table-column type="selection" width="55" align="center" />
-            <el-table-column label="配料名称" prop="name" align="center" />
-            <el-table-column label="分类" align="center" width="200">
-              <template slot-scope="scope">
-                <span v-if="scope.row.categoryPathName">{{ scope.row.categoryPathName }}</span>
-                <el-tag
-                  v-else
-                  :type="getCategoryTagType(scope.row.category)"
-                  size="small"
-                >
-                  {{ getCategoryLabel(scope.row.category) }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="标签" align="center" min-width="160">
-              <template slot-scope="scope">
-                <el-tag
-                  v-for="tag in scope.row.tags || []"
-                  :key="tag.id"
-                  size="small"
-                  effect="plain"
-                  class="ingredient-tag"
-                >{{ tag.name }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="单位" prop="unit" align="center" />
-            <el-table-column label="热量(卡/单位)" prop="calories" align="center" />
-            <el-table-column label="备注" prop="remark" align="center" />
-            <el-table-column label="状态" prop="enabled" align="center">
-              <template slot-scope="scope">
-                <el-switch
-                  v-model="scope.row.enabled"
-                  :disabled="!!statusPending[scope.row.id]"
-                  :active-value="true"
-                  :inactive-value="false"
-                  @change="handleStatusChange(scope.row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" align="center" width="150">
-              <template slot-scope="scope">
-                <el-button type="text" icon="el-icon-edit" @click="handleUpdate(scope.row)">编辑</el-button>
-                <el-button type="text" icon="el-icon-delete" style="color: #f56c6c;" @click="handleDelete(scope.row)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
 
           <!-- 分页 -->
           <pagination
@@ -220,13 +136,9 @@ export default {
   },
   data() {
     return {
-      viewMode: 'market',
       listRequestId: 0,
       statusPending: {},
       loading: true,
-      ids: [],
-      single: true,
-      multiple: true,
       total: 0,
       ingredientList: [],
       queryParams: {
@@ -248,12 +160,12 @@ export default {
       tagRequestId: 0,
       categoryManagerVisible: false,
       categoryMap: {
-        MEAT: { label: '肉类', type: 'danger' },
-        VEGETABLE: { label: '蔬菜', type: 'success' },
-        SEAFOOD: { label: '海鲜', type: 'primary' },
-        TOFU: { label: '豆制品', type: 'warning' },
-        SPICE: { label: '调料', type: 'info' },
-        OTHER: { label: '其他', type: '' }
+        MEAT: { label: '肉类' },
+        VEGETABLE: { label: '蔬菜' },
+        SEAFOOD: { label: '海鲜' },
+        TOFU: { label: '豆制品' },
+        SPICE: { label: '调料' },
+        OTHER: { label: '其他' }
       }
     }
   },
@@ -273,11 +185,6 @@ export default {
     this.getList()
   },
   methods: {
-    /** 切换展示方式并清空表格勾选，保留查询和分页条件。 */
-    setViewMode(mode) {
-      this.viewMode = mode
-      this.handleSelectionChange([])
-    },
     /** 根据一级分类ID切换货架，清空二级筛选并查询首页。 */
     selectParentCategory(id) {
       this.queryParams.parentCategoryId = id
@@ -349,7 +256,6 @@ export default {
     /** 查询当前分页，仅接收最新请求，避免快速切换分类时旧结果覆盖。 */
     getList() {
       const requestId = ++this.listRequestId
-      this.handleSelectionChange([])
       this.loading = true
       queryIngredients({ ...this.queryParams }).then(response => {
         if (requestId !== this.listRequestId) return
@@ -411,11 +317,6 @@ export default {
       this.queryParams.size = limit
       this.getList()
     },
-    handleSelectionChange(selection) {
-      this.ids = selection.map(item => item.id)
-      this.single = selection.length !== 1
-      this.multiple = !selection.length
-    },
     handleAdd() {
       this.$refs.ingredientForm.handleAdd()
     },
@@ -442,7 +343,7 @@ export default {
       })
     },
     handleDelete(row) {
-      const ids = row.id ? [row.id] : this.ids
+      const ids = [row.id]
       this.$confirm('是否确认删除配料编号为"' + ids + '"的数据项?', '警告', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
@@ -474,9 +375,6 @@ export default {
     getCategoryLabel(category) {
       return this.categoryMap[category] ? this.categoryMap[category].label : category
     },
-    getCategoryTagType(category) {
-      return this.categoryMap[category] ? this.categoryMap[category].type : ''
-    },
     resetForm(formName) {
       this.$refs[formName].resetFields()
     }
@@ -490,9 +388,6 @@ export default {
 .ingredient-header { background: #fff; padding: 16px 24px; margin-bottom: 16px; border-radius: 10px; }
 .page-title, .current-category { font-size: 18px; font-weight: 600; }
 .page-title small, .current-category small { font-size: 12px; color: #909399; font-weight: 400; margin-left: 10px; }
-.view-tabs { display: flex; background: #f0f2f5; padding: 4px; border-radius: 8px; flex-shrink: 0; }
-.view-tabs button { border: 0; background: transparent; padding: 7px 22px; border-radius: 6px; color: #606266; cursor: pointer; }
-.view-tabs button.active { background: #fff; color: #67c23a; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
 .market-layout { display: flex; gap: 16px; align-items: flex-start; }
 .category-sidebar { width: 208px; flex: none; background: #fff; border-radius: 10px; overflow: hidden; }
 .side-head { padding: 14px 18px; color: #909399; font-size: 13px; font-weight: 600; border-bottom: 1px solid #f0f2f5; }
