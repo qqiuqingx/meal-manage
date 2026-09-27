@@ -41,6 +41,26 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="标签" prop="tagId">
+          <el-select
+            v-model="queryParams.tagId"
+            filterable
+            remote
+            clearable
+            :remote-method="searchTagOptions"
+            :loading="tagLoading"
+            placeholder="搜索标签"
+            @visible-change="handleTagFilterVisible"
+            @change="handleQuery"
+          >
+            <el-option
+              v-for="item in tagOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="状态" prop="enabled">
           <el-select v-model="queryParams.enabled" placeholder="请选择状态" clearable>
             <el-option label="启用" :value="true" />
@@ -59,6 +79,11 @@
       <div slot="header" class="clearfix">
         <el-button type="primary" icon="el-icon-plus" @click="handleAdd">新增</el-button>
         <el-button icon="el-icon-collection-tag" @click="handleCategoryManage">分类管理</el-button>
+        <el-button
+          v-permission="['dishIngredientTag:list']"
+          icon="el-icon-collection-tag"
+          @click="handleTagManage"
+        >标签管理</el-button>
         <el-button type="danger" icon="el-icon-delete" :disabled="multiple" @click="handleDelete">删除</el-button>
         <el-button type="warning" icon="el-icon-download" @click="handleDownload">导出</el-button>
       </div>
@@ -77,6 +102,17 @@
             >
               {{ getCategoryLabel(scope.row.category) }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="标签" align="center" min-width="160">
+          <template slot-scope="scope">
+            <el-tag
+              v-for="tag in scope.row.tags || []"
+              :key="tag.id"
+              size="small"
+              effect="plain"
+              class="ingredient-tag"
+            >{{ tag.name }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="单位" prop="unit" align="center" />
@@ -124,6 +160,7 @@
 <script>
 import { queryIngredients, editIngredient, delIngredients, downloadIngredients } from '@/api/dishIngredient'
 import { queryCategoryTree } from '@/api/dishIngredientCategory'
+import { queryIngredientTags } from '@/api/dishIngredientTag'
 import Pagination from '@/components/Pagination'
 import IngredientForm from './form'
 import CategoryManager from './categoryManager'
@@ -149,11 +186,17 @@ export default {
         name: null,
         parentCategoryId: null,
         categoryId: null,
+        tagId: null,
         enabled: null
       },
       categoryTree: [],
       level1Categories: [],
       level2Categories: [],
+      tagOptions: [],
+      tagLoading: false,
+      tagSearchText: '',
+      tagSearchLoaded: false,
+      tagRequestId: 0,
       categoryManagerVisible: false,
       categoryMap: {
         MEAT: { label: '肉类', type: 'danger' },
@@ -239,6 +282,40 @@ export default {
         this.loading = false
       })
     },
+    /** 首次展开筛选器时加载标签选项。 */
+    handleTagFilterVisible(visible) {
+      if (visible && !this.tagSearchLoaded) {
+        this.searchTagOptions(this.tagSearchText)
+      }
+    },
+    /** 按标签名称远程搜索筛选选项。 */
+    searchTagOptions(query) {
+      const name = query || ''
+      if (name === this.tagSearchText && (this.tagSearchLoaded || this.tagLoading)) return
+      this.tagRequestId += 1
+      this.tagLoading = false
+      this.tagSearchText = name
+      this.tagSearchLoaded = false
+      const selected = this.tagOptions.find(item => item.id === this.queryParams.tagId)
+      this.tagOptions = selected ? [selected] : []
+      const requestId = ++this.tagRequestId
+      this.tagLoading = true
+      queryIngredientTags({ name: name || undefined, page: 0, size: 20 }).then(response => {
+        if (requestId !== this.tagRequestId) return
+        this.tagOptions = this.mergeTagOptions(this.tagOptions, response.content || [])
+        this.tagSearchLoaded = true
+      }).catch(() => {
+        if (requestId === this.tagRequestId) this.tagSearchLoaded = false
+      }).finally(() => {
+        if (requestId === this.tagRequestId) this.tagLoading = false
+      })
+    },
+    /** 合并远程结果并让最新标签名称覆盖缓存。 */
+    mergeTagOptions(current, incoming) {
+      const options = new Map((current || []).map(item => [item.id, item]))
+      ;(incoming || []).forEach(item => options.set(item.id, item))
+      return Array.from(options.values())
+    },
     handleQuery() {
       this.queryParams.page = 0
       this.getList()
@@ -263,6 +340,10 @@ export default {
     },
     handleCategoryManage() {
       this.categoryManagerVisible = true
+    },
+    /** 打开标签维护页。 */
+    handleTagManage() {
+      this.$router.push({ path: '/meal/dishIngredientTag' })
     },
     handleUpdate(row) {
       this.$refs.ingredientForm.handleUpdate(row.id)
@@ -292,6 +373,7 @@ export default {
         name: this.queryParams.name,
         parentCategoryId: this.queryParams.parentCategoryId,
         categoryId: this.queryParams.categoryId,
+        tagId: this.queryParams.tagId,
         enabled: this.queryParams.enabled
       }
       downloadIngredients(params).then(response => {
@@ -322,5 +404,8 @@ export default {
 }
 .table-card {
   margin-bottom: 15px;
+}
+.ingredient-tag {
+  margin: 2px;
 }
 </style>

@@ -8,6 +8,8 @@ import javax.validation.constraints.NotBlank;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.io.Serializable;
 import java.sql.Timestamp;
+import java.util.List;
+import me.zhengjie.modules.meal.domain.dto.DishIngredientTagDto;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -34,7 +36,7 @@ public class DishIngredient implements Serializable {
     @ApiModelProperty(value = "二级分类ID")
     private Integer categoryId;
 
-    @ApiModelProperty(value = "配料分类（兼容旧字段）：MEAT、VEGETABLE、SEAFOOD、TOFU、SPICE、OTHER")
+    @ApiModelProperty(value = "历史分类枚举（保留读写；不再根据分类名称自动生成，当前归属使用 categoryId）")
     private String category;
 
     @ApiModelProperty(value = "单位：克g、毫升ml、个")
@@ -70,6 +72,16 @@ public class DishIngredient implements Serializable {
     @TableField(exist = false)
     @ApiModelProperty(value = "分类路径（非数据库字段，如：蔬菜/瓜类）")
     private String categoryPathName;
+
+    /** 配料写入时可选的标签ID集合。 */
+    @TableField(exist = false)
+    @ApiModelProperty(value = "关联标签ID集合；新增未传时为空，编辑未传时保持原标签")
+    private List<Integer> tagIds;
+
+    /** 查询结果中的标签ID和名称列表。 */
+    @TableField(exist = false)
+    @ApiModelProperty(value = "配料关联的标签详情")
+    private List<DishIngredientTagDto> tags;
 
     public void copy(DishIngredient source){
         BeanUtil.copyProperties(source,this, CopyOptions.create().setIgnoreNullValue(true));

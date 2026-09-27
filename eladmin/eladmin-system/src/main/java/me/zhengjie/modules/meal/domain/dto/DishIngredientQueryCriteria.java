@@ -21,6 +21,9 @@ public class DishIngredientQueryCriteria {
     /** 二级分类ID */
     private Integer categoryId;
 
+    /** 标签ID；查询时与名称、分类和状态条件同时生效。 */
+    private Integer tagId;
+
     private Boolean enabled;
 
     private Integer page = 0;

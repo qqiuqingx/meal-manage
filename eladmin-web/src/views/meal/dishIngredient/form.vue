@@ -44,6 +44,30 @@
           输入新的名称将自动创建二级分类（归属：{{ form.parentCategoryName }}）
         </div>
       </el-form-item>
+      <el-form-item label="标签" prop="tagIds">
+        <el-select
+          ref="tagSelect"
+          v-model="form.tagIds"
+          multiple
+          filterable
+          remote
+          clearable
+          collapse-tags
+          :remote-method="searchTags"
+          :loading="tagLoading"
+          placeholder="搜索并选择标签"
+          style="width: 100%"
+          @visible-change="handleTagDropdownVisible"
+        >
+          <el-option
+            v-for="item in tagOptions"
+            :key="item.id"
+            :label="item.name"
+            :value="item.id"
+          />
+        </el-select>
+        <div class="form-tip">标签由标签管理页面维护，可选择多个；标签不会自动从分类继承</div>
+      </el-form-item>
       <el-form-item label="单位" prop="unit">
         <el-select v-model="form.unit" placeholder="请选择单位" clearable style="width: 100%">
           <el-option label="克" value="克" />
@@ -70,6 +94,7 @@
 
 <script>
 import { addIngredient, editIngredient, getIngredient } from '@/api/dishIngredient'
+import { queryIngredientTags } from '@/api/dishIngredientTag'
 
 export default {
   name: 'IngredientForm',
@@ -85,6 +110,14 @@ export default {
       title: '',
       level1Categories: [],
       currentLevel2Categories: [],
+      tagOptions: [],
+      tagLoading: false,
+      tagPage: 0,
+      tagPageSize: 20,
+      tagTotal: 0,
+      tagSearchText: '',
+      tagSearchLoaded: false,
+      tagRequestId: 0,
       form: {
         id: null,
         name: '',
@@ -92,6 +125,7 @@ export default {
         parentCategoryName: null,
         categoryName: null,
         categoryId: null,
+        tagIds: [],
         unit: '克',
         calories: 0,
         remark: '',
@@ -113,7 +147,87 @@ export default {
       }
     }
   },
+  beforeDestroy() {
+    this.detachTagDropdownScroll()
+  },
   methods: {
+    /** 首次打开标签选择器时加载首屏选项。 */
+    handleTagDropdownVisible(visible) {
+      if (!visible) {
+        this.detachTagDropdownScroll()
+        return
+      }
+      if (!this.tagSearchLoaded) {
+        this.searchTags(this.tagSearchText)
+      }
+      this.$nextTick(() => {
+        const wrap = this.getTagDropdownWrap()
+        if (wrap) {
+          wrap.removeEventListener('scroll', this.handleTagDropdownScroll)
+          wrap.addEventListener('scroll', this.handleTagDropdownScroll)
+        }
+      })
+    },
+    /** 标签下拉列表滚动到底部时加载下一页。 */
+    handleTagDropdownScroll(event) {
+      const wrap = event && event.target
+      if (wrap && wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 24) {
+        this.loadMoreTags()
+      }
+    },
+    /** 搜索标签并重置远程分页。 */
+    searchTags(query) {
+      const name = query || ''
+      if (name === this.tagSearchText && (this.tagSearchLoaded || this.tagLoading)) return
+      this.tagRequestId += 1
+      this.tagLoading = false
+      this.tagSearchText = name
+      this.tagSearchLoaded = false
+      this.tagPage = 0
+      this.tagTotal = 0
+      this.tagOptions = this.tagOptions.filter(item => this.form.tagIds.includes(item.id))
+      this.fetchTagPage(0)
+    },
+    /** 加载一个标签分页，并合并保留已选标签的显示名称。 */
+    fetchTagPage(page) {
+      if (this.tagLoading || (page > 0 && page * this.tagPageSize >= this.tagTotal)) return
+      this.tagLoading = true
+      const requestId = ++this.tagRequestId
+      queryIngredientTags({ name: this.tagSearchText || undefined, page, size: this.tagPageSize }).then(response => {
+        if (requestId !== this.tagRequestId) return
+        this.tagOptions = this.mergeTagOptions(this.tagOptions, response.content || [])
+        this.tagTotal = response.totalElements || 0
+        this.tagPage = page + 1
+        this.tagSearchLoaded = true
+      }).catch(() => {
+        if (requestId === this.tagRequestId) this.tagSearchLoaded = false
+      }).finally(() => {
+        if (requestId === this.tagRequestId) this.tagLoading = false
+      })
+    },
+    /** 继续加载当前搜索条件的下一页。 */
+    loadMoreTags() {
+      if (!this.tagLoading && this.tagSearchLoaded && this.tagPage * this.tagPageSize < this.tagTotal) {
+        this.fetchTagPage(this.tagPage)
+      }
+    },
+    /** 按标签ID合并下拉选项，保留最新返回的名称。 */
+    mergeTagOptions(current, incoming) {
+      const options = new Map((current || []).map(item => [item.id, item]))
+      ;(incoming || []).forEach(item => options.set(item.id, item))
+      return Array.from(options.values())
+    },
+    /** 取得 Element UI 标签下拉列表的滚动容器。 */
+    getTagDropdownWrap() {
+      const select = this.$refs.tagSelect
+      const scrollbar = select && select.$refs && select.$refs.scrollbar
+      return scrollbar && scrollbar.wrap
+    },
+    /** 对话框关闭或组件卸载时移除滚动监听。 */
+    detachTagDropdownScroll() {
+      const wrap = this.getTagDropdownWrap()
+      if (wrap) wrap.removeEventListener('scroll', this.handleTagDropdownScroll)
+    },
     handleParentCategoryChange(value) {
       const existing = this.level1Categories.find(c => c.name === value)
       this.form.parentCategoryId = existing ? existing.id : null
@@ -142,11 +256,13 @@ export default {
           parentCategoryName: response.parentCategoryName || null,
           categoryName: response.categoryName || null,
           categoryId: response.categoryId || null,
+          tagIds: response.tagIds || [],
           unit: response.unit || '克',
           calories: response.calories || 0,
           remark: response.remark || '',
           enabled: response.enabled !== false
         }
+        this.tagOptions = this.mergeTagOptions(this.tagOptions, response.tags || [])
         this.syncCategoryOptions()
         this.dialogVisible = true
       })
@@ -225,6 +341,7 @@ export default {
       this.dialogVisible = false
     },
     dialogClose() {
+      this.detachTagDropdownScroll()
       this.resetForm()
     },
     resetForm() {
@@ -235,12 +352,20 @@ export default {
         parentCategoryName: null,
         categoryName: null,
         categoryId: null,
+        tagIds: [],
         unit: '克',
         calories: 0,
         remark: '',
         enabled: true
       }
       this.currentLevel2Categories = []
+      this.tagOptions = []
+      this.tagPage = 0
+      this.tagTotal = 0
+      this.tagSearchText = ''
+      this.tagSearchLoaded = false
+      this.tagRequestId += 1
+      this.tagLoading = false
       if (this.$refs.form) {
         this.$refs.form.resetFields()
       }

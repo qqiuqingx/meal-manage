@@ -24,6 +24,13 @@ public interface DishIngredientMapper extends BaseMapper<DishIngredient> {
 
     List<DishIngredient> findById(@Param("id") Integer id);
 
+    /**
+     * 按配料ID加行锁，用于串行化配料修改、删除和标签关系替换。
+     * @param id 配料ID
+     * @return 配料不存在时返回 null
+     */
+    DishIngredient selectByIdForUpdate(@Param("id") Integer id);
+
     List<DishIngredient> findByDishId(@Param("dishId") Integer dishId);
 
     List<DishIngredientRelation> findRelationsByDishId(@Param("dishId") Integer dishId);

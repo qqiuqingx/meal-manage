@@ -63,6 +63,14 @@
             <if test="criteria.parentCategoryId != null">
                 and c2.parent_id = #{criteria.parentCategoryId}
             </if>
+            <if test="criteria.tagId != null">
+                and exists (
+                    select 1
+                    from dish_ingredient_tag_relation tag_rel
+                    where tag_rel.ingredient_id = di.id
+                      and tag_rel.tag_id = #{criteria.tagId}
+                )
+            </if>
             <if test="criteria.enabled != null">
                 and di.enabled = #{criteria.enabled}
             </if>
@@ -77,6 +85,13 @@
         left join dish_ingredient_category c2 on di.category_id = c2.id
         left join dish_ingredient_category c1 on c2.parent_id = c1.id
         where di.id = #{id}
+    </select>
+
+    <select id="selectByIdForUpdate" resultMap="BaseResultMap">
+        SELECT di.*
+        FROM dish_ingredient di
+        WHERE di.id = #{id}
+        FOR UPDATE
     </select>
 
     <select id="findByDishId" resultMap="BaseResultMap">
