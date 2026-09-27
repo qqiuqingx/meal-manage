@@ -29,6 +29,12 @@ const permission = {
 
 export const filterAsyncRouter = (routers, lastRouter = false, type = false) => { // 遍历后台传来的路由字符串，转换为组件对象
   return routers.filter(router => {
+    const isIngredientPage = router.component === 'meal/dishIngredient/index'
+    // 配料父路由本身就是可访问页面，不能跳转到后台目录占位地址。
+    if (isIngredientPage && router.redirect === 'noredirect') {
+      delete router.redirect
+    }
+
     if (type && router.children) {
       router.children = filterChildren(router.children)
     }
@@ -44,6 +50,13 @@ export const filterAsyncRouter = (routers, lastRouter = false, type = false) => 
     }
     if (router.children != null && router.children && router.children.length) {
       router.children = filterAsyncRouter(router.children, router, type)
+      // 配料页自身承载列表；仅为侧栏补充入口，空路径指向现有父路由。
+      if (!type && isIngredientPage) {
+        router.children.unshift({
+          path: '',
+          meta: { ...router.meta, title: '配料列表' }
+        })
+      }
     } else {
       delete router['children']
       delete router['redirect']
