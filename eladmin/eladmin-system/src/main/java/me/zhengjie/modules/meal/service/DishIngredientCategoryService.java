@@ -1,6 +1,8 @@
 package me.zhengjie.modules.meal.service;
 
 import me.zhengjie.modules.meal.domain.DishIngredientCategory;
+import me.zhengjie.modules.meal.domain.dto.DishIngredientCategoryCreateDto;
+import me.zhengjie.modules.meal.domain.dto.DishIngredientCategoryUpdateDto;
 import com.baomidou.mybatisplus.extension.service.IService;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +49,20 @@ public interface DishIngredientCategoryService extends IService<DishIngredientCa
      * @return 创建后的分类
      */
     DishIngredientCategory create(DishIngredientCategory category);
+
+    /**
+     * 校验并创建配料分类；请求未指定排序时追加到同级分类末尾。
+     * @param request 分类名称、层级、父分类和可选排序
+     * @return 已创建且包含数据库生成ID的分类
+     */
+    DishIngredientCategory createCategory(DishIngredientCategoryCreateDto request);
+
+    /**
+     * 修改分类名称和排序，分类层级及父分类保持不变。
+     * @param id 分类ID
+     * @param request 新名称和可选排序
+     */
+    void updateCategory(Integer id, DishIngredientCategoryUpdateDto request);
 
     /**
      * 删除分类（带校验）

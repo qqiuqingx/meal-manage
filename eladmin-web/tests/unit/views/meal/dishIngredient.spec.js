@@ -1,3 +1,5 @@
+/* eslint-env jest */
+
 jest.mock('@/api/dishIngredient', () => ({
   delIngredients: jest.fn(),
   downloadIngredients: jest.fn(),
@@ -15,6 +17,7 @@ jest.mock('@/api/dishIngredientTag', () => ({
 }))
 
 import { downloadIngredients, editIngredient, queryIngredients } from '@/api/dishIngredient'
+import { queryCategoryTree } from '@/api/dishIngredientCategory'
 import { addIngredientTag, queryIngredientTags } from '@/api/dishIngredientTag'
 import component from '@/views/meal/dishIngredient/index'
 
@@ -115,6 +118,40 @@ describe('ingredient supermarket navigation', () => {
     expect(queryIngredients).toHaveBeenCalledWith(expect.objectContaining({ parentCategoryId: 2, categoryId: null, page: 0, tagId: 12 }))
     vm.selectCategory(21)
     expect(queryIngredients).toHaveBeenLastCalledWith(expect.objectContaining({ parentCategoryId: 2, categoryId: 21, page: 0 }))
+  })
+
+  test('refreshes category tree and ingredient list after category edits', async() => {
+    queryCategoryTree.mockResolvedValue([
+      { id: 1, name: '蔬菜', children: [{ id: 11, name: '叶菜' }] }
+    ])
+    queryIngredients.mockResolvedValue({ content: [], totalElements: 0 })
+    const vm = createVm()
+    vm.queryParams.parentCategoryId = 1
+    vm.queryParams.categoryId = 11
+
+    await vm.handleCategoriesChanged()
+    await flushPromises()
+
+    expect(vm.categoryTree[0].name).toBe('蔬菜')
+    expect(vm.level2Categories).toEqual([{ id: 11, name: '叶菜' }])
+    expect(queryIngredients).toHaveBeenCalledTimes(1)
+  })
+
+  test('resets pagination when a deleted category invalidates the active filter', async() => {
+    queryCategoryTree.mockResolvedValue([])
+    queryIngredients.mockResolvedValue({ content: [], totalElements: 0 })
+    const vm = createVm()
+    vm.queryParams.parentCategoryId = 9
+    vm.queryParams.categoryId = 91
+    vm.queryParams.page = 3
+
+    await vm.handleCategoriesChanged()
+    await flushPromises()
+
+    expect(vm.queryParams.parentCategoryId).toBe(null)
+    expect(vm.queryParams.categoryId).toBe(null)
+    expect(vm.queryParams.page).toBe(0)
+    expect(queryIngredients).toHaveBeenCalledTimes(1)
   })
 
   test('ignores an older category response arriving after the latest query', async() => {

@@ -170,6 +170,7 @@ Backend reads from:
     - `eladmin/doc/apidoc/排餐计划生成接口.md`
     - `eladmin/doc/apidoc/订单排餐日历接口文档.md`
     - `eladmin/doc/apidoc/父套餐餐数统计接口.md`
+    - `eladmin/doc/apidoc/配料分类接口文档.md`
 - **Business Documentation**:
   - Business docs are in `doc/business/` directory
   - **修改业务逻辑前必须先读业务文档**，了解概念、表关系和跨模块依赖

@@ -2,6 +2,8 @@ package me.zhengjie.modules.meal.rest;
 
 import me.zhengjie.annotation.Log;
 import me.zhengjie.modules.meal.domain.DishIngredientCategory;
+import me.zhengjie.modules.meal.domain.dto.DishIngredientCategoryCreateDto;
+import me.zhengjie.modules.meal.domain.dto.DishIngredientCategoryUpdateDto;
 import me.zhengjie.modules.meal.service.DishIngredientCategoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -50,6 +52,35 @@ public class DishIngredientCategoryController {
     @PreAuthorize("@el.check('dishIngredient:list')")
     public ResponseEntity<List<DishIngredientCategory>> listByParentId(@PathVariable Integer parentId) {
         return new ResponseEntity<>(categoryService.listByParentId(parentId), HttpStatus.OK);
+    }
+
+    /**
+     * 新增一级或二级配料分类。
+     * @param request 分类名称、层级、父分类和可选排序
+     * @return 新建分类
+     */
+    @PostMapping
+    @Log("新增配料分类")
+    @ApiOperation("新增配料分类")
+    @PreAuthorize("@el.check('dishIngredient:add')")
+    public ResponseEntity<DishIngredientCategory> create(@RequestBody DishIngredientCategoryCreateDto request) {
+        return new ResponseEntity<>(categoryService.createCategory(request), HttpStatus.CREATED);
+    }
+
+    /**
+     * 修改分类名称或排序，不支持调整层级及父分类。
+     * @param id 分类ID
+     * @param request 新名称和可选排序
+     * @return 无响应正文
+     */
+    @PutMapping("/{id}")
+    @Log("编辑配料分类")
+    @ApiOperation("编辑配料分类")
+    @PreAuthorize("@el.check('dishIngredient:edit')")
+    public ResponseEntity<Object> update(@PathVariable Integer id,
+                                         @RequestBody DishIngredientCategoryUpdateDto request) {
+        categoryService.updateCategory(id, request);
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 
     @DeleteMapping("/{id}")

@@ -3,6 +3,8 @@ package me.zhengjie.modules.meal.service.impl;
 import me.zhengjie.modules.meal.domain.DishIngredientCategory;
 import me.zhengjie.modules.meal.domain.DishIngredient;
 import me.zhengjie.modules.meal.domain.dto.CategoryIngredientMappingRow;
+import me.zhengjie.modules.meal.domain.dto.DishIngredientCategoryCreateDto;
+import me.zhengjie.modules.meal.domain.dto.DishIngredientCategoryUpdateDto;
 import me.zhengjie.modules.meal.mapper.DishIngredientCategoryMapper;
 import me.zhengjie.modules.meal.mapper.DishIngredientMapper;
 import me.zhengjie.modules.meal.service.DishIngredientCategoryService;
@@ -10,8 +12,10 @@ import me.zhengjie.exception.BadRequestException;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -71,6 +75,91 @@ public class DishIngredientCategoryServiceImpl
         category.setCreateTime(new Timestamp(System.currentTimeMillis()));
         categoryMapper.insert(category);
         return category;
+    }
+
+    /**
+     * 校验并新增分类；排序未指定时追加到同级分类末尾。
+     * @param request 分类名称、层级、父分类和可选排序
+     * @return 新建分类
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public DishIngredientCategory createCategory(DishIngredientCategoryCreateDto request) {
+        if (request == null) {
+            throw new BadRequestException("分类信息不能为空");
+        }
+        String name = normalizeCategoryName(request.getName());
+        Integer level = request.getLevel();
+        Integer parentId = request.getParentId();
+        if (level == null || (level != 1 && level != 2)) {
+            throw new BadRequestException("分类层级只能为1或2");
+        }
+        if (level == 1 && parentId != null) {
+            throw new BadRequestException("一级分类不能设置父分类");
+        }
+        if (level == 2) {
+            if (parentId == null) {
+                throw new BadRequestException("二级分类必须选择一级分类");
+            }
+            DishIngredientCategory parent = categoryMapper.selectById(parentId);
+            if (parent == null || parent.getLevel() != 1) {
+                throw new BadRequestException("父分类不存在或不是一级分类");
+            }
+        }
+        if (countSameName(level, parentId, name, null) > 0) {
+            throw new BadRequestException("同级分类名称已存在");
+        }
+
+        DishIngredientCategory category = new DishIngredientCategory();
+        category.setName(name);
+        category.setLevel(level);
+        category.setParentId(parentId);
+        category.setSort(request.getSort() == null ? getNextSort(level, parentId) : request.getSort());
+        category.setEnabled(true);
+        category.setCreateTime(new Timestamp(System.currentTimeMillis()));
+        try {
+            categoryMapper.insert(category);
+        } catch (DuplicateKeyException ex) {
+            throw new BadRequestException("同级分类名称已存在");
+        }
+        return category;
+    }
+
+    /**
+     * 更新分类名称和排序；层级和父分类由现有记录确定且不会改变。
+     * @param id 分类ID
+     * @param request 新名称和可选排序
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateCategory(Integer id, DishIngredientCategoryUpdateDto request) {
+        if (id == null) {
+            throw new BadRequestException("分类ID不能为空");
+        }
+        if (request == null) {
+            throw new BadRequestException("分类信息不能为空");
+        }
+        DishIngredientCategory category = categoryMapper.selectById(id);
+        if (category == null) {
+            throw new BadRequestException("分类不存在");
+        }
+
+        String name = normalizeCategoryName(request.getName());
+        if (countSameName(category.getLevel(), category.getParentId(), name, id) > 0) {
+            throw new BadRequestException("同级分类名称已存在");
+        }
+        category.setName(name);
+        if (request.getSort() != null) {
+            category.setSort(request.getSort());
+        }
+        category.setUpdateTime(new Timestamp(System.currentTimeMillis()));
+        try {
+            if (categoryMapper.updateById(category) == 0) {
+                throw new BadRequestException("分类不存在");
+            }
+        } catch (DuplicateKeyException ex) {
+            throw new BadRequestException("同级分类名称已存在");
+        }
     }
 
     @Override
@@ -139,5 +228,44 @@ private List<DishIngredientCategory> buildTree(List<DishIngredientCategory> all)
     private int getNextSort(int level, Integer parentId) {
         Integer maxSort = categoryMapper.selectMaxSort(level, parentId);
         return (maxSort == null ? 0 : maxSort) + 10;
+    }
+
+    /**
+     * 查询同层级、同父级下的同名分类数量，可按需排除正在编辑的分类。
+     * @param level 分类层级
+     * @param parentId 父分类ID，一级分类传null
+     * @param name 已规范化的分类名称
+     * @param excludeId 编辑时排除的分类ID
+     * @return 匹配数量
+     */
+    private Long countSameName(Integer level, Integer parentId, String name, Integer excludeId) {
+        QueryWrapper<DishIngredientCategory> query = new QueryWrapper<DishIngredientCategory>()
+            .eq("level", level)
+            .eq("name", name);
+        if (parentId == null) {
+            query.isNull("parent_id");
+        } else {
+            query.eq("parent_id", parentId);
+        }
+        if (excludeId != null) {
+            query.ne("id", excludeId);
+        }
+        return categoryMapper.selectCount(query);
+    }
+
+    /**
+     * 去除分类名称首尾空白并校验非空和长度。
+     * @param name 原始分类名称
+     * @return 可保存的分类名称
+     */
+    private String normalizeCategoryName(String name) {
+        String normalized = StringUtils.trimWhitespace(name);
+        if (!StringUtils.hasText(normalized)) {
+            throw new BadRequestException("分类名称不能为空");
+        }
+        if (normalized.codePointCount(0, normalized.length()) > 64) {
+            throw new BadRequestException("分类名称不能超过64个字符");
+        }
+        return normalized;
     }
 }

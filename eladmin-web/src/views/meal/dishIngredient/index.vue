@@ -143,7 +143,7 @@
     <category-manager
       :visible.sync="categoryManagerVisible"
       :category-tree="categoryTree"
-      @refresh-categories="refreshCategories"
+      @refresh-categories="handleCategoriesChanged"
     />
 
     <tag-manager
@@ -257,18 +257,23 @@ export default {
       this.queryParams.categoryId = id
       this.handleQuery()
     },
+    /** 刷新分类树并同步当前筛选，返回筛选条件是否已失效。 */
     async refreshCategories() {
       try {
         const tree = await queryCategoryTree()
         this.categoryTree = tree || []
         this.level1Categories = this.categoryTree
-        const changed = this.syncQueryCategoryState(this.categoryTree)
-        if (changed) {
-          this.getList()
-        }
+        return this.syncQueryCategoryState(this.categoryTree)
       } catch (error) {
         console.error('加载分类失败', error)
+        return false
       }
+    },
+    /** 分类新增、改名或删除后刷新筛选树和配料当前页，更新分类路径名称。 */
+    async handleCategoriesChanged() {
+      const filtersChanged = await this.refreshCategories()
+      if (filtersChanged) this.queryParams.page = 0
+      this.getList()
     },
     getLevel2CategoriesByParentId(parentId) {
       if (!parentId) {
