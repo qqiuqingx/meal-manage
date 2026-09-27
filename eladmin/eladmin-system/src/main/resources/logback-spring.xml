@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<configuration scan="true" scanPeriod="30 seconds" debug="false">
+<configuration debug="false">
     <contextName>elAdmin</contextName>
     <property name="log.charset" value="utf-8" />
     <property name="log.pattern" value="%contextName- %red(%d{yyyy-MM-dd HH:mm:ss}) %green([%thread]) %highlight(%-5level) %boldMagenta(%logger{36}) - %msg%n" />
@@ -80,6 +80,19 @@
         </encoder>
     </appender>
 
+    <!-- 客户批量导入日志文件（每天一个文件，保留30天） -->
+    <appender name="CUSTOMER_IMPORT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${log.path}/customer-import.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${log.path}/customer-import.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
     <!-- 排餐计划服务日志单独写文件 -->
     <logger name="me.zhengjie.modules.meal.service.impl.MealPlanServiceImpl" level="info" additivity="false">
         <appender-ref ref="MEAL_PLAN_FILE" />
@@ -107,6 +120,20 @@
     <!-- 企业微信回调日志单独写文件 -->
     <logger name="me.zhengjie.modules.wecom.service.WeComCallbackService" level="info" additivity="false">
         <appender-ref ref="WECOM_CALLBACK_FILE" />
+        <appender-ref ref="console" />
+    </logger>
+
+    <!-- 客户批量导入解析与提交日志单独写文件 -->
+    <logger name="me.zhengjie.modules.customer.profile.rest.CustomerProfileImportController" level="info" additivity="false">
+        <appender-ref ref="CUSTOMER_IMPORT_FILE" />
+        <appender-ref ref="console" />
+    </logger>
+    <logger name="me.zhengjie.modules.customer.profile.service.CustomerOrderImportParser" level="info" additivity="false">
+        <appender-ref ref="CUSTOMER_IMPORT_FILE" />
+        <appender-ref ref="console" />
+    </logger>
+    <logger name="me.zhengjie.modules.customer.profile.service.impl.CustomerProfileImportServiceImpl" level="info" additivity="false">
+        <appender-ref ref="CUSTOMER_IMPORT_FILE" />
         <appender-ref ref="console" />
     </logger>
 

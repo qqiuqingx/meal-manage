@@ -179,7 +179,8 @@ public class CustomerOrderImportParser {
                     sheet.getSheetName(), result.getDataRowCount(), customers.size());
             return result;
         } catch (Exception e) {
-            log.warn("客户导入工作簿解析失败，异常类型: {}", e.getClass().getSimpleName());
+            log.warn("客户导入工作簿解析失败: errorType={}, stackTrace={}",
+                    e.getClass().getSimpleName(), Arrays.toString(e.getStackTrace()));
             result.setStructureValid(false);
             result.getIssues().add(CustomerImportIssueDto.of(CustomerImportIssueCategory.WORKBOOK_ERROR, null, null,
                     "工作簿无法解析：" + e.getMessage()));

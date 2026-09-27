@@ -123,6 +123,9 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
                         result.setAlreadyExistsCount(result.getAlreadyExistsCount() + 1);
                     }
                 } catch (BadRequestException e) {
+                    log.warn("客户批量导入单客户校验失败: sourceRows={}, code={}, reason={}",
+                            candidate.getParsed().getSourceRows(), candidate.getParsed().getEffectiveCode(),
+                            e.getMessage());
                     item = buildItemResult(candidate, "FAILED", e.getMessage(), null, null);
                     result.setFailedCount(result.getFailedCount() + 1);
                 } catch (Exception e) {
@@ -134,7 +137,14 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
                 }
             }
             result.getResults().add(item);
+            log.info("客户批量导入单客户结果: sourceRows={}, code={}, status={}, customerId={}, orderId={}",
+                    item.getSourceRows(), item.getCustomerCode(), item.getStatus(),
+                    item.getCustomerId(), item.getOrderId());
         }
+        log.info("客户批量导入提交完成: hashPrefix={}, importDate={}, created={}, alreadyExists={}, skipped={}, failed={}",
+                workbook.getFileHash().substring(0, 8), resolvedImportDate,
+                result.getCreatedCount(), result.getAlreadyExistsCount(),
+                result.getSkippedCount(), result.getFailedCount());
         return result;
     }
 

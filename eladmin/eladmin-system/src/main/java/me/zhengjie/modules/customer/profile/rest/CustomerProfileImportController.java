@@ -7,6 +7,8 @@ import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportPreviewDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportResultDto;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileImportService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -34,6 +36,8 @@ import java.util.Locale;
 @RequestMapping("/api/customerProfile/import")
 public class CustomerProfileImportController {
 
+    private static final Logger log = LoggerFactory.getLogger(CustomerProfileImportController.class);
+
     private final CustomerProfileImportService importService;
 
     public CustomerProfileImportController(CustomerProfileImportService importService) {
@@ -55,12 +59,20 @@ public class CustomerProfileImportController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "importDate", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate importDate) throws IOException {
-        if (file == null || file.isEmpty()) {
-            throw new BadRequestException("请上传客户用餐计划表文件");
+        try {
+            if (file == null || file.isEmpty()) {
+                throw new BadRequestException("请上传客户用餐计划表文件");
+            }
+            validateXlsxFile(file);
+            CustomerImportPreviewDto preview = importService.preview(file.getBytes(), file.getOriginalFilename(), importDate);
+            return ResponseEntity.ok(preview);
+        } catch (BadRequestException e) {
+            log.warn("客户批量导入预览校验失败: reason={}", e.getMessage());
+            throw e;
+        } catch (IOException | RuntimeException e) {
+            log.error("客户批量导入预览异常: errorType={}", e.getClass().getSimpleName(), e);
+            throw e;
         }
-        validateXlsxFile(file);
-        CustomerImportPreviewDto preview = importService.preview(file.getBytes(), file.getOriginalFilename(), importDate);
-        return ResponseEntity.ok(preview);
     }
 
     /**
@@ -80,13 +92,21 @@ public class CustomerProfileImportController {
             @RequestParam("fileHash") String fileHash,
             @RequestParam(value = "importDate", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate importDate) throws IOException {
-        if (file == null || file.isEmpty()) {
-            throw new BadRequestException("请上传客户用餐计划表文件");
+        try {
+            if (file == null || file.isEmpty()) {
+                throw new BadRequestException("请上传客户用餐计划表文件");
+            }
+            validateXlsxFile(file);
+            CustomerImportResultDto result = importService.importCustomers(
+                    file.getBytes(), file.getOriginalFilename(), fileHash, importDate);
+            return ResponseEntity.ok(result);
+        } catch (BadRequestException e) {
+            log.warn("客户批量导入提交校验失败: reason={}", e.getMessage());
+            throw e;
+        } catch (IOException | RuntimeException e) {
+            log.error("客户批量导入提交异常: errorType={}", e.getClass().getSimpleName(), e);
+            throw e;
         }
-        validateXlsxFile(file);
-        CustomerImportResultDto result = importService.importCustomers(
-                file.getBytes(), file.getOriginalFilename(), fileHash, importDate);
-        return ResponseEntity.ok(result);
     }
 
     /**
