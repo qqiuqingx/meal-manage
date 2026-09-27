@@ -148,15 +148,13 @@
       </el-table-column>
     </el-table>
 
-    <el-pagination
-      :current-page="page.current"
-      :page-sizes="[10, 20, 50, 100]"
-      :page-size="page.size"
-      :total="page.total"
-      layout="total, sizes, prev, pager, next, jumper"
-      @size-change="handleSizeChange"
-      @current-change="handleCurrentChange"
-    />
+    <div v-if="page.total > 0" class="meal-stats-load-status" aria-live="polite">
+      <span>已加载 {{ rows.length }} / {{ page.total }} 条</span>
+      <span v-if="loadingMore" class="meal-stats-load-status__message">正在加载…</span>
+      <el-button v-else-if="loadError" type="text" size="small" @click="loadNextPage(true)">加载失败，点击重试</el-button>
+      <span v-else-if="rows.length >= page.total" class="meal-stats-load-status__message">已加载全部</span>
+      <span v-else class="meal-stats-load-status__message">向下滚动加载更多</span>
+    </div>
 
     <el-dialog
       :visible.sync="calendarDialogVisible"
@@ -255,11 +253,13 @@ export default {
   data() {
     return {
       loading: false,
+      loadingMore: false,
+      loadError: false,
       rows: [],
       tableHeight: 520,
       query: defaultQuery(),
       page: {
-        current: 1,
+        current: 0,
         size: 20,
         total: 0
       },
@@ -273,7 +273,8 @@ export default {
       depletionWarnings: [],
       calendarScheduleOrders: [],
       calendarScheduleCells: [],
-      calendarRevision: ''
+      calendarRevision: '',
+      requestSequence: 0
     }
   },
   computed: {
@@ -367,51 +368,150 @@ export default {
   mounted() {
     this.$nextTick(() => {
       this.updateTableHeight()
+      this.bindTableScroll()
     })
     window.addEventListener('resize', this.updateTableHeight)
   },
   beforeDestroy() {
     window.removeEventListener('resize', this.updateTableHeight)
+    this.unbindTableScroll()
+    this.requestSequence += 1
   },
   methods: {
-    loadData() {
-      this.loading = true
+    /**
+     * 加载首批或追加一页客户用餐统计，并忽略已过期的查询响应。
+     * @param {boolean} reset 是否清空当前列表并从第一页加载
+     */
+    loadData(reset = true) {
+      if (!reset && (this.loading || this.loadingMore || this.rows.length >= this.page.total)) {
+        return
+      }
+      const requestId = ++this.requestSequence
+      const requestPage = reset ? 1 : this.page.current + 1
+      if (reset) {
+        this.rows = []
+        this.page.current = 0
+        this.page.total = 0
+        this.loading = true
+        this.loadingMore = false
+        this.loadError = false
+        this.$nextTick(() => {
+          const body = this.getTableScrollContainer()
+          if (body) body.scrollTop = 0
+        })
+      } else {
+        this.loadingMore = true
+        this.loadError = false
+      }
       getMealStats({
         ...this.query,
-        page: this.page.current,
+        page: requestPage,
         size: this.page.size
       }).then(res => {
-        this.rows = res.content || []
+        if (requestId !== this.requestSequence) {
+          return
+        }
+        const content = Array.isArray(res.content) ? res.content : []
+        this.rows = reset ? content : this.rows.concat(content)
+        this.page.current = requestPage
         this.page.total = res.totalElements || 0
+        this.recalculateRowGroups()
+      }).catch(() => {
+        if (requestId === this.requestSequence && !reset) {
+          this.loadError = true
+        }
+      }).finally(() => {
+        if (requestId !== this.requestSequence) {
+          return
+        }
+        this.loading = false
+        this.loadingMore = false
         this.$nextTick(() => {
           this.updateTableHeight()
+          if (!this.loadError) this.loadMoreWhenTableFits()
         })
-      }).finally(() => {
-        this.loading = false
       })
+    },
+    /**
+     * 请求当前筛选条件下的下一页数据。
+     * @param {boolean} retry 是否为失败请求的手动重试
+     */
+    loadNextPage(retry = false) {
+      if (this.loading || this.loadingMore || (this.loadError && !retry) || this.rows.length >= this.page.total) {
+        return
+      }
+      this.loadData(false)
+    },
+    /** 取得 Element UI 表格实际负责滚动的容器。 */
+    getTableScrollContainer() {
+      const tableRef = this.$refs.mealStatsTable
+      return tableRef && tableRef.$el
+        ? tableRef.$el.querySelector('.el-table__body-wrapper')
+        : null
+    },
+    /** 绑定表格滚动事件，触底时自动加载下一页。 */
+    bindTableScroll() {
+      const body = this.getTableScrollContainer()
+      if (!body || this._mealStatsScrollBody === body) {
+        return
+      }
+      this.unbindTableScroll()
+      this._mealStatsScrollBody = body
+      body.addEventListener('scroll', this.handleTableScroll)
+    },
+    /** 移除表格滚动事件监听。 */
+    unbindTableScroll() {
+      if (this._mealStatsScrollBody) {
+        this._mealStatsScrollBody.removeEventListener('scroll', this.handleTableScroll)
+        this._mealStatsScrollBody = null
+      }
+    },
+    /** 在滚动位置接近表格底部时加载下一页。 */
+    handleTableScroll() {
+      const body = this.getTableScrollContainer()
+      if (!body || this.loading || this.loadingMore || this.loadError || this.rows.length >= this.page.total) {
+        return
+      }
+      if (body.scrollHeight - body.scrollTop - body.clientHeight <= 100) {
+        this.loadNextPage()
+      }
+    },
+    /** 首批内容不足以产生滚动条时继续加载，避免用户无处触发滚动。 */
+    loadMoreWhenTableFits() {
+      const body = this.getTableScrollContainer()
+      if (body && body.scrollHeight <= body.clientHeight && this.rows.length < this.page.total) {
+        this.loadNextPage()
+      }
+    },
+    /** 追加分页后重算客户合并行，兼容同一客户的明细跨页返回。 */
+    recalculateRowGroups() {
+      let start = 0
+      while (start < this.rows.length) {
+        let end = start + 1
+        while (end < this.rows.length && this.rows[end].customerId === this.rows[start].customerId) {
+          end += 1
+        }
+        const span = end - start
+        for (let index = start; index < end; index += 1) {
+          this.rows[index].firstRowInGroup = index === start
+          this.rows[index].groupRowSpan = index === start ? span : 0
+        }
+        start = end
+      }
     },
     loadDepletionWarnings() {
       getDepletionWarnings().then(res => {
         this.depletionWarnings = res || []
       }).catch(() => {})
     },
+    /** 按当前筛选条件清空列表并从第一页重新加载。 */
     handleQuery() {
-      this.page.current = 1
-      this.loadData()
+      this.loadData(true)
     },
+    /** 恢复默认筛选条件并重新加载首批数据。 */
     resetQuery() {
       this.query = defaultQuery()
-      this.page.current = 1
-      this.loadData()
-    },
-    handleSizeChange(size) {
-      this.page.size = size
-      this.page.current = 1
-      this.loadData()
-    },
-    handleCurrentChange(page) {
-      this.page.current = page
-      this.loadData()
+      this.loadData(true)
     },
     tableSpanMethod({ row, columnIndex }) {
       if (columnIndex > 4 && columnIndex !== 11) {
@@ -543,6 +643,12 @@ export default {
         this.calendarExcludedDates = this.calendarExcludedDates.filter(value => value.date !== date)
       }
     },
+    /**
+     * 查找指定餐次人工新增计划应关联的订单。
+     * @param {string} mealType 餐次类型
+     * @param {string} date 计划日期
+     * @return {number|null} 可用订单ID；没有匹配订单时返回 null
+     */
     resolveAdditionOrderId(mealType, date) {
       if (!this.selectedRow) {
         return null
@@ -555,11 +661,14 @@ export default {
           (!candidate.endDate || date <= candidate.endDate)) || breakfastOrders[0]
         return order && order.orderId
       }
-      const row = this.rows.find(item => item.customerId === this.selectedRow.customerId && (
-        (mealType === 'BREAKFAST' && item.mealBucket === 'BREAKFAST') ||
-        (mealType !== 'BREAKFAST' && item.mealBucket === 'LUNCH_DINNER')
-      ))
-      return row && row.orderId
+      const row = this.rows.find(item => item.customerId === this.selectedRow.customerId && item.mealBucket === 'LUNCH_DINNER')
+      if (row && row.orderId) {
+        return row.orderId
+      }
+      const lunchDinnerOrders = this.calendarScheduleOrders
+        .filter(order => Number(order.status) === 1 && Number(order.mealCount) > 0)
+        .sort((left, right) => Number(left.orderId) - Number(right.orderId))
+      return lunchDinnerOrders.length > 0 ? lunchDinnerOrders[0].orderId : null
     },
     extractExcludedDates(days) {
       return days
@@ -627,6 +736,7 @@ export default {
           remark: ''
         }))
     },
+    /** 保存日历调整并刷新客户统计列表。 */
     saveCalendarAdjustments() {
       if (!this.selectedRow) {
         return
@@ -642,7 +752,7 @@ export default {
       }).then(() => {
         this.$message.success('排餐日历已保存')
         this.calendarDialogVisible = false
-        this.loadData()
+        this.loadData(true)
       }).catch(err => {
         const message = err && err.response && err.response.data && err.response.data.message
         this.$message.error(message || '排餐日历保存失败，请刷新后重试')
@@ -847,5 +957,18 @@ export default {
   margin-top: 12px;
   color: #909399;
   text-align: center;
+}
+
+.meal-stats-load-status {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 12px;
+}
+
+.meal-stats-load-status__message {
+  margin-left: 8px;
 }
 </style>
