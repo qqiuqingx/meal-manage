@@ -50,14 +50,15 @@
             size="mini"
             @input="setInlineDraft(scope.row, 'customerCode', $event)"
             @blur="submitInlineDraft(scope.row, 'customerCode')"
+            @mouseleave.native="submitInlineDraft(scope.row, 'customerCode')"
             @keyup.enter.native="submitInlineDraft(scope.row, 'customerCode')"
             @keyup.esc.native="cancelInlineDraft(scope.row, 'customerCode', $event)"
           />
           <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'customerCode')">{{ scope.row.customerCode || '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="客户姓名" prop="customerName" width="100" fixed="left" />
-      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip fixed="left">
+      <el-table-column label="客户姓名" prop="customerName" width="100" />
+      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip>
         <template slot-scope="scope">
           <el-input
             v-if="isInlineEditing(scope.row, 'specialRequirements')"
@@ -68,6 +69,7 @@
             placeholder="特殊要求"
             @input="setInlineDraft(scope.row, 'specialRequirements', $event)"
             @blur="submitInlineDraft(scope.row, 'specialRequirements')"
+            @mouseleave.native="submitInlineDraft(scope.row, 'specialRequirements')"
             @keyup.enter.native="submitInlineDraft(scope.row, 'specialRequirements')"
             @keyup.esc.native="cancelInlineDraft(scope.row, 'specialRequirements', $event)"
           />
@@ -85,6 +87,7 @@
             maxlength="11"
             @input="setInlineDraft(scope.row, 'phone', $event)"
             @blur="submitInlineDraft(scope.row, 'phone')"
+            @mouseleave.native="submitInlineDraft(scope.row, 'phone')"
             @keyup.enter.native="submitInlineDraft(scope.row, 'phone')"
             @keyup.esc.native="cancelInlineDraft(scope.row, 'phone', $event)"
           />
@@ -105,6 +108,7 @@
                 maxlength="200"
                 @input="setInlineDraft(scope.row, addressInlineField(addr), $event)"
                 @blur="submitInlineDraft(scope.row, addressInlineField(addr))"
+                @mouseleave.native="submitInlineDraft(scope.row, addressInlineField(addr))"
                 @keyup.enter.native="submitInlineDraft(scope.row, addressInlineField(addr))"
                 @keyup.esc.native="cancelInlineDraft(scope.row, addressInlineField(addr), $event)"
               />
@@ -129,6 +133,7 @@
               inputmode="numeric"
               @input="setInlineDraft(scope.row, 'mainDishCount', $event)"
               @blur="submitInlineDraft(scope.row, 'mainDishCount')"
+              @mouseleave.native="submitInlineDraft(scope.row, 'mainDishCount')"
               @keyup.enter.native="submitInlineDraft(scope.row, 'mainDishCount')"
               @keyup.esc.native="cancelInlineDraft(scope.row, 'mainDishCount', $event)"
             />
@@ -144,6 +149,7 @@
               inputmode="numeric"
               @input="setInlineDraft(scope.row, 'sideDishCount', $event)"
               @blur="submitInlineDraft(scope.row, 'sideDishCount')"
+              @mouseleave.native="submitInlineDraft(scope.row, 'sideDishCount')"
               @keyup.enter.native="submitInlineDraft(scope.row, 'sideDishCount')"
               @keyup.esc.native="cancelInlineDraft(scope.row, 'sideDishCount', $event)"
             />
@@ -159,6 +165,7 @@
               inputmode="numeric"
               @input="setInlineDraft(scope.row, 'vegCount', $event)"
               @blur="submitInlineDraft(scope.row, 'vegCount')"
+              @mouseleave.native="submitInlineDraft(scope.row, 'vegCount')"
               @keyup.enter.native="submitInlineDraft(scope.row, 'vegCount')"
               @keyup.esc.native="cancelInlineDraft(scope.row, 'vegCount', $event)"
             />
@@ -170,11 +177,13 @@
         <template slot-scope="scope">
           <el-select
             v-if="isInlineEditing(scope.row, 'soupCount')"
+            :ref="inlineInputRef(scope.row, 'soupCount')"
             :value="scope.row.soupCount"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
             @change="saveInlineSelection(scope.row, 'soupCount', $event)"
             @visible-change="!$event && cancelInlineDraft(scope.row, 'soupCount')"
+            @mouseleave.native="cancelInlineSelectOnLeave(scope.row, 'soupCount')"
           >
             <el-option label="含汤" :value="1" />
             <el-option label="不含" :value="0" />
@@ -186,11 +195,13 @@
         <template slot-scope="scope">
           <el-select
             v-if="isInlineEditing(scope.row, 'scheduleMode')"
+            :ref="inlineInputRef(scope.row, 'scheduleMode')"
             :value="scope.row.scheduleMode"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
             @change="saveInlineSelection(scope.row, 'scheduleMode', $event)"
             @visible-change="!$event && cancelInlineDraft(scope.row, 'scheduleMode')"
+            @mouseleave.native="cancelInlineSelectOnLeave(scope.row, 'scheduleMode')"
           >
             <el-option label="指定日期" value="SCHEDULE" />
             <el-option label="每天送" value="DAILY" />
@@ -220,7 +231,7 @@
       </el-table-column>
       <el-table-column label="过敏" width="190">
         <template slot-scope="scope">
-          <div v-if="isInlineEditing(scope.row, 'allergyTags')" class="inline-allergy-cell">
+          <div v-if="isInlineEditing(scope.row, 'allergyTags')" class="inline-allergy-cell" @mouseleave="cancelInlineDraft(scope.row, 'allergyTags')">
             <el-tag
               v-for="(tag, index) in (scope.row.allergyTags || [])"
               :key="`${tag}-${index}`"
@@ -263,6 +274,7 @@
             inputmode="numeric"
             @input="setInlineDraft(scope.row, 'breakfastCount', $event)"
             @blur="submitInlineDraft(scope.row, 'breakfastCount')"
+            @mouseleave.native="submitInlineDraft(scope.row, 'breakfastCount')"
             @keyup.enter.native="submitInlineDraft(scope.row, 'breakfastCount')"
             @keyup.esc.native="cancelInlineDraft(scope.row, 'breakfastCount', $event)"
           />
@@ -281,6 +293,7 @@
             inputmode="numeric"
             @input="setInlineDraft(scope.row, 'lunchDinnerCount', $event)"
             @blur="submitInlineDraft(scope.row, 'lunchDinnerCount')"
+            @mouseleave.native="submitInlineDraft(scope.row, 'lunchDinnerCount')"
             @keyup.enter.native="submitInlineDraft(scope.row, 'lunchDinnerCount')"
             @keyup.esc.native="cancelInlineDraft(scope.row, 'lunchDinnerCount', $event)"
           />
@@ -330,11 +343,13 @@
         <template slot-scope="scope">
           <el-select
             v-if="isInlineEditing(scope.row, 'status')"
+            :ref="inlineInputRef(scope.row, 'status')"
             :value="scope.row.status"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
             @change="saveInlineSelection(scope.row, 'status', $event)"
             @visible-change="!$event && cancelInlineDraft(scope.row, 'status')"
+            @mouseleave.native="cancelInlineSelectOnLeave(scope.row, 'status')"
           >
             <el-option label="进行中" :value="1" />
             <el-option label="暂停" :value="4" />
@@ -376,7 +391,7 @@
         </template>
       </el-table-column>
       <el-table-column label="订单编号" prop="orderCode" width="140" />
-      <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="180" align="center" fixed="right">
+      <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="180" align="center">
         <template slot-scope="scope">
           <el-button size="mini" type="primary" icon="edit" :disabled="scope.row.status !== 1 && scope.row.status !== 4" @click="handleEdit(scope.row)">编辑</el-button>
           <el-button v-if="scope.row.status === 1 || scope.row.status === 4" size="mini" type="danger" icon="refresh" @click="openRefundDialog(scope.row)">退餐</el-button>
@@ -716,10 +731,18 @@ export default {
     cancelInlineDraft(row, field, event) {
       const key = this.inlineDraftKey(row, field)
       this.$delete(this.inlineDrafts, key)
+      if (field === 'allergyTags') this.$delete(this.allergyInputDrafts, row.id)
       if (this.activeInlineKey === key) this.activeInlineKey = null
       if (event && event.target && event.target.blur) {
         event.target.blur()
       }
+    },
+    /** 鼠标离开未展开的行内下拉框时退出编辑；选项面板展开时保留交互。 */
+    cancelInlineSelectOnLeave(row, field) {
+      if (!this.isInlineEditing(row, field)) return
+      let select = this.$refs[this.inlineInputRef(row, field)]
+      if (Array.isArray(select)) select = select.find(item => !item._isDestroyed) || select[0]
+      if (select && !select.visible) this.cancelInlineDraft(row, field)
     },
     /** 校验并提交订单行指定字段的草稿；失焦或回车时调用，提交失败时恢复展示值。 */
     async submitInlineDraft(row, field) {
@@ -1168,7 +1191,7 @@ export default {
 }
 .inline-value.is-editable {
   cursor: pointer;
-  border-bottom: 1px dashed #c0c4cc;
+  border-bottom: 1px dashed transparent;
 }
 .inline-value.is-editable:hover {
   color: #409eff;

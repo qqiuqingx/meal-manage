@@ -296,6 +296,33 @@ describe('CustomerOrder edit flow', () => {
     })
   })
 
+  test('leaving a selector closes it only when its option panel is closed', () => {
+    const vm = createVm()
+    const row = { id: 142, status: 1, soupCount: 0 }
+    const ref = vm.inlineInputRef(row, 'soupCount')
+    vm.beginInlineEdit(row, 'soupCount')
+    vm.$refs[ref] = { visible: true }
+
+    vm.cancelInlineSelectOnLeave(row, 'soupCount')
+    expect(vm.isInlineEditing(row, 'soupCount')).toBe(true)
+
+    vm.$refs[ref].visible = false
+    vm.cancelInlineSelectOnLeave(row, 'soupCount')
+    expect(vm.isInlineEditing(row, 'soupCount')).toBe(false)
+  })
+
+  test('closing the allergy editor discards an unfinished tag', () => {
+    const vm = createVm()
+    const row = { id: 143, status: 1, allergyTags: [] }
+    vm.beginInlineEdit(row, 'allergyTags')
+    vm.setAllergyDraft(row, '花生')
+
+    vm.cancelInlineDraft(row, 'allergyTags')
+
+    expect(vm.isInlineEditing(row, 'allergyTags')).toBe(false)
+    expect(vm.getAllergyDraft(row)).toBe('')
+  })
+
   test('rejects a fractional meal count before sending a request', async() => {
     const vm = createVm()
     const row = { id: 15, status: 1, breakfastCount: 2 }
