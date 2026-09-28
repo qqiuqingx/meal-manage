@@ -50,24 +50,24 @@
 
     <update id="updateAllergyTagsInline">
         UPDATE customer_profile
-        SET allergy_tags = #{allergyTagsJson, jdbcType=VARCHAR},
-            update_by = #{updateBy},
+        SET allergy_tags = #{allergyTagsJson, jdbcType=VARCHAR, typeHandler=org.apache.ibatis.type.StringTypeHandler},
+            update_by = #{updateBy, typeHandler=org.apache.ibatis.type.StringTypeHandler},
             update_time = #{updateTime, jdbcType=TIMESTAMP}
         WHERE id = #{id}
     </update>
 
     <update id="updateSpecialRequirementsInline">
         UPDATE customer_profile
-        SET special_requirements = #{specialRequirements, jdbcType=VARCHAR},
-            update_by = #{updateBy},
+        SET special_requirements = #{specialRequirements, jdbcType=VARCHAR, typeHandler=org.apache.ibatis.type.StringTypeHandler},
+            update_by = #{updateBy, typeHandler=org.apache.ibatis.type.StringTypeHandler},
             update_time = #{updateTime, jdbcType=TIMESTAMP}
         WHERE id = #{id}
     </update>
 
     <update id="updateCustomerCodeInline">
         UPDATE customer_profile
-        SET customer_code = #{customerCode},
-            update_by = #{updateBy},
+        SET customer_code = #{customerCode, typeHandler=org.apache.ibatis.type.StringTypeHandler},
+            update_by = #{updateBy, typeHandler=org.apache.ibatis.type.StringTypeHandler},
             update_time = #{updateTime, jdbcType=TIMESTAMP}
         WHERE id = #{id}
     </update>

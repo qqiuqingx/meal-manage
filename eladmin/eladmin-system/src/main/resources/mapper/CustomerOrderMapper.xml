@@ -67,8 +67,8 @@
             <when test="field == 'sideDishCount'">side_dish_count = #{integerValue, jdbcType=INTEGER}</when>
             <when test="field == 'vegCount'">veg_count = #{integerValue, jdbcType=INTEGER}</when>
             <when test="field == 'soupCount'">soup_count = #{integerValue, jdbcType=INTEGER}</when>
-            <when test="field == 'scheduleMode'">schedule_mode = #{stringValue, jdbcType=VARCHAR}</when>
-            <when test="field == 'customMenuImage'">custom_menu_image = #{stringValue, jdbcType=VARCHAR}</when>
+            <when test="field == 'scheduleMode'">schedule_mode = #{stringValue, jdbcType=VARCHAR, typeHandler=org.apache.ibatis.type.StringTypeHandler}</when>
+            <when test="field == 'customMenuImage'">custom_menu_image = #{stringValue, jdbcType=VARCHAR, typeHandler=org.apache.ibatis.type.StringTypeHandler}</when>
             <when test="field == 'breakfastCount'">
                 breakfast_count = #{integerValue, jdbcType=INTEGER},
                 remaining_count = #{remainingCount, jdbcType=INTEGER}
@@ -82,14 +82,15 @@
                 pause_effective_date = #{pauseEffectiveDate, jdbcType=DATE}
             </when>
         </choose>,
-        update_by = #{updateBy},
+        update_by = #{updateBy, typeHandler=org.apache.ibatis.type.StringTypeHandler},
         update_time = #{updateTime, jdbcType=TIMESTAMP}
         WHERE id = #{id}
     </update>
 
     <update id="updateCustomerCodeInline">
         UPDATE customer_order
-        SET customer_code = #{customerCode}, update_by = #{updateBy},
+        SET customer_code = #{customerCode, typeHandler=org.apache.ibatis.type.StringTypeHandler},
+            update_by = #{updateBy, typeHandler=org.apache.ibatis.type.StringTypeHandler},
             update_time = #{updateTime, jdbcType=TIMESTAMP}
         WHERE id = #{id}
     </update>
