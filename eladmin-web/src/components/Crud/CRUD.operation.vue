@@ -68,7 +68,8 @@
       />
       <el-popover
         placement="bottom-end"
-        width="150"
+        width="170"
+        popper-class="crud-column-popover"
         trigger="click"
       >
         <el-button
@@ -90,7 +91,7 @@
         </el-checkbox>
         <el-checkbox
           v-for="item in tableColumns"
-          :key="item.property"
+          :key="item.key"
           v-model="item.visible"
           @change="handleCheckedTableColumnsChange(item)"
         >
@@ -118,6 +119,14 @@ function sortWithRef(src, ref) {
   return result
 }
 
+/** 返回表格列的稳定标识，优先使用模板列显式配置的 column-key。
+ * @param {Object} config Element UI 列配置
+ * @returns {string|undefined} 列标识
+ */
+function getColumnKey(config) {
+  return config && (config.columnKey || config.property)
+}
+
 export default {
   mixins: [crud()],
   props: {
@@ -130,6 +139,10 @@ export default {
       default: () => { return [] }
     },
     ignoreColumns: {
+      type: Array,
+      default: () => { return [] }
+    },
+    columnOrder: {
       type: Array,
       default: () => { return [] }
     }
@@ -148,7 +161,7 @@ export default {
     'crud.props.table'() {
       this.updateTableColumns()
       this.tableColumns.forEach(column => {
-        if (this.hiddenColumns.indexOf(column.property) !== -1) {
+        if (this.hiddenColumns.indexOf(column.key) !== -1 || this.hiddenColumns.indexOf(column.property) !== -1) {
           column.visible = false
           this.updateColumnVisible(column)
         }
@@ -156,12 +169,16 @@ export default {
     },
     'crud.props.table.store.states.columns'() {
       this.updateTableColumns()
+    },
+    columnOrder() {
+      this.updateTableColumns()
     }
   },
   created() {
     this.crud.updateProp('searchToggle', true)
   },
   methods: {
+    /** 根据表格当前列和指定顺序更新列设置列表，保留各列的显隐状态。 */
     updateTableColumns() {
       const table = this.crud.getTable()
       if (!table) {
@@ -169,7 +186,7 @@ export default {
         return
       }
       let cols = null
-      const columnFilter = e => e && e.type === 'default' && e.property && this.ignoreColumns.indexOf(e.property) === -1
+      const columnFilter = e => e && e.type === 'default' && getColumnKey(e) && this.ignoreColumns.indexOf(getColumnKey(e)) === -1
       const refCols = table.columns.filter(columnFilter)
       if (this.ignoreNextTableColumnsChange) {
         this.ignoreNextTableColumnsChange = false
@@ -179,8 +196,20 @@ export default {
       const columns = []
       const fullTableColumns = table.$children.map(e => e.columnConfig).filter(columnFilter)
       cols = sortWithRef(fullTableColumns, refCols)
+      if (this.columnOrder.length) {
+        const orderIndex = new Map(this.columnOrder.map((key, index) => [key, index]))
+        const defaultIndex = new Map(cols.map((config, index) => [getColumnKey(config), index]))
+        cols.sort((a, b) => {
+          const aKey = getColumnKey(a)
+          const bKey = getColumnKey(b)
+          const aIndex = orderIndex.has(aKey) ? orderIndex.get(aKey) : Number.MAX_SAFE_INTEGER
+          const bIndex = orderIndex.has(bKey) ? orderIndex.get(bKey) : Number.MAX_SAFE_INTEGER
+          return aIndex - bIndex || defaultIndex.get(aKey) - defaultIndex.get(bKey)
+        })
+      }
       cols.forEach(config => {
         const column = {
+          key: getColumnKey(config),
           property: config.property,
           label: config.label,
           visible: refCols.indexOf(config) !== -1
@@ -232,18 +261,27 @@ export default {
       this.allColumnsSelectedIndeterminate = selectedCount !== totalCount && selectedCount !== 0
       this.updateColumnVisible(item)
     },
+    /** 按列设置列表中的相邻可见列定位插入位置，并通知页面列显隐已变化。
+     * @param {Object} item 要显示或隐藏的列设置
+     */
     updateColumnVisible(item) {
       const table = this.crud.props.table
-      const vm = table.$children.find(e => e.prop === item.property)
+      const vm = table.$children.find(e => getColumnKey(e.columnConfig) === item.key)
+      if (!vm) return
       const columnConfig = vm.columnConfig
       if (item.visible) {
-        // 找出合适的插入点
-        const columnIndex = this.tableColumns.indexOf(item)
-        vm.owner.store.commit('insertColumn', columnConfig, columnIndex + 1, null)
+        const activeColumns = table.store.states._columns
+        const itemIndex = this.tableColumns.indexOf(item)
+        const activeIndex = column => activeColumns.findIndex(config => getColumnKey(config) === column.key)
+        const next = this.tableColumns.slice(itemIndex + 1).find(column => column.visible && activeIndex(column) !== -1)
+        const previous = this.tableColumns.slice(0, itemIndex).reverse().find(column => column.visible && activeIndex(column) !== -1)
+        const insertIndex = next ? activeIndex(next) : (previous ? activeIndex(previous) + 1 : activeColumns.length)
+        vm.owner.store.commit('insertColumn', columnConfig, insertIndex, null)
       } else {
         vm.owner.store.commit('removeColumn', columnConfig, null)
       }
       this.ignoreNextTableColumnsChange = true
+      this.$emit('column-visibility-change', item)
     },
     toggleSearch() {
       this.crud.props.searchToggle = !this.crud.props.searchToggle
@@ -264,5 +302,9 @@ export default {
   }
   .crud-opts .crud-opts-right span {
     float: left;
+  }
+  .crud-column-popover {
+    max-height: 60vh;
+    overflow-y: auto;
   }
 </style>

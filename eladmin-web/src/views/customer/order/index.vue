@@ -29,7 +29,14 @@
         />
         <rrOperation />
       </div>
-      <crudOperation :permission="permission" />
+      <crudOperation
+        :permission="permission"
+        :ignore-columns="['actions']"
+        :column-order="columnOrder"
+        @column-visibility-change="handleColumnVisibilityChange"
+      >
+        <el-button slot="right" size="mini" plain icon="el-icon-refresh-left" @click="resetColumnOrder">恢复列顺序</el-button>
+      </crudOperation>
     </div>
 
     <!--表格渲染-->
@@ -40,7 +47,7 @@
       @selection-change="crud.selectionChangeHandler"
     >
       <el-table-column :selectable="checkboxT" type="selection" width="55" />
-      <el-table-column label="客户编号" prop="customerCode" width="130" fixed="left">
+      <el-table-column label="客户编号" prop="customerCode" width="130">
         <template slot-scope="scope">
           <el-input
             v-if="isInlineEditing(scope.row, 'customerCode')"
@@ -94,7 +101,7 @@
           <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'phone')">{{ scope.row.phone || '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="地址" min-width="220">
+      <el-table-column column-key="addresses" label="地址" min-width="220">
         <template slot-scope="scope">
           <div v-if="!scope.row.addresses || scope.row.addresses.length === 0">-</div>
           <div v-for="addr in scope.row.addresses" :key="addr.addressType" class="inline-address-row">
@@ -119,7 +126,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="规格" width="180">
+      <el-table-column column-key="specification" label="规格" width="180">
         <template slot-scope="scope">
           <div class="inline-spec-field">
             <span>主</span>
@@ -173,7 +180,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="含汤" width="70" align="center">
+      <el-table-column column-key="soupCount" label="含汤" width="70" align="center">
         <template slot-scope="scope">
           <el-select
             v-if="isInlineEditing(scope.row, 'soupCount')"
@@ -190,7 +197,7 @@
           <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'soupCount')">{{ scope.row.soupCount >= 1 ? '含汤' : '不含汤' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="排餐模式" width="100">
+      <el-table-column column-key="scheduleMode" label="排餐模式" width="100">
         <template slot-scope="scope">
           <el-select
             v-if="isInlineEditing(scope.row, 'scheduleMode')"
@@ -209,7 +216,7 @@
           <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'scheduleMode')">{{ scheduleModeText(scope.row.scheduleMode) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="自定义菜单" width="120" align="center">
+      <el-table-column column-key="customMenuImage" label="自定义菜单" width="120" align="center">
         <template slot-scope="scope">
           <div
             v-if="scope.row.customMenuImage || isInlineEditable(scope.row)"
@@ -227,7 +234,7 @@
           <span v-else>-</span>
         </template>
       </el-table-column>
-      <el-table-column label="过敏" width="190">
+      <el-table-column column-key="allergyTags" label="过敏" width="190">
         <template slot-scope="scope">
           <div v-if="isInlineEditing(scope.row, 'allergyTags')" class="inline-allergy-cell" @mouseleave="cancelInlineDraft(scope.row, 'allergyTags')">
             <el-tag
@@ -312,7 +319,7 @@
         </template>
       </el-table-column>
       <el-table-column label="已排餐" prop="scheduledCount" width="80" align="center" />
-      <el-table-column prop="remainingCount" width="70" align="center">
+      <el-table-column label="剩余" prop="remainingCount" width="70" align="center">
         <template slot="header">
           <span class="column-help">
             剩余
@@ -322,7 +329,7 @@
           </span>
         </template>
       </el-table-column>
-      <el-table-column prop="estimatedRemainingCount" width="120" align="center">
+      <el-table-column label="预计剩余餐数" prop="estimatedRemainingCount" width="120" align="center">
         <template slot="header">
           <span class="column-help">
             预计剩余餐数
@@ -337,7 +344,7 @@
           {{ formatMoney(scope.row.mealBalance) }}
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="80" align="center">
+      <el-table-column column-key="status" label="状态" width="80" align="center">
         <template slot-scope="scope">
           <el-select
             v-if="isInlineEditing(scope.row, 'status')"
@@ -356,17 +363,17 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="餐次" width="70" align="center">
+      <el-table-column column-key="mealType" label="餐次" width="70" align="center">
         <template slot-scope="scope">
           {{ mealTypeText(scope.row.mealType, scope.row.status) }}
         </template>
       </el-table-column>
-      <el-table-column label="销售渠道" width="100">
+      <el-table-column column-key="customerSource" label="销售渠道" width="100">
         <template slot-scope="scope">
           {{ getSourceLabel(scope.row.customerSource) }}
         </template>
       </el-table-column>
-      <el-table-column label="订单期间" width="180">
+      <el-table-column column-key="orderPeriod" label="订单期间" width="180">
         <template slot-scope="{ row }">
           {{ formatOrderPeriod(row) }}
         </template>
@@ -388,7 +395,7 @@
         </template>
       </el-table-column>
       <el-table-column label="订单编号" prop="orderCode" width="140" />
-      <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" label="操作" width="180" align="center">
+      <el-table-column v-if="checkPer(['admin','customerOrder:edit','customerOrder:del'])" column-key="actions" label="操作" width="180" align="center">
         <template slot-scope="scope">
           <el-button size="mini" type="primary" icon="edit" :disabled="scope.row.status !== 1 && scope.row.status !== 4" @click="handleEdit(scope.row)">编辑</el-button>
           <el-button v-if="scope.row.status === 1 || scope.row.status === 4" size="mini" type="danger" icon="refresh" @click="openRefundDialog(scope.row)">退餐</el-button>
@@ -517,6 +524,58 @@ import OrderForm from '@/components/Order/OrderForm.vue'
 import { parseTime } from '@/utils/index'
 import { getToken } from '@/utils/auth'
 import { mapGetters } from 'vuex'
+import Sortable from 'sortablejs'
+
+const COLUMN_ORDER_STORAGE_KEY = 'customer-order-column-order-v1'
+
+/** 返回订单表格列的稳定标识。
+ * @param {Object} column Element UI 列配置
+ * @returns {string|undefined} 列标识
+ */
+function getOrderColumnKey(column) {
+  return column && (column.columnKey || column.property)
+}
+
+/** 判断列是否允许通过表头拖动。
+ * @param {Object} column Element UI 列配置
+ * @returns {boolean} 是否为可拖动的业务列
+ */
+function isOrderColumnMovable(column) {
+  return Boolean(column && column.type === 'default' && getOrderColumnKey(column) !== 'actions' && getOrderColumnKey(column))
+}
+
+/** 将新列按模板顺序补入已保存的列顺序，并去除重复标识。
+ * @param {string[]} defaultKeys 当前模板中的列标识
+ * @param {string[]} savedKeys 浏览器中已保存的列标识
+ * @returns {string[]} 可用于当前表格的完整顺序
+ */
+function mergeOrderColumnKeys(defaultKeys, savedKeys) {
+  const result = Array.isArray(savedKeys) ? savedKeys.filter((key, index) => typeof key === 'string' && key && savedKeys.indexOf(key) === index) : []
+  let cursor = -1
+  defaultKeys.forEach(key => {
+    const index = result.indexOf(key)
+    if (index === -1) {
+      cursor += 1
+      result.splice(cursor, 0, key)
+    } else {
+      cursor = index
+    }
+  })
+  return result
+}
+
+/** 将当前可见列的拖动结果写回完整顺序，保留被隐藏列原有的位置。
+ * @param {string[]} allKeys 包含隐藏列的顺序
+ * @param {string[]} visibleKeys 拖动后的可见列顺序
+ * @returns {string[]} 更新后的完整顺序
+ */
+function replaceVisibleOrderColumnKeys(allKeys, visibleKeys) {
+  const visibleSet = new Set(visibleKeys)
+  let index = 0
+  const result = allKeys.map(key => visibleSet.has(key) ? visibleKeys[index++] : key)
+  while (index < visibleKeys.length) result.push(visibleKeys[index++])
+  return result
+}
 
 function cleanReplaceRules(rules) {
   if (!rules || !rules.length) return []
@@ -567,6 +626,8 @@ export default {
       allergyInputDrafts: {},
       savingRows: {},
       uploadingRows: {},
+      columnOrder: [],
+      defaultColumnOrder: [],
       rules: {
         customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
         totalAmount: [{
@@ -629,10 +690,179 @@ export default {
       return this.crud.status.add === CRUD.STATUS.PREPARED ? '新增订单' : '编辑订单'
     }
   },
+  watch: {
+    canViewAmount() {
+      this.$nextTick(() => this.initializeColumnOrder())
+    }
+  },
   created() {
+    this.columnSorter = null
+    this.columnHeaderRow = null
+    this.columnOrderLoaded = false
     this.loadCustomerSourceDict()
   },
+  mounted() {
+    this.$nextTick(() => this.initializeColumnOrder())
+  },
+  activated() {
+    this.$nextTick(() => this.initializeColumnOrder())
+  },
+  deactivated() {
+    this.destroyColumnSortable()
+  },
+  beforeDestroy() {
+    this.destroyColumnSortable()
+  },
   methods: {
+    /** 读取当前浏览器保存的订单列顺序。
+     * @returns {string[]} 已保存的列标识，格式无效时返回空数组
+     */
+    readColumnOrder() {
+      try {
+        const stored = JSON.parse(window.localStorage.getItem(COLUMN_ORDER_STORAGE_KEY))
+        return Array.isArray(stored) ? stored : []
+      } catch (error) {
+        return []
+      }
+    },
+    /** 将订单列顺序保存到当前浏览器。 */
+    saveColumnOrder() {
+      try {
+        window.localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(this.columnOrder))
+      } catch (error) {
+        this.$message.warning('浏览器未能保存列顺序')
+      }
+    },
+    /** 合并默认列与浏览器偏好，并在表格挂载后恢复列顺序。 */
+    initializeColumnOrder() {
+      const table = this.$refs.table
+      if (!table || !table.store || !table.store.states._columns.length) return
+      const defaultKeys = table.$children.map(child => child.columnConfig).filter(isOrderColumnMovable).map(getOrderColumnKey)
+      this.defaultColumnOrder = defaultKeys
+      const savedKeys = this.columnOrderLoaded ? this.columnOrder : this.readColumnOrder()
+      this.columnOrder = mergeOrderColumnKeys(defaultKeys, savedKeys)
+      this.columnOrderLoaded = true
+      this.applyColumnOrder()
+      this.$nextTick(() => this.setupColumnSortable())
+    },
+    /** 按浏览器偏好重排 Element UI 的列配置，并更新表头和表体布局。 */
+    applyColumnOrder() {
+      const table = this.$refs.table
+      if (!table || !table.store) return
+      const columns = table.store.states._columns
+      const ranks = new Map(this.columnOrder.map((key, index) => [key, index]))
+      const selection = columns.filter(column => column.type === 'selection')
+      const actions = columns.filter(column => getOrderColumnKey(column) === 'actions')
+      const movable = columns.filter(isOrderColumnMovable)
+      const others = columns.filter(column => column.type !== 'selection' && getOrderColumnKey(column) !== 'actions' && !isOrderColumnMovable(column))
+      movable.sort((a, b) => {
+        const aRank = ranks.has(getOrderColumnKey(a)) ? ranks.get(getOrderColumnKey(a)) : Number.MAX_SAFE_INTEGER
+        const bRank = ranks.has(getOrderColumnKey(b)) ? ranks.get(getOrderColumnKey(b)) : Number.MAX_SAFE_INTEGER
+        return aRank - bRank
+      })
+      const next = selection.concat(movable, others, actions)
+      if (next.every((column, index) => column === columns[index])) return
+      columns.splice(0, columns.length, ...next)
+      table.store.updateColumns()
+      table.store.scheduleLayout()
+    },
+    /** 给订单表头绑定拖动操作；重建表头后会更新列标识并重新绑定。 */
+    setupColumnSortable() {
+      const table = this.$refs.table
+      const headerRow = table && table.$el.querySelector('.el-table__header-wrapper thead tr')
+      if (!headerRow) return
+      const columns = table.store.states.columns
+      const cells = Array.from(headerRow.children).filter(cell => cell.tagName === 'TH' && !cell.classList.contains('gutter'))
+      if (cells.length !== columns.length) return
+      cells.forEach((cell, index) => {
+        const column = columns[index]
+        cell.dataset.orderColumnId = column.id
+        cell.classList.toggle('order-column-draggable', isOrderColumnMovable(column))
+      })
+      if (this.columnSorter && this.columnHeaderRow === headerRow) return
+      this.destroyColumnSortable()
+      this.columnHeaderRow = headerRow
+      this.columnSorter = Sortable.create(headerRow, {
+        animation: 150,
+        direction: 'horizontal',
+        draggable: 'th.order-column-draggable',
+        handle: '.cell',
+        filter: '.el-icon-question',
+        preventOnFilter: false,
+        ghostClass: 'order-column-ghost',
+        scroll: true,
+        scrollSensitivity: 80,
+        scrollSpeed: 15,
+        onMove: event => {
+          if (!event.related || !event.related.classList.contains('order-column-draggable')) return false
+        },
+        onEnd: () => this.handleColumnDrop()
+      })
+    },
+    /** 撤销 Sortable 对表头 DOM 的直接移动，随后由 Vue 根据列配置重新渲染。
+     * @param {Object[]} columns 拖动前的可见列配置
+     */
+    restoreColumnHeader(columns) {
+      const row = this.columnHeaderRow
+      if (!row) return
+      const cells = new Map(Array.from(row.children).map(cell => [cell.dataset.orderColumnId, cell]))
+      const gutter = Array.from(row.children).find(cell => cell.classList.contains('gutter')) || null
+      columns.forEach(column => {
+        const cell = cells.get(column.id)
+        if (cell) row.insertBefore(cell, gutter)
+      })
+    },
+    /** 将拖动后的表头顺序写回表格与浏览器偏好。 */
+    handleColumnDrop() {
+      const table = this.$refs.table
+      if (!table || !this.columnHeaderRow) return
+      const columns = table.store.states.columns.slice()
+      const byId = new Map(columns.map(column => [column.id, column]))
+      const cells = Array.from(this.columnHeaderRow.children).filter(cell => cell.dataset.orderColumnId)
+      const reordered = cells.map(cell => byId.get(cell.dataset.orderColumnId))
+      this.restoreColumnHeader(columns)
+      if (reordered.length !== columns.length || reordered.some(column => !column)) return
+      if (reordered[0].type !== 'selection' || (getOrderColumnKey(columns[columns.length - 1]) === 'actions' && getOrderColumnKey(reordered[reordered.length - 1]) !== 'actions')) return
+      const visibleKeys = reordered.filter(isOrderColumnMovable).map(getOrderColumnKey)
+      const oldKeys = columns.filter(isOrderColumnMovable).map(getOrderColumnKey)
+      if (visibleKeys.every((key, index) => key === oldKeys[index])) return
+      this.columnOrder = replaceVisibleOrderColumnKeys(this.columnOrder, visibleKeys)
+      this.saveColumnOrder()
+      const scrollLeft = table.bodyWrapper ? table.bodyWrapper.scrollLeft : 0
+      this.applyColumnOrder()
+      this.$nextTick(() => {
+        if (table.bodyWrapper) table.bodyWrapper.scrollLeft = scrollLeft
+        if (table.headerWrapper) table.headerWrapper.scrollLeft = scrollLeft
+        this.setupColumnSortable()
+      })
+    },
+    /** 列设置中显隐变化后，按保存的顺序放回该列并重新绑定表头拖动。 */
+    handleColumnVisibilityChange() {
+      this.$nextTick(() => {
+        this.applyColumnOrder()
+        this.$nextTick(() => this.setupColumnSortable())
+      })
+    },
+    /** 清除浏览器中的列顺序偏好并恢复当前权限下的默认顺序。 */
+    resetColumnOrder() {
+      this.columnOrder = this.defaultColumnOrder.slice()
+      let storageCleared = true
+      try {
+        window.localStorage.removeItem(COLUMN_ORDER_STORAGE_KEY)
+      } catch (error) {
+        storageCleared = false
+        this.$message.warning('浏览器未能清除列顺序')
+      }
+      this.applyColumnOrder()
+      this.$nextTick(() => this.setupColumnSortable())
+      if (storageCleared) this.$message.success('已恢复默认列顺序')
+    },
+    /** 页面隐藏或销毁时释放表头拖动实例。 */
+    destroyColumnSortable() {
+      if (this.columnSorter) this.columnSorter.destroy()
+      this.columnSorter = null
+      this.columnHeaderRow = null
+    },
     loadCustomerSourceDict() {
       dictDetailApi.get('customer_source').then(res => {
         this.customerSourceOptions = (res.content || res.data || res || []).map(item => ({
@@ -1158,6 +1388,16 @@ export default {
 }
 .head-container .filter-item {
   margin-right: 10px;
+}
+::v-deep .el-table__header-wrapper th.order-column-draggable .cell {
+  cursor: grab;
+  user-select: none;
+}
+::v-deep .el-table__header-wrapper th.order-column-draggable.sortable-chosen .cell {
+  cursor: grabbing;
+}
+::v-deep .el-table__header-wrapper th.order-column-ghost {
+  background: #ecf5ff;
 }
 .column-help {
   display: inline-flex;
