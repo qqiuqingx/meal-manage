@@ -57,6 +57,23 @@
         </template>
       </el-table-column>
       <el-table-column label="客户姓名" prop="customerName" width="100" fixed="left" />
+      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip fixed="left">
+        <template slot-scope="scope">
+          <el-input
+            v-if="isInlineEditing(scope.row, 'specialRequirements')"
+            :ref="inlineInputRef(scope.row, 'specialRequirements')"
+            :value="getInlineDraft(scope.row, 'specialRequirements')"
+            :disabled="isInlineBusy(scope.row)"
+            size="mini"
+            placeholder="特殊要求"
+            @input="setInlineDraft(scope.row, 'specialRequirements', $event)"
+            @blur="submitInlineDraft(scope.row, 'specialRequirements')"
+            @keyup.enter.native="submitInlineDraft(scope.row, 'specialRequirements')"
+            @keyup.esc.native="cancelInlineDraft(scope.row, 'specialRequirements', $event)"
+          />
+          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'specialRequirements')">{{ scope.row.specialRequirements || '-' }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="手机号" prop="phone" width="145">
         <template slot-scope="scope">
           <el-input
@@ -181,23 +198,6 @@
             <el-option label="工作日" value="WEEKDAY" />
           </el-select>
           <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'scheduleMode')">{{ scheduleModeText(scope.row.scheduleMode) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip>
-        <template slot-scope="scope">
-          <el-input
-            v-if="isInlineEditing(scope.row, 'specialRequirements')"
-            :ref="inlineInputRef(scope.row, 'specialRequirements')"
-            :value="getInlineDraft(scope.row, 'specialRequirements')"
-            :disabled="isInlineBusy(scope.row)"
-            size="mini"
-            placeholder="特殊要求"
-            @input="setInlineDraft(scope.row, 'specialRequirements', $event)"
-            @blur="submitInlineDraft(scope.row, 'specialRequirements')"
-            @keyup.enter.native="submitInlineDraft(scope.row, 'specialRequirements')"
-            @keyup.esc.native="cancelInlineDraft(scope.row, 'specialRequirements', $event)"
-          />
-          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'specialRequirements')">{{ scope.row.specialRequirements || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="自定义菜单" width="120" align="center">
