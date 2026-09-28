@@ -40,9 +40,23 @@
       @selection-change="crud.selectionChangeHandler"
     >
       <el-table-column :selectable="checkboxT" type="selection" width="55" />
-      <el-table-column label="客户编号" prop="customerCode" width="120" fixed="left" />
+      <el-table-column label="客户编号" prop="customerCode" width="130" fixed="left">
+        <template slot-scope="scope">
+          <el-input
+            v-if="isInlineEditable(scope.row)"
+            :value="getInlineDraft(scope.row, 'customerCode')"
+            :disabled="isInlineBusy(scope.row)"
+            size="mini"
+            @input="setInlineDraft(scope.row, 'customerCode', $event)"
+            @blur="submitInlineDraft(scope.row, 'customerCode')"
+            @keyup.enter.native="submitInlineDraft(scope.row, 'customerCode')"
+            @keyup.esc.native="cancelInlineDraft(scope.row, 'customerCode', $event)"
+          />
+          <span v-else>{{ scope.row.customerCode || '-' }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="客户姓名" prop="customerName" width="100" fixed="left" />
-      <el-table-column label="手机号" prop="phone" width="120" fixed="left" />
+      <el-table-column label="手机号" prop="phone" width="120" />
       <el-table-column label="地址" min-width="200">
         <template slot-scope="scope">
           <div v-if="!scope.row.addresses || scope.row.addresses.length === 0">-</div>
@@ -51,48 +65,204 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="规格" width="110">
+      <el-table-column label="规格" width="170">
         <template slot-scope="scope">
-          {{ packageSpecText(scope.row) }}
+          <div class="inline-spec-field">
+            <span>主</span>
+            <el-input
+              v-if="isInlineEditable(scope.row)"
+              :value="getInlineDraft(scope.row, 'mainDishCount')"
+              :disabled="isInlineBusy(scope.row)"
+              size="mini"
+              type="number"
+              min="0"
+              @input="setInlineDraft(scope.row, 'mainDishCount', $event)"
+              @blur="submitInlineDraft(scope.row, 'mainDishCount')"
+              @keyup.enter.native="submitInlineDraft(scope.row, 'mainDishCount')"
+              @keyup.esc.native="cancelInlineDraft(scope.row, 'mainDishCount', $event)"
+            />
+            <span v-else>{{ scope.row.mainDishCount || 0 }}</span>
+            <span>副</span>
+            <el-input
+              v-if="isInlineEditable(scope.row)"
+              :value="getInlineDraft(scope.row, 'sideDishCount')"
+              :disabled="isInlineBusy(scope.row)"
+              size="mini"
+              type="number"
+              min="0"
+              @input="setInlineDraft(scope.row, 'sideDishCount', $event)"
+              @blur="submitInlineDraft(scope.row, 'sideDishCount')"
+              @keyup.enter.native="submitInlineDraft(scope.row, 'sideDishCount')"
+              @keyup.esc.native="cancelInlineDraft(scope.row, 'sideDishCount', $event)"
+            />
+            <span v-else>{{ scope.row.sideDishCount || 0 }}</span>
+            <span>素</span>
+            <el-input
+              v-if="isInlineEditable(scope.row)"
+              :value="getInlineDraft(scope.row, 'vegCount')"
+              :disabled="isInlineBusy(scope.row)"
+              size="mini"
+              type="number"
+              min="0"
+              @input="setInlineDraft(scope.row, 'vegCount', $event)"
+              @blur="submitInlineDraft(scope.row, 'vegCount')"
+              @keyup.enter.native="submitInlineDraft(scope.row, 'vegCount')"
+              @keyup.esc.native="cancelInlineDraft(scope.row, 'vegCount', $event)"
+            />
+            <span v-else>{{ scope.row.vegCount || 0 }}</span>
+          </div>
         </template>
       </el-table-column>
       <el-table-column label="含汤" width="70" align="center">
         <template slot-scope="scope">
-          {{ scope.row.soupCount >= 1 ? '含汤' : '不含汤' }}
+          <el-select
+            v-if="isInlineEditable(scope.row)"
+            :value="scope.row.soupCount"
+            :disabled="isInlineBusy(scope.row)"
+            size="mini"
+            @change="saveInlineSelection(scope.row, 'soupCount', $event)"
+          >
+            <el-option label="含汤" :value="1" />
+            <el-option label="不含" :value="0" />
+          </el-select>
+          <span v-else>{{ scope.row.soupCount >= 1 ? '含汤' : '不含汤' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="排餐模式" width="100">
         <template slot-scope="scope">
-          {{ scheduleModeText(scope.row.scheduleMode) }}
+          <el-select
+            v-if="isInlineEditable(scope.row)"
+            :value="scope.row.scheduleMode"
+            :disabled="isInlineBusy(scope.row)"
+            size="mini"
+            @change="saveInlineSelection(scope.row, 'scheduleMode', $event)"
+          >
+            <el-option label="指定日期" value="SCHEDULE" />
+            <el-option label="每天送" value="DAILY" />
+            <el-option label="周末送" value="WEEKEND" />
+            <el-option label="工作日" value="WEEKDAY" />
+          </el-select>
+          <span v-else>{{ scheduleModeText(scope.row.scheduleMode) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip>
         <template slot-scope="scope">
-          {{ scope.row.specialRequirements || '-' }}
-        </template>
-      </el-table-column>
-      <el-table-column label="自定义菜单" width="100" align="center">
-        <template slot-scope="scope">
-          <el-image
-            v-if="scope.row.customMenuImage"
-            :src="getCustomMenuImageUrl(scope.row.customMenuImage)"
-            :preview-src-list="[getCustomMenuImageUrl(scope.row.customMenuImage)]"
-            fit="contain"
-            style="width: 40px; height: 40px; cursor: pointer;"
+          <el-input
+            v-if="isInlineEditable(scope.row)"
+            :value="getInlineDraft(scope.row, 'specialRequirements')"
+            :disabled="isInlineBusy(scope.row)"
+            size="mini"
+            placeholder="特殊要求"
+            @input="setInlineDraft(scope.row, 'specialRequirements', $event)"
+            @blur="submitInlineDraft(scope.row, 'specialRequirements')"
+            @keyup.enter.native="submitInlineDraft(scope.row, 'specialRequirements')"
+            @keyup.esc.native="cancelInlineDraft(scope.row, 'specialRequirements', $event)"
           />
-          <span v-else style="color: #c0c4cc;">-</span>
+          <span v-else>{{ scope.row.specialRequirements || '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="过敏" width="150">
+      <el-table-column label="自定义菜单" width="150" align="center">
         <template slot-scope="scope">
-          <span v-if="!scope.row.allergyTags || scope.row.allergyTags.length === 0">-</span>
-          <el-tag v-for="tag in scope.row.allergyTags" :key="tag" size="mini" type="warning" style="margin-right: 4px;">
-            {{ tag }}
-          </el-tag>
+          <div class="inline-menu-cell">
+            <el-image
+              v-if="scope.row.customMenuImage"
+              :src="getCustomMenuImageUrl(scope.row.customMenuImage)"
+              :preview-src-list="[getCustomMenuImageUrl(scope.row.customMenuImage)]"
+              fit="contain"
+              style="width: 40px; height: 40px; cursor: pointer;"
+            />
+            <span v-else-if="!isInlineEditable(scope.row)" style="color: #c0c4cc;">-</span>
+            <template v-if="isInlineEditable(scope.row)">
+              <el-upload
+                :action="imagesUploadApi"
+                :headers="uploadHeaders"
+                :show-file-list="false"
+                :before-upload="getCustomMenuBeforeUpload(scope.row)"
+                :on-success="getCustomMenuUploadSuccess(scope.row)"
+                :on-error="getCustomMenuUploadError(scope.row)"
+                accept="image/*"
+              >
+                <el-button size="mini" type="text" :disabled="isInlineBusy(scope.row)">
+                  {{ scope.row.customMenuImage ? '替换' : '上传' }}
+                </el-button>
+              </el-upload>
+              <el-button
+                v-if="scope.row.customMenuImage"
+                size="mini"
+                type="text"
+                :disabled="isInlineBusy(scope.row)"
+                @click="saveInlineValue(scope.row, 'customMenuImage', null, scope.row.customMenuImage)"
+              >删除</el-button>
+            </template>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column label="早餐" prop="breakfastCount" width="60" align="center" />
-      <el-table-column label="午晚" prop="lunchDinnerCount" width="60" align="center" />
+      <el-table-column label="过敏" width="190">
+        <template slot-scope="scope">
+          <div v-if="isInlineEditable(scope.row)" class="inline-allergy-cell">
+            <el-tag
+              v-for="(tag, index) in (scope.row.allergyTags || [])"
+              :key="`${tag}-${index}`"
+              size="mini"
+              type="warning"
+              closable
+              :disable-transitions="true"
+              @close="removeAllergyTag(scope.row, tag)"
+            >{{ tag }}</el-tag>
+            <div class="inline-allergy-input">
+              <el-input
+                :value="getAllergyDraft(scope.row)"
+                :disabled="isInlineBusy(scope.row)"
+                size="mini"
+                placeholder="添加标签"
+                @input="setAllergyDraft(scope.row, $event)"
+                @keyup.enter.native="addAllergyTag(scope.row)"
+              />
+              <el-button size="mini" type="text" :disabled="isInlineBusy(scope.row)" @click="addAllergyTag(scope.row)">添加</el-button>
+            </div>
+          </div>
+          <template v-else>
+            <span v-if="!scope.row.allergyTags || scope.row.allergyTags.length === 0">-</span>
+            <el-tag v-for="(tag, index) in (scope.row.allergyTags || [])" :key="`${tag}-${index}`" size="mini" type="warning" style="margin-right: 4px;">
+              {{ tag }}
+            </el-tag>
+          </template>
+        </template>
+      </el-table-column>
+      <el-table-column label="早餐" prop="breakfastCount" width="90" align="center">
+        <template slot-scope="scope">
+          <el-input
+            v-if="isInlineEditable(scope.row)"
+            :value="getInlineDraft(scope.row, 'breakfastCount')"
+            :disabled="isInlineBusy(scope.row)"
+            size="mini"
+            type="number"
+            min="0"
+            @input="setInlineDraft(scope.row, 'breakfastCount', $event)"
+            @blur="submitInlineDraft(scope.row, 'breakfastCount')"
+            @keyup.enter.native="submitInlineDraft(scope.row, 'breakfastCount')"
+            @keyup.esc.native="cancelInlineDraft(scope.row, 'breakfastCount', $event)"
+          />
+          <span v-else>{{ scope.row.breakfastCount }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="午晚" prop="lunchDinnerCount" width="90" align="center">
+        <template slot-scope="scope">
+          <el-input
+            v-if="isInlineEditable(scope.row)"
+            :value="getInlineDraft(scope.row, 'lunchDinnerCount')"
+            :disabled="isInlineBusy(scope.row)"
+            size="mini"
+            type="number"
+            min="0"
+            @input="setInlineDraft(scope.row, 'lunchDinnerCount', $event)"
+            @blur="submitInlineDraft(scope.row, 'lunchDinnerCount')"
+            @keyup.enter.native="submitInlineDraft(scope.row, 'lunchDinnerCount')"
+            @keyup.esc.native="cancelInlineDraft(scope.row, 'lunchDinnerCount', $event)"
+          />
+          <span v-else>{{ scope.row.lunchDinnerCount }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="合计" prop="totalCount" width="60" align="center" />
       <el-table-column label="核销" prop="verifiedCount" width="60" align="center">
         <template slot-scope="scope">
@@ -134,7 +304,17 @@
       </el-table-column>
       <el-table-column label="状态" width="80" align="center">
         <template slot-scope="scope">
-          <el-tag :type="statusTagType(scope.row.status)">
+          <el-select
+            v-if="isInlineEditable(scope.row)"
+            :value="scope.row.status"
+            :disabled="isInlineBusy(scope.row)"
+            size="mini"
+            @change="saveInlineSelection(scope.row, 'status', $event)"
+          >
+            <el-option label="进行中" :value="1" />
+            <el-option label="暂停" :value="4" />
+          </el-select>
+          <el-tag v-else :type="statusTagType(scope.row.status)">
             {{ statusText(scope.row.status) }}
           </el-tag>
         </template>
@@ -264,6 +444,7 @@ import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
 import OrderForm from '@/components/Order/OrderForm.vue'
 import { parseTime } from '@/utils/index'
+import { getToken } from '@/utils/auth'
 import { mapGetters } from 'vuex'
 
 function cleanReplaceRules(rules) {
@@ -308,6 +489,10 @@ export default {
       },
       customerSourceOptions: [],
       editRequestId: 0,
+      inlineDrafts: {},
+      allergyInputDrafts: {},
+      savingRows: {},
+      uploadingRows: {},
       rules: {
         customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
         totalAmount: [{
@@ -345,7 +530,11 @@ export default {
     }
   },
   computed: {
-    ...mapGetters(['baseApi', 'roles']),
+    ...mapGetters(['baseApi', 'imagesUploadApi', 'roles']),
+    uploadHeaders() {
+      const token = getToken()
+      return token ? { Authorization: token } : {}
+    },
     canViewAmount() {
       return this.roles.includes('admin') || this.roles.includes('customerOrder:amount:view')
     },
@@ -390,6 +579,198 @@ export default {
       if (!path) return ''
       if (path.startsWith('http://') || path.startsWith('https://')) return path
       return this.baseApi + path
+    },
+    isInlineEditable(row) {
+      return (this.roles.includes('admin') || this.roles.includes('customerOrder:edit')) &&
+        (row.status === 1 || row.status === 4)
+    },
+    isInlineBusy(row) {
+      return Boolean(this.savingRows[row.id] || this.uploadingRows[row.id])
+    },
+    inlineDraftKey(row, field) {
+      return `${row.id}:${field}`
+    },
+    clearInlineDraftsForRow(row) {
+      const prefix = `${row.id}:`
+      Object.keys(this.inlineDrafts).forEach(key => {
+        if (key.indexOf(prefix) === 0) {
+          this.$delete(this.inlineDrafts, key)
+        }
+      })
+    },
+    getInlineDraft(row, field) {
+      const key = this.inlineDraftKey(row, field)
+      if (Object.prototype.hasOwnProperty.call(this.inlineDrafts, key)) {
+        return this.inlineDrafts[key]
+      }
+      const value = row[field]
+      if (field === 'customerCode' || field === 'specialRequirements') {
+        return value || ''
+      }
+      return value === null || value === undefined ? 0 : value
+    },
+    setInlineDraft(row, field, value) {
+      this.$set(this.inlineDrafts, this.inlineDraftKey(row, field), value)
+    },
+    cancelInlineDraft(row, field, event) {
+      this.$delete(this.inlineDrafts, this.inlineDraftKey(row, field))
+      if (event && event.target && event.target.blur) {
+        event.target.blur()
+      }
+    },
+    async submitInlineDraft(row, field) {
+      const key = this.inlineDraftKey(row, field)
+      if (this.isInlineBusy(row)) {
+        this.$delete(this.inlineDrafts, key)
+        return
+      }
+      const draft = this.getInlineDraft(row, field)
+      let value = draft
+      if (field === 'breakfastCount' || field === 'lunchDinnerCount' ||
+        field === 'mainDishCount' || field === 'sideDishCount' || field === 'vegCount') {
+        if (draft === '' || draft === null || draft === undefined || !Number.isInteger(Number(draft)) || Number(draft) < 0) {
+          this.$message.warning('餐数必须是大于或等于 0 的整数')
+          this.$delete(this.inlineDrafts, key)
+          return
+        }
+        value = Number(draft)
+      } else if (field === 'specialRequirements') {
+        value = String(draft || '').trim() || null
+      } else if (field === 'customerCode' && !String(draft || '').trim()) {
+        this.$message.warning('客户编号不能为空')
+        this.$delete(this.inlineDrafts, key)
+        return
+      }
+      const saved = await this.saveInlineValue(row, field, value, row[field])
+      if (saved) {
+        this.$delete(this.inlineDrafts, key)
+      }
+    },
+    saveInlineSelection(row, field, value) {
+      return this.saveInlineValue(row, field, value, row[field])
+    },
+    async saveInlineValue(row, field, value, expectedValue) {
+      if (!this.isInlineEditable(row) || this.savingRows[row.id]) return false
+      const normalizedValue = value === undefined ? null : value
+      const normalizedExpected = expectedValue === undefined ? null : expectedValue
+      if (JSON.stringify(normalizedValue) === JSON.stringify(normalizedExpected)) {
+        this.$delete(this.inlineDrafts, this.inlineDraftKey(row, field))
+        return true
+      }
+
+      this.$set(this.savingRows, row.id, true)
+      this.clearInlineDraftsForRow(row)
+      let saved = false
+      try {
+        await orderApi.updateInline(row.id, {
+          field,
+          value: normalizedValue,
+          expectedValue: normalizedExpected
+        })
+        saved = true
+        this.$delete(this.inlineDrafts, this.inlineDraftKey(row, field))
+        this.$message.success('保存成功')
+      } catch (error) {
+        this.$delete(this.inlineDrafts, this.inlineDraftKey(row, field))
+        if (error && error.response && error.response.status === 409) {
+          this.$message.warning('数据已被其他操作修改，已刷新最新值')
+        } else {
+          this.$message.error((error && error.message) || '保存失败，已恢复最新数据')
+        }
+      }
+      const refreshed = await this.refreshInlineRows()
+      if (!refreshed) {
+        this.$message.warning('当前页刷新失败，请手动刷新确认最新值')
+      }
+      this.$delete(this.savingRows, row.id)
+      return saved
+    },
+    async refreshInlineRows() {
+      const table = this.$refs.table
+      const bodyScrollLeft = table && table.bodyWrapper ? table.bodyWrapper.scrollLeft : 0
+      const headerScrollLeft = table && table.headerWrapper ? table.headerWrapper.scrollLeft : bodyScrollLeft
+      let refreshed = true
+      try {
+        const refreshPromise = this.crud.refresh()
+        if (refreshPromise) {
+          await refreshPromise
+        }
+        await new Promise(resolve => this.$nextTick(resolve))
+      } catch (error) {
+        refreshed = false
+      } finally {
+        const refreshedTable = this.$refs.table
+        if (refreshedTable && refreshedTable.bodyWrapper) {
+          refreshedTable.bodyWrapper.scrollLeft = bodyScrollLeft
+        }
+        if (refreshedTable && refreshedTable.headerWrapper) {
+          refreshedTable.headerWrapper.scrollLeft = headerScrollLeft
+        }
+      }
+      return refreshed
+    },
+    getAllergyDraft(row) {
+      return this.allergyInputDrafts[row.id] || ''
+    },
+    setAllergyDraft(row, value) {
+      this.$set(this.allergyInputDrafts, row.id, value)
+    },
+    async addAllergyTag(row) {
+      if (this.isInlineBusy(row)) return
+      const tag = String(this.getAllergyDraft(row) || '').trim()
+      if (!tag) return
+      const currentTags = row.allergyTags || []
+      if (currentTags.includes(tag)) {
+        this.$delete(this.allergyInputDrafts, row.id)
+        return
+      }
+      const saved = await this.saveInlineValue(row, 'allergyTags', currentTags.concat(tag), currentTags)
+      if (saved) {
+        this.$delete(this.allergyInputDrafts, row.id)
+      }
+    },
+    removeAllergyTag(row, tag) {
+      if (this.isInlineBusy(row)) return
+      const currentTags = row.allergyTags || []
+      const nextTags = currentTags.filter(item => item !== tag)
+      return this.saveInlineValue(row, 'allergyTags', nextTags, currentTags)
+    },
+    getCustomMenuBeforeUpload(row) {
+      return file => {
+        if (this.isInlineBusy(row)) return false
+        if (!file.type || !file.type.startsWith('image/')) {
+          this.$message.error('只能上传图片文件')
+          return false
+        }
+        if (file.size / 1024 / 1024 >= 5) {
+          this.$message.error('图片大小不能超过 5MB')
+          return false
+        }
+        this.$set(this.uploadingRows, row.id, true)
+        return true
+      }
+    },
+    getCustomMenuUploadSuccess(row) {
+      return async response => {
+        const data = response || {}
+        if (!data.type || !data.realName) {
+          this.$message.error('图片已上传，但未返回有效文件路径')
+          this.$delete(this.uploadingRows, row.id)
+          return
+        }
+        const path = `/file/${data.type}/${data.realName}`
+        try {
+          await this.saveInlineValue(row, 'customMenuImage', path, row.customMenuImage)
+        } finally {
+          this.$delete(this.uploadingRows, row.id)
+        }
+      }
+    },
+    getCustomMenuUploadError(row) {
+      return () => {
+        this.$delete(this.uploadingRows, row.id)
+        this.$message.error('菜单图片上传失败')
+      }
     },
     [CRUD.HOOK.beforeToCU]() {
       const currentForm = { ...this.form }
@@ -636,5 +1017,35 @@ export default {
   color: #909399;
   cursor: help;
   font-size: 13px;
+}
+.inline-spec-field {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.inline-spec-field .el-input {
+  width: 38px;
+}
+.inline-menu-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.inline-menu-cell .el-upload {
+  display: inline-flex;
+}
+.inline-allergy-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+}
+.inline-allergy-input {
+  display: flex;
+  align-items: center;
+  width: 100%;
 }
 </style>

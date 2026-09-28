@@ -2,11 +2,14 @@ package me.zhengjie.modules.customer.order.service.impl;
 
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.CustomerOrderInlineAudit;
 import me.zhengjie.modules.customer.order.domain.CustomerOrderStatus;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
+import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderInlineUpdateDto;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
+import me.zhengjie.modules.customer.order.mapper.CustomerOrderInlineAuditMapper;
 import me.zhengjie.modules.customer.order.service.CustomerOrderService;
 import me.zhengjie.modules.customer.order.util.CustomerOrderAmountPermissionUtil;
 import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
@@ -49,8 +52,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -62,6 +67,9 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
     @Autowired
     private CustomerOrderMapper orderMapper;
+
+    @Autowired
+    private CustomerOrderInlineAuditMapper inlineAuditMapper;
 
     @Autowired
     private CustomerProfileMapper profileMapper;
@@ -333,6 +341,560 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         syncProfileDietaryInfo(dto);
         softDeleteRules(dto.getId());
         saveReplaceRules(dto.getId(), dto.getReplaceRules());
+    }
+
+    /**
+     * 按白名单更新一个订单字段，校验页面提供的旧值并将实际变更状态追加到审计表。
+     *
+     * @param id 订单主键
+     * @param dto 单字段更新请求，包含字段键、新值和预期旧值
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateInline(Long id, CustomerOrderInlineUpdateDto dto) {
+        if (id == null) {
+            throw new BadRequestException("订单ID不能为空");
+        }
+        if (dto == null || dto.getField() == null) {
+            throw new BadRequestException("行内修改字段不能为空");
+        }
+
+        String field = dto.getField();
+        if (!isOrderInlineField(field)) {
+            throw new BadRequestException("不支持行内修改字段：" + field);
+        }
+
+        CustomerOrder order = orderMapper.selectInlineUpdateByIdForUpdate(id);
+        if (order == null) {
+            throw new BadRequestException("订单不存在");
+        }
+        if (!Integer.valueOf(CustomerOrderStatus.ACTIVE.getCode()).equals(order.getStatus())
+                && !Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()).equals(order.getStatus())) {
+            throw new BadRequestException("只有进行中或暂停订单可以行内修改");
+        }
+
+        CustomerProfile profile = null;
+        if (isProfileInlineField(field) || "customerCode".equals(field)) {
+            profile = profileMapper.selectByIdForInlineUpdate(order.getCustomerId());
+            if (profile == null) {
+                throw new BadRequestException("客户档案不存在");
+            }
+        }
+
+        Object expectedValue = normalizeInlineValue(field, dto.getExpectedValue(), true);
+        Object requestedValue = normalizeInlineValue(field, dto.getValue(), false);
+        Object actualValue = getInlineValue(order, profile, field);
+        Object comparableCurrentValue = normalizeInlineValue(field, actualValue, true);
+        if (!Objects.equals(comparableCurrentValue, expectedValue)) {
+            throw new BadRequestException(org.springframework.http.HttpStatus.CONFLICT,
+                    "字段已被其他操作修改，请刷新后重试");
+        }
+        if (isInlineNoOp(order, profile, field, actualValue, requestedValue)) {
+            return;
+        }
+
+        String operator = getCurrentUsername();
+        LocalDateTime updateTime = LocalDateTime.now().withNano(0);
+        LinkedHashMap<String, Object> orderBeforeState = new LinkedHashMap<>();
+        LinkedHashMap<String, Object> orderAfterState = new LinkedHashMap<>();
+        LinkedHashMap<String, Object> profileBeforeState = new LinkedHashMap<>();
+        LinkedHashMap<String, Object> profileAfterState = new LinkedHashMap<>();
+
+        if ("customerCode".equals(field)) {
+            updateInlineCustomerCode(order, profile, (String) requestedValue, operator,
+                    updateTime,
+                    orderBeforeState, orderAfterState, profileBeforeState, profileAfterState);
+        } else if (isProfileInlineField(field)) {
+            updateInlineProfileField(profile, field, actualValue, requestedValue, operator,
+                    updateTime,
+                    profileBeforeState, profileAfterState);
+        } else {
+            orderBeforeState.put(field, actualValue);
+            orderAfterState.put(field, requestedValue);
+            appendInlineUpdateMetadata(orderBeforeState, orderAfterState,
+                    order.getUpdateBy(), order.getUpdateTime(), operator, updateTime);
+
+            Integer integerValue = requestedValue instanceof Integer ? (Integer) requestedValue : null;
+            String stringValue = requestedValue instanceof String ? (String) requestedValue : null;
+            Integer remainingCount = null;
+            LocalDate pauseEffectiveDate = order.getPauseEffectiveDate();
+            if ("breakfastCount".equals(field) || "lunchDinnerCount".equals(field)) {
+                remainingCount = applyMealCountUpdate(order, field, integerValue,
+                        orderBeforeState, orderAfterState);
+            } else if ("status".equals(field)) {
+                pauseEffectiveDate = applyStatusUpdate(order, integerValue,
+                        orderBeforeState, orderAfterState);
+            }
+
+            if (orderMapper.updateInlineField(id, field, integerValue, stringValue,
+                    remainingCount, pauseEffectiveDate, operator, updateTime) != 1) {
+                throw new BadRequestException(org.springframework.http.HttpStatus.CONFLICT,
+                        "订单数据已被其他操作修改，请刷新后重试");
+            }
+        }
+
+        CustomerOrderInlineAudit audit = new CustomerOrderInlineAudit();
+        audit.setOrderId(order.getId());
+        audit.setCustomerId(order.getCustomerId());
+        audit.setFieldKey(field);
+        audit.setOperator(operator);
+        audit.setCreatedAt(LocalDateTime.now());
+        audit.setBeforeState(buildInlineAuditState(order.getId(), orderBeforeState,
+                order.getCustomerId(), profileBeforeState));
+        audit.setAfterState(buildInlineAuditState(order.getId(), orderAfterState,
+                order.getCustomerId(), profileAfterState));
+        if (inlineAuditMapper.insert(audit) != 1) {
+            throw new IllegalStateException("订单行内修改审计写入失败");
+        }
+    }
+
+    /**
+     * 判断字段是否属于行内修改白名单。
+     *
+     * @param field 字段键
+     * @return 支持时为 true
+     */
+    private boolean isOrderInlineField(String field) {
+        return "mainDishCount".equals(field)
+                || "sideDishCount".equals(field)
+                || "vegCount".equals(field)
+                || "soupCount".equals(field)
+                || "scheduleMode".equals(field)
+                || "customMenuImage".equals(field)
+                || "breakfastCount".equals(field)
+                || "lunchDinnerCount".equals(field)
+                || "status".equals(field)
+                || isProfileInlineField(field)
+                || "customerCode".equals(field);
+    }
+
+    /**
+     * 判断字段是否归属于客户档案。
+     *
+     * @param field 字段键
+     * @return 归属于客户档案时为 true
+     */
+    private boolean isProfileInlineField(String field) {
+        return "allergyTags".equals(field) || "specialRequirements".equals(field);
+    }
+
+    /**
+     * 按字段类型校验行内请求值；预期旧值允许为 null，以支持数据库空值的并发比较。
+     *
+     * @param field 字段键
+     * @param rawValue 请求中的原始 JSON 值
+     * @param expected 是否为预期旧值
+     * @return 已验证的字段值
+     */
+    private Object normalizeInlineValue(String field, Object rawValue, boolean expected) {
+        if ("allergyTags".equals(field)) {
+            return normalizeInlineAllergyTags(rawValue);
+        }
+        if (rawValue == null) {
+            if (expected || "customMenuImage".equals(field) || "specialRequirements".equals(field)) {
+                return null;
+            }
+            throw new BadRequestException("字段 " + field + " 不允许为空");
+        }
+        if ("mainDishCount".equals(field) || "sideDishCount".equals(field)
+                || "vegCount".equals(field) || "soupCount".equals(field)
+                || "breakfastCount".equals(field) || "lunchDinnerCount".equals(field)
+                || "status".equals(field)) {
+            Integer value = requireInlineInteger(field, rawValue);
+            if (expected) {
+                return value;
+            }
+            if ("soupCount".equals(field) && value != 0 && value != 1) {
+                throw new BadRequestException("含汤字段只允许 0 或 1");
+            }
+            if ("status".equals(field) && value != CustomerOrderStatus.ACTIVE.getCode()
+                    && value != CustomerOrderStatus.PAUSED.getCode()) {
+                throw new BadRequestException("订单状态只允许进行中或暂停");
+            }
+            if (!"status".equals(field) && value < 0) {
+                throw new BadRequestException("字段 " + field + " 不能小于 0");
+            }
+            return value;
+        }
+        if (!(rawValue instanceof String)) {
+            throw new BadRequestException("字段 " + field + " 必须是字符串");
+        }
+        String value = (String) rawValue;
+        if ("specialRequirements".equals(field)) {
+            String normalized = value.trim();
+            return normalized.isEmpty() ? null : normalized;
+        }
+        if ("customerCode".equals(field)) {
+            if (expected) {
+                return value;
+            }
+            if (value.trim().isEmpty()) {
+                throw new BadRequestException("客户编号不能为空");
+            }
+            return value;
+        }
+        if (expected) {
+            return value;
+        }
+        if ("scheduleMode".equals(field)) {
+            if (!Arrays.asList("SCHEDULE", "DAILY", "WEEKEND", "WEEKDAY").contains(value)) {
+                throw new BadRequestException("排餐模式不合法");
+            }
+            return value;
+        }
+        if ("customMenuImage".equals(field)) {
+            String[] pathParts = value.split("/", -1);
+            if (value.length() > 500 || pathParts.length != 4 || !"".equals(pathParts[0])
+                    || !"file".equals(pathParts[1]) || pathParts[2].isEmpty() || pathParts[3].isEmpty()
+                    || value.contains("..") || value.contains("\\") || value.contains("?")
+                    || value.contains("#") || value.trim().length() != value.length()) {
+                throw new BadRequestException("自定义菜单图片必须使用已上传文件的 /file/ 路径");
+            }
+            return value;
+        }
+        throw new BadRequestException("不支持行内修改字段：" + field);
+    }
+
+    /**
+     * 去除过敏标签首尾空白并去重，保留首次出现顺序。
+     *
+     * @param rawValue 请求值或数据库当前值
+     * @return 规范化标签列表
+     */
+    private List<String> normalizeInlineAllergyTags(Object rawValue) {
+        if (rawValue == null) {
+            return Collections.emptyList();
+        }
+        if (!(rawValue instanceof List)) {
+            throw new BadRequestException("过敏标签必须是字符串数组");
+        }
+        List<String> tags = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (Object item : (List<?>) rawValue) {
+            if (item == null) {
+                continue;
+            }
+            if (!(item instanceof String)) {
+                throw new BadRequestException("过敏标签必须是字符串");
+            }
+            String tag = ((String) item).trim();
+            if (!tag.isEmpty() && seen.add(tag)) {
+                tags.add(tag);
+            }
+        }
+        return tags;
+    }
+
+    /**
+     * 读取严格为 JSON 整数的行内字段值，拒绝字符串和小数转换。
+     *
+     * @param field 字段键
+     * @param rawValue 请求值
+     * @return 32 位整数
+     */
+    private Integer requireInlineInteger(String field, Object rawValue) {
+        if (!(rawValue instanceof Integer) && !(rawValue instanceof Long)) {
+            throw new BadRequestException("字段 " + field + " 必须是整数");
+        }
+        long value = ((Number) rawValue).longValue();
+        if (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) {
+            throw new BadRequestException("字段 " + field + " 超出允许范围");
+        }
+        return (int) value;
+    }
+
+    /**
+     * 读取当前订单中与字段键对应的持久化值。
+     *
+     * @param order 已锁定订单
+     * @param field 字段键
+     * @return 当前字段值
+     */
+    private Object getInlineValue(CustomerOrder order, CustomerProfile profile, String field) {
+        switch (field) {
+            case "mainDishCount": return order.getMainDishCount();
+            case "sideDishCount": return order.getSideDishCount();
+            case "vegCount": return order.getVegCount();
+            case "soupCount": return order.getSoupCount();
+            case "scheduleMode": return order.getScheduleMode();
+            case "customMenuImage": return order.getCustomMenuImage();
+            case "breakfastCount": return order.getBreakfastCount();
+            case "lunchDinnerCount": return order.getLunchDinnerCount();
+            case "status": return order.getStatus();
+            case "allergyTags": return profile == null ? null : profile.getAllergyTags();
+            case "specialRequirements": return profile == null ? null : profile.getSpecialRequirements();
+            case "customerCode": return order.getCustomerCode();
+            default: throw new BadRequestException("不支持行内修改字段：" + field);
+        }
+    }
+
+    /**
+     * 判断更新是否没有需要持久化的业务变更。
+     *
+     * @param order 已锁定订单
+     * @param profile 已锁定客户档案；订单自有字段时为空
+     * @param field 字段键
+     * @param actualValue 数据库当前原始值
+     * @param requestedValue 已规范化的新值
+     * @return 无变化时为 true
+     */
+    private boolean isInlineNoOp(CustomerOrder order, CustomerProfile profile, String field,
+                                 Object actualValue, Object requestedValue) {
+        if ("customerCode".equals(field)) {
+            return Objects.equals(order.getCustomerCode(), requestedValue)
+                    && Objects.equals(profile.getCustomerCode(), requestedValue);
+        }
+        return Objects.equals(actualValue, requestedValue);
+    }
+
+    /**
+     * 定向更新过敏标签或客户特殊要求，并记录客户档案实际修改前后值。
+     *
+     * @param profile 已锁定客户档案
+     * @param field 字段键
+     * @param actualValue 数据库原始值
+     * @param requestedValue 已规范化的新值
+     * @param operator 最后修改人
+     * @param beforeState 修改前审计字段
+     * @param afterState 修改后审计字段
+     */
+    private void updateInlineProfileField(CustomerProfile profile, String field, Object actualValue,
+                                          Object requestedValue, String operator,
+                                          LocalDateTime updateTime,
+                                          Map<String, Object> beforeState,
+                                          Map<String, Object> afterState) {
+        beforeState.put(field, actualValue);
+        afterState.put(field, requestedValue);
+        appendInlineUpdateMetadata(beforeState, afterState, profile.getUpdateBy(),
+                profile.getUpdateTime(), operator, updateTime);
+
+        int updated;
+        if ("allergyTags".equals(field)) {
+            updated = profileMapper.updateAllergyTagsInline(profile.getId(),
+                    JSON.toJSONString(requestedValue), operator, updateTime);
+        } else {
+            updated = profileMapper.updateSpecialRequirementsInline(profile.getId(),
+                    (String) requestedValue, operator, updateTime);
+        }
+        if (updated != 1) {
+            throw new BadRequestException(org.springframework.http.HttpStatus.CONFLICT,
+                    "客户档案数据已被其他操作修改，请刷新后重试");
+        }
+    }
+
+    /**
+     * 校验当前父套餐编号池后，同步更新客户档案和当前订单的客户编号。
+     *
+     * @param order 已锁定订单
+     * @param profile 已锁定客户档案
+     * @param customerCode 新客户编号
+     * @param operator 最后修改人
+     * @param orderBeforeState 订单修改前审计字段
+     * @param orderAfterState 订单修改后审计字段
+     * @param profileBeforeState 档案修改前审计字段
+     * @param profileAfterState 档案修改后审计字段
+     */
+    private void updateInlineCustomerCode(CustomerOrder order, CustomerProfile profile, String customerCode,
+                                          String operator, LocalDateTime updateTime,
+                                          Map<String, Object> orderBeforeState,
+                                          Map<String, Object> orderAfterState,
+                                          Map<String, Object> profileBeforeState,
+                                          Map<String, Object> profileAfterState) {
+        validateInlineCustomerCode(order, customerCode);
+        if (profileMapper.countByCodeExcludeId(customerCode, profile.getId()) > 0) {
+            throw new BadRequestException("客户编号「" + customerCode + "」已被占用，请换一个");
+        }
+
+        orderBeforeState.put("customerCode", order.getCustomerCode());
+        orderAfterState.put("customerCode", customerCode);
+        profileBeforeState.put("customerCode", profile.getCustomerCode());
+        profileAfterState.put("customerCode", customerCode);
+        boolean profileCodeChanged = !Objects.equals(profile.getCustomerCode(), customerCode);
+        boolean orderCodeChanged = !Objects.equals(order.getCustomerCode(), customerCode);
+        try {
+            if (profileCodeChanged) {
+                appendInlineUpdateMetadata(profileBeforeState, profileAfterState,
+                        profile.getUpdateBy(), profile.getUpdateTime(), operator, updateTime);
+                if (profileMapper.updateCustomerCodeInline(
+                        profile.getId(), customerCode, operator, updateTime) != 1) {
+                    throw new BadRequestException(org.springframework.http.HttpStatus.CONFLICT,
+                            "客户档案数据已被其他操作修改，请刷新后重试");
+                }
+            }
+            if (orderCodeChanged) {
+                appendInlineUpdateMetadata(orderBeforeState, orderAfterState,
+                        order.getUpdateBy(), order.getUpdateTime(), operator, updateTime);
+                if (orderMapper.updateCustomerCodeInline(
+                        order.getId(), customerCode, operator, updateTime) != 1) {
+                    throw new BadRequestException(org.springframework.http.HttpStatus.CONFLICT,
+                            "订单数据已被其他操作修改，请刷新后重试");
+                }
+            }
+        } catch (DuplicateKeyException ex) {
+            throw new BadRequestException("客户编号「" + customerCode + "」已被占用，请换一个");
+        }
+    }
+
+    /**
+     * 将随业务更新一起修改的操作人和更新时间加入前后状态。
+     *
+     * @param beforeState 修改前状态字段
+     * @param afterState 修改后状态字段
+     * @param previousOperator 当前记录的修改人
+     * @param previousUpdateTime 当前记录的更新时间
+     * @param operator 本次操作人
+     * @param updateTime 本次更新时间
+     */
+    private void appendInlineUpdateMetadata(Map<String, Object> beforeState,
+                                            Map<String, Object> afterState,
+                                            String previousOperator,
+                                            LocalDateTime previousUpdateTime,
+                                            String operator,
+                                            LocalDateTime updateTime) {
+        if (!Objects.equals(previousOperator, operator)) {
+            beforeState.put("updateBy", previousOperator);
+            afterState.put("updateBy", operator);
+        }
+        if (!Objects.equals(previousUpdateTime, updateTime)) {
+            beforeState.put("updateTime", previousUpdateTime);
+            afterState.put("updateTime", updateTime);
+        }
+    }
+
+    /**
+     * 根据订单当前父套餐的编号池校验客户编号前缀和数字范围。
+     *
+     * @param order 当前订单
+     * @param customerCode 待校验客户编号
+     */
+    private void validateInlineCustomerCode(CustomerOrder order, String customerCode) {
+        if (customerCode == null || customerCode.length() > 16) {
+            throw new BadRequestException("客户编号不能为空且不能超过 16 个字符");
+        }
+        if (order.getParentPackageId() == null) {
+            throw new BadRequestException("当前订单未关联父套餐，无法校验客户编号");
+        }
+        ParentPackage parent = parentPackageMapper.selectById(order.getParentPackageId());
+        if (parent == null) {
+            throw new BadRequestException("当前订单父套餐不存在");
+        }
+        String poolPrefix = parent.getPoolPrefix();
+        if (StringUtils.isBlank(poolPrefix) || parent.getPoolStart() == null || parent.getPoolEnd() == null) {
+            throw new BadRequestException("当前父套餐未配置可用的客户编号池");
+        }
+        if (!customerCode.startsWith(poolPrefix)) {
+            throw new BadRequestException("客户编号必须以「" + poolPrefix + "」开头");
+        }
+        String numberPart = customerCode.substring(poolPrefix.length());
+        if (!numberPart.matches("[0-9]+")) {
+            throw new BadRequestException("客户编号前缀后的内容必须是数字");
+        }
+        int sequence;
+        try {
+            sequence = Integer.parseInt(numberPart);
+        } catch (NumberFormatException ex) {
+            throw new BadRequestException("客户编号数字部分超出允许范围");
+        }
+        if (sequence < parent.getPoolStart() || sequence > parent.getPoolEnd()) {
+            throw new BadRequestException("客户编号不在当前父套餐编号池范围内");
+        }
+    }
+
+    /**
+     * 添加本次白名单字段及业务派生字段的定向数据库更新。
+     *
+     * @param order 已锁定订单
+     * @param field 字段键
+     * @param value 已验证的新值
+     * @param update 定向更新包装器
+     * @param beforeState 修改前审计字段
+     * @param afterState 修改后审计字段
+     */
+    /**
+     * 校验并更新早餐或午晚餐数，同时重算剩余餐数。
+     *
+     * @param order 已锁定订单
+     * @param field 被修改餐数字段
+     * @param requestedCount 新餐数
+     * @param update 定向更新包装器
+     * @param beforeState 修改前审计字段
+     * @param afterState 修改后审计字段
+     */
+    private Integer applyMealCountUpdate(CustomerOrder order, String field, Integer requestedCount,
+                                         Map<String, Object> beforeState,
+                                         Map<String, Object> afterState) {
+        int breakfastCount = "breakfastCount".equals(field) ? requestedCount
+                : (order.getBreakfastCount() == null ? 0 : order.getBreakfastCount());
+        int lunchDinnerCount = "lunchDinnerCount".equals(field) ? requestedCount
+                : (order.getLunchDinnerCount() == null ? 0 : order.getLunchDinnerCount());
+        long totalCount = (long) breakfastCount + lunchDinnerCount;
+        int verifiedCount = order.getVerifiedCount() == null ? 0 : order.getVerifiedCount();
+        int importedVerifiedCount = order.getImportedVerifiedCount() == null ? 0 : order.getImportedVerifiedCount();
+        if (totalCount < verifiedCount || totalCount < importedVerifiedCount) {
+            throw new BadRequestException("订单餐数不能小于已核销餐数（当前已核销：" + verifiedCount + "）");
+        }
+        if (totalCount > Integer.MAX_VALUE) {
+            throw new BadRequestException("订单餐数合计超出允许范围");
+        }
+
+        int remainingCount = (int) totalCount - verifiedCount;
+        if (!Objects.equals(order.getRemainingCount(), remainingCount)) {
+            beforeState.put("remainingCount", order.getRemainingCount());
+            afterState.put("remainingCount", remainingCount);
+        }
+        return remainingCount;
+    }
+
+    /**
+     * 按现有订单规则在进行中与暂停之间切换，并维护暂停生效日。
+     *
+     * @param order 已锁定订单
+     * @param requestedStatus 新状态
+     * @param update 定向更新包装器
+     * @param beforeState 修改前审计字段
+     * @param afterState 修改后审计字段
+     */
+    private LocalDate applyStatusUpdate(CustomerOrder order, Integer requestedStatus,
+                                        Map<String, Object> beforeState,
+                                        Map<String, Object> afterState) {
+        Integer previousStatus = order.getStatus();
+        LocalDate pauseEffectiveDate;
+        if (Integer.valueOf(CustomerOrderStatus.ACTIVE.getCode()).equals(previousStatus)
+                && Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()).equals(requestedStatus)) {
+            pauseEffectiveDate = LocalDate.now();
+        } else if (Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()).equals(previousStatus)
+                && Integer.valueOf(CustomerOrderStatus.ACTIVE.getCode()).equals(requestedStatus)) {
+            if (order.getMealType() == null) {
+                throw new BadRequestException("该订单餐次尚未指定，请先确认午餐或晚餐后再恢复");
+            }
+            pauseEffectiveDate = null;
+        } else {
+            throw new BadRequestException("订单状态只能在进行中与暂停之间切换");
+        }
+        if (!Objects.equals(order.getPauseEffectiveDate(), pauseEffectiveDate)) {
+            beforeState.put("pauseEffectiveDate", order.getPauseEffectiveDate());
+            afterState.put("pauseEffectiveDate", pauseEffectiveDate);
+        }
+        return pauseEffectiveDate;
+    }
+
+    /**
+     * 以实体类型和主键为索引，将一组字段状态序列化为审计 JSON。
+     *
+     * @param orderId 订单主键
+     * @param fields 单个实体的字段状态
+     * @return 可供管理员核对和手动恢复的 JSON 文本
+     */
+    private String buildInlineAuditState(Long orderId, Map<String, Object> orderFields,
+                                         Long customerId, Map<String, Object> profileFields) {
+        Map<String, Object> state = new LinkedHashMap<>();
+        if (!orderFields.isEmpty()) {
+            state.put("customer_order:" + orderId, orderFields);
+        }
+        if (!profileFields.isEmpty()) {
+            state.put("customer_profile:" + customerId, profileFields);
+        }
+        return JSON.toJSONString(state);
     }
 
     @Override

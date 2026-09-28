@@ -2,6 +2,7 @@ package me.zhengjie.modules.customer.order.service;
 
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
+import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderInlineUpdateDto;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
 import me.zhengjie.utils.PageResult;
@@ -41,6 +42,14 @@ public interface CustomerOrderService {
      * 更新订单
      */
     void update(CustomerOrderSaveDto dto);
+
+    /**
+     * 校验旧值后更新白名单中的一个订单字段，并在同一事务中写入前后状态审计。
+     *
+     * @param id 订单主键
+     * @param dto 单字段更新请求，包含新值和页面读取到的预期旧值
+     */
+    void updateInline(Long id, CustomerOrderInlineUpdateDto dto);
 
     /**
      * 删除订单

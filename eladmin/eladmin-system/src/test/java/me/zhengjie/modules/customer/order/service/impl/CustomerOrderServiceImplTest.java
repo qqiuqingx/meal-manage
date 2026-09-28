@@ -1,10 +1,15 @@
 package me.zhengjie.modules.customer.order.service.impl;
 
 import cn.hutool.jwt.JWT;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import me.zhengjie.modules.customer.order.domain.CustomerOrderInlineAudit;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderInlineUpdateDto;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
+import me.zhengjie.modules.customer.order.mapper.CustomerOrderInlineAuditMapper;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplaceRuleMapper;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
@@ -35,6 +40,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.math.BigDecimal;
@@ -47,6 +53,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,6 +62,9 @@ class CustomerOrderServiceImplTest {
 
     @Mock
     private CustomerOrderMapper orderMapper;
+
+    @Mock
+    private CustomerOrderInlineAuditMapper inlineAuditMapper;
 
     @Mock
     private MealPlanCustomerMapper mealPlanCustomerMapper;
@@ -79,6 +89,16 @@ class CustomerOrderServiceImplTest {
 
     @InjectMocks
     private CustomerOrderServiceImpl orderService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void prepareSecurityContext() {
+        setTestSecurityContext();
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearSecurityContext() {
+        clearTestSecurityContext();
+    }
 
     @Test
     void query_setsEstimatedRemainingCountFromCurrentRemainingMinusTodayUnverifiedPlans() {
@@ -204,6 +224,7 @@ class CustomerOrderServiceImplTest {
         existing.setId(50L);
         existing.setCustomerId(1L);
         existing.setParentPackageId(40L);
+        existing.setStatus(1);
         existing.setVerifiedCount(0);
 
         CustomerOrderSaveDto dto = buildValidDto();
@@ -218,6 +239,249 @@ class CustomerOrderServiceImplTest {
         ArgumentCaptor<CustomerOrder> captor = ArgumentCaptor.forClass(CustomerOrder.class);
         verify(orderMapper).updateById(captor.capture());
         assertEquals("/file/avatar/menu-002.jpg", captor.getValue().getCustomMenuImage());
+    }
+
+    @Test
+    void updateInline_updatesOnlyRequestedMealCountAndAuditsDerivedRemainingCount() {
+        CustomerOrder existing = new CustomerOrder();
+        existing.setId(70L);
+        existing.setCustomerId(7L);
+        existing.setStatus(1);
+        existing.setBreakfastCount(2);
+        existing.setLunchDinnerCount(3);
+        existing.setVerifiedCount(2);
+        existing.setImportedVerifiedCount(0);
+        existing.setRemainingCount(3);
+        existing.setUpdateBy("previous");
+
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("breakfastCount");
+        dto.setValue(4);
+        dto.setExpectedValue(2);
+
+        when(orderMapper.selectInlineUpdateByIdForUpdate(70L)).thenReturn(existing);
+        when(orderMapper.updateInlineField(eq(70L), eq("breakfastCount"), eq(4),
+                org.mockito.ArgumentMatchers.isNull(), eq(5), org.mockito.ArgumentMatchers.isNull(), eq("tester"),
+                any(java.time.LocalDateTime.class)))
+                .thenReturn(1);
+        when(inlineAuditMapper.insert(any(CustomerOrderInlineAudit.class))).thenReturn(1);
+        setTestSecurityContext();
+        try {
+            orderService.updateInline(70L, dto);
+        } finally {
+            clearTestSecurityContext();
+        }
+
+        ArgumentCaptor<CustomerOrderInlineAudit> auditCaptor = ArgumentCaptor.forClass(CustomerOrderInlineAudit.class);
+        verify(inlineAuditMapper).insert(auditCaptor.capture());
+        CustomerOrderInlineAudit audit = auditCaptor.getValue();
+        assertEquals(70L, audit.getOrderId());
+        assertEquals(7L, audit.getCustomerId());
+        assertEquals("breakfastCount", audit.getFieldKey());
+        assertEquals("tester", audit.getOperator());
+        JSONObject before = JSON.parseObject(audit.getBeforeState()).getJSONObject("customer_order:70");
+        JSONObject after = JSON.parseObject(audit.getAfterState()).getJSONObject("customer_order:70");
+        assertEquals(2, before.getInteger("breakfastCount"));
+        assertEquals(4, after.getInteger("breakfastCount"));
+        assertEquals(3, before.getInteger("remainingCount"));
+        assertEquals(5, after.getInteger("remainingCount"));
+        assertEquals("previous", before.getString("updateBy"));
+        assertEquals("tester", after.getString("updateBy"));
+    }
+
+    @Test
+    void updateInline_rejectsStaleExpectedValueWithConflictAndDoesNotWriteAudit() {
+        CustomerOrder existing = new CustomerOrder();
+        existing.setId(71L);
+        existing.setCustomerId(7L);
+        existing.setStatus(1);
+        existing.setMainDishCount(2);
+
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("mainDishCount");
+        dto.setValue(3);
+        dto.setExpectedValue(1);
+        when(orderMapper.selectInlineUpdateByIdForUpdate(71L)).thenReturn(existing);
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> orderService.updateInline(71L, dto));
+
+        assertEquals(409, ex.getStatus());
+        verify(orderMapper, never()).updateInlineField(any(Long.class), any(String.class), any(Integer.class),
+                any(String.class), any(Integer.class), any(LocalDate.class), any(String.class),
+                any(java.time.LocalDateTime.class));
+        verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
+    }
+
+    @Test
+    void updateInline_rejectsMealCountBelowVerifiedCount() {
+        CustomerOrder existing = new CustomerOrder();
+        existing.setId(72L);
+        existing.setCustomerId(7L);
+        existing.setStatus(1);
+        existing.setBreakfastCount(5);
+        existing.setLunchDinnerCount(2);
+        existing.setVerifiedCount(4);
+        existing.setRemainingCount(3);
+
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("breakfastCount");
+        dto.setValue(1);
+        dto.setExpectedValue(5);
+        when(orderMapper.selectInlineUpdateByIdForUpdate(72L)).thenReturn(existing);
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> orderService.updateInline(72L, dto));
+
+        assertEquals("订单餐数不能小于已核销餐数（当前已核销：4）", ex.getMessage());
+        verify(orderMapper, never()).updateInlineField(any(Long.class), any(String.class), any(Integer.class),
+                any(String.class), any(Integer.class), any(LocalDate.class), any(String.class),
+                any(java.time.LocalDateTime.class));
+        verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
+    }
+
+    @Test
+    void updateInline_rejectsExternalCustomMenuUrls() {
+        CustomerOrder existing = new CustomerOrder();
+        existing.setId(75L);
+        existing.setCustomerId(7L);
+        existing.setStatus(1);
+        existing.setCustomMenuImage(null);
+
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("customMenuImage");
+        dto.setValue("https://example.com/menu.jpg");
+        dto.setExpectedValue(null);
+        when(orderMapper.selectInlineUpdateByIdForUpdate(75L)).thenReturn(existing);
+
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> orderService.updateInline(75L, dto));
+
+        assertEquals(400, exception.getStatus());
+        verify(orderMapper, never()).updateInlineField(any(Long.class), any(String.class), any(Integer.class),
+                any(String.class), any(Integer.class), any(LocalDate.class), any(String.class),
+                any(java.time.LocalDateTime.class));
+        verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
+    }
+
+    @Test
+    void updateInline_acceptsTheExistingLocalStorageImagePath() {
+        CustomerOrder existing = new CustomerOrder();
+        existing.setId(76L);
+        existing.setCustomerId(7L);
+        existing.setStatus(1);
+        existing.setCustomMenuImage(null);
+
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("customMenuImage");
+        dto.setValue("/file/image/menu-076.jpg");
+        dto.setExpectedValue(null);
+        when(orderMapper.selectInlineUpdateByIdForUpdate(76L)).thenReturn(existing);
+        when(orderMapper.updateInlineField(eq(76L), eq("customMenuImage"),
+                org.mockito.ArgumentMatchers.isNull(), eq("/file/image/menu-076.jpg"),
+                org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull(), eq("tester"),
+                any(java.time.LocalDateTime.class))).thenReturn(1);
+        when(inlineAuditMapper.insert(any(CustomerOrderInlineAudit.class))).thenReturn(1);
+
+        orderService.updateInline(76L, dto);
+
+        verify(orderMapper).updateInlineField(eq(76L), eq("customMenuImage"),
+                org.mockito.ArgumentMatchers.isNull(), eq("/file/image/menu-076.jpg"),
+                org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull(), eq("tester"),
+                any(java.time.LocalDateTime.class));
+        verify(inlineAuditMapper).insert(any(CustomerOrderInlineAudit.class));
+    }
+
+    @Test
+    void updateInline_normalizesAllergyTagsAndAuditsTheCustomerProfile() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(73L);
+        order.setCustomerId(9L);
+        order.setStatus(1);
+
+        CustomerProfile profile = new CustomerProfile();
+        profile.setId(9L);
+        profile.setAllergyTags(Collections.singletonList("牛奶"));
+        profile.setUpdateBy("previous");
+
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("allergyTags");
+        dto.setValue(Arrays.asList(" 花生 ", "花生", "鸡蛋"));
+        dto.setExpectedValue(Collections.singletonList("牛奶"));
+
+        when(orderMapper.selectInlineUpdateByIdForUpdate(73L)).thenReturn(order);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(profile);
+        when(profileMapper.updateAllergyTagsInline(eq(9L),
+                eq("[\"花生\",\"鸡蛋\"]"), eq("tester"), any(java.time.LocalDateTime.class))).thenReturn(1);
+        when(inlineAuditMapper.insert(any(CustomerOrderInlineAudit.class))).thenReturn(1);
+
+        orderService.updateInline(73L, dto);
+
+        ArgumentCaptor<CustomerOrderInlineAudit> auditCaptor = ArgumentCaptor.forClass(CustomerOrderInlineAudit.class);
+        verify(inlineAuditMapper).insert(auditCaptor.capture());
+        JSONObject before = JSON.parseObject(auditCaptor.getValue().getBeforeState())
+                .getJSONObject("customer_profile:9");
+        JSONObject after = JSON.parseObject(auditCaptor.getValue().getAfterState())
+                .getJSONObject("customer_profile:9");
+        assertEquals(Collections.singletonList("牛奶"), before.getJSONArray("allergyTags").toJavaList(String.class));
+        assertEquals(Arrays.asList("花生", "鸡蛋"), after.getJSONArray("allergyTags").toJavaList(String.class));
+        assertEquals("previous", before.getString("updateBy"));
+        assertEquals("tester", after.getString("updateBy"));
+        verify(orderMapper, never()).updateInlineField(any(Long.class), any(String.class), any(Integer.class),
+                any(String.class), any(Integer.class), any(LocalDate.class), any(String.class),
+                any(java.time.LocalDateTime.class));
+    }
+
+    @Test
+    void updateInline_syncsCustomerCodeUsingExistingVariableSuffixRuleAndAuditsBothEntities() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(74L);
+        order.setCustomerId(9L);
+        order.setParentPackageId(40L);
+        order.setCustomerCode("A11001");
+        order.setStatus(1);
+        order.setUpdateBy("previous-order-operator");
+
+        CustomerProfile profile = new CustomerProfile();
+        profile.setId(9L);
+        profile.setCustomerCode("A11001");
+        profile.setUpdateBy("previous-profile-operator");
+
+        ParentPackage parent = new ParentPackage();
+        parent.setId(40L);
+        parent.setPoolPrefix("A1");
+        parent.setPoolStart(1001);
+        parent.setPoolEnd(1199);
+
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("customerCode");
+        dto.setValue("A100001002");
+        dto.setExpectedValue("A11001");
+
+        when(orderMapper.selectInlineUpdateByIdForUpdate(74L)).thenReturn(order);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(profile);
+        when(parentPackageMapper.selectById(40L)).thenReturn(parent);
+        when(profileMapper.countByCodeExcludeId("A100001002", 9L)).thenReturn(0);
+        when(profileMapper.updateCustomerCodeInline(eq(9L), eq("A100001002"), eq("tester"),
+                any(java.time.LocalDateTime.class))).thenReturn(1);
+        when(orderMapper.updateCustomerCodeInline(eq(74L), eq("A100001002"), eq("tester"),
+                any(java.time.LocalDateTime.class))).thenReturn(1);
+        when(inlineAuditMapper.insert(any(CustomerOrderInlineAudit.class))).thenReturn(1);
+
+        orderService.updateInline(74L, dto);
+
+        verify(profileMapper).updateCustomerCodeInline(eq(9L), eq("A100001002"), eq("tester"),
+                any(java.time.LocalDateTime.class));
+        verify(orderMapper).updateCustomerCodeInline(eq(74L), eq("A100001002"), eq("tester"),
+                any(java.time.LocalDateTime.class));
+        ArgumentCaptor<CustomerOrderInlineAudit> auditCaptor = ArgumentCaptor.forClass(CustomerOrderInlineAudit.class);
+        verify(inlineAuditMapper).insert(auditCaptor.capture());
+        JSONObject before = JSON.parseObject(auditCaptor.getValue().getBeforeState());
+        JSONObject after = JSON.parseObject(auditCaptor.getValue().getAfterState());
+        assertEquals("A11001", before.getJSONObject("customer_order:74").getString("customerCode"));
+        assertEquals("A11001", before.getJSONObject("customer_profile:9").getString("customerCode"));
+        assertEquals("A100001002", after.getJSONObject("customer_order:74").getString("customerCode"));
+        assertEquals("A100001002", after.getJSONObject("customer_profile:9").getString("customerCode"));
     }
 
     @Test
@@ -269,8 +533,8 @@ class CustomerOrderServiceImplTest {
 
         ApplicationContext context = mock(ApplicationContext.class);
         UserDetailsService userDetailsService = mock(UserDetailsService.class);
-        when(context.getBean(UserDetailsService.class)).thenReturn(userDetailsService);
-        when(userDetailsService.loadUserByUsername("tester"))
+        lenient().when(context.getBean(UserDetailsService.class)).thenReturn(userDetailsService);
+        lenient().when(userDetailsService.loadUserByUsername("tester"))
                 .thenReturn(new User("tester", "", Collections.emptyList()));
         new SpringBeanHolder().setApplicationContext(context);
         SecurityUtils.header = "Authorization";
@@ -445,8 +709,8 @@ class CustomerOrderServiceImplTest {
     private void setTestSecurityContext() {
         ApplicationContext context = mock(ApplicationContext.class);
         UserDetailsService userDetailsService = mock(UserDetailsService.class);
-        when(context.getBean(UserDetailsService.class)).thenReturn(userDetailsService);
-        when(userDetailsService.loadUserByUsername("tester"))
+        lenient().when(context.getBean(UserDetailsService.class)).thenReturn(userDetailsService);
+        lenient().when(userDetailsService.loadUserByUsername("tester"))
                 .thenReturn(new User("tester", "", Collections.emptyList()));
         new SpringBeanHolder().setApplicationContext(context);
         SecurityUtils.header = "Authorization";

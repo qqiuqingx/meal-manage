@@ -3,7 +3,9 @@ package me.zhengjie.modules.customer.order.rest;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import me.zhengjie.annotation.Log;
+import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderDetailDto;
+import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderInlineUpdateDto;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderSaveDto;
 import me.zhengjie.modules.customer.order.service.CustomerOrderService;
@@ -15,7 +17,10 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -25,6 +30,9 @@ import java.util.Set;
 @RestController
 @RequestMapping("/api/customer/order")
 public class CustomerOrderController {
+
+    private static final Set<String> INLINE_UPDATE_REQUEST_KEYS = new HashSet<>(Arrays.asList(
+            "field", "value", "expectedValue"));
 
     @Autowired
     private CustomerOrderService orderService;
@@ -86,6 +94,33 @@ public class CustomerOrderController {
     public ResponseEntity<Void> update(@Validated @RequestBody CustomerOrderSaveDto dto) {
         orderService.update(dto);
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 校验请求只包含字段键、新值和预期旧值，再执行受限订单行内更新。
+     *
+     * @param id 订单主键
+     * @param request 行内字段请求；必须显式包含 field、value、expectedValue
+     * @return 成功时返回 204 No Content
+     */
+    @ApiOperation("行内单字段更新订单")
+    @PatchMapping("/{id}/inline")
+    @Log("行内编辑订单字段")
+    @PreAuthorize("@el.check('customerOrder:edit')")
+    public ResponseEntity<Void> updateInline(@PathVariable Long id,
+                                             @RequestBody Map<String, Object> request) {
+        if (request == null || !request.keySet().equals(INLINE_UPDATE_REQUEST_KEYS)) {
+            throw new BadRequestException("请求必须且只能包含 field、value、expectedValue 三个字段");
+        }
+        if (!(request.get("field") instanceof String)) {
+            throw new BadRequestException("field 必须是字符串");
+        }
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField((String) request.get("field"));
+        dto.setValue(request.get("value"));
+        dto.setExpectedValue(request.get("expectedValue"));
+        orderService.updateInline(id, dto);
+        return ResponseEntity.noContent().build();
     }
 
     @ApiOperation("删除订单")

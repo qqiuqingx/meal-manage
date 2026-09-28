@@ -59,6 +59,41 @@
         <result column="trial_order_code" property="trialOrderCode"/>
     </resultMap>
 
+    <update id="updateInlineField">
+        UPDATE customer_order
+        SET
+        <choose>
+            <when test="field == 'mainDishCount'">main_dish_count = #{integerValue, jdbcType=INTEGER}</when>
+            <when test="field == 'sideDishCount'">side_dish_count = #{integerValue, jdbcType=INTEGER}</when>
+            <when test="field == 'vegCount'">veg_count = #{integerValue, jdbcType=INTEGER}</when>
+            <when test="field == 'soupCount'">soup_count = #{integerValue, jdbcType=INTEGER}</when>
+            <when test="field == 'scheduleMode'">schedule_mode = #{stringValue, jdbcType=VARCHAR}</when>
+            <when test="field == 'customMenuImage'">custom_menu_image = #{stringValue, jdbcType=VARCHAR}</when>
+            <when test="field == 'breakfastCount'">
+                breakfast_count = #{integerValue, jdbcType=INTEGER},
+                remaining_count = #{remainingCount, jdbcType=INTEGER}
+            </when>
+            <when test="field == 'lunchDinnerCount'">
+                lunch_dinner_count = #{integerValue, jdbcType=INTEGER},
+                remaining_count = #{remainingCount, jdbcType=INTEGER}
+            </when>
+            <when test="field == 'status'">
+                status = #{integerValue, jdbcType=INTEGER},
+                pause_effective_date = #{pauseEffectiveDate, jdbcType=DATE}
+            </when>
+        </choose>,
+        update_by = #{updateBy},
+        update_time = #{updateTime, jdbcType=TIMESTAMP}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateCustomerCodeInline">
+        UPDATE customer_order
+        SET customer_code = #{customerCode}, update_by = #{updateBy},
+            update_time = #{updateTime, jdbcType=TIMESTAMP}
+        WHERE id = #{id}
+    </update>
+
     <!-- 条件查询订单列表(关联客户姓名、手机号、套餐名称和过敏标签) -->
     <select id="findAll" resultMap="JoinResultMap">
         SELECT o.*, cp.customer_name, cp.phone, cp.allergy_tags, cp.special_requirements,

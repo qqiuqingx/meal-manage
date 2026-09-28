@@ -31,6 +31,14 @@ export function edit(data) {
   })
 }
 
+export function updateInline(id, data) {
+  return axios({
+    url: `/api/customer/order/${id}/inline`,
+    method: 'patch',
+    data
+  })
+}
+
 export function del(ids) {
   return axios({
     url: '/api/customer/order',
@@ -63,4 +71,4 @@ export function getTrialOrderOptions(params) {
   })
 }
 
-export default { getOrders, getOrder, add, edit, del, getOrdersByCustomer, validateOrder, getTrialOrderOptions }
+export default { getOrders, getOrder, add, edit, updateInline, del, getOrdersByCustomer, validateOrder, getTrialOrderOptions }

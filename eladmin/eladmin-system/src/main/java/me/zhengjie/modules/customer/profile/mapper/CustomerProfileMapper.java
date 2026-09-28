@@ -64,4 +64,51 @@ public interface CustomerProfileMapper extends BaseMapper<CustomerProfile> {
      * @return 当前客户档案
      */
     CustomerProfile selectByIdForScheduleUpdate(@Param("id") Long id);
+
+    /**
+     * 锁定客户档案行，供订单行内共享字段或客户编号更新使用。
+     *
+     * @param id 客户主键
+     * @return 当前客户档案；不存在时返回 null
+     */
+    CustomerProfile selectByIdForInlineUpdate(@Param("id") Long id);
+
+    /**
+     * 定向更新客户过敏标签，并记录最后修改人。
+     *
+     * @param id 客户主键
+     * @param allergyTagsJson 规范化后的 JSON 数组文本
+     * @param updateBy 最后修改人
+     * @return 更新行数
+     */
+    int updateAllergyTagsInline(@Param("id") Long id,
+                                @Param("allergyTagsJson") String allergyTagsJson,
+                                @Param("updateBy") String updateBy,
+                                @Param("updateTime") java.time.LocalDateTime updateTime);
+
+    /**
+     * 定向更新客户特殊要求，并记录最后修改人。
+     *
+     * @param id 客户主键
+     * @param specialRequirements 特殊要求；null 表示清空
+     * @param updateBy 最后修改人
+     * @return 更新行数
+     */
+    int updateSpecialRequirementsInline(@Param("id") Long id,
+                                        @Param("specialRequirements") String specialRequirements,
+                                        @Param("updateBy") String updateBy,
+                                        @Param("updateTime") java.time.LocalDateTime updateTime);
+
+    /**
+     * 定向更新客户编号，并记录最后修改人。
+     *
+     * @param id 客户主键
+     * @param customerCode 新客户编号
+     * @param updateBy 最后修改人
+     * @return 更新行数
+     */
+    int updateCustomerCodeInline(@Param("id") Long id,
+                                 @Param("customerCode") String customerCode,
+                                 @Param("updateBy") String updateBy,
+                                 @Param("updateTime") java.time.LocalDateTime updateTime);
 }

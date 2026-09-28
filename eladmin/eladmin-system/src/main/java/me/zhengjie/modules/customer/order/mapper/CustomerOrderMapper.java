@@ -8,6 +8,7 @@ import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -17,6 +18,49 @@ import java.util.List;
  */
 @Mapper
 public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
+
+    /**
+     * 查询并锁定行内修改目标订单，避免校验旧值后被另一事务并发覆盖。
+     *
+     * @param id 订单主键
+     * @return 当前订单；不存在时返回 null
+     */
+    @Select("SELECT * FROM customer_order WHERE id = #{id} FOR UPDATE")
+    CustomerOrder selectInlineUpdateByIdForUpdate(@Param("id") Long id);
+
+    /**
+     * 按白名单字段定向更新订单，并原子保存餐数或状态派生值。
+     *
+     * @param id 订单主键
+     * @param field 已校验的字段键
+     * @param integerValue 数量或状态的新值
+     * @param stringValue 排餐模式或图片路径的新值
+     * @param remainingCount 餐数修改后的剩余餐数
+     * @param pauseEffectiveDate 状态修改后的暂停生效日
+     * @param updateBy 最后修改人
+     * @return 更新行数
+     */
+    int updateInlineField(@Param("id") Long id,
+                          @Param("field") String field,
+                          @Param("integerValue") Integer integerValue,
+                          @Param("stringValue") String stringValue,
+                          @Param("remainingCount") Integer remainingCount,
+                          @Param("pauseEffectiveDate") LocalDate pauseEffectiveDate,
+                          @Param("updateBy") String updateBy,
+                          @Param("updateTime") java.time.LocalDateTime updateTime);
+
+    /**
+     * 定向同步当前订单的客户编号，并记录最后修改人。
+     *
+     * @param id 订单主键
+     * @param customerCode 新客户编号
+     * @param updateBy 最后修改人
+     * @return 更新行数
+     */
+    int updateCustomerCodeInline(@Param("id") Long id,
+                                 @Param("customerCode") String customerCode,
+                                 @Param("updateBy") String updateBy,
+                                 @Param("updateTime") java.time.LocalDateTime updateTime);
 
     /**
      * 多条件查询订单列表（数据库分页）

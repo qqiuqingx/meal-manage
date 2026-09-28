@@ -1,0 +1,29 @@
+feature: order-inline-edit-audit
+current_phase: completed
+phases:
+  - id: phase-01
+    name: 订单自身字段即时更新与可靠审计
+    depends_on: []
+    status: completed
+  - id: phase-02
+    name: 客户共享字段及客户编号同步
+    depends_on:
+      - phase-01
+    status: completed
+  - id: phase-03
+    name: 订单列表行内交互与手机号列
+    depends_on:
+      - phase-01
+      - phase-02
+    status: completed
+  - id: phase-04
+    name: 契约、跨模块回归与交付检查
+    depends_on:
+      - phase-01
+      - phase-02
+      - phase-03
+    status: completed
+
+release_validation:
+  status: pending
+  note: 真实数据库 DDL 和隔离数据端到端验收未执行，需在发布环境备份并确认 DDL 窗口后完成。
