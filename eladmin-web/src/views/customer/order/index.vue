@@ -92,7 +92,7 @@
                 @keyup.esc.native="cancelInlineDraft(scope.row, addressInlineField(addr), $event)"
               />
             </template>
-            <el-tag v-else size="mini" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click.native="beginInlineEdit(scope.row, addressInlineField(addr))">
+            <el-tag v-else size="mini" disable-transitions :class="{ 'is-editable': isInlineEditable(scope.row) }" @click.native="beginInlineEdit(scope.row, addressInlineField(addr))">
               {{ addr.type }}: {{ addr.detail }}
             </el-tag>
           </div>
@@ -662,7 +662,11 @@ export default {
       if (!this.isInlineEditable(row) || this.isInlineBusy(row)) return
       this.activeInlineKey = this.inlineDraftKey(row, field)
       this.$nextTick(() => {
-        const input = this.$refs[this.inlineInputRef(row, field)]
+        let input = this.$refs[this.inlineInputRef(row, field)]
+        // 地址列的 ref 位于 v-for 内，Vue 会收集为数组，取未被销毁的实例
+        if (Array.isArray(input)) {
+          input = input.find(item => !item._isDestroyed) || input[0]
+        }
         if (input && this.activeInlineKey === this.inlineDraftKey(row, field)) {
           input.focus()
           const nativeInput = input.$el && input.$el.querySelector('input')
