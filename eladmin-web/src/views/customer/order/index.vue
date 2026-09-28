@@ -183,7 +183,6 @@
             size="mini"
             @change="saveInlineSelection(scope.row, 'soupCount', $event)"
             @visible-change="!$event && cancelInlineDraft(scope.row, 'soupCount')"
-            @mouseleave.native="cancelInlineSelectOnLeave(scope.row, 'soupCount')"
           >
             <el-option label="含汤" :value="1" />
             <el-option label="不含" :value="0" />
@@ -201,7 +200,6 @@
             size="mini"
             @change="saveInlineSelection(scope.row, 'scheduleMode', $event)"
             @visible-change="!$event && cancelInlineDraft(scope.row, 'scheduleMode')"
-            @mouseleave.native="cancelInlineSelectOnLeave(scope.row, 'scheduleMode')"
           >
             <el-option label="指定日期" value="SCHEDULE" />
             <el-option label="每天送" value="DAILY" />
@@ -349,7 +347,6 @@
             size="mini"
             @change="saveInlineSelection(scope.row, 'status', $event)"
             @visible-change="!$event && cancelInlineDraft(scope.row, 'status')"
-            @mouseleave.native="cancelInlineSelectOnLeave(scope.row, 'status')"
           >
             <el-option label="进行中" :value="1" />
             <el-option label="暂停" :value="4" />
@@ -736,13 +733,6 @@ export default {
       if (event && event.target && event.target.blur) {
         event.target.blur()
       }
-    },
-    /** 鼠标离开未展开的行内下拉框时退出编辑；选项面板展开时保留交互。 */
-    cancelInlineSelectOnLeave(row, field) {
-      if (!this.isInlineEditing(row, field)) return
-      let select = this.$refs[this.inlineInputRef(row, field)]
-      if (Array.isArray(select)) select = select.find(item => !item._isDestroyed) || select[0]
-      if (select && !select.visible) this.cancelInlineDraft(row, field)
     },
     /** 校验并提交订单行指定字段的草稿；失焦或回车时调用，提交失败时恢复展示值。 */
     async submitInlineDraft(row, field) {
