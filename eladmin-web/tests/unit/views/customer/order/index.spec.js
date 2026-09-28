@@ -141,8 +141,9 @@ describe('CustomerOrder edit flow', () => {
     const source = fs.readFileSync(path.resolve(__dirname, '../../../../../src/views/customer/order/index.vue'), 'utf8')
 
     expect(source).toContain('<el-table-column label="已排餐" prop="scheduledCount" width="80" align="center" />')
-    expect(source).toContain('<el-table-column label="手机号" prop="phone" width="120" />')
-    expect(source).not.toContain('<el-table-column label="手机号" prop="phone" width="120" fixed="left" />')
+    expect(source).toContain('<el-table-column label="手机号" prop="phone" width="145">')
+    expect(source).toContain("@click=\"beginInlineEdit(scope.row, 'phone')\"")
+    expect(source).toContain('@click.native="beginInlineEdit(scope.row, addressInlineField(addr))"')
     expect(source).toContain("@keyup.enter.native=\"submitInlineDraft(scope.row, 'breakfastCount')\"")
     expect(source).toContain("v-if=\"isInlineEditing(scope.row, 'mainDishCount')\"")
     expect(source).toContain("@click=\"beginInlineEdit(scope.row, 'mainDishCount')\"")
@@ -223,6 +224,62 @@ describe('CustomerOrder edit flow', () => {
       value: null,
       expectedValue: '少盐'
     })
+  })
+
+  test('updates a customer phone from the clicked value', async() => {
+    orderApi.updateInline.mockResolvedValue({})
+    const vm = createVm()
+    const row = { id: 26, status: 1, phone: '13800000000' }
+    vm.beginInlineEdit(row, 'phone')
+    vm.setInlineDraft(row, 'phone', '13900000000')
+
+    await vm.submitInlineDraft(row, 'phone')
+
+    expect(orderApi.updateInline).toHaveBeenCalledWith(26, {
+      field: 'phone',
+      value: '13900000000',
+      expectedValue: '13800000000'
+    })
+  })
+
+  test('updates only the clicked address slot with its own expected value', async() => {
+    orderApi.updateInline.mockResolvedValue({})
+    const vm = createVm()
+    const row = {
+      id: 27,
+      status: 1,
+      addresses: [
+        { addressType: 'DEFAULT', type: '默认', detail: '旧默认地址' },
+        { addressType: 'WEEKEND', type: '周末', detail: '旧周末地址' }
+      ]
+    }
+    const field = vm.addressInlineField(row.addresses[1])
+    vm.beginInlineEdit(row, field)
+    vm.setInlineDraft(row, field, '新周末地址')
+
+    await vm.submitInlineDraft(row, field)
+
+    expect(orderApi.updateInline).toHaveBeenCalledWith(27, {
+      field: 'addressDetail:WEEKEND',
+      value: '新周末地址',
+      expectedValue: '旧周末地址'
+    })
+    expect(row.addresses[0].detail).toBe('旧默认地址')
+  })
+
+  test('rejects an invalid phone or empty address before sending a request', async() => {
+    const vm = createVm()
+    const row = { id: 28, status: 1, phone: '13800000000', addresses: [{ addressType: 'DEFAULT', detail: '旧地址' }] }
+    vm.beginInlineEdit(row, 'phone')
+    vm.setInlineDraft(row, 'phone', '123')
+    await vm.submitInlineDraft(row, 'phone')
+    vm.beginInlineEdit(row, 'addressDetail:DEFAULT')
+    vm.setInlineDraft(row, 'addressDetail:DEFAULT', '   ')
+    await vm.submitInlineDraft(row, 'addressDetail:DEFAULT')
+
+    expect(orderApi.updateInline).not.toHaveBeenCalled()
+    expect(vm.$message.warning).toHaveBeenCalledWith('手机号格式不正确')
+    expect(vm.$message.warning).toHaveBeenCalledWith('地址不能为空且不能超过 200 个字符')
   })
 
   test('saves selection values as soon as the user changes the selector', async() => {

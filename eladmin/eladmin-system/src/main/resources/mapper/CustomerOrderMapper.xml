@@ -101,7 +101,7 @@
                pp.package_name as parent_package_name,
                sp.sub_package_name as child_package_name,
                trial_o.order_code as trial_order_code,
-               (SELECT JSON_ARRAYAGG(JSON_OBJECT('type', CASE cpa.address_type WHEN 'DEFAULT' THEN '默认' WHEN 'WORKDAY' THEN '工作日' WHEN 'WEEKEND' THEN '周末' END, 'detail', cpa.address_detail))
+               (SELECT JSON_ARRAYAGG(JSON_OBJECT('addressType', cpa.address_type, 'type', CASE cpa.address_type WHEN 'DEFAULT' THEN '默认' WHEN 'WORKDAY' THEN '工作日' WHEN 'WEEKEND' THEN '周末' END, 'detail', cpa.address_detail))
                 FROM customer_profile_address cpa WHERE cpa.customer_id = o.customer_id) as addresses
         FROM customer_order o
         LEFT JOIN customer_profile cp ON o.customer_id = cp.id
@@ -219,7 +219,7 @@
                pp.package_name as parent_package_name,
                sp.sub_package_name as child_package_name,
                trial_o.order_code as trial_order_code,
-               (SELECT JSON_ARRAYAGG(JSON_OBJECT('type', CASE cpa.address_type WHEN 'DEFAULT' THEN '默认' WHEN 'WORKDAY' THEN '工作日' WHEN 'WEEKEND' THEN '周末' END, 'detail', cpa.address_detail))
+               (SELECT JSON_ARRAYAGG(JSON_OBJECT('addressType', cpa.address_type, 'type', CASE cpa.address_type WHEN 'DEFAULT' THEN '默认' WHEN 'WORKDAY' THEN '工作日' WHEN 'WEEKEND' THEN '周末' END, 'detail', cpa.address_detail))
                 FROM customer_profile_address cpa WHERE cpa.customer_id = o.customer_id) as addresses
         FROM customer_order o
         LEFT JOIN customer_profile cp ON o.customer_id = cp.id

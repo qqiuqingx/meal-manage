@@ -269,6 +269,8 @@ public class CustomerOrder implements Serializable {
 
     @Data
     public static class AddressInfo implements Serializable {
+        /** 地址槽位代码（DEFAULT/WORKDAY/WEEKEND），用于定位行内修改目标。 */
+        private String addressType;
         private String type;
         private String detail;
     }

@@ -64,6 +64,14 @@
         WHERE id = #{id}
     </update>
 
+    <update id="updatePhoneInline">
+        UPDATE customer_profile
+        SET phone = #{phone, jdbcType=VARCHAR, typeHandler=org.apache.ibatis.type.StringTypeHandler},
+            update_by = #{updateBy, typeHandler=org.apache.ibatis.type.StringTypeHandler},
+            update_time = #{updateTime, jdbcType=TIMESTAMP}
+        WHERE id = #{id}
+    </update>
+
     <update id="updateCustomerCodeInline">
         UPDATE customer_profile
         SET customer_code = #{customerCode, typeHandler=org.apache.ibatis.type.StringTypeHandler},

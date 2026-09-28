@@ -21,7 +21,9 @@ import me.zhengjie.modules.customer.pkg.domain.SubPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.modules.meal.domain.Dish;
 import me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto;
@@ -73,6 +75,9 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
     @Autowired
     private CustomerProfileMapper profileMapper;
+
+    @Autowired
+    private CustomerProfileAddressMapper profileAddressMapper;
 
     @Autowired
     private CustomerProfileService customerProfileService;
@@ -347,7 +352,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
      * 按白名单更新一个订单字段，校验页面提供的旧值并将实际变更状态追加到审计表。
      *
      * @param id 订单主键
-     * @param dto 单字段更新请求，包含字段键、新值和预期旧值
+     * @param dto 单字段更新请求，包含字段键、新值和预期旧值；地址字段含槽位类型
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -373,17 +378,26 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             throw new BadRequestException("只有进行中或暂停订单可以行内修改");
         }
 
+        String addressType = inlineAddressType(field);
         CustomerProfile profile = null;
-        if (isProfileInlineField(field) || "customerCode".equals(field)) {
+        if (isProfileInlineField(field) || "customerCode".equals(field) || addressType != null) {
             profile = profileMapper.selectByIdForInlineUpdate(order.getCustomerId());
             if (profile == null) {
                 throw new BadRequestException("客户档案不存在");
             }
         }
 
+        CustomerProfileAddress address = null;
+        if (addressType != null) {
+            address = profileAddressMapper.selectForInlineUpdate(order.getCustomerId(), addressType);
+            if (address == null) {
+                throw new BadRequestException("该类型地址不存在，请在客户档案中添加");
+            }
+        }
+
         Object expectedValue = normalizeInlineValue(field, dto.getExpectedValue(), true);
         Object requestedValue = normalizeInlineValue(field, dto.getValue(), false);
-        Object actualValue = getInlineValue(order, profile, field);
+        Object actualValue = address == null ? getInlineValue(order, profile, field) : address.getAddressDetail();
         Object comparableCurrentValue = normalizeInlineValue(field, actualValue, true);
         if (!Objects.equals(comparableCurrentValue, expectedValue)) {
             throw new BadRequestException(org.springframework.http.HttpStatus.CONFLICT,
@@ -399,8 +413,23 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         LinkedHashMap<String, Object> orderAfterState = new LinkedHashMap<>();
         LinkedHashMap<String, Object> profileBeforeState = new LinkedHashMap<>();
         LinkedHashMap<String, Object> profileAfterState = new LinkedHashMap<>();
+        LinkedHashMap<String, Object> addressBeforeState = new LinkedHashMap<>();
+        LinkedHashMap<String, Object> addressAfterState = new LinkedHashMap<>();
 
-        if ("customerCode".equals(field)) {
+        if (address != null) {
+            addressBeforeState.put("addressType", addressType);
+            addressAfterState.put("addressType", addressType);
+            addressBeforeState.put("addressDetail", actualValue);
+            addressAfterState.put("addressDetail", requestedValue);
+            if (!Objects.equals(address.getUpdateTime(), updateTime)) {
+                addressBeforeState.put("updateTime", address.getUpdateTime());
+                addressAfterState.put("updateTime", updateTime);
+            }
+            if (profileAddressMapper.updateAddressDetailInline(address.getId(), (String) requestedValue, updateTime) != 1) {
+                throw new BadRequestException(org.springframework.http.HttpStatus.CONFLICT,
+                        "地址已被其他操作修改，请刷新后重试");
+            }
+        } else if ("customerCode".equals(field)) {
             updateInlineCustomerCode(order, profile, (String) requestedValue, operator,
                     updateTime,
                     orderBeforeState, orderAfterState, profileBeforeState, profileAfterState);
@@ -440,9 +469,9 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         audit.setOperator(operator);
         audit.setCreatedAt(LocalDateTime.now());
         audit.setBeforeState(buildInlineAuditState(order.getId(), orderBeforeState,
-                order.getCustomerId(), profileBeforeState));
+                order.getCustomerId(), profileBeforeState, address == null ? null : address.getId(), addressBeforeState));
         audit.setAfterState(buildInlineAuditState(order.getId(), orderAfterState,
-                order.getCustomerId(), profileAfterState));
+                order.getCustomerId(), profileAfterState, address == null ? null : address.getId(), addressAfterState));
         if (inlineAuditMapper.insert(audit) != 1) {
             throw new IllegalStateException("订单行内修改审计写入失败");
         }
@@ -465,6 +494,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
                 || "lunchDinnerCount".equals(field)
                 || "status".equals(field)
                 || isProfileInlineField(field)
+                || inlineAddressType(field) != null
                 || "customerCode".equals(field);
     }
 
@@ -475,7 +505,22 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
      * @return 归属于客户档案时为 true
      */
     private boolean isProfileInlineField(String field) {
-        return "allergyTags".equals(field) || "specialRequirements".equals(field);
+        return "allergyTags".equals(field) || "specialRequirements".equals(field)
+                || "phone".equals(field);
+    }
+
+    /**
+     * 从地址行内字段键中识别现有地址槽位。
+     *
+     * @param field 形如 addressDetail:DEFAULT 的字段键
+     * @return 合法槽位代码；其他字段返回 null
+     */
+    private String inlineAddressType(String field) {
+        if (field == null || !field.startsWith("addressDetail:")) {
+            return null;
+        }
+        String type = field.substring("addressDetail:".length());
+        return Arrays.asList("DEFAULT", "WORKDAY", "WEEKEND").contains(type) ? type : null;
     }
 
     /**
@@ -520,6 +565,26 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             throw new BadRequestException("字段 " + field + " 必须是字符串");
         }
         String value = (String) rawValue;
+        if ("phone".equals(field)) {
+            if (expected) {
+                return value;
+            }
+            String normalized = value.trim();
+            if (!normalized.matches("^1[3-9]\\d{9}$")) {
+                throw new BadRequestException("手机号格式不正确");
+            }
+            return normalized;
+        }
+        if (inlineAddressType(field) != null) {
+            if (expected) {
+                return value;
+            }
+            String normalized = value.trim();
+            if (normalized.isEmpty() || normalized.length() > 200) {
+                throw new BadRequestException("地址不能为空且不能超过 200 个字符");
+            }
+            return normalized;
+        }
         if ("specialRequirements".equals(field)) {
             String normalized = value.trim();
             return normalized.isEmpty() ? null : normalized;
@@ -623,6 +688,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             case "status": return order.getStatus();
             case "allergyTags": return profile == null ? null : profile.getAllergyTags();
             case "specialRequirements": return profile == null ? null : profile.getSpecialRequirements();
+            case "phone": return profile == null ? null : profile.getPhone();
             case "customerCode": return order.getCustomerCode();
             default: throw new BadRequestException("不支持行内修改字段：" + field);
         }
@@ -672,6 +738,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
         if ("allergyTags".equals(field)) {
             updated = profileMapper.updateAllergyTagsInline(profile.getId(),
                     JSON.toJSONString(requestedValue), operator, updateTime);
+        } else if ("phone".equals(field)) {
+            updated = profileMapper.updatePhoneInline(profile.getId(), (String) requestedValue, operator, updateTime);
         } else {
             updated = profileMapper.updateSpecialRequirementsInline(profile.getId(),
                     (String) requestedValue, operator, updateTime);
@@ -882,17 +950,25 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
      * 以实体类型和主键为索引，将一组字段状态序列化为审计 JSON。
      *
      * @param orderId 订单主键
-     * @param fields 单个实体的字段状态
+     * @param orderFields 订单字段状态
+     * @param customerId 客户主键
+     * @param profileFields 客户档案字段状态
+     * @param addressId 地址主键；非地址修改时为空
+     * @param addressFields 地址字段状态
      * @return 可供管理员核对和手动恢复的 JSON 文本
      */
     private String buildInlineAuditState(Long orderId, Map<String, Object> orderFields,
-                                         Long customerId, Map<String, Object> profileFields) {
+                                         Long customerId, Map<String, Object> profileFields,
+                                         Long addressId, Map<String, Object> addressFields) {
         Map<String, Object> state = new LinkedHashMap<>();
         if (!orderFields.isEmpty()) {
             state.put("customer_order:" + orderId, orderFields);
         }
         if (!profileFields.isEmpty()) {
             state.put("customer_profile:" + customerId, profileFields);
+        }
+        if (!addressFields.isEmpty()) {
+            state.put("customer_profile_address:" + addressId, addressFields);
         }
         return JSON.toJSONString(state);
     }

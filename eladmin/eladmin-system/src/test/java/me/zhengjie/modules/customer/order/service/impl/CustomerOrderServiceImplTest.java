@@ -16,7 +16,9 @@ import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
+import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto;
@@ -71,6 +73,9 @@ class CustomerOrderServiceImplTest {
 
     @Mock
     private CustomerProfileMapper profileMapper;
+
+    @Mock
+    private CustomerProfileAddressMapper profileAddressMapper;
 
     @Mock
     private ParentPackageMapper parentPackageMapper;
@@ -430,6 +435,145 @@ class CustomerOrderServiceImplTest {
         verify(orderMapper, never()).updateInlineField(any(Long.class), any(String.class), any(Integer.class),
                 any(String.class), any(Integer.class), any(LocalDate.class), any(String.class),
                 any(java.time.LocalDateTime.class));
+    }
+
+    @Test
+    void updateInline_updatesPhoneInCustomerProfileAndAuditsIt() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(80L);
+        order.setCustomerId(9L);
+        order.setStatus(1);
+        CustomerProfile profile = new CustomerProfile();
+        profile.setId(9L);
+        profile.setPhone("13800000000");
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("phone");
+        dto.setExpectedValue("13800000000");
+        dto.setValue("13900000000");
+        when(orderMapper.selectInlineUpdateByIdForUpdate(80L)).thenReturn(order);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(profile);
+        when(profileMapper.updatePhoneInline(eq(9L), eq("13900000000"), eq("tester"),
+                any(java.time.LocalDateTime.class))).thenReturn(1);
+        when(inlineAuditMapper.insert(any(CustomerOrderInlineAudit.class))).thenReturn(1);
+
+        orderService.updateInline(80L, dto);
+
+        ArgumentCaptor<CustomerOrderInlineAudit> auditCaptor = ArgumentCaptor.forClass(CustomerOrderInlineAudit.class);
+        verify(inlineAuditMapper).insert(auditCaptor.capture());
+        JSONObject before = JSON.parseObject(auditCaptor.getValue().getBeforeState()).getJSONObject("customer_profile:9");
+        JSONObject after = JSON.parseObject(auditCaptor.getValue().getAfterState()).getJSONObject("customer_profile:9");
+        assertEquals("13800000000", before.getString("phone"));
+        assertEquals("13900000000", after.getString("phone"));
+    }
+
+    @Test
+    void updateInline_rejectsInvalidPhoneWithoutWriting() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(81L);
+        order.setCustomerId(9L);
+        order.setStatus(1);
+        CustomerProfile profile = new CustomerProfile();
+        profile.setId(9L);
+        profile.setPhone("13800000000");
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("phone");
+        dto.setExpectedValue("13800000000");
+        dto.setValue("123");
+        when(orderMapper.selectInlineUpdateByIdForUpdate(81L)).thenReturn(order);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(profile);
+
+        assertThrows(BadRequestException.class, () -> orderService.updateInline(81L, dto));
+
+        verify(profileMapper, never()).updatePhoneInline(any(Long.class), any(String.class),
+                any(String.class), any(java.time.LocalDateTime.class));
+        verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
+    }
+
+    @Test
+    void updateInline_updatesOnlyTheChosenAddressSlotAndAuditsIt() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(82L);
+        order.setCustomerId(9L);
+        order.setStatus(1);
+        CustomerProfile profile = new CustomerProfile();
+        profile.setId(9L);
+        CustomerProfileAddress address = new CustomerProfileAddress();
+        address.setId(31L);
+        address.setAddressType("WEEKEND");
+        address.setAddressDetail("旧周末地址");
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("addressDetail:WEEKEND");
+        dto.setExpectedValue("旧周末地址");
+        dto.setValue("新周末地址");
+        when(orderMapper.selectInlineUpdateByIdForUpdate(82L)).thenReturn(order);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(profile);
+        when(profileAddressMapper.selectForInlineUpdate(9L, "WEEKEND")).thenReturn(address);
+        when(profileAddressMapper.updateAddressDetailInline(eq(31L), eq("新周末地址"),
+                any(java.time.LocalDateTime.class))).thenReturn(1);
+        when(inlineAuditMapper.insert(any(CustomerOrderInlineAudit.class))).thenReturn(1);
+
+        orderService.updateInline(82L, dto);
+
+        verify(profileAddressMapper).selectForInlineUpdate(9L, "WEEKEND");
+        ArgumentCaptor<CustomerOrderInlineAudit> auditCaptor = ArgumentCaptor.forClass(CustomerOrderInlineAudit.class);
+        verify(inlineAuditMapper).insert(auditCaptor.capture());
+        JSONObject before = JSON.parseObject(auditCaptor.getValue().getBeforeState())
+                .getJSONObject("customer_profile_address:31");
+        JSONObject after = JSON.parseObject(auditCaptor.getValue().getAfterState())
+                .getJSONObject("customer_profile_address:31");
+        assertEquals("WEEKEND", before.getString("addressType"));
+        assertEquals("旧周末地址", before.getString("addressDetail"));
+        assertEquals("新周末地址", after.getString("addressDetail"));
+    }
+
+    @Test
+    void updateInline_rejectsStaleAddressValueWithoutWriting() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(83L);
+        order.setCustomerId(9L);
+        order.setStatus(1);
+        CustomerProfile profile = new CustomerProfile();
+        profile.setId(9L);
+        CustomerProfileAddress address = new CustomerProfileAddress();
+        address.setId(31L);
+        address.setAddressDetail("最新地址");
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("addressDetail:DEFAULT");
+        dto.setExpectedValue("旧地址");
+        dto.setValue("新地址");
+        when(orderMapper.selectInlineUpdateByIdForUpdate(83L)).thenReturn(order);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(profile);
+        when(profileAddressMapper.selectForInlineUpdate(9L, "DEFAULT")).thenReturn(address);
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> orderService.updateInline(83L, dto));
+
+        assertEquals(409, ex.getStatus());
+        verify(profileAddressMapper, never()).updateAddressDetailInline(any(Long.class), any(String.class),
+                any(java.time.LocalDateTime.class));
+        verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
+    }
+
+    @Test
+    void updateInline_doesNotCreateMissingAddressSlots() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(84L);
+        order.setCustomerId(9L);
+        order.setStatus(1);
+        CustomerProfile profile = new CustomerProfile();
+        profile.setId(9L);
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("addressDetail:WEEKEND");
+        dto.setExpectedValue(null);
+        dto.setValue("新增周末地址");
+        when(orderMapper.selectInlineUpdateByIdForUpdate(84L)).thenReturn(order);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(profile);
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> orderService.updateInline(84L, dto));
+
+        assertEquals("该类型地址不存在，请在客户档案中添加", ex.getMessage());
+        verify(profileAddressMapper, never()).updateAddressDetailInline(any(Long.class), any(String.class),
+                any(java.time.LocalDateTime.class));
+        verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
     }
 
     @Test

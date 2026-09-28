@@ -100,6 +100,20 @@ public interface CustomerProfileMapper extends BaseMapper<CustomerProfile> {
                                         @Param("updateTime") java.time.LocalDateTime updateTime);
 
     /**
+     * 行内更新客户手机号并记录修改人。
+     *
+     * @param id 客户主键
+     * @param phone 新手机号
+     * @param updateBy 操作人
+     * @param updateTime 修改时间
+     * @return 更新行数
+     */
+    int updatePhoneInline(@Param("id") Long id,
+                          @Param("phone") String phone,
+                          @Param("updateBy") String updateBy,
+                          @Param("updateTime") java.time.LocalDateTime updateTime);
+
+    /**
      * 定向更新客户编号，并记录最后修改人。
      *
      * @param id 客户主键

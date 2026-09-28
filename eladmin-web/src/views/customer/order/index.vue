@@ -57,13 +57,45 @@
         </template>
       </el-table-column>
       <el-table-column label="客户姓名" prop="customerName" width="100" fixed="left" />
-      <el-table-column label="手机号" prop="phone" width="120" />
-      <el-table-column label="地址" min-width="200">
+      <el-table-column label="手机号" prop="phone" width="145">
+        <template slot-scope="scope">
+          <el-input
+            v-if="isInlineEditing(scope.row, 'phone')"
+            :ref="inlineInputRef(scope.row, 'phone')"
+            :value="getInlineDraft(scope.row, 'phone')"
+            :disabled="isInlineBusy(scope.row)"
+            size="mini"
+            maxlength="11"
+            @input="setInlineDraft(scope.row, 'phone', $event)"
+            @blur="submitInlineDraft(scope.row, 'phone')"
+            @keyup.enter.native="submitInlineDraft(scope.row, 'phone')"
+            @keyup.esc.native="cancelInlineDraft(scope.row, 'phone', $event)"
+          />
+          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'phone')">{{ scope.row.phone || '-' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="地址" min-width="220">
         <template slot-scope="scope">
           <div v-if="!scope.row.addresses || scope.row.addresses.length === 0">-</div>
-          <el-tag v-for="addr in scope.row.addresses" :key="addr.type" size="mini" style="margin-bottom: 2px; display: block; white-space: normal; height: auto;">
-            {{ addr.type }}: {{ addr.detail }}
-          </el-tag>
+          <div v-for="addr in scope.row.addresses" :key="addr.addressType" class="inline-address-row">
+            <template v-if="isInlineEditing(scope.row, addressInlineField(addr))">
+              <span>{{ addr.type }}:</span>
+              <el-input
+                :ref="inlineInputRef(scope.row, addressInlineField(addr))"
+                :value="getInlineDraft(scope.row, addressInlineField(addr))"
+                :disabled="isInlineBusy(scope.row)"
+                size="mini"
+                maxlength="200"
+                @input="setInlineDraft(scope.row, addressInlineField(addr), $event)"
+                @blur="submitInlineDraft(scope.row, addressInlineField(addr))"
+                @keyup.enter.native="submitInlineDraft(scope.row, addressInlineField(addr))"
+                @keyup.esc.native="cancelInlineDraft(scope.row, addressInlineField(addr), $event)"
+              />
+            </template>
+            <el-tag v-else size="mini" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click.native="beginInlineEdit(scope.row, addressInlineField(addr))">
+              {{ addr.type }}: {{ addr.detail }}
+            </el-tag>
+          </div>
         </template>
       </el-table-column>
       <el-table-column label="规格" width="180">
@@ -641,6 +673,19 @@ export default {
     inlineDraftKey(row, field) {
       return `${row.id}:${field}`
     },
+    /** 根据地址槽位返回行内编辑字段键。 */
+    addressInlineField(address) {
+      return `addressDetail:${address.addressType}`
+    },
+    /** 返回订单行中指定字段的当前值；地址从对应槽位读取。 */
+    getInlineCurrentValue(row, field) {
+      if (field.indexOf('addressDetail:') === 0) {
+        const addressType = field.substring('addressDetail:'.length)
+        const address = (row.addresses || []).find(item => item.addressType === addressType)
+        return address ? address.detail : null
+      }
+      return row[field]
+    },
     clearInlineDraftsForRow(row) {
       const prefix = `${row.id}:`
       Object.keys(this.inlineDrafts).forEach(key => {
@@ -654,8 +699,8 @@ export default {
       if (Object.prototype.hasOwnProperty.call(this.inlineDrafts, key)) {
         return this.inlineDrafts[key]
       }
-      const value = row[field]
-      if (field === 'customerCode' || field === 'specialRequirements') {
+      const value = this.getInlineCurrentValue(row, field)
+      if (field === 'customerCode' || field === 'specialRequirements' || field === 'phone' || field.indexOf('addressDetail:') === 0) {
         return value || ''
       }
       return value === null || value === undefined ? 0 : value
@@ -693,12 +738,26 @@ export default {
         value = Number(draft)
       } else if (field === 'specialRequirements') {
         value = String(draft || '').trim() || null
+      } else if (field === 'phone') {
+        value = String(draft || '').trim()
+        if (!/^1[3-9]\d{9}$/.test(value)) {
+          this.$message.warning('手机号格式不正确')
+          this.$delete(this.inlineDrafts, key)
+          return
+        }
+      } else if (field.indexOf('addressDetail:') === 0) {
+        value = String(draft || '').trim()
+        if (!value || value.length > 200) {
+          this.$message.warning('地址不能为空且不能超过 200 个字符')
+          this.$delete(this.inlineDrafts, key)
+          return
+        }
       } else if (field === 'customerCode' && !String(draft || '').trim()) {
         this.$message.warning('客户编号不能为空')
         this.$delete(this.inlineDrafts, key)
         return
       }
-      const saved = await this.saveInlineValue(row, field, value, row[field])
+      const saved = await this.saveInlineValue(row, field, value, this.getInlineCurrentValue(row, field))
       if (saved) {
         this.$delete(this.inlineDrafts, key)
       }
@@ -1114,6 +1173,26 @@ export default {
 .inline-spec-field .inline-value {
   min-width: 12px;
   text-align: center;
+}
+.inline-address-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+.inline-address-row .el-input {
+  flex: 1;
+  min-width: 140px;
+}
+.inline-address-row .el-tag {
+  height: auto;
+  white-space: normal;
+}
+.inline-address-row .is-editable {
+  cursor: pointer;
+}
+.inline-address-row .is-editable:hover {
+  border-color: #409eff;
 }
 .inline-menu-cell {
   display: flex;
