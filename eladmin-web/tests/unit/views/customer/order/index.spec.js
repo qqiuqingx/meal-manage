@@ -144,6 +144,51 @@ describe('CustomerOrder edit flow', () => {
     expect(source).toContain('<el-table-column label="手机号" prop="phone" width="120" />')
     expect(source).not.toContain('<el-table-column label="手机号" prop="phone" width="120" fixed="left" />')
     expect(source).toContain("@keyup.enter.native=\"submitInlineDraft(scope.row, 'breakfastCount')\"")
+    expect(source).toContain("v-if=\"isInlineEditing(scope.row, 'mainDishCount')\"")
+    expect(source).toContain("@click=\"beginInlineEdit(scope.row, 'mainDishCount')\"")
+    expect(source).toContain("@click=\"beginInlineEdit(scope.row, 'sideDishCount')\"")
+    expect(source).toContain("@click=\"beginInlineEdit(scope.row, 'vegCount')\"")
+    expect(source).toContain('@click="openCustomMenuDialog(scope.row)"')
+    expect(source).toContain("{{ menuDialogRow.customMenuImage ? '替换菜单图片' : '上传菜单图片' }}")
+  })
+
+  test('clicking one value opens only its editor and focuses the existing value', async() => {
+    const vm = createVm()
+    const row = { id: 20, status: 1, mainDishCount: 2, sideDishCount: 1 }
+    const select = jest.fn()
+    const focus = jest.fn()
+    vm.$refs[vm.inlineInputRef(row, 'mainDishCount')] = {
+      focus,
+      $el: { querySelector: () => ({ select }) }
+    }
+
+    vm.beginInlineEdit(row, 'mainDishCount')
+    await Promise.resolve()
+
+    expect(vm.isInlineEditing(row, 'mainDishCount')).toBe(true)
+    expect(vm.isInlineEditing(row, 'sideDishCount')).toBe(false)
+    expect(vm.getInlineDraft(row, 'mainDishCount')).toBe(2)
+    expect(focus).toHaveBeenCalledTimes(1)
+    expect(select).toHaveBeenCalledTimes(1)
+  })
+
+  test('submitting one specification value keeps the other specification values unchanged', async() => {
+    orderApi.updateInline.mockResolvedValue({})
+    const vm = createVm()
+    const row = { id: 22, status: 1, mainDishCount: 2, sideDishCount: 1, vegCount: 3 }
+    vm.beginInlineEdit(row, 'sideDishCount')
+    vm.setInlineDraft(row, 'sideDishCount', '4')
+
+    await vm.submitInlineDraft(row, 'sideDishCount')
+
+    expect(orderApi.updateInline).toHaveBeenCalledWith(22, {
+      field: 'sideDishCount',
+      value: 4,
+      expectedValue: 1
+    })
+    expect(vm.activeInlineKey).toBeNull()
+    expect(row.mainDishCount).toBe(2)
+    expect(row.vegCount).toBe(3)
   })
 
   test('saves a numeric field with its row value as the expected old value and refreshes the page', async() => {
@@ -168,6 +213,7 @@ describe('CustomerOrder edit flow', () => {
     orderApi.updateInline.mockResolvedValue({})
     const vm = createVm()
     const row = { id: 14, status: 4, specialRequirements: '少盐' }
+    vm.beginInlineEdit(row, 'specialRequirements')
     vm.setInlineDraft(row, 'specialRequirements', '   ')
 
     await vm.submitInlineDraft(row, 'specialRequirements')
@@ -196,12 +242,28 @@ describe('CustomerOrder edit flow', () => {
   test('rejects a fractional meal count before sending a request', async() => {
     const vm = createVm()
     const row = { id: 15, status: 1, breakfastCount: 2 }
+    vm.beginInlineEdit(row, 'breakfastCount')
     vm.setInlineDraft(row, 'breakfastCount', '2.5')
 
     await vm.submitInlineDraft(row, 'breakfastCount')
 
     expect(orderApi.updateInline).not.toHaveBeenCalled()
     expect(vm.$message.warning).toHaveBeenCalledWith('餐数必须是大于或等于 0 的整数')
+    expect(vm.activeInlineKey).toBeNull()
+  })
+
+  test('escape closes the chosen editor without saving its draft on blur', async() => {
+    const vm = createVm()
+    const row = { id: 21, status: 1, mainDishCount: 2 }
+    vm.beginInlineEdit(row, 'mainDishCount')
+    vm.setInlineDraft(row, 'mainDishCount', '3')
+
+    vm.cancelInlineDraft(row, 'mainDishCount')
+    await vm.submitInlineDraft(row, 'mainDishCount')
+
+    expect(vm.activeInlineKey).toBeNull()
+    expect(vm.inlineDrafts['21:mainDishCount']).toBeUndefined()
+    expect(orderApi.updateInline).not.toHaveBeenCalled()
   })
 
   test('shows terminal orders and rows without edit permission as read-only', () => {
@@ -246,8 +308,10 @@ describe('CustomerOrder edit flow', () => {
     orderApi.updateInline.mockResolvedValue({})
     const vm = createVm()
     const row = { id: 19, status: 1, customMenuImage: null }
+    vm.openCustomMenuDialog(row)
     const beforeUpload = vm.getCustomMenuBeforeUpload(row)
 
+    expect(vm.menuDialogVisible).toBe(true)
     expect(beforeUpload({ type: 'image/jpeg', size: 1024 })).toBe(true)
     await vm.getCustomMenuUploadSuccess(row)({ type: 'image', realName: 'menu-019.jpg' })
 
@@ -257,5 +321,33 @@ describe('CustomerOrder edit flow', () => {
       expectedValue: null
     })
     expect(vm.uploadingRows[19]).toBeUndefined()
+    expect(vm.menuDialogVisible).toBe(false)
+  })
+
+  test('keeps menu preview available without edit permission and hides empty menu', () => {
+    const vm = createVm({ roles: ['customerOrder:list'] })
+    vm.openCustomMenuDialog({ id: 23, status: 1, customMenuImage: null })
+    expect(vm.menuDialogVisible).toBe(false)
+
+    const row = { id: 24, status: 1, customMenuImage: '/file/image/menu.jpg' }
+    vm.openCustomMenuDialog(row)
+    expect(vm.menuDialogRow).toBe(row)
+    expect(vm.menuDialogVisible).toBe(true)
+  })
+
+  test('deletes the menu image through the existing inline update request', async() => {
+    orderApi.updateInline.mockResolvedValue({})
+    const vm = createVm()
+    const row = { id: 25, status: 1, customMenuImage: '/file/image/menu.jpg' }
+    vm.openCustomMenuDialog(row)
+
+    await vm.removeCustomMenuImage()
+
+    expect(orderApi.updateInline).toHaveBeenCalledWith(25, {
+      field: 'customMenuImage',
+      value: null,
+      expectedValue: '/file/image/menu.jpg'
+    })
+    expect(vm.menuDialogVisible).toBe(false)
   })
 })

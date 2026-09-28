@@ -43,7 +43,8 @@
       <el-table-column label="客户编号" prop="customerCode" width="130" fixed="left">
         <template slot-scope="scope">
           <el-input
-            v-if="isInlineEditable(scope.row)"
+            v-if="isInlineEditing(scope.row, 'customerCode')"
+            :ref="inlineInputRef(scope.row, 'customerCode')"
             :value="getInlineDraft(scope.row, 'customerCode')"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
@@ -52,7 +53,7 @@
             @keyup.enter.native="submitInlineDraft(scope.row, 'customerCode')"
             @keyup.esc.native="cancelInlineDraft(scope.row, 'customerCode', $event)"
           />
-          <span v-else>{{ scope.row.customerCode || '-' }}</span>
+          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'customerCode')">{{ scope.row.customerCode || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="客户姓名" prop="customerName" width="100" fixed="left" />
@@ -65,90 +66,96 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="规格" width="170">
+      <el-table-column label="规格" width="180">
         <template slot-scope="scope">
           <div class="inline-spec-field">
             <span>主</span>
             <el-input
-              v-if="isInlineEditable(scope.row)"
+              v-if="isInlineEditing(scope.row, 'mainDishCount')"
+              :ref="inlineInputRef(scope.row, 'mainDishCount')"
               :value="getInlineDraft(scope.row, 'mainDishCount')"
               :disabled="isInlineBusy(scope.row)"
               size="mini"
-              type="number"
-              min="0"
+              type="text"
+              inputmode="numeric"
               @input="setInlineDraft(scope.row, 'mainDishCount', $event)"
               @blur="submitInlineDraft(scope.row, 'mainDishCount')"
               @keyup.enter.native="submitInlineDraft(scope.row, 'mainDishCount')"
               @keyup.esc.native="cancelInlineDraft(scope.row, 'mainDishCount', $event)"
             />
-            <span v-else>{{ scope.row.mainDishCount || 0 }}</span>
+            <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'mainDishCount')">{{ scope.row.mainDishCount == null ? 0 : scope.row.mainDishCount }}</span>
             <span>副</span>
             <el-input
-              v-if="isInlineEditable(scope.row)"
+              v-if="isInlineEditing(scope.row, 'sideDishCount')"
+              :ref="inlineInputRef(scope.row, 'sideDishCount')"
               :value="getInlineDraft(scope.row, 'sideDishCount')"
               :disabled="isInlineBusy(scope.row)"
               size="mini"
-              type="number"
-              min="0"
+              type="text"
+              inputmode="numeric"
               @input="setInlineDraft(scope.row, 'sideDishCount', $event)"
               @blur="submitInlineDraft(scope.row, 'sideDishCount')"
               @keyup.enter.native="submitInlineDraft(scope.row, 'sideDishCount')"
               @keyup.esc.native="cancelInlineDraft(scope.row, 'sideDishCount', $event)"
             />
-            <span v-else>{{ scope.row.sideDishCount || 0 }}</span>
+            <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'sideDishCount')">{{ scope.row.sideDishCount == null ? 0 : scope.row.sideDishCount }}</span>
             <span>素</span>
             <el-input
-              v-if="isInlineEditable(scope.row)"
+              v-if="isInlineEditing(scope.row, 'vegCount')"
+              :ref="inlineInputRef(scope.row, 'vegCount')"
               :value="getInlineDraft(scope.row, 'vegCount')"
               :disabled="isInlineBusy(scope.row)"
               size="mini"
-              type="number"
-              min="0"
+              type="text"
+              inputmode="numeric"
               @input="setInlineDraft(scope.row, 'vegCount', $event)"
               @blur="submitInlineDraft(scope.row, 'vegCount')"
               @keyup.enter.native="submitInlineDraft(scope.row, 'vegCount')"
               @keyup.esc.native="cancelInlineDraft(scope.row, 'vegCount', $event)"
             />
-            <span v-else>{{ scope.row.vegCount || 0 }}</span>
+            <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'vegCount')">{{ scope.row.vegCount == null ? 0 : scope.row.vegCount }}</span>
           </div>
         </template>
       </el-table-column>
       <el-table-column label="含汤" width="70" align="center">
         <template slot-scope="scope">
           <el-select
-            v-if="isInlineEditable(scope.row)"
+            v-if="isInlineEditing(scope.row, 'soupCount')"
             :value="scope.row.soupCount"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
             @change="saveInlineSelection(scope.row, 'soupCount', $event)"
+            @visible-change="!$event && cancelInlineDraft(scope.row, 'soupCount')"
           >
             <el-option label="含汤" :value="1" />
             <el-option label="不含" :value="0" />
           </el-select>
-          <span v-else>{{ scope.row.soupCount >= 1 ? '含汤' : '不含汤' }}</span>
+          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'soupCount')">{{ scope.row.soupCount >= 1 ? '含汤' : '不含汤' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="排餐模式" width="100">
         <template slot-scope="scope">
           <el-select
-            v-if="isInlineEditable(scope.row)"
+            v-if="isInlineEditing(scope.row, 'scheduleMode')"
             :value="scope.row.scheduleMode"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
             @change="saveInlineSelection(scope.row, 'scheduleMode', $event)"
+            @visible-change="!$event && cancelInlineDraft(scope.row, 'scheduleMode')"
           >
             <el-option label="指定日期" value="SCHEDULE" />
             <el-option label="每天送" value="DAILY" />
             <el-option label="周末送" value="WEEKEND" />
             <el-option label="工作日" value="WEEKDAY" />
           </el-select>
-          <span v-else>{{ scheduleModeText(scope.row.scheduleMode) }}</span>
+          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'scheduleMode')">{{ scheduleModeText(scope.row.scheduleMode) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip>
         <template slot-scope="scope">
           <el-input
-            v-if="isInlineEditable(scope.row)"
+            v-if="isInlineEditing(scope.row, 'specialRequirements')"
+            :ref="inlineInputRef(scope.row, 'specialRequirements')"
             :value="getInlineDraft(scope.row, 'specialRequirements')"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
@@ -158,48 +165,30 @@
             @keyup.enter.native="submitInlineDraft(scope.row, 'specialRequirements')"
             @keyup.esc.native="cancelInlineDraft(scope.row, 'specialRequirements', $event)"
           />
-          <span v-else>{{ scope.row.specialRequirements || '-' }}</span>
+          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'specialRequirements')">{{ scope.row.specialRequirements || '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="自定义菜单" width="150" align="center">
+      <el-table-column label="自定义菜单" width="120" align="center">
         <template slot-scope="scope">
-          <div class="inline-menu-cell">
+          <div
+            v-if="scope.row.customMenuImage || isInlineEditable(scope.row)"
+            class="inline-menu-cell"
+            @click="openCustomMenuDialog(scope.row)"
+          >
             <el-image
               v-if="scope.row.customMenuImage"
               :src="getCustomMenuImageUrl(scope.row.customMenuImage)"
-              :preview-src-list="[getCustomMenuImageUrl(scope.row.customMenuImage)]"
               fit="contain"
-              style="width: 40px; height: 40px; cursor: pointer;"
+              style="width: 40px; height: 40px;"
             />
-            <span v-else-if="!isInlineEditable(scope.row)" style="color: #c0c4cc;">-</span>
-            <template v-if="isInlineEditable(scope.row)">
-              <el-upload
-                :action="imagesUploadApi"
-                :headers="uploadHeaders"
-                :show-file-list="false"
-                :before-upload="getCustomMenuBeforeUpload(scope.row)"
-                :on-success="getCustomMenuUploadSuccess(scope.row)"
-                :on-error="getCustomMenuUploadError(scope.row)"
-                accept="image/*"
-              >
-                <el-button size="mini" type="text" :disabled="isInlineBusy(scope.row)">
-                  {{ scope.row.customMenuImage ? '替换' : '上传' }}
-                </el-button>
-              </el-upload>
-              <el-button
-                v-if="scope.row.customMenuImage"
-                size="mini"
-                type="text"
-                :disabled="isInlineBusy(scope.row)"
-                @click="saveInlineValue(scope.row, 'customMenuImage', null, scope.row.customMenuImage)"
-              >删除</el-button>
-            </template>
+            <span v-else class="inline-value is-editable">上传菜单</span>
           </div>
+          <span v-else>-</span>
         </template>
       </el-table-column>
       <el-table-column label="过敏" width="190">
         <template slot-scope="scope">
-          <div v-if="isInlineEditable(scope.row)" class="inline-allergy-cell">
+          <div v-if="isInlineEditing(scope.row, 'allergyTags')" class="inline-allergy-cell">
             <el-tag
               v-for="(tag, index) in (scope.row.allergyTags || [])"
               :key="`${tag}-${index}`"
@@ -219,48 +208,51 @@
                 @keyup.enter.native="addAllergyTag(scope.row)"
               />
               <el-button size="mini" type="text" :disabled="isInlineBusy(scope.row)" @click="addAllergyTag(scope.row)">添加</el-button>
+              <el-button size="mini" type="text" @click="cancelInlineDraft(scope.row, 'allergyTags')">完成</el-button>
             </div>
           </div>
-          <template v-else>
+          <div v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'allergyTags')">
             <span v-if="!scope.row.allergyTags || scope.row.allergyTags.length === 0">-</span>
             <el-tag v-for="(tag, index) in (scope.row.allergyTags || [])" :key="`${tag}-${index}`" size="mini" type="warning" style="margin-right: 4px;">
               {{ tag }}
             </el-tag>
-          </template>
+          </div>
         </template>
       </el-table-column>
       <el-table-column label="早餐" prop="breakfastCount" width="90" align="center">
         <template slot-scope="scope">
           <el-input
-            v-if="isInlineEditable(scope.row)"
+            v-if="isInlineEditing(scope.row, 'breakfastCount')"
+            :ref="inlineInputRef(scope.row, 'breakfastCount')"
             :value="getInlineDraft(scope.row, 'breakfastCount')"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
-            type="number"
-            min="0"
+            type="text"
+            inputmode="numeric"
             @input="setInlineDraft(scope.row, 'breakfastCount', $event)"
             @blur="submitInlineDraft(scope.row, 'breakfastCount')"
             @keyup.enter.native="submitInlineDraft(scope.row, 'breakfastCount')"
             @keyup.esc.native="cancelInlineDraft(scope.row, 'breakfastCount', $event)"
           />
-          <span v-else>{{ scope.row.breakfastCount }}</span>
+          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'breakfastCount')">{{ scope.row.breakfastCount }}</span>
         </template>
       </el-table-column>
       <el-table-column label="午晚" prop="lunchDinnerCount" width="90" align="center">
         <template slot-scope="scope">
           <el-input
-            v-if="isInlineEditable(scope.row)"
+            v-if="isInlineEditing(scope.row, 'lunchDinnerCount')"
+            :ref="inlineInputRef(scope.row, 'lunchDinnerCount')"
             :value="getInlineDraft(scope.row, 'lunchDinnerCount')"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
-            type="number"
-            min="0"
+            type="text"
+            inputmode="numeric"
             @input="setInlineDraft(scope.row, 'lunchDinnerCount', $event)"
             @blur="submitInlineDraft(scope.row, 'lunchDinnerCount')"
             @keyup.enter.native="submitInlineDraft(scope.row, 'lunchDinnerCount')"
             @keyup.esc.native="cancelInlineDraft(scope.row, 'lunchDinnerCount', $event)"
           />
-          <span v-else>{{ scope.row.lunchDinnerCount }}</span>
+          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'lunchDinnerCount')">{{ scope.row.lunchDinnerCount }}</span>
         </template>
       </el-table-column>
       <el-table-column label="合计" prop="totalCount" width="60" align="center" />
@@ -305,16 +297,17 @@
       <el-table-column label="状态" width="80" align="center">
         <template slot-scope="scope">
           <el-select
-            v-if="isInlineEditable(scope.row)"
+            v-if="isInlineEditing(scope.row, 'status')"
             :value="scope.row.status"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
             @change="saveInlineSelection(scope.row, 'status', $event)"
+            @visible-change="!$event && cancelInlineDraft(scope.row, 'status')"
           >
             <el-option label="进行中" :value="1" />
             <el-option label="暂停" :value="4" />
           </el-select>
-          <el-tag v-else :type="statusTagType(scope.row.status)">
+          <el-tag v-else :type="statusTagType(scope.row.status)" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click.native="beginInlineEdit(scope.row, 'status')">
             {{ statusText(scope.row.status) }}
           </el-tag>
         </template>
@@ -369,6 +362,40 @@
       @size-change="crud.sizeChangeHandler"
       @current-change="crud.pageChangeHandler"
     />
+
+    <el-dialog title="自定义菜单" :visible.sync="menuDialogVisible" width="420px" append-to-body :close-on-click-modal="false" @closed="menuDialogRow = null">
+      <div v-if="menuDialogRow" class="menu-dialog-body">
+        <el-image
+          v-if="menuDialogRow.customMenuImage"
+          :src="getCustomMenuImageUrl(menuDialogRow.customMenuImage)"
+          :preview-src-list="[getCustomMenuImageUrl(menuDialogRow.customMenuImage)]"
+          fit="contain"
+          class="menu-dialog-image"
+        />
+        <div v-else class="menu-dialog-empty">尚未上传菜单图片</div>
+        <div v-if="isInlineEditable(menuDialogRow)" class="menu-dialog-actions">
+          <el-upload
+            :action="imagesUploadApi"
+            :headers="uploadHeaders"
+            :disabled="isInlineBusy(menuDialogRow)"
+            :show-file-list="false"
+            :before-upload="getCustomMenuBeforeUpload(menuDialogRow)"
+            :on-success="getCustomMenuUploadSuccess(menuDialogRow)"
+            :on-error="getCustomMenuUploadError(menuDialogRow)"
+            accept="image/*"
+          >
+            <el-button type="primary" size="small" :loading="isInlineBusy(menuDialogRow)">
+              {{ menuDialogRow.customMenuImage ? '替换菜单图片' : '上传菜单图片' }}
+            </el-button>
+          </el-upload>
+          <el-button v-if="menuDialogRow.customMenuImage" size="small" :disabled="isInlineBusy(menuDialogRow)" @click="removeCustomMenuImage">删除图片</el-button>
+        </div>
+        <div v-if="isInlineEditable(menuDialogRow)" class="menu-dialog-hint">支持图片文件，大小不超过 5MB</div>
+      </div>
+      <div slot="footer" class="dialog-footer">
+        <el-button @click="menuDialogVisible = false">关闭</el-button>
+      </div>
+    </el-dialog>
 
     <!--表单组件-->
     <el-dialog
@@ -489,6 +516,9 @@ export default {
       },
       customerSourceOptions: [],
       editRequestId: 0,
+      menuDialogVisible: false,
+      menuDialogRow: null,
+      activeInlineKey: null,
       inlineDrafts: {},
       allergyInputDrafts: {},
       savingRows: {},
@@ -587,6 +617,27 @@ export default {
     isInlineBusy(row) {
       return Boolean(this.savingRows[row.id] || this.uploadingRows[row.id])
     },
+    /** 判断订单行的 field 是否为当前编辑字段，返回布尔值。 */
+    isInlineEditing(row, field) {
+      return this.isInlineEditable(row) && this.activeInlineKey === this.inlineDraftKey(row, field)
+    },
+    /** 根据订单行和字段返回输入框的唯一引用名，用于点击数值后聚焦。 */
+    inlineInputRef(row, field) {
+      return `inline-input-${row.id}-${field}`
+    },
+    /** 点击订单行的指定字段值时，只打开该字段的编辑控件。 */
+    beginInlineEdit(row, field) {
+      if (!this.isInlineEditable(row) || this.isInlineBusy(row)) return
+      this.activeInlineKey = this.inlineDraftKey(row, field)
+      this.$nextTick(() => {
+        const input = this.$refs[this.inlineInputRef(row, field)]
+        if (input && this.activeInlineKey === this.inlineDraftKey(row, field)) {
+          input.focus()
+          const nativeInput = input.$el && input.$el.querySelector('input')
+          if (nativeInput) nativeInput.select()
+        }
+      })
+    },
     inlineDraftKey(row, field) {
       return `${row.id}:${field}`
     },
@@ -612,14 +663,20 @@ export default {
     setInlineDraft(row, field, value) {
       this.$set(this.inlineDrafts, this.inlineDraftKey(row, field), value)
     },
+    /** 取消订单行指定字段的草稿；event 存在时同时让输入框失焦。 */
     cancelInlineDraft(row, field, event) {
-      this.$delete(this.inlineDrafts, this.inlineDraftKey(row, field))
+      const key = this.inlineDraftKey(row, field)
+      this.$delete(this.inlineDrafts, key)
+      if (this.activeInlineKey === key) this.activeInlineKey = null
       if (event && event.target && event.target.blur) {
         event.target.blur()
       }
     },
+    /** 校验并提交订单行指定字段的草稿；失焦或回车时调用，提交失败时恢复展示值。 */
     async submitInlineDraft(row, field) {
       const key = this.inlineDraftKey(row, field)
+      if (this.activeInlineKey !== key) return
+      this.activeInlineKey = null
       if (this.isInlineBusy(row)) {
         this.$delete(this.inlineDrafts, key)
         return
@@ -646,9 +703,12 @@ export default {
         this.$delete(this.inlineDrafts, key)
       }
     },
+    /** 选择订单行字段的新值后即时提交，返回保存结果 Promise。 */
     saveInlineSelection(row, field, value) {
+      if (this.activeInlineKey === this.inlineDraftKey(row, field)) this.activeInlineKey = null
       return this.saveInlineValue(row, field, value, row[field])
     },
+    /** 提交订单行单字段的新值和旧值 expectedValue，刷新列表并返回是否保存成功。 */
     async saveInlineValue(row, field, value, expectedValue) {
       if (!this.isInlineEditable(row) || this.savingRows[row.id]) return false
       const normalizedValue = value === undefined ? null : value
@@ -659,6 +719,7 @@ export default {
       }
 
       this.$set(this.savingRows, row.id, true)
+      if (this.activeInlineKey === this.inlineDraftKey(row, field)) this.activeInlineKey = null
       this.clearInlineDraftsForRow(row)
       let saved = false
       try {
@@ -735,6 +796,19 @@ export default {
       const nextTags = currentTags.filter(item => item !== tag)
       return this.saveInlineValue(row, 'allergyTags', nextTags, currentTags)
     },
+    /** 点击有菜单图片的订单行时打开预览；可编辑行也允许打开上传弹窗。 */
+    openCustomMenuDialog(row) {
+      if ((!row.customMenuImage && !this.isInlineEditable(row)) || this.isInlineBusy(row)) return
+      this.menuDialogRow = row
+      this.menuDialogVisible = true
+    },
+    /** 删除当前弹窗订单的菜单图片引用，刷新列表后关闭弹窗。 */
+    async removeCustomMenuImage() {
+      const row = this.menuDialogRow
+      if (!row || !row.customMenuImage || !this.isInlineEditable(row) || this.isInlineBusy(row)) return
+      await this.saveInlineValue(row, 'customMenuImage', null, row.customMenuImage)
+      this.menuDialogVisible = false
+    },
     getCustomMenuBeforeUpload(row) {
       return file => {
         if (this.isInlineBusy(row)) return false
@@ -763,6 +837,7 @@ export default {
           await this.saveInlineValue(row, 'customMenuImage', path, row.customMenuImage)
         } finally {
           this.$delete(this.uploadingRows, row.id)
+          if (this.menuDialogRow && this.menuDialogRow.id === row.id) this.menuDialogVisible = false
         }
       }
     },
@@ -1026,16 +1101,54 @@ export default {
   white-space: nowrap;
 }
 .inline-spec-field .el-input {
-  width: 38px;
+  width: 42px;
+}
+.inline-value.is-editable {
+  cursor: pointer;
+  border-bottom: 1px dashed #c0c4cc;
+}
+.inline-value.is-editable:hover {
+  color: #409eff;
+  border-bottom-color: #409eff;
+}
+.inline-spec-field .inline-value {
+  min-width: 12px;
+  text-align: center;
 }
 .inline-menu-cell {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  min-height: 40px;
+  cursor: pointer;
 }
-.inline-menu-cell .el-upload {
-  display: inline-flex;
+.inline-menu-cell:hover .inline-value {
+  color: #409eff;
+}
+.menu-dialog-body {
+  text-align: center;
+}
+.menu-dialog-image {
+  width: 100%;
+  height: 240px;
+  cursor: pointer;
+}
+.menu-dialog-empty {
+  padding: 70px 0;
+  color: #909399;
+  border: 1px dashed #dcdfe6;
+}
+.menu-dialog-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+.menu-dialog-hint {
+  margin-top: 10px;
+  color: #909399;
+  font-size: 12px;
 }
 .inline-allergy-cell {
   display: flex;
