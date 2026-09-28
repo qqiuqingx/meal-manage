@@ -50,7 +50,20 @@
       <aside class="category-sidebar">
         <div class="side-head">商品分类</div>
         <button class="category-item" :class="{ active: !queryParams.parentCategoryId }" @click="selectParentCategory(null)">全部配料</button>
-        <button v-for="item in level1Categories" :key="item.id" class="category-item" :class="{ active: queryParams.parentCategoryId === item.id }" @click="selectParentCategory(item.id)">{{ item.name }}</button>
+        <div v-for="item in level1Categories" :key="item.id" class="category-entry">
+          <button class="category-item" :class="{ active: queryParams.parentCategoryId === item.id }" @click="selectParentCategory(item.id)">{{ item.name }}</button>
+          <button
+            v-permission="['admin', 'dishIngredient:del']"
+            type="button"
+            class="category-quick-delete"
+            :aria-label="`删除一级分类${item.name}`"
+            :disabled="categoryDeleteLoadingId !== null"
+            @click.stop="handleQuickDeleteCategory(item)"
+          ><i class="el-icon-delete" /></button>
+        </div>
+        <div v-permission="['admin', 'dishIngredient:add']" class="side-add">
+          <el-button type="text" icon="el-icon-plus" @click="handleAddLevelOneCategory">新增一级分类</el-button>
+        </div>
         <div class="side-foot"><el-button type="success" plain icon="el-icon-setting" @click="handleCategoryManage">分类管理</el-button></div>
       </aside>
       <!-- 操作按钮 -->
@@ -70,8 +83,25 @@
 
         <div>
           <div v-if="queryParams.parentCategoryId" class="category-chips">
-            <button :class="{ active: !queryParams.categoryId }" @click="selectCategory(null)">全部</button>
-            <button v-for="item in level2Categories" :key="item.id" :class="{ active: queryParams.categoryId === item.id }" @click="selectCategory(item.id)">{{ item.name }}</button>
+            <button class="category-chip" :class="{ active: !queryParams.categoryId }" @click="selectCategory(null)">全部</button>
+            <div v-for="item in level2Categories" :key="item.id" class="category-chip-entry">
+              <button class="category-chip" :class="{ active: queryParams.categoryId === item.id }" @click="selectCategory(item.id)">{{ item.name }}</button>
+              <button
+                v-permission="['admin', 'dishIngredient:del']"
+                type="button"
+                class="category-quick-delete"
+                :aria-label="`删除二级分类${item.name}`"
+                :disabled="categoryDeleteLoadingId !== null"
+                @click.stop="handleQuickDeleteCategory(item)"
+              ><i class="el-icon-delete" /></button>
+            </div>
+            <el-button
+              v-permission="['admin', 'dishIngredient:add']"
+              class="category-chip-add"
+              type="text"
+              icon="el-icon-plus"
+              @click="handleAddLevelTwoCategory"
+            >新增二级分类</el-button>
           </div>
           <div v-loading="loading" class="ingredient-grid">
             <article v-for="item in ingredientList" :key="item.id" class="ingredient-card">
@@ -141,6 +171,7 @@
     <ingredient-form ref="ingredientForm" :category-tree="categoryTree" @refresh="getList" />
 
     <category-manager
+      ref="categoryManager"
       :visible.sync="categoryManagerVisible"
       :category-tree="categoryTree"
       @refresh-categories="handleCategoriesChanged"
@@ -196,6 +227,7 @@ export default {
       tagSearchLoaded: false,
       tagRequestId: 0,
       categoryManagerVisible: false,
+      categoryDeleteLoadingId: null,
       tagManagerVisible: false,
       tagPopoverVisible: {},
       tagOptionsAll: [],
@@ -398,6 +430,23 @@ export default {
     handleCategoryManage() {
       this.categoryManagerVisible = true
     },
+    /** 直接打开一级分类新增表单，无需先进入分类管理。 */
+    handleAddLevelOneCategory() {
+      this.$refs.categoryManager.handleAddLevelOne()
+    },
+    /** 在当前一级分类下直接打开二级分类新增表单。 */
+    handleAddLevelTwoCategory() {
+      const parent = this.level1Categories.find(item => item.id === this.queryParams.parentCategoryId)
+      if (parent) this.$refs.categoryManager.handleAddLevelTwo(parent)
+    },
+    /** 从分类列表直接删除分类，复用分类管理中的确认和服务端校验。 */
+    handleQuickDeleteCategory(category) {
+      if (this.categoryDeleteLoadingId !== null) return
+      this.categoryDeleteLoadingId = category.id
+      return this.$refs.categoryManager.handleDelete(category).finally(() => {
+        this.categoryDeleteLoadingId = null
+      })
+    },
     /** 打开页内标签管理弹窗。 */
     handleTagManage() {
       this.tagManagerVisible = true
@@ -564,9 +613,18 @@ export default {
 .market-layout { display: flex; gap: 16px; align-items: flex-start; }
 .category-sidebar { width: 208px; flex: none; background: #fff; border-radius: 10px; overflow: hidden; }
 .side-head { padding: 14px 18px; color: #909399; font-size: 13px; font-weight: 600; border-bottom: 1px solid #f0f2f5; }
+.category-entry, .category-chip-entry { position: relative; }
 .category-item { display: block; width: 100%; border: 0; border-left: 4px solid transparent; padding: 13px 14px; text-align: left; color: #606266; background: #fff; cursor: pointer; }
+.category-entry .category-item { padding-right: 38px; }
 .category-item:hover { background: #fafafa; }
 .category-item.active { background: #f0f9eb; color: #67c23a; border-left-color: #67c23a; font-weight: 600; }
+.category-quick-delete { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; color: #f56c6c; background: transparent; cursor: pointer; opacity: 0; pointer-events: none; }
+.category-entry:hover .category-quick-delete, .category-entry:focus-within .category-quick-delete,
+.category-chip-entry:hover .category-quick-delete, .category-chip-entry:focus-within .category-quick-delete { opacity: 1; pointer-events: auto; }
+.category-quick-delete:hover, .category-quick-delete:focus { background: #fef0f0; }
+.category-quick-delete:disabled { cursor: wait; }
+.side-add { padding: 8px 14px; border-top: 1px solid #f0f2f5; }
+.side-add .el-button { width: 100%; text-align: left; }
 .side-foot { padding: 12px 14px; border-top: 1px solid #f0f2f5; }
 .side-foot .el-button { width: 100%; border-style: dashed; }
 .market-content { flex: 1; min-width: 0; border: 0; background: transparent; }
@@ -576,8 +634,11 @@ export default {
 .toolbar-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .toolbar-buttons .el-button { margin-left: 0; }
 .category-chips { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 6px; }
-.category-chips button { flex: none; padding: 7px 18px; font-size: 13px; color: #606266; background: #fff; border: 1px solid #dcdfe6; border-radius: 18px; cursor: pointer; }
-.category-chips button.active { background: #67c23a; color: #fff; border-color: #67c23a; }
+.category-chip { flex: none; padding: 7px 18px; font-size: 13px; color: #606266; background: #fff; border: 1px solid #dcdfe6; border-radius: 18px; cursor: pointer; }
+.category-chip-entry .category-chip { padding-right: 38px; }
+.category-chip.active { background: #67c23a; color: #fff; border-color: #67c23a; }
+.category-chip-entry .category-quick-delete { right: 7px; }
+.category-chip-add.el-button { flex: none; margin-left: 0; padding: 7px 10px; border: 1px dashed #67c23a; border-radius: 18px; color: #67c23a; background: #fff; }
 .ingredient-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; min-height: 100px; }
 .ingredient-card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.05); transition: box-shadow .15s, transform .15s; }
 .ingredient-card:hover { box-shadow: 0 6px 16px rgba(103,194,58,.12); transform: translateY(-2px); }

@@ -105,6 +105,41 @@ describe('dish ingredient tag filter', () => {
 describe('ingredient supermarket navigation', () => {
   beforeEach(() => jest.clearAllMocks())
 
+  test('opens category creation directly for the requested level', () => {
+    const vm = createVm()
+    const categoryManager = { handleAddLevelOne: jest.fn(), handleAddLevelTwo: jest.fn() }
+    vm.$refs = { categoryManager }
+    vm.level1Categories = [{ id: 3, name: '蔬菜' }]
+    vm.queryParams.parentCategoryId = 3
+
+    vm.handleAddLevelOneCategory()
+    vm.handleAddLevelTwoCategory()
+
+    expect(categoryManager.handleAddLevelOne).toHaveBeenCalledTimes(1)
+    expect(categoryManager.handleAddLevelTwo).toHaveBeenCalledWith(vm.level1Categories[0])
+  })
+
+  test('uses the shared delete flow and prevents duplicate requests', async() => {
+    let finishDelete
+    const categoryManager = {
+      handleDelete: jest.fn(() => new Promise(resolve => { finishDelete = resolve }))
+    }
+    const vm = createVm()
+    vm.$refs = { categoryManager }
+    const category = { id: 3, name: '蔬菜' }
+
+    const deletion = vm.handleQuickDeleteCategory(category)
+    vm.handleQuickDeleteCategory(category)
+
+    expect(categoryManager.handleDelete).toHaveBeenCalledTimes(1)
+    expect(categoryManager.handleDelete).toHaveBeenCalledWith(category)
+    expect(vm.categoryDeleteLoadingId).toBe(3)
+
+    finishDelete()
+    await deletion
+    expect(vm.categoryDeleteLoadingId).toBeNull()
+  })
+
   test('switches parent category and clears the previous child and page', async() => {
     queryIngredients.mockResolvedValue({ content: [], totalElements: 0 })
     const vm = createVm()

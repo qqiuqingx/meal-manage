@@ -6,7 +6,7 @@ jest.mock('@/api/dishIngredientCategory', () => ({
   editCategory: jest.fn()
 }))
 
-import { addCategory, editCategory } from '@/api/dishIngredientCategory'
+import { addCategory, delCategory, editCategory } from '@/api/dishIngredientCategory'
 import component from '@/views/meal/dishIngredient/categoryManager'
 
 function createVm() {
@@ -23,6 +23,21 @@ function createVm() {
 
 describe('ingredient category manager', () => {
   beforeEach(() => jest.clearAllMocks())
+
+  test('opens either create form directly without showing the manager', () => {
+    const vm = createVm()
+    vm.visible = false
+
+    vm.handleAddLevelOne()
+    expect(vm.formVisible).toBe(true)
+    expect(vm.form).toEqual({ name: '', level: 1, parentId: null, sort: null })
+    expect(vm.visible).toBe(false)
+
+    vm.handleAddLevelTwo({ id: 3, name: '蔬菜' })
+    expect(vm.form).toEqual({ name: '', level: 2, parentId: 3, sort: null })
+    expect(vm.parentCategoryName).toBe('蔬菜')
+    expect(vm.visible).toBe(false)
+  })
 
   test('creates a category and preserves an explicit sort of zero', async() => {
     addCategory.mockResolvedValue({ id: 4 })
@@ -67,5 +82,17 @@ describe('ingredient category manager', () => {
 
     expect(editCategory).not.toHaveBeenCalled()
     expect(vm.$emit).not.toHaveBeenCalled()
+  })
+
+  test('confirms and deletes a category, then refreshes categories', async() => {
+    delCategory.mockResolvedValue(undefined)
+    const vm = createVm()
+
+    await vm.handleDelete({ id: 7, name: '叶菜类' })
+
+    expect(vm.$confirm).toHaveBeenCalledWith('是否确认删除分类“叶菜类”？', '提示', expect.any(Object))
+    expect(delCategory).toHaveBeenCalledWith(7)
+    expect(vm.$emit).toHaveBeenCalledWith('refresh-categories')
+    expect(vm.deleteLoadingId).toBeNull()
   })
 })

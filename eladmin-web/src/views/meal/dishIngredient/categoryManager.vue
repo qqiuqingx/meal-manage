@@ -1,73 +1,75 @@
 <template>
-  <el-dialog
-    title="分类管理"
-    :visible.sync="dialogVisible"
-    width="720px"
-    append-to-body
-    :close-on-click-modal="false"
-  >
-    <div class="manager-tip">
-      删除前会校验：一级分类下仍有二级分类、或二级分类下仍有关联配料时，后端会拒绝删除。
-    </div>
-
-    <div class="category-toolbar">
-      <el-button
-        v-permission="['admin', 'dishIngredient:add']"
-        type="primary"
-        size="small"
-        icon="el-icon-plus"
-        @click="handleAddLevelOne"
-      >新增一级分类</el-button>
-    </div>
-
-    <el-table
-      :data="categoryTree"
-      border
-      row-key="id"
-      default-expand-all
-      :tree-props="{ children: 'children' }"
-      empty-text="暂无分类数据"
+  <div>
+    <el-dialog
+      title="分类管理"
+      :visible.sync="dialogVisible"
+      width="720px"
+      append-to-body
+      :close-on-click-modal="false"
     >
-      <el-table-column prop="name" label="分类名称" min-width="240" />
-      <el-table-column label="层级" width="120" align="center">
-        <template slot-scope="scope">
-          <el-tag :type="scope.row.level === 1 ? 'primary' : 'success'" size="small">
-            {{ scope.row.level === 1 ? '一级分类' : '二级分类' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="sort" label="排序" width="100" align="center" />
-      <el-table-column label="操作" width="240" align="center">
-        <template slot-scope="scope">
-          <el-button
-            v-if="scope.row.level === 1"
-            v-permission="['admin', 'dishIngredient:add']"
-            type="text"
-            icon="el-icon-plus"
-            @click="handleAddLevelTwo(scope.row)"
-          >新增二级</el-button>
-          <el-button
-            v-permission="['admin', 'dishIngredient:edit']"
-            type="text"
-            icon="el-icon-edit"
-            @click="handleEdit(scope.row)"
-          >编辑</el-button>
-          <el-button
-            v-permission="['admin', 'dishIngredient:del']"
-            type="text"
-            icon="el-icon-delete"
-            style="color: #f56c6c;"
-            :loading="deleteLoadingId === scope.row.id"
-            @click="handleDelete(scope.row)"
-          >
-            删除
-          </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+      <div class="manager-tip">
+        删除前会校验：一级分类下仍有二级分类、或二级分类下仍有关联配料时，后端会拒绝删除。
+      </div>
+
+      <div class="category-toolbar">
+        <el-button
+          v-permission="['admin', 'dishIngredient:add']"
+          type="primary"
+          size="small"
+          icon="el-icon-plus"
+          @click="handleAddLevelOne"
+        >新增一级分类</el-button>
+      </div>
+
+      <el-table
+        :data="categoryTree"
+        border
+        row-key="id"
+        default-expand-all
+        :tree-props="{ children: 'children' }"
+        empty-text="暂无分类数据"
+      >
+        <el-table-column prop="name" label="分类名称" min-width="240" />
+        <el-table-column label="层级" width="120" align="center">
+          <template slot-scope="scope">
+            <el-tag :type="scope.row.level === 1 ? 'primary' : 'success'" size="small">
+              {{ scope.row.level === 1 ? '一级分类' : '二级分类' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="sort" label="排序" width="100" align="center" />
+        <el-table-column label="操作" width="240" align="center">
+          <template slot-scope="scope">
+            <el-button
+              v-if="scope.row.level === 1"
+              v-permission="['admin', 'dishIngredient:add']"
+              type="text"
+              icon="el-icon-plus"
+              @click="handleAddLevelTwo(scope.row)"
+            >新增二级</el-button>
+            <el-button
+              v-permission="['admin', 'dishIngredient:edit']"
+              type="text"
+              icon="el-icon-edit"
+              @click="handleEdit(scope.row)"
+            >编辑</el-button>
+            <el-button
+              v-permission="['admin', 'dishIngredient:del']"
+              type="text"
+              icon="el-icon-delete"
+              style="color: #f56c6c;"
+              :loading="deleteLoadingId === scope.row.id"
+              @click="handleDelete(scope.row)"
+            >
+              删除
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
 
     <el-dialog
-      :title="formMode === 'create' ? '新增配料分类' : '编辑配料分类'"
+      :title="formMode === 'create' ? (form.level === 1 ? '新增一级分类' : '新增二级分类') : '编辑配料分类'"
       :visible.sync="formVisible"
       width="460px"
       append-to-body
@@ -95,7 +97,7 @@
         <el-button :disabled="submitLoading" @click="formVisible = false">取 消</el-button>
       </div>
     </el-dialog>
-  </el-dialog>
+  </div>
 </template>
 
 <script>
@@ -217,7 +219,7 @@ export default {
       if (this.$refs.categoryForm) this.$refs.categoryForm.resetFields()
     },
     handleDelete(row) {
-      this.$confirm(`是否确认删除分类“${row.name}”？`, '提示', {
+      return this.$confirm(`是否确认删除分类“${row.name}”？`, '提示', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
