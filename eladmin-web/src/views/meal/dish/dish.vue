@@ -41,6 +41,15 @@
               </el-checkbox-group>
             </el-form-item>
 
+            <el-form-item label="菜品标签">
+              <dish-tag-editor
+                ref="dishTagEditor"
+                v-model="form.tagIds"
+                :selected-tags="form.tags"
+                @tags-change="$set(form, 'tags', $event)"
+              />
+            </el-form-item>
+
             <el-form-item label="制作流程" prop="cookingMethod">
               <el-input v-model="form.cookingMethod" type="textarea" :rows="4" placeholder="输入菜品的具体制作流程..." class="editorial-textarea" />
             </el-form-item>
@@ -148,9 +157,11 @@
 <script>
 import { addDish, editDish, queryPackages, getDish } from '@/api/dish'
 import { queryIngredients } from '@/api/dishIngredient'
+import DishTagEditor from './components/DishTagEditor'
 
 export default {
   name: 'DishForm',
+  components: { DishTagEditor },
   data() {
     return {
       dialogVisible: false,
@@ -166,6 +177,8 @@ export default {
         dishType: 'MAIN',
         mealTypes: ['LUNCH'],
         mealPackages: [],
+        tagIds: [],
+        tags: [],
         sort: 0,
         enabled: true,
         ingredientList: []
@@ -208,6 +221,8 @@ export default {
         if (!this.form.ingredientList) {
           this.$set(this.form, 'ingredientList', [])
         }
+        this.$set(this.form, 'tagIds', this.form.tagIds || (this.form.tags || []).map(tag => tag.id))
+        this.$set(this.form, 'tags', this.form.tags || [])
         this.$set(this.form, 'dishType', this.form.dishType || 'MAIN')
         this.$set(this.form, 'mealTypes', this.form.mealTypes || ['LUNCH'])
 
@@ -249,12 +264,17 @@ export default {
         dishType: 'MAIN',
         mealTypes: ['LUNCH'],
         mealPackages: [],
+        tagIds: [],
+        tags: [],
         sort: 0,
         enabled: true,
         ingredientList: []
       }
       this.selectIngredientId = null
       this.ingredientOptions = []
+      if (this.$refs.dishTagEditor) {
+        this.$refs.dishTagEditor.resetState()
+      }
       if (this.$refs.form) {
         this.$refs.form.resetFields()
       }

@@ -11,6 +11,7 @@ import me.zhengjie.modules.meal.domain.dto.DailyCustomerStats;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleRecordQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleRecordVO;
 import me.zhengjie.modules.meal.domain.dto.DishIngredientDto;
+import me.zhengjie.modules.meal.domain.dto.DishTagDto;
 import me.zhengjie.modules.meal.domain.DishIngredientRelation;
 import me.zhengjie.modules.meal.domain.enums.MealPackageEnum;
 import me.zhengjie.modules.meal.domain.enums.DishTypeEnum;
@@ -40,6 +41,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import me.zhengjie.modules.meal.service.DishService;
+import me.zhengjie.modules.meal.service.DishTagService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import me.zhengjie.utils.PageUtil;
@@ -79,6 +81,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     private final MealPlanMapper mealPlanMapper;
     private final MealPlanCustomerMapper mealPlanCustomerMapper;
     private final MealSchedulePlanMapper mealSchedulePlanMapper;
+    private final DishTagService dishTagService;
 
     private static final String[] DISH_TYPES = {"MAIN", "SIDE", "SOUP", "VEGETABLE", "RICE"};
     private static final String[] MEAL_TYPES = {"LUNCH", "DINNER"};
@@ -172,6 +175,26 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         }
         for (Dish dish : dishes) {
             dish.setIngredientList(map.get(dish.getId()));
+        }
+    }
+
+    /**
+     * 批量填充菜品标签ID和名称，避免菜品分页查询逐条访问数据库。
+     * @param dishes 待填充的菜品列表
+     */
+    private void fillDishTagsBatch(List<Dish> dishes) {
+        if (dishes == null || dishes.isEmpty()) return;
+        List<Integer> dishIds = dishes.stream().map(Dish::getId).collect(Collectors.toList());
+        Map<Integer, List<DishTagDto>> tagsByDish = dishTagService.findTagsByDishIds(dishIds);
+        for (Dish dish : dishes) {
+            List<DishTagDto> tags = tagsByDish.get(dish.getId());
+            if (tags == null) {
+                dish.setTagIds(new ArrayList<>());
+                dish.setTags(new ArrayList<>());
+            } else {
+                dish.setTagIds(tags.stream().map(DishTagDto::getId).collect(Collectors.toList()));
+                dish.setTags(tags);
+            }
         }
     }
 
@@ -272,6 +295,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         fillIngredientsBatch(result.getContent());
         fillMealPackageDetailsBatch(result.getContent());
         fillMealTimeInfoBatch(result.getContent(), criteria.getDishMealTypeMap());
+        fillDishTagsBatch(result.getContent());
         return result;
     }
 
@@ -281,6 +305,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         List<Dish> list = dishMapper.findAll(criteria);
         fillIngredientsBatch(list);
         fillMealPackageDetailsBatch(list);
+        fillDishTagsBatch(list);
         return list;
     }
 
@@ -326,6 +351,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         if (dish != null) {
             fillIngredientsBatch(Collections.singletonList(dish));
             fillMealPackageDetailsBatch(Collections.singletonList(dish));
+            fillDishTagsBatch(Collections.singletonList(dish));
         }
         return dish;
     }
@@ -364,12 +390,18 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 dishIngredientMapper.insertRelation(resources.getId(), dto);
             }
         }
+        if (resources.getTagIds() != null) {
+            dishTagService.replaceDishTags(resources.getId(), resources.getTagIds());
+        }
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void update(Dish resources) {
-        Dish dish = getById(resources.getId());
+        Dish dish = dishMapper.selectByIdForUpdate(resources.getId());
+        if (dish == null) {
+            throw new BadRequestException("菜品不存在");
+        }
         dish.copy(resources);
         // 回填 ingredients 字符串字段（供兼容读取）
         // 若 ingredientList 为空则从关系表查询已有配料，避免误覆盖
@@ -389,16 +421,36 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
                 dishIngredientMapper.insertRelation(resources.getId(), dto);
             }
         }
+        if (resources.getTagIds() != null) {
+            dishTagService.replaceDishTags(resources.getId(), resources.getTagIds());
+        }
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteAll(List<Integer> ids) {
-        // 先删除配料关联
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        Set<Integer> orderedIds = new TreeSet<>();
         for (Integer id : ids) {
+            if (id != null) {
+                orderedIds.add(id);
+            }
+        }
+        if (orderedIds.isEmpty()) {
+            return;
+        }
+        for (Integer id : orderedIds) {
+            dishMapper.selectByIdForUpdate(id);
+        }
+        List<Integer> dishIds = new ArrayList<>(orderedIds);
+        // 先删除配料关联
+        for (Integer id : dishIds) {
             dishIngredientMapper.deleteRelationsByDishId(id);
         }
-        dishMapper.deleteBatchIds(ids);
+        dishTagService.deleteDishRelations(dishIds);
+        dishMapper.deleteBatchIds(dishIds);
     }
 
     @Override

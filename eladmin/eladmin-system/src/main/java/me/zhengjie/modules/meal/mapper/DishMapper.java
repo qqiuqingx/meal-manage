@@ -24,4 +24,11 @@ public interface DishMapper extends BaseMapper<Dish> {
     List<Dish> findBySchedule(@Param("week") Integer week, @Param("day") Integer day, @Param("mealType") String mealType);
 
     List<Dish> findAvailableByCustomerId(@Param("customerId") Integer customerId, @Param("mealType") String mealType, @Param("week") Integer week, @Param("day") Integer day);
+
+    /**
+     * 按菜品ID加行锁，串行化同一菜品的标签替换和删除。
+     * @param id 菜品ID
+     * @return 菜品不存在时返回 null
+     */
+    Dish selectByIdForUpdate(@Param("id") Integer id);
 }

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="me.zhengjie.modules.meal.mapper.DishTagRelationMapper">
+    <resultMap id="DishTagRelationResultMap" type="me.zhengjie.modules.meal.domain.dto.DishTagRelationDto">
+        <result column="dish_id" property="dishId"/>
+        <result column="tag_id" property="tagId"/>
+        <result column="name" property="name"/>
+    </resultMap>
+
+    <insert id="insertRelation">
+        INSERT INTO dish_tag_relation (dish_id, tag_id)
+        VALUES (#{relation.dishId}, #{relation.tagId})
+    </insert>
+
+    <delete id="deleteByDishIds">
+        DELETE FROM dish_tag_relation
+        WHERE dish_id IN
+        <foreach collection="dishIds" item="dishId" open="(" separator="," close=")">
+            #{dishId}
+        </foreach>
+    </delete>
+
+    <select id="countRelationsByTagId" resultType="long">
+        SELECT COUNT(1)
+        FROM dish_tag_relation
+        WHERE tag_id = #{tagId}
+    </select>
+
+    <select id="selectTagsByDishIds" resultMap="DishTagRelationResultMap">
+        SELECT tag_rel.dish_id, dish_tag.id AS tag_id, dish_tag.name
+        FROM dish_tag_relation tag_rel
+        INNER JOIN dish_tag ON dish_tag.id = tag_rel.tag_id
+        WHERE tag_rel.dish_id IN
+        <foreach collection="dishIds" item="dishId" open="(" separator="," close=")">
+            #{dishId}
+        </foreach>
+        ORDER BY tag_rel.dish_id, tag_rel.tag_id
+    </select>
+</mapper>

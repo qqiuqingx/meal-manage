@@ -8,6 +8,7 @@ import javax.validation.constraints.NotBlank;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import me.zhengjie.modules.meal.domain.dto.DishIngredientDto;
+import me.zhengjie.modules.meal.domain.dto.DishTagDto;
 import java.util.List;
 import java.io.Serializable;
 import java.sql.Timestamp;
@@ -51,6 +52,16 @@ public class Dish implements Serializable {
     @ApiModelProperty(value = "配料列表（新增/编辑时使用）")
     @TableField(exist = false)
     private List<DishIngredientDto> ingredientList;
+
+    /** 菜品标签ID集合；新增/编辑时提交，编辑未传或为 null 时保留原关系。 */
+    @ApiModelProperty(value = "菜品标签ID集合；编辑未传或为null时保留原关系，空数组清空")
+    @TableField(exist = false)
+    private List<Integer> tagIds;
+
+    /** 查询时返回的菜品标签列表；名称由服务端关联查询生成。 */
+    @ApiModelProperty(value = "菜品标签列表")
+    @TableField(exist = false)
+    private List<DishTagDto> tags;
 
     @ApiModelProperty(value = "图片路径")
     @TableField("image_url")
