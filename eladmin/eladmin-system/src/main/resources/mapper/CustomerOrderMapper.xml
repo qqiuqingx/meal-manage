@@ -53,7 +53,7 @@
         <result column="phone" property="phone"/>
         <result column="parent_package_name" property="parentPackageName"/>
         <result column="child_package_name" property="childPackageName"/>
-        <result column="allergy_tags" property="allergyTags" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+        <result column="allergy_tags" property="allergyTags" typeHandler="me.zhengjie.modules.customer.profile.handler.AllergyTagsTypeHandler"/>
         <result column="special_requirements" property="specialRequirements"/>
         <result column="addresses" property="addresses" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
         <result column="trial_order_code" property="trialOrderCode"/>

@@ -10,7 +10,7 @@
         <result column="delivery_phone_info" property="deliveryPhoneInfo"/>
         <result column="gestational_week" property="gestationalWeek"/>
         <result column="allergy_tags" property="allergyTags"
-                typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+                typeHandler="me.zhengjie.modules.customer.profile.handler.AllergyTagsTypeHandler"/>
         <result column="excluded_dish_ids" property="excludedDishIds"
                 typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
         <result column="excluded_dates" property="excludedDates"

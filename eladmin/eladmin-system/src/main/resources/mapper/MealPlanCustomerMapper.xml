@@ -193,7 +193,7 @@
         <result column="address_detail" property="addressDetail"/>
         <result column="address_type" property="addressType"/>
         <result column="allergy_tags" property="allergyTags"
-                typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+                typeHandler="me.zhengjie.modules.customer.profile.handler.AllergyTagsTypeHandler"/>
         <result column="special_requirements" property="specialRequirements"/>
         <result column="custom_menu_image" property="customMenuImage"/>
     </resultMap>

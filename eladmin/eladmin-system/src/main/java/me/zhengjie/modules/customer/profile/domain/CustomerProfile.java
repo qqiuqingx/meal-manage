@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
+import me.zhengjie.modules.customer.profile.handler.AllergyTagsTypeHandler;
 import me.zhengjie.modules.customer.profile.handler.ExcludedDateListTypeHandler;
 
 /**
@@ -56,7 +57,7 @@ public class CustomerProfile implements Serializable {
     /**
      * 过敏食物标签(JSON数组)
      */
-    @TableField(value = "allergy_tags", typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    @TableField(value = "allergy_tags", typeHandler = AllergyTagsTypeHandler.class)
     private List<String> allergyTags;
 
     /**
