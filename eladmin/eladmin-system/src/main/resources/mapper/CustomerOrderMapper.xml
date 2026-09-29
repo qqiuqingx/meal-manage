@@ -281,19 +281,29 @@
         ORDER BY customer_id ASC, start_date ASC, deal_time ASC, id ASC
     </select>
 
-    <select id="findMealStatsCalendarOrdersByCustomerIds" resultMap="BaseResultMap">
-        SELECT *
-        FROM customer_order
-        WHERE status IN (1, 4)
-          AND COALESCE(remaining_count, 0) &gt; 0
+
+
+    <select id="findMealStatsOrders" resultMap="BaseResultMap">
+        SELECT o.*
+        FROM customer_order o
+        LEFT JOIN customer_profile cp ON cp.id = o.customer_id
+        WHERE o.status IN (1, 4)
+          AND COALESCE(o.remaining_count, 0) &gt; 0
         <if test="startedBeforeDate != null">
-          AND start_date &lt; #{startedBeforeDate}
+          AND o.start_date &lt; #{startedBeforeDate}
         </if>
-          AND customer_id IN
-        <foreach collection="customerIds" item="customerId" open="(" separator="," close=")">
-            #{customerId}
-        </foreach>
-        ORDER BY customer_id ASC, start_date ASC, deal_time ASC, id ASC
+        <if test="criteria != null and criteria.customerCode != null and criteria.customerCode != ''">
+          AND o.customer_code LIKE CONCAT('%', #{criteria.customerCode}, '%')
+        </if>
+        <if test="criteria != null and criteria.customerName != null and criteria.customerName != ''">
+          AND cp.customer_name LIKE CONCAT('%', #{criteria.customerName}, '%')
+        </if>
+        <if test="criteria != null and criteria.phone != null and criteria.phone != ''">
+          AND cp.phone LIKE CONCAT('%', #{criteria.phone}, '%')
+        </if>
+        ORDER BY (o.customer_code IS NULL) ASC, o.customer_code ASC,
+                 (o.start_date IS NULL) ASC, o.start_date ASC,
+                 (o.deal_time IS NULL) ASC, o.deal_time ASC, o.id ASC
     </select>
 
     <!-- 统计同一客户在同一时间段内的订单数量（去除结束日期限制） -->

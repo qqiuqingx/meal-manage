@@ -18,7 +18,7 @@ public class CustomerMealScheduleCellDto implements Serializable {
     /** 排餐日期，格式 yyyy-MM-dd */
     private String date;
 
-    /** 餐次：LUNCH/DINNER */
+    /** 餐次：BREAKFAST/LUNCH/DINNER */
     private String mealType;
 
     /** 未应用排除和人工覆盖时的基础份数 */
@@ -45,6 +45,9 @@ public class CustomerMealScheduleCellDto implements Serializable {
     /** 是否存在人工数量覆盖 */
     private Boolean manualOverride;
 
-    /** 是否被客户排除日期覆盖 */
-    private Boolean excluded;
+    /** 是否被客户档案统一停餐；优先于当前订单覆盖 */
+    private Boolean customerExcluded;
+
+    /** 是否被当前订单的零份覆盖停餐 */
+    private Boolean orderExcluded;
 }

@@ -48,10 +48,6 @@
         SELECT * FROM customer_profile WHERE id = #{id}
     </select>
 
-    <select id="selectByIdForScheduleUpdate" resultMap="BaseResultMap">
-        SELECT * FROM customer_profile WHERE id = #{id} FOR UPDATE
-    </select>
-
     <select id="selectByIdForInlineUpdate" resultMap="BaseResultMap">
         SELECT * FROM customer_profile WHERE id = #{id} FOR UPDATE
     </select>

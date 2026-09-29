@@ -166,6 +166,11 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         long startTime = System.currentTimeMillis();
 
+        // 先锁定本次可能参与排餐的订单，再进入日期排餐计划与结果行，日历保存使用相同的锁顺序。
+        Map<Long, CustomerMealScheduleAddition> manualAdditions = loadManualAdditionsByOrder(targetDate, mealType);
+        List<CustomerOrder> candidateOrders = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
+        List<CustomerOrder> lockedCandidateOrders = lockGenerationOrders(candidateOrders, manualAdditions);
+
         // 步骤1: 清理旧计划
         log.debug("开始清理旧排餐计划");
         MealPlan existingPlan = softDeleteExistingPlan(targetDate, mealType, customerId);
@@ -175,9 +180,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         log.debug("开始加载数据");
         long dataLoadStart = System.currentTimeMillis();
 
-        Map<Long, CustomerMealScheduleAddition> manualAdditions = loadManualAdditionsByOrder(targetDate, mealType);
         Map<Long, List<MealPlanCustomer>> verifiedServings = loadVerifiedServings(existingPlan, customerId);
-        List<CustomerOrder> orders = loadValidOrders(targetDate, mealType, customerId, manualAdditions, verifiedServings);
+        List<CustomerOrder> orders = loadValidOrders(targetDate, mealType, customerId, manualAdditions,
+                verifiedServings, lockedCandidateOrders);
         log.debug("加载有效订单完成 - 订单数量: {}", orders.size());
 
         Map<Long, CustomerProfile> customerMap = loadCustomers(orders);
@@ -377,6 +382,47 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
+     * 按订单ID稳定顺序锁定基础候选及显式数量覆盖所指向的订单。
+     *
+     * @param candidates 数据库按基础排餐条件查询的候选
+     * @param manualAdditions 当前日期餐次的数量覆盖
+     * @return 使用锁定后订单快照替换的基础候选
+     */
+    private List<CustomerOrder> lockGenerationOrders(List<CustomerOrder> candidates,
+                                                    Map<Long, CustomerMealScheduleAddition> manualAdditions) {
+        Set<Long> orderIds = new java.util.TreeSet<>();
+        if (candidates != null) {
+            candidates.stream().filter(Objects::nonNull).map(CustomerOrder::getId)
+                    .filter(Objects::nonNull).forEach(orderIds::add);
+        }
+        if (manualAdditions != null) {
+            manualAdditions.values().stream().filter(Objects::nonNull).map(CustomerMealScheduleAddition::getOrderId)
+                    .filter(Objects::nonNull).forEach(orderIds::add);
+        }
+        Map<Long, CustomerOrder> lockedOrders = new HashMap<>();
+        for (Long orderId : orderIds) {
+            CustomerOrder lockedOrder = customerOrderMapper.selectInlineUpdateByIdForUpdate(orderId);
+            if (lockedOrder != null) {
+                lockedOrders.put(orderId, lockedOrder);
+            }
+        }
+        if (candidates == null || candidates.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<CustomerOrder> result = new ArrayList<>(candidates.size());
+        for (CustomerOrder candidate : candidates) {
+            if (candidate == null || candidate.getId() == null) {
+                continue;
+            }
+            CustomerOrder lockedOrder = lockedOrders.get(candidate.getId());
+            if (lockedOrder != null) {
+                result.add(lockedOrder);
+            }
+        }
+        return result;
+    }
+
+    /**
      * 查询满足日期、餐次和配送规则的订单候选，并验证目标份数不会超过订单购买数。
      *
      * @param targetDate 排餐日期
@@ -391,6 +437,20 @@ public class MealPlanServiceImpl implements MealPlanService {
                                                Long customerId,
                                                Map<Long, CustomerMealScheduleAddition> manualAdditions,
                                                Map<Long, List<MealPlanCustomer>> verifiedServings) {
+        List<CustomerOrder> candidates = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
+        return loadValidOrders(targetDate, mealType, customerId, manualAdditions, verifiedServings,
+                candidates == null ? Collections.emptyList() : candidates);
+    }
+
+    /**
+     * 基于已锁定的候选订单验证生成条件，避免读取候选后订单状态或数量被并发修改。
+     */
+    private List<CustomerOrder> loadValidOrders(LocalDate targetDate,
+                                               String mealType,
+                                               Long customerId,
+                                               Map<Long, CustomerMealScheduleAddition> manualAdditions,
+                                               Map<Long, List<MealPlanCustomer>> verifiedServings,
+                                               List<CustomerOrder> lockedCandidates) {
         long startTime = System.currentTimeMillis();
         log.info("开始查询有效订单 - 日期: {}, 餐次: {}, 客户ID: {}", targetDate, mealType, customerId);
 
@@ -409,8 +469,7 @@ public class MealPlanServiceImpl implements MealPlanService {
             }
         }
 
-        List<CustomerOrder> candidateOrders = customerOrderMapper.findMealPlanOrders(targetDate, mealType);
-        candidateOrders = mergeManualAdditionOrders(candidateOrders, targetDate, mealType, manualAdditions);
+        List<CustomerOrder> candidateOrders = mergeManualAdditionOrders(lockedCandidates, targetDate, mealType, manualAdditions);
         log.info("基础条件过滤后的候选订单 - 数量: {}", candidateOrders.size());
 
         Map<Long, List<CustomerMealScheduleAddition>> planAdditionsByOrder = loadPlanAdditionsByOrder(candidateOrders, targetDate);
@@ -443,6 +502,12 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         List<CustomerOrder> validOrders = new ArrayList<>();
         for (CustomerOrder order : candidateOrders) {
+            if (order.getStatus() == null || order.getStatus() != 1
+                    || order.getRemainingCount() == null || order.getRemainingCount() <= 0
+                    || order.getStartDate() == null || targetDate.isBefore(order.getStartDate())
+                    || order.getEndDate() != null && targetDate.isAfter(order.getEndDate())) {
+                continue;
+            }
             if (customerId != null && !Objects.equals(order.getCustomerId(), customerId)) {
                 continue;
             }
@@ -483,7 +548,7 @@ public class MealPlanServiceImpl implements MealPlanService {
                     targetDate
             ).getOrDefault(CustomerMealStatsScheduleUtil.cellKey(targetDate, mealType), 0);
             if (targetQuantity == 0) {
-                if (manualAddition) {
+                if (manualAddition && resolveTargetQuantity(manualAdditions.get(order.getId())) > 0) {
                     throw new BadRequestException("订单 " + order.getId() + " 当前日期餐次已超过购买餐数计划");
                 }
                 log.info("订单被过滤 - 订单ID: {}, 日期: {}, 餐次: {}, 原因: 购买餐数已按先后顺序分配完毕",
@@ -535,7 +600,10 @@ public class MealPlanServiceImpl implements MealPlanService {
                 additionCustomerDetails.add(formatManualAdditionCustomer(null, addition));
                 continue;
             }
-            CustomerOrder order = customerOrderMapper.selectById(addition.getOrderId());
+            if (addition.getQuantity() != null && addition.getQuantity() == 0) {
+                continue;
+            }
+            CustomerOrder order = customerOrderMapper.selectInlineUpdateByIdForUpdate(addition.getOrderId());
             additionOrderMap.put(addition.getOrderId(), order);
             additionCustomerDetails.add(formatManualAdditionCustomer(order, addition));
         }
@@ -552,6 +620,9 @@ public class MealPlanServiceImpl implements MealPlanService {
         for (CustomerMealScheduleAddition addition : additionsByOrder.values()) {
             if (addition == null || addition.getOrderId() == null) {
                 invalidCount++;
+                continue;
+            }
+            if (addition.getQuantity() != null && addition.getQuantity() == 0) {
                 continue;
             }
             if (existingOrderIds.contains(addition.getOrderId())) {
@@ -712,12 +783,12 @@ public class MealPlanServiceImpl implements MealPlanService {
      * 解析当前日期餐次的目标份数，旧记录缺省按一份处理。
      *
      * @param addition 当前数量覆盖
-     * @return 正整数目标份数
+     * @return 非负目标份数，零份表示跳过当前订单日期餐次
      */
     private int resolveTargetQuantity(CustomerMealScheduleAddition addition) {
         int quantity = addition == null || addition.getQuantity() == null ? 1 : addition.getQuantity();
-        if (quantity < 1) {
-            throw new BadRequestException("目标份数必须大于等于1");
+        if (quantity < 0) {
+            throw new BadRequestException("目标份数不能小于0");
         }
         if (addition != null && addition.getSoupQuantity() != null
                 && (addition.getSoupQuantity() < 0 || addition.getSoupQuantity() > quantity)) {
@@ -2613,52 +2684,6 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
-     * 删除客户指定日期餐次的未核销排餐记录；若存在已核销记录则拒绝日历取消操作。
-     * 异常信息会带上具体日期和餐次，方便前端提示用户。
-     *
-     * @param customerId 客户ID
-     * @param recordDate 排餐日期，格式 yyyy-MM-dd
-     * @param mealType 餐次，支持 BREAKFAST / LUNCH / DINNER
-     * @return 删除的客户排餐记录数量
-     */
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public int deleteUnverifiedCustomerMealForCalendarAdjustment(Long customerId, String recordDate, String mealType) {
-        LocalDate targetDate = ScheduleKeyUtil.parseDate(recordDate);
-        MealPlan lockedPlan = mealPlanMapper.findActiveByDateAndMealTypeForUpdate(targetDate, mealType);
-        if (lockedPlan == null) {
-            return 0;
-        }
-        List<CustomerGeneratedMealPlanDto> generatedRecords =
-                mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(customerId, targetDate, mealType);
-        if (generatedRecords == null || generatedRecords.isEmpty()) {
-            return 0;
-        }
-        for (CustomerGeneratedMealPlanDto record : generatedRecords) {
-            if (Boolean.TRUE.equals(record.getVerified())) {
-                throw new BadRequestException(String.format("%s %s已核销，不能取消排餐",
-                        targetDate, OrderStartMealTypeUtil.mealTypeDesc(mealType)));
-            }
-        }
-        List<Long> customerPlanIds = generatedRecords.stream()
-                .map(CustomerGeneratedMealPlanDto::getCustomerPlanId)
-                .collect(Collectors.toList());
-        mealPlanCustomerItemMapper.softDeleteByCustomerPlanIds(customerPlanIds);
-        mealPlanManualReplaceMapper.softDeleteByCustomerPlanIds(customerPlanIds);
-        mealPlanCustomerMapper.softDeleteByIds(customerPlanIds);
-        Set<Long> mealPlanIds = generatedRecords.stream()
-                .map(CustomerGeneratedMealPlanDto::getMealPlanId)
-                .collect(Collectors.toSet());
-        for (Long mealPlanId : mealPlanIds) {
-            MealPlan mealPlan = mealPlanMapper.selectById(mealPlanId);
-            if (mealPlan != null && !Boolean.TRUE.equals(mealPlan.getDeleted())) {
-                refreshMealPlanSummary(mealPlan, true);
-            }
-        }
-        return customerPlanIds.size();
-    }
-
-    /**
      * 将已生成的订单日期餐次结果减到新目标份数，优先删除失败份和较大的未核销份序。
      *
      * @param customerId 客户ID
@@ -2684,13 +2709,11 @@ public class MealPlanServiceImpl implements MealPlanService {
             return 0;
         }
         List<CustomerGeneratedMealPlanDto> generatedRecords =
-                mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(customerId, targetDate, mealType);
+                mealPlanCustomerMapper.selectGeneratedByOrderDateMeal(customerId, orderId, targetDate, mealType);
         if (generatedRecords == null || generatedRecords.isEmpty()) {
             return 0;
         }
-        List<CustomerGeneratedMealPlanDto> orderRecords = generatedRecords.stream()
-                .filter(record -> Objects.equals(orderId, record.getOrderId()))
-                .collect(Collectors.toList());
+        List<CustomerGeneratedMealPlanDto> orderRecords = generatedRecords;
         long verifiedCount = orderRecords.stream().filter(record -> Boolean.TRUE.equals(record.getVerified())).count();
         if (verifiedCount > targetQuantity) {
             throw new BadRequestException(String.format("%s %s已核销%d份，计划份数不能调低",
@@ -2718,9 +2741,13 @@ public class MealPlanServiceImpl implements MealPlanService {
                 .limit(excessCount)
                 .map(CustomerGeneratedMealPlanDto::getCustomerPlanId)
                 .collect(Collectors.toList());
+        int deletedRows = mealPlanCustomerMapper.softDeleteUnverifiedByIds(customerPlanIds);
+        if (deletedRows != customerPlanIds.size()) {
+            throw new BadRequestException(org.springframework.http.HttpStatus.CONFLICT,
+                    "排餐核销状态已变化，请刷新后重试");
+        }
         mealPlanCustomerItemMapper.softDeleteByCustomerPlanIds(customerPlanIds);
         mealPlanManualReplaceMapper.softDeleteByCustomerPlanIds(customerPlanIds);
-        mealPlanCustomerMapper.softDeleteByIds(customerPlanIds);
         refreshMealPlanSummary(lockedPlan, true);
         return customerPlanIds.size();
     }

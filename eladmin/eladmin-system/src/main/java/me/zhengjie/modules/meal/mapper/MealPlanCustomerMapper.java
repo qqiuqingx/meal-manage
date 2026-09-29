@@ -57,6 +57,14 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
     int softDeleteByIds(@Param("ids") List<Long> ids);
 
     /**
+     * 仅软删除仍未核销的客户排餐记录，避免日历调整与核销并发时误删已核销事实。
+     *
+     * @param ids 客户排餐记录ID
+     * @return 实际更新行数
+     */
+    int softDeleteUnverifiedByIds(@Param("ids") List<Long> ids);
+
+    /**
      * 根据排餐计划ID查询所有客户
      */
     List<MealPlanCustomer> selectByMealPlanId(@Param("mealPlanId") Long mealPlanId);
@@ -127,23 +135,31 @@ public interface MealPlanCustomerMapper extends BaseMapper<MealPlanCustomer> {
                                                                                                              @Param("recordDate") LocalDate recordDate);
 
     /**
-     * 按客户、订单、日期和餐次聚合查询有效排餐成功份数、失败份数及核销份数。
+     * 按订单读取指定日期范围的成功、失败及核销排餐进度。
+     *
+     * @param orderId 订单ID
+     * @param startDate 开始日期
+     * @param endDate 结束日期
+     * @return 当前订单按日期和餐次聚合的进度
      */
-    List<CustomerScheduledMealDto> selectScheduledMealsByCustomerIdsAndDateRange(@Param("customerIds") List<Long> customerIds,
-                                                                                 @Param("startDate") LocalDate startDate,
-                                                                                 @Param("endDate") LocalDate endDate);
+    List<CustomerScheduledMealDto> selectScheduledMealsByOrderIdAndDateRange(@Param("orderId") Long orderId,
+                                                                             @Param("startDate") LocalDate startDate,
+                                                                             @Param("endDate") LocalDate endDate);
 
     /**
-     * 查询客户指定日期餐次的有效成功或失败排餐结果，供份数下调和排除日历清理使用。
-     *
-     * @param customerId 客户ID
-     * @param recordDate 排餐日期
-     * @param mealType 餐次
-     * @return 含份序、订单、生成状态和核销状态的结果行
+     * 查询当前订单、日期和餐次的生成结果，不包含同客户其他订单。
      */
-    List<me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto> selectGeneratedByCustomerDateMeal(@Param("customerId") Long customerId,
-                                                                                                            @Param("recordDate") LocalDate recordDate,
-                                                                                                            @Param("mealType") String mealType);
+    List<me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto> selectGeneratedByOrderDateMeal(
+            @Param("customerId") Long customerId,
+            @Param("orderId") Long orderId,
+            @Param("recordDate") LocalDate recordDate,
+            @Param("mealType") String mealType);
+
+    /**
+     * 按餐次统计订单全部有效的成功排餐份数，供早餐和午晚餐池分别校验。
+     */
+    List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countSuccessfulScheduledByOrderIdGroupedByMealType(
+            @Param("orderId") Long orderId);
 
     /**
      * 根据排餐计划ID查询所有未核销的客户排餐记录

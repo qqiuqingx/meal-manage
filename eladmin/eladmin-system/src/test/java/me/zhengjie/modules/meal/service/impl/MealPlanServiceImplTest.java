@@ -40,13 +40,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.mockito.invocation.Invocation;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -103,6 +106,28 @@ class MealPlanServiceImplTest {
     void setUp() {
         lenient().when(dishIngredientCategoryService.getCategoryIngredientMapping()).thenReturn(Collections.emptyMap());
         lenient().when(mealPlanManualReplaceMapper.selectByMealPlanId(anyLong())).thenReturn(Collections.emptyList());
+        lenient().when(customerOrderMapper.selectInlineUpdateByIdForUpdate(anyLong())).thenAnswer(invocation -> {
+            Long orderId = invocation.getArgument(0);
+            List<Invocation> calls = new ArrayList<>(Mockito.mockingDetails(customerOrderMapper).getInvocations());
+            for (int index = calls.size() - 1; index >= 0; index--) {
+                Invocation call = calls.get(index);
+                if (!"findMealPlanOrders".equals(call.getMethod().getName())) {
+                    continue;
+                }
+                LocalDate date = (LocalDate) call.getArgument(0);
+                String mealType = (String) call.getArgument(1);
+                List<CustomerOrder> candidates = customerOrderMapper.findMealPlanOrders(date, mealType);
+                if (candidates != null) {
+                    for (CustomerOrder candidate : candidates) {
+                        if (candidate != null && orderId.equals(candidate.getId())) {
+                            return candidate;
+                        }
+                    }
+                }
+                break;
+            }
+            return customerOrderMapper.selectById(orderId);
+        });
     }
 
     @Test
@@ -361,57 +386,6 @@ class MealPlanServiceImplTest {
     }
 
     @Test
-    void shouldRejectCalendarAdjustmentDeleteWhenGeneratedMealIsVerified() {
-        MealPlan lockedPlan = new MealPlan();
-        lockedPlan.setId(10L);
-        CustomerGeneratedMealPlanDto generated = new CustomerGeneratedMealPlanDto();
-        generated.setMealPlanId(10L);
-        generated.setCustomerPlanId(20L);
-        generated.setCustomerId(30L);
-        generated.setRecordDate(LocalDate.of(2026, 5, 24));
-        generated.setMealType("LUNCH");
-        generated.setVerified(true);
-
-        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 5, 24), "LUNCH"))
-                .thenReturn(lockedPlan);
-        when(mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(30L, LocalDate.of(2026, 5, 24), "LUNCH"))
-                .thenReturn(Collections.singletonList(generated));
-
-        assertThrows(BadRequestException.class,
-                () -> mealPlanService.deleteUnverifiedCustomerMealForCalendarAdjustment(30L, "2026-05-24", "LUNCH"));
-        verify(mealPlanCustomerItemMapper, never()).softDeleteByCustomerPlanIds(anyList());
-        verify(mealPlanCustomerMapper, never()).softDeleteByIds(anyList());
-    }
-
-    @Test
-    void shouldSoftDeleteUnverifiedGeneratedMealForCalendarAdjustment() {
-        CustomerGeneratedMealPlanDto generated = new CustomerGeneratedMealPlanDto();
-        generated.setMealPlanId(10L);
-        generated.setCustomerPlanId(20L);
-        generated.setCustomerId(30L);
-        generated.setRecordDate(LocalDate.of(2026, 5, 24));
-        generated.setMealType("LUNCH");
-        generated.setVerified(false);
-
-        MealPlan mealPlan = new MealPlan();
-        mealPlan.setId(10L);
-        mealPlan.setDeleted(false);
-        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 5, 24), "LUNCH"))
-                .thenReturn(mealPlan);
-        when(mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(30L, LocalDate.of(2026, 5, 24), "LUNCH"))
-                .thenReturn(Collections.singletonList(generated));
-        when(mealPlanMapper.selectById(10L)).thenReturn(mealPlan);
-        when(mealPlanCustomerMapper.selectByMealPlanId(10L)).thenReturn(Collections.emptyList());
-
-        int deletedCount = mealPlanService.deleteUnverifiedCustomerMealForCalendarAdjustment(30L, "2026-05-24", "LUNCH");
-
-        assertEquals(1, deletedCount);
-        verify(mealPlanCustomerItemMapper).softDeleteByCustomerPlanIds(Collections.singletonList(20L));
-        verify(mealPlanCustomerMapper).softDeleteByIds(Collections.singletonList(20L));
-        verify(mealPlanMapper).softDeletePlanById(10L);
-    }
-
-    @Test
     void shouldIgnoreManualAdditionOrderOutsideDateRangeWhenGeneratingMealPlan() throws Exception {
         CustomerMealScheduleAddition addition = new CustomerMealScheduleAddition();
         addition.setOrderId(10L);
@@ -657,8 +631,6 @@ class MealPlanServiceImplTest {
         when(customerOrderMapper.findByDateRangeAndMealType(LocalDate.of(2026, 4, 1), "LUNCH")).thenReturn(Collections.singletonList(order));
         when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(LocalDate.of(2026, 4, 1), "LUNCH"))
                 .thenReturn(Collections.singletonList(addition));
-        when(customerMealScheduleAdditionMapper.selectActiveByOrderDateMeal(order.getId(), LocalDate.of(2026, 4, 1), "LUNCH"))
-                .thenReturn(addition);
         when(customerOrderMapper.selectById(order.getId())).thenReturn(order);
         lenient().when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
         when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(inv -> {
@@ -1065,8 +1037,9 @@ class MealPlanServiceImplTest {
         remainingSuccessful.setIsVerified(0);
 
         when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(recordDate, "LUNCH")).thenReturn(plan);
-        when(mealPlanCustomerMapper.selectGeneratedByCustomerDateMeal(1L, recordDate, "LUNCH"))
+        when(mealPlanCustomerMapper.selectGeneratedByOrderDateMeal(1L, 10L, recordDate, "LUNCH"))
                 .thenReturn(Arrays.asList(verified, successful, failed));
+        when(mealPlanCustomerMapper.softDeleteUnverifiedByIds(Collections.singletonList(103L))).thenReturn(1);
         when(mealPlanMapper.selectById(77L)).thenReturn(plan);
         when(mealPlanCustomerMapper.selectByMealPlanId(77L)).thenReturn(Arrays.asList(remainingVerified, remainingSuccessful));
 
@@ -1076,9 +1049,29 @@ class MealPlanServiceImplTest {
         assertEquals(1, deletedCount);
         verify(mealPlanCustomerItemMapper).softDeleteByCustomerPlanIds(Collections.singletonList(103L));
         verify(mealPlanManualReplaceMapper).softDeleteByCustomerPlanIds(Collections.singletonList(103L));
-        verify(mealPlanCustomerMapper).softDeleteByIds(Collections.singletonList(103L));
+        verify(mealPlanCustomerMapper).softDeleteUnverifiedByIds(Collections.singletonList(103L));
         verify(mealPlanCustomerMapper, never()).softDeleteByIds(Collections.singletonList(101L));
         verify(mealPlanCustomerMapper, never()).softDeleteByIds(Collections.singletonList(102L));
+    }
+
+    @Test
+    void shouldRollbackCalendarReductionWhenUnverifiedGuardLosesRaceWithVerification() {
+        LocalDate recordDate = LocalDate.of(2026, 5, 25);
+        MealPlan plan = new MealPlan();
+        plan.setId(78L);
+        CustomerGeneratedMealPlanDto unverified = generatedServing(104L, 1, 1, false);
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(recordDate, "LUNCH")).thenReturn(plan);
+        when(mealPlanCustomerMapper.selectGeneratedByOrderDateMeal(1L, 10L, recordDate, "LUNCH"))
+                .thenReturn(Collections.singletonList(unverified));
+        when(mealPlanCustomerMapper.softDeleteUnverifiedByIds(Collections.singletonList(104L))).thenReturn(0);
+
+        BadRequestException error = assertThrows(BadRequestException.class,
+                () -> mealPlanService.deleteExcessUnverifiedCustomerServingsForCalendarAdjustment(
+                        1L, 10L, recordDate.toString(), "LUNCH", 0));
+
+        assertEquals(org.springframework.http.HttpStatus.CONFLICT.value(), error.getStatus());
+        verify(mealPlanCustomerItemMapper, never()).softDeleteByCustomerPlanIds(anyList());
+        verify(mealPlanManualReplaceMapper, never()).softDeleteByCustomerPlanIds(anyList());
     }
 
     @Test
@@ -1239,6 +1232,73 @@ class MealPlanServiceImplTest {
         verify(mealPlanCustomerMapper, never()).insert(any());
         verify(mealPlanCustomerItemMapper, never()).insert(any());
         verify(customerOrderMapper, never()).selectList(null);
+    }
+
+    @Test
+    void shouldSkipZeroQuantityOrderAndGenerateAnotherOrderForTheSameCustomer() {
+        CustomerOrder cancelledOrder = buildOrder();
+        CustomerOrder activeOrder = buildOrder();
+        cancelledOrder.setId(10L);
+        activeOrder.setId(11L);
+        cancelledOrder.setStartDate(LocalDate.of(2026, 4, 1));
+        activeOrder.setStartDate(LocalDate.of(2026, 4, 1));
+        cancelledOrder.setScheduleMode("WEEKEND");
+
+        CustomerMealScheduleAddition cancellation = new CustomerMealScheduleAddition();
+        cancellation.setOrderId(cancelledOrder.getId());
+        cancellation.setCustomerId(cancelledOrder.getCustomerId());
+        cancellation.setRecordDate(LocalDate.of(2026, 4, 1));
+        cancellation.setMealType("LUNCH");
+        cancellation.setQuantity(0);
+
+        CustomerProfile customer = buildCustomer();
+        ParentPackage parentPackage = buildParentPackage();
+        Dish mainDish = buildDish(11, "红烧鸡", "MAIN", Collections.singletonList("LUNCH"),
+                Collections.singletonList("1"), Collections.singletonList("1-3"), 1);
+
+        when(mealPlanMapper.findActiveByDateAndMealTypeForUpdate(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(null);
+        when(customerOrderMapper.findByDateRangeAndMealType(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Arrays.asList(cancelledOrder, activeOrder));
+        when(customerOrderMapper.findMealPlanOrders(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Collections.singletonList(activeOrder));
+        when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(LocalDate.of(2026, 4, 1), "LUNCH"))
+                .thenReturn(Collections.singletonList(cancellation));
+        when(customerMealScheduleAdditionMapper.selectActiveByCustomerIdsAndDateRange(
+                anyList(), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(Collections.singletonList(cancellation));
+        when(customerOrderMapper.selectById(cancelledOrder.getId())).thenReturn(cancelledOrder);
+        when(mealPlanCustomerMapper.countScheduledByOrderIds(Collections.singletonList(activeOrder.getId()), "LUNCH"))
+                .thenReturn(Collections.emptyList());
+        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(customer));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(invocation -> {
+            MealPlan plan = invocation.getArgument(0);
+            plan.setId(100L);
+            return 1;
+        });
+        when(mealPlanMapper.selectById(anyLong())).thenAnswer(invocation -> {
+            MealPlan plan = new MealPlan();
+            plan.setId(invocation.getArgument(0));
+            plan.setRecordDate(LocalDate.of(2026, 4, 1));
+            plan.setMealType("LUNCH");
+            plan.setSuccessCount(0);
+            plan.setFailCount(0);
+            plan.setTotalCount(0);
+            return plan;
+        });
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(parentPackage));
+        when(mealSchedulePlanMapper.findBySchedule(any(), any(), any()))
+                .thenReturn(Collections.singletonList(mainDish));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList())).thenReturn(Collections.emptyList());
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-04-01", "LUNCH", null);
+
+        assertEquals(1, result.getTotalCount());
+        assertEquals(1, result.getSuccessCount());
+        verify(mealPlanCustomerMapper).countScheduledByOrderIds(Collections.singletonList(activeOrder.getId()), "LUNCH");
+        ArgumentCaptor<MealPlanCustomer> planCaptor = ArgumentCaptor.forClass(MealPlanCustomer.class);
+        verify(mealPlanCustomerMapper).insert(planCaptor.capture());
+        assertEquals(activeOrder.getId(), planCaptor.getValue().getOrderId());
     }
 
     /**

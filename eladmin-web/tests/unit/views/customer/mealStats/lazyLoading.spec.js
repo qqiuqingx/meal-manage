@@ -1,12 +1,14 @@
 /* eslint-env jest */
 import { createLocalVue, shallowMount } from '@vue/test-utils'
+import Vuex from 'vuex'
 import CustomerMealStats from '@/views/customer/mealStats/index.vue'
 import { getMealStats } from '@/api/customer/profile'
 import { getDepletionWarnings } from '@/api/mealPlan'
 
 jest.mock('@/api/customer/profile', () => ({
   getMealStats: jest.fn(),
-  saveMealScheduleAdjustments: jest.fn()
+  getOrderMealCalendar: jest.fn(),
+  saveOrderMealCalendar: jest.fn()
 }))
 
 jest.mock('@/api/mealPlan', () => ({
@@ -14,20 +16,16 @@ jest.mock('@/api/mealPlan', () => ({
 }))
 
 const localVue = createLocalVue()
+localVue.use(Vuex)
 localVue.directive('loading', {})
+const store = { getters: { baseApi: '', roles: ['admin'] }}
 
 function flushPromises() {
   return new Promise(resolve => setTimeout(resolve, 0))
 }
 
-function makeRow(customerId, mealBucket) {
-  return {
-    rowKey: `${customerId}-${mealBucket}`,
-    customerId,
-    mealBucket,
-    firstRowInGroup: true,
-    groupRowSpan: 1
-  }
+function makeOrder(orderId, customerId = 7) {
+  return { orderId, customerId, customerCode: 'A007', customerName: '同一客户', orderCode: `ORD-${orderId}` }
 }
 
 function createDeferred() {
@@ -38,7 +36,7 @@ function createDeferred() {
   return { promise, resolve }
 }
 
-describe('CustomerMealStats lazy loading', () => {
+describe('CustomerMealStats order pagination', () => {
   let wrapper
 
   beforeEach(() => {
@@ -56,6 +54,7 @@ describe('CustomerMealStats lazy loading', () => {
   async function mountPage() {
     wrapper = shallowMount(CustomerMealStats, {
       localVue,
+      store,
       stubs: {
         'el-input': true,
         'el-date-picker': true,
@@ -64,7 +63,9 @@ describe('CustomerMealStats lazy loading', () => {
         'el-table-column': true,
         'el-tooltip': true,
         'el-alert': true,
-        'el-dialog': true
+        'el-dialog': true,
+        'el-tag': true,
+        'el-image': true
       }
     })
     await flushPromises()
@@ -72,18 +73,12 @@ describe('CustomerMealStats lazy loading', () => {
     return wrapper.vm
   }
 
-  test('loads another page near the bottom and joins a customer group across pages', async() => {
+  test('appends separate order rows for the same customer without row grouping', async() => {
     const vm = await mountPage()
     const body = { scrollHeight: 1000, scrollTop: 550, clientHeight: 400 }
     vm.getTableScrollContainer = jest.fn(() => body)
-    await wrapper.setData({
-      rows: [makeRow(7, 'BREAKFAST')],
-      page: { current: 1, size: 20, total: 40 }
-    })
-    getMealStats.mockResolvedValue({
-      content: [makeRow(7, 'LUNCH_DINNER')],
-      totalElements: 40
-    })
+    await wrapper.setData({ rows: [makeOrder(70)], page: { current: 1, size: 20, total: 2 }})
+    getMealStats.mockResolvedValue({ content: [makeOrder(71)], totalElements: 2 })
 
     vm.handleTableScroll()
     vm.handleTableScroll()
@@ -91,20 +86,18 @@ describe('CustomerMealStats lazy loading', () => {
 
     expect(getMealStats).toHaveBeenCalledTimes(1)
     expect(getMealStats).toHaveBeenCalledWith(expect.objectContaining({ page: 2, size: 20 }))
-    expect(vm.rows.map(row => row.mealBucket)).toEqual(['BREAKFAST', 'LUNCH_DINNER'])
-    expect(vm.rows.map(row => [row.firstRowInGroup, row.groupRowSpan])).toEqual([[true, 2], [false, 0]])
+    expect(vm.rows.map(row => row.orderId)).toEqual([70, 71])
+    expect(vm.rows[0].customerId).toBe(vm.rows[1].customerId)
+    expect(vm.rows).toHaveLength(2)
   })
 
-  test('keeps existing rows after a failed request and retries the same page', async() => {
+  test('keeps existing rows after a failed append and retries the same page', async() => {
     const vm = await mountPage()
-    const firstRow = makeRow(8, 'LUNCH_DINNER')
-    await wrapper.setData({
-      rows: [firstRow],
-      page: { current: 1, size: 20, total: 40 }
-    })
+    const firstRow = makeOrder(80)
+    await wrapper.setData({ rows: [firstRow], page: { current: 1, size: 20, total: 40 }})
     getMealStats
       .mockRejectedValueOnce(new Error('network error'))
-      .mockResolvedValueOnce({ content: [makeRow(9, 'BREAKFAST')], totalElements: 40 })
+      .mockResolvedValueOnce({ content: [makeOrder(81)], totalElements: 40 })
 
     vm.loadNextPage()
     await flushPromises()
@@ -119,7 +112,7 @@ describe('CustomerMealStats lazy loading', () => {
     expect(getMealStats).toHaveBeenCalledTimes(2)
     expect(getMealStats).toHaveBeenNthCalledWith(1, expect.objectContaining({ page: 2 }))
     expect(getMealStats).toHaveBeenNthCalledWith(2, expect.objectContaining({ page: 2 }))
-    expect(vm.rows).toHaveLength(2)
+    expect(vm.rows.map(row => row.orderId)).toEqual([80, 81])
     expect(vm.loadError).toBe(false)
   })
 
@@ -127,31 +120,21 @@ describe('CustomerMealStats lazy loading', () => {
     const vm = await mountPage()
     const staleRequest = createDeferred()
     const searchRequest = createDeferred()
-    await wrapper.setData({
-      rows: [makeRow(10, 'BREAKFAST')],
-      page: { current: 1, size: 20, total: 40 }
-    })
-    getMealStats
-      .mockReturnValueOnce(staleRequest.promise)
-      .mockReturnValueOnce(searchRequest.promise)
+    await wrapper.setData({ rows: [makeOrder(90)], page: { current: 1, size: 20, total: 40 }})
+    getMealStats.mockReturnValueOnce(staleRequest.promise).mockReturnValueOnce(searchRequest.promise)
 
     vm.loadNextPage()
-    await wrapper.setData({
-      query: {
-        ...vm.query,
-        customerName: '新客户'
-      }
-    })
+    await wrapper.setData({ query: { ...vm.query, customerName: '新客户' }})
     vm.handleQuery()
 
-    searchRequest.resolve({ content: [makeRow(20, 'LUNCH_DINNER')], totalElements: 1 })
+    searchRequest.resolve({ content: [makeOrder(100, 20)], totalElements: 1 })
     await flushPromises()
-    staleRequest.resolve({ content: [makeRow(10, 'LUNCH_DINNER')], totalElements: 40 })
+    staleRequest.resolve({ content: [makeOrder(91)], totalElements: 40 })
     await flushPromises()
 
     expect(getMealStats).toHaveBeenNthCalledWith(1, expect.objectContaining({ page: 2 }))
     expect(getMealStats).toHaveBeenNthCalledWith(2, expect.objectContaining({ page: 1, customerName: '新客户' }))
-    expect(vm.rows).toEqual([expect.objectContaining({ customerId: 20 })])
+    expect(vm.rows.map(row => row.orderId)).toEqual([100])
     expect(vm.page.current).toBe(1)
     expect(vm.page.total).toBe(1)
   })

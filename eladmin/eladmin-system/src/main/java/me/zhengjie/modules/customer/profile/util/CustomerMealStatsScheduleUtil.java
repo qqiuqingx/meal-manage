@@ -33,64 +33,13 @@ public final class CustomerMealStatsScheduleUtil {
     }
 
     /**
-     * 按订单模式、客户排除和历史数量覆盖构建当前月仍有购买餐数的计划日期。
-     *
-     * @param orders 当前客户订单
-     * @param excludedDates 客户完整排除日期
-     * @param statsMonth 查询月份
-     * @param mealBucket 早餐或午晚餐餐数池
-     * @param additionsByOrder 截至当前月末的历史数量覆盖
-     * @return 当前月仍有目标份数的日期与餐次
-     */
-    public static List<ScheduleDay> buildMonthScheduleDays(List<CustomerOrder> orders,
-                                                           List<ExcludedDateDto> excludedDates,
-                                                           String statsMonth,
-                                                           String mealBucket,
-                                                           Map<Long, List<CustomerMealScheduleAddition>> additionsByOrder) {
-        if (orders == null || orders.isEmpty()) {
-            return Collections.emptyList();
-        }
-        YearMonth month = parseMonth(statsMonth);
-        LocalDate monthEnd = month.atEndOfMonth();
-        Map<String, ScheduleDay> dayMap = new LinkedHashMap<>();
-
-        for (CustomerOrder order : orders) {
-            if (order == null) {
-                continue;
-            }
-            List<CustomerMealScheduleAddition> additions = additionsByOrder == null
-                    ? Collections.emptyList() : additionsByOrder.getOrDefault(order.getId(), Collections.emptyList());
-            Map<String, Integer> quantities = buildOrderQuantities(order, excludedDates, additions, monthEnd);
-            for (LocalDate date = month.atDay(1); !date.isAfter(monthEnd); date = date.plusDays(1)) {
-                for (String mealType : mealTypesForBucket(mealBucket)) {
-                    if (quantities.getOrDefault(cellKey(date, mealType), 0) > 0) {
-                        ScheduleDay day = dayMap.computeIfAbsent(date.toString(), ScheduleDay::new);
-                        day.addMealTypes(Collections.singletonList(mealType));
-                    }
-                }
-            }
-        }
-
-        return new ArrayList<>(dayMap.values());
-    }
-
-    /**
-     * 构建不应用客户排除日期的月度基础应排餐日期，用于日历编辑时展示可恢复餐次。
-     */
-    public static List<ScheduleDay> buildMonthBaseScheduleDays(List<CustomerOrder> orders,
-                                                               String statsMonth,
-                                                               String mealBucket) {
-        return buildMonthScheduleDays(orders, Collections.emptyList(), statsMonth, mealBucket, Collections.emptyMap());
-    }
-
-    /**
      * 按订单、日期和午晚餐生成数量日历单元格，并应用购买餐数顺序分配。
      *
      * @param order 客户订单
      * @param excludedDates 客户排除日期
      * @param statsMonth 查询月份
      * @param additions 截至查询月底的该订单全部有效人工数量覆盖
-     * @return 订单有效期内的午晚餐数量单元格
+     * @return 订单有效期内有业务意义的数量单元格，基础份数保留其他覆盖和客户统一停餐
      */
     public static List<CustomerMealScheduleCellDto> buildMonthMealScheduleCells(CustomerOrder order,
                                                                                 List<ExcludedDateDto> excludedDates,
@@ -106,8 +55,6 @@ public final class CustomerMealStatsScheduleUtil {
             return Collections.emptyList();
         }
 
-        Map<String, Integer> baseQuantities = buildOrderQuantities(order, Collections.emptyList(),
-                Collections.emptyList(), end);
         Map<String, Integer> quantities = buildOrderQuantities(order, excludedDates, additions, end);
         Map<String, CustomerMealScheduleAddition> additionByCell = new LinkedHashMap<>();
         if (additions != null) {
@@ -121,7 +68,7 @@ public final class CustomerMealStatsScheduleUtil {
         List<CustomerMealScheduleCellDto> cells = new ArrayList<>();
         LocalDate current = start;
         while (!current.isAfter(end)) {
-            for (String mealType : Arrays.asList("LUNCH", "DINNER")) {
+            for (String mealType : ALL_MEAL_TYPES) {
                 if (!orderContainsMealType(order, mealType)) {
                     continue;
                 }
@@ -132,9 +79,12 @@ public final class CustomerMealStatsScheduleUtil {
 
                 String key = cellKey(current, mealType);
                 boolean excluded = isExcluded(excludedDates, current, mealType);
-                int baseQuantity = baseQuantities.getOrDefault(key, 0);
                 int quantity = quantities.getOrDefault(key, 0);
                 CustomerMealScheduleAddition addition = additionByCell.get(key);
+                int baseQuantity = addition == null
+                        ? quantity
+                        : buildOrderQuantities(order, excludedDates, withoutCellAddition(additions, addition), end)
+                                .getOrDefault(key, 0);
                 CustomerMealScheduleCellDto cell = new CustomerMealScheduleCellDto();
                 cell.setOrderId(order.getId());
                 cell.setDate(current.toString());
@@ -142,17 +92,44 @@ public final class CustomerMealStatsScheduleUtil {
                 cell.setBaseQuantity(baseQuantity);
                 cell.setQuantity(quantity);
                 cell.setSoupQuantity(quantity > 0 && addition != null ? addition.getSoupQuantity() : null);
-                cell.setDefaultIncludesSoup(safeInt(order.getSoupCount()) > 0);
+                cell.setDefaultIncludesSoup(!"BREAKFAST".equals(mealType) && safeInt(order.getSoupCount()) > 0);
                 cell.setGeneratedCount(0);
                 cell.setFailedCount(0);
                 cell.setVerifiedCount(0);
-                cell.setManualOverride(quantity > 0 && addition != null);
-                cell.setExcluded(excluded);
+                cell.setManualOverride(addition != null);
+                cell.setCustomerExcluded(excluded);
+                cell.setOrderExcluded(addition != null && addition.getQuantity() != null
+                        && addition.getQuantity() == 0);
                 cells.add(cell);
             }
             current = current.plusDays(1);
         }
         return cells;
+    }
+
+    /**
+     * 移除本次计算单元格的覆盖，其余月份和单元格覆盖继续参与数量池分配。
+     *
+     * @param additions 订单全部历史覆盖
+     * @param target 要从基础量计算中暂时移除的覆盖
+     * @return 除目标单元格外的有效覆盖
+     */
+    private static List<CustomerMealScheduleAddition> withoutCellAddition(
+            List<CustomerMealScheduleAddition> additions, CustomerMealScheduleAddition target) {
+        if (additions == null || additions.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<CustomerMealScheduleAddition> result = new ArrayList<>(additions.size());
+        for (CustomerMealScheduleAddition addition : additions) {
+            if (addition == null || addition == target
+                    || target.getRecordDate().equals(addition.getRecordDate())
+                    && target.getMealType().equals(addition.getMealType())
+                    && (target.getOrderId() == null || target.getOrderId().equals(addition.getOrderId()))) {
+                continue;
+            }
+            result.add(addition);
+        }
+        return result;
     }
 
     /**
@@ -181,6 +158,14 @@ public final class CustomerMealStatsScheduleUtil {
             for (CustomerMealScheduleAddition addition : additions) {
                 if (addition != null && addition.getRecordDate() != null && addition.getMealType() != null
                         && (order.getId() == null || order.getId().equals(addition.getOrderId()))) {
+                    int quantity = addition.getQuantity() == null ? 1 : addition.getQuantity();
+                    if (quantity < 0) {
+                        throw new BadRequestException("目标份数不能小于0");
+                    }
+                    if (addition.getSoupQuantity() != null
+                            && (addition.getSoupQuantity() < 0 || addition.getSoupQuantity() > quantity)) {
+                        throw new BadRequestException("含汤份数必须在0到目标份数之间");
+                    }
                     additionByCell.put(cellKey(addition.getRecordDate(), addition.getMealType()), addition);
                 }
             }
@@ -206,8 +191,12 @@ public final class CustomerMealStatsScheduleUtil {
                     continue;
                 }
                 int quantity = addition == null || addition.getQuantity() == null ? 1 : addition.getQuantity();
+                if (quantity == 0) {
+                    result.put(cellKey(date, mealType), 0);
+                    continue;
+                }
                 int remaining = "BREAKFAST".equals(mealType) ? breakfastRemaining : lunchDinnerRemaining;
-                if (quantity <= 0 || quantity > remaining) {
+                if (quantity > remaining) {
                     continue;
                 }
                 result.put(cellKey(date, mealType), quantity);
@@ -244,13 +233,6 @@ public final class CustomerMealStatsScheduleUtil {
         } catch (Exception e) {
             throw new BadRequestException("统计月份格式错误，请使用 yyyy-MM 格式");
         }
-    }
-
-    private static List<String> mealTypesForBucket(String mealBucket) {
-        if ("BREAKFAST".equals(mealBucket)) {
-            return Collections.singletonList("BREAKFAST");
-        }
-        return Arrays.asList("LUNCH", "DINNER");
     }
 
     private static boolean orderContainsMealType(CustomerOrder order, String mealType) {
@@ -364,54 +346,6 @@ public final class CustomerMealStatsScheduleUtil {
 
     private static int safeInt(Integer value) {
         return value == null ? 0 : value;
-    }
-
-    @Data
-    public static class ScheduleDay {
-        private String date;
-        private List<String> mealTypes = new ArrayList<>();
-        private List<String> scheduledMealTypes = new ArrayList<>();
-        private List<String> baseMealTypes = new ArrayList<>();
-        private List<String> excludedMealTypes = new ArrayList<>();
-        private List<String> addedMealTypes = new ArrayList<>();
-
-        public ScheduleDay() {
-        }
-
-        public ScheduleDay(String date) {
-            this.date = date;
-        }
-
-        private void addMealTypes(List<String> values) {
-            addUniqueMealTypes(mealTypes, values);
-        }
-
-        public void addBaseMealTypes(List<String> values) {
-            addUniqueMealTypes(baseMealTypes, values);
-        }
-
-        public void addExcludedMealType(String mealType) {
-            addUniqueMealTypes(excludedMealTypes, Collections.singletonList(mealType));
-        }
-
-        public void addAddedMealType(String mealType) {
-            addUniqueMealTypes(addedMealTypes, Collections.singletonList(mealType));
-        }
-
-        private void addUniqueMealTypes(List<String> target, List<String> values) {
-            if (values == null) {
-                return;
-            }
-            for (String value : values) {
-                if (StringUtils.isNotBlank(value) && !target.contains(value)) {
-                    target.add(value);
-                }
-            }
-        }
-
-        public void addScheduledMealType(String mealType) {
-            addUniqueMealTypes(scheduledMealTypes, Collections.singletonList(mealType));
-        }
     }
 
     @Data

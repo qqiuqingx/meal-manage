@@ -1,92 +1,53 @@
 package me.zhengjie.modules.customer.profile.domain.dto;
 
 import lombok.Data;
-import me.zhengjie.modules.customer.profile.util.CustomerMealStatsScheduleUtil;
 
+import java.io.Serializable;
 import java.util.List;
 
 /**
- * 客户用餐统计行
+ * 客户用餐统计页的单笔订单行；客户共享资料按当前档案值重复展示。
  */
 @Data
-public class CustomerMealStatsRowDto {
+public class CustomerMealStatsRowDto implements Serializable {
 
-    private String rowKey;
+    private static final long serialVersionUID = 1L;
 
-    private Long customerId;
-
-    /**
-     * 当前餐池默认用于人工新增排餐的订单ID。
-     */
+    /** 列表行和排餐日历的订单身份。 */
     private Long orderId;
+    private Long customerId;
+    private String orderCode;
 
-    private String customerCode;
-
+    /** 客户共享资料。 */
     private String phone;
-
     private String addressText;
-
-    private String remarkInfo;
-
-    private String specialRequirementText;
-
-    private String soupLabel;
-
-    /** 客户档案中的医嘱原文。 */
+    private String customerCode;
+    private String customerName;
+    private String specialRequirements;
     private String medicalRequirements;
-
-    /** 客户想吃或菜品特殊要求的已确认对象与完整原文。 */
+    private String postoperativeInfo;
     private List<CustomerDietItemDto> dishRequirements;
-
     private List<String> dishRequirementsRaw;
-
-    /** 客户禁忌的已确认对象与完整原文。 */
+    private List<String> allergyTags;
     private List<CustomerDietItemDto> dietaryRestrictions;
-
     private List<String> dietaryRestrictionsRaw;
 
-    private String deliveryInfo;
-
-    private String purchaseDateText;
-
-    private String startDateText;
-
-    private Integer mealCount;
-
-    private Integer remainingMealCount;
-
-    private List<CustomerMealStatsScheduleUtil.ScheduleDay> scheduleDays;
-
-    /**
-     * 不应用排除日期的基础应排餐日期，用于日历编辑恢复。
-     */
-    private List<CustomerMealStatsScheduleUtil.ScheduleDay> baseScheduleDays;
-
-    private List<CustomerMealStatsScheduleUtil.ScheduleDay> customerScheduleDays;
-
-    /**
-     * 按订单、日期和餐次拆分的午晚餐数量网格数据。
-     */
-    private List<CustomerMealScheduleCellDto> mealScheduleCells;
-
-    /**
-     * 当前客户午晚餐日历涉及的订单摘要。
-     */
-    private List<CustomerMealScheduleOrderDto> mealScheduleOrders;
-
-    /**
-     * 当前月已保存的人工数量覆盖，兼容早餐旧日历编辑。
-     */
-    private List<CustomerMealScheduleAdditionDto> manualScheduleAdditions;
-
-    /**
-     * 当前客户排餐日历修订标记，保存时用于并发修改校验。
-     */
-    private String calendarRevision;
-
-    private String mealBucket;
-
-    private Boolean firstRowInGroup;
-
-    private Integer groupRowSpan;
+    /** 当前订单资料。 */
+    private String scheduleMode;
+    private String scheduleModeText;
+    private String mealType;
+    private String mealTypeText;
+    private String specification;
+    private Integer soupCount;
+    private Integer breakfastCount;
+    private Integer lunchDinnerCount;
+    private Integer totalCount;
+    private Integer verifiedCount;
+    private Integer scheduledCount;
+    private Integer remainingCount;
+    private Integer estimatedRemainingCount;
+    private Integer status;
+    private String statusLabel;
+    private String dealTime;
+    private String customMenuImage;
 }

@@ -1,0 +1,40 @@
+feature: order-meal-stats-calendar
+title: 客户用餐统计与排餐日历按订单展示
+created_at: '2026-09-29'
+baseline_commit: 11b0e694
+plan_status: ready_for_review
+implementation_status: in_progress
+current_phase: phase-04
+overview: 00-overview.md
+contracts: contracts.md
+confirmed_requirements:
+  list_scope: order
+  calendar_scope: order
+  special_requirements_source: customer_profile.special_requirements
+  basic_condition_source: customer_profile.medical_requirements
+  postoperative_display: original_text
+  customer_global_exclusions: preserved_with_priority
+phases:
+  - id: phase-01
+    name: 订单停餐与实际排餐语义闭环
+    file: phase-01-order-adjustment-semantics.md
+    depends_on: []
+    status: complete
+  - id: phase-02
+    name: 单订单排餐日历读取与安全保存
+    file: phase-02-order-calendar.md
+    depends_on:
+      - phase-01
+    status: complete
+  - id: phase-03
+    name: 24列订单列表与订单日历页面闭环
+    file: phase-03-order-list-and-calendar-ui.md
+    depends_on:
+      - phase-02
+    status: complete
+  - id: phase-04
+    name: 隔离验收文档和完整交付
+    file: phase-04-regression-and-delivery.md
+    depends_on:
+      - phase-03
+    status: in_progress

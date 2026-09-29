@@ -1,139 +1,191 @@
 /* eslint-env jest */
+import Vue from 'vue'
+import Vuex from 'vuex'
+import ElementUI from 'element-ui'
+import { createLocalVue, mount } from '@vue/test-utils'
+import CustomerMealStats from '@/views/customer/mealStats/index.vue'
+import { getMealStats, getOrderMealCalendar, saveOrderMealCalendar } from '@/api/customer/profile'
+import { getDepletionWarnings } from '@/api/mealPlan'
 
-function hasExcludedMeal(ctx, date, mealType) {
-  return ctx.calendarExcludedDates.some(item => item.date === date && Array.isArray(item.mealTypes) && item.mealTypes.includes(mealType))
+jest.mock('@/api/customer/profile', () => ({
+  getMealStats: jest.fn(),
+  getOrderMealCalendar: jest.fn(),
+  saveOrderMealCalendar: jest.fn()
+}))
+
+jest.mock('@/api/mealPlan', () => ({
+  getDepletionWarnings: jest.fn()
+}))
+
+const localVue = createLocalVue()
+localVue.use(Vuex)
+localVue.use(ElementUI)
+const store = new Vuex.Store({
+  getters: {
+    baseApi: () => '/api',
+    roles: () => ['admin']
+  }
+})
+
+function flushPromises() {
+  return new Promise(resolve => setTimeout(resolve, 0))
 }
 
-function isBaseMeal(day, mealType) {
-  return Array.isArray(day.baseMealTypes) && day.baseMealTypes.includes(mealType)
+function deferred() {
+  let resolve
+  const promise = new Promise(resolvePromise => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
 }
 
-function isMealAdded(ctx, day, mealType) {
-  return ctx.calendarAdditions.some(item => item.date === day.date && item.mealType === mealType)
-}
-
-function resolveAdditionOrderId(ctx, mealType) {
-  const row = ctx.rows.find(item => item.customerId === ctx.selectedRow.customerId && (
-    (mealType === 'BREAKFAST' && item.mealBucket === 'BREAKFAST') ||
-    (mealType !== 'BREAKFAST' && item.mealBucket === 'LUNCH_DINNER')
-  ))
-  return row && row.orderId
-}
-
-function addExcludedMeal(ctx, date, mealType) {
-  let item = ctx.calendarExcludedDates.find(value => value.date === date)
-  if (!item) {
-    item = { date, mealTypes: [] }
-    ctx.calendarExcludedDates.push(item)
-  }
-  if (!item.mealTypes.includes(mealType)) {
-    item.mealTypes.push(mealType)
-  }
-}
-
-function removeExcludedMeal(ctx, date, mealType) {
-  const item = ctx.calendarExcludedDates.find(value => value.date === date)
-  if (!item) {
-    return
-  }
-  item.mealTypes = item.mealTypes.filter(value => value !== mealType)
-  if (item.mealTypes.length === 0) {
-    ctx.calendarExcludedDates = ctx.calendarExcludedDates.filter(value => value.date !== date)
-  }
-}
-
-function toggleMeal(ctx, day, mealType) {
-  if (!day.currentMonth) {
-    return
-  }
-  if (hasExcludedMeal(ctx, day.date, mealType)) {
-    removeExcludedMeal(ctx, day.date, mealType)
-    return
-  }
-  if (isMealAdded(ctx, day, mealType)) {
-    ctx.calendarAdditions = ctx.calendarAdditions.filter(item => !(item.date === day.date && item.mealType === mealType))
-    return
-  }
-  if (isBaseMeal(day, mealType)) {
-    addExcludedMeal(ctx, day.date, mealType)
-    return
-  }
-  const orderId = resolveAdditionOrderId(ctx, mealType)
-  if (orderId) {
-    ctx.calendarAdditions.push({ orderId, date: day.date, mealType, remark: '' })
-  }
-}
-
-function mealButtonClass(ctx, day, mealType) {
-  const excluded = hasExcludedMeal(ctx, day.date, mealType)
-  const scheduled = Array.isArray(day.scheduledMealTypes) && day.scheduledMealTypes.includes(mealType)
+function row(orderId, values = {}) {
   return {
-    'readonly-calendar__meal-button--base': isBaseMeal(day, mealType),
-    'readonly-calendar__meal-button--excluded': excluded,
-    'readonly-calendar__meal-button--added': isMealAdded(ctx, day, mealType),
-    'readonly-calendar__meal-button--scheduled': scheduled,
-    'readonly-calendar__meal-button--scheduled-cancelled': scheduled && excluded
+    orderId,
+    customerId: 1,
+    orderCode: `ORD-${orderId}`,
+    customerCode: 'A001',
+    customerName: '张三',
+    phone: '13800138000',
+    addressText: '地址：示例路',
+    specialRequirements: '米饭加量',
+    scheduleModeText: '每日',
+    mealTypeText: '早餐、午晚餐',
+    specification: '主1 / 副1 / 素1',
+    soupCount: 1,
+    breakfastCount: 5,
+    lunchDinnerCount: 10,
+    totalCount: 15,
+    verifiedCount: 3,
+    scheduledCount: 7,
+    remainingCount: 8,
+    estimatedRemainingCount: 6,
+    status: 1,
+    statusLabel: '进行中',
+    medicalRequirements: '少盐',
+    dealTime: '2026-09-20 14:05:00',
+    postoperativeInfo: '4个月',
+    dishRequirements: [],
+    dishRequirementsRaw: [],
+    allergyTags: ['花生'],
+    dietaryRestrictions: [],
+    dietaryRestrictionsRaw: [],
+    customMenuImage: '/uploads/menu.png',
+    ...values
   }
 }
 
-describe('CustomerMealStats editable calendar state', () => {
-  test('toggles base meal into exclusion and restores it', () => {
-    const ctx = { calendarExcludedDates: [], calendarAdditions: [], rows: [], selectedRow: { customerId: 1 }}
-    const day = { date: '2026-05-24', currentMonth: true, baseMealTypes: ['LUNCH'], scheduledMealTypes: [] }
+function calendar(orderId, overrides = []) {
+  return {
+    orderId,
+    customerId: 1,
+    orderCode: `ORD-${orderId}`,
+    customerCode: 'A001',
+    customerName: '张三',
+    statsMonth: '2026-09',
+    status: 1,
+    mealType: 'ALL',
+    breakfastCount: 1,
+    lunchDinnerCount: 2,
+    availableBreakfastCount: 1,
+    availableLunchDinnerCount: 2,
+    defaultIncludesSoup: true,
+    editable: true,
+    readOnlyReason: null,
+    revision: `revision-${orderId}`,
+    cells: [],
+    overrides
+  }
+}
 
-    toggleMeal(ctx, day, 'LUNCH')
-    expect(ctx.calendarExcludedDates).toEqual([{ date: '2026-05-24', mealTypes: ['LUNCH'] }])
+describe('CustomerMealStats order page', () => {
+  let wrapper
 
-    toggleMeal(ctx, day, 'LUNCH')
-    expect(ctx.calendarExcludedDates).toEqual([])
+  beforeEach(() => {
+    getMealStats.mockReset().mockResolvedValue({ content: [], totalElements: 0 })
+    getOrderMealCalendar.mockReset()
+    saveOrderMealCalendar.mockReset().mockResolvedValue({})
+    getDepletionWarnings.mockReset().mockResolvedValue([])
   })
 
-  test('toggles non-base meal into manual addition and removes it', () => {
-    const ctx = {
-      calendarExcludedDates: [],
-      calendarAdditions: [],
-      selectedRow: { customerId: 1 },
-      rows: [{ customerId: 1, mealBucket: 'LUNCH_DINNER', orderId: 99 }]
+  afterEach(() => {
+    if (wrapper) {
+      wrapper.destroy()
+      wrapper = null
     }
-    const day = { date: '2026-05-25', currentMonth: true, baseMealTypes: [], scheduledMealTypes: [] }
-
-    toggleMeal(ctx, day, 'DINNER')
-    expect(ctx.calendarAdditions).toEqual([{ orderId: 99, date: '2026-05-25', mealType: 'DINNER', remark: '' }])
-
-    toggleMeal(ctx, day, 'DINNER')
-    expect(ctx.calendarAdditions).toEqual([])
   })
 
-  test('allows scheduled base meal to be selected for cancellation', () => {
-    const ctx = { calendarExcludedDates: [], calendarAdditions: [], rows: [], selectedRow: { customerId: 1 }}
-    const day = {
-      date: '2026-05-25',
-      currentMonth: true,
-      baseMealTypes: ['LUNCH'],
-      scheduledMealTypes: ['LUNCH']
-    }
+  async function mountPage() {
+    wrapper = mount(CustomerMealStats, {
+      localVue,
+      store,
+      stubs: {
+        'customer-meal-quantity-grid': true,
+        CustomerDietCell: true
+      }
+    })
+    await flushPromises()
+    return wrapper
+  }
 
-    toggleMeal(ctx, day, 'LUNCH')
+  test('renders the 24 contracted business columns in order before the calendar action', async() => {
+    const expected = [
+      '手机号', '地址', '客户编号', '客户姓名', '特殊要求', '排餐模式', '餐次', '规格', '含汤',
+      '早餐', '午晚', '合计', '核销', '已排餐', '剩余', '预计剩余', '状态', '基本情况',
+      '成单时间', '术后天数', '菜品特殊要求', '过敏食物', '禁忌食物', '自定义菜单', '操作'
+    ]
+    getMealStats.mockResolvedValue({ content: [row(10)], totalElements: 1 })
+    const page = await mountPage()
+    await Vue.nextTick()
 
-    expect(ctx.calendarExcludedDates).toEqual([{ date: '2026-05-25', mealTypes: ['LUNCH'] }])
+    const header = page.find('.el-table__header-wrapper:not(.el-table__fixed-header-wrapper)')
+    const labels = header.findAll('th .cell').wrappers.map(cell => cell.text().trim()).filter(Boolean)
+    expect(labels).toEqual(expected)
+    expect(page.text()).toContain('餐数为当前订单累计值')
   })
 
-  test('marks scheduled cancellation state for grey check rendering', () => {
-    const ctx = {
-      calendarExcludedDates: [{ date: '2026-05-25', mealTypes: ['LUNCH'] }],
-      calendarAdditions: []
-    }
-    const day = {
-      date: '2026-05-25',
-      currentMonth: true,
-      baseMealTypes: ['LUNCH'],
-      scheduledMealTypes: ['LUNCH']
-    }
+  test('ignores an earlier order calendar response after switching to another order', async() => {
+    const firstRequest = deferred()
+    const secondRequest = deferred()
+    getOrderMealCalendar.mockReturnValueOnce(firstRequest.promise).mockReturnValueOnce(secondRequest.promise)
+    const page = await mountPage()
+    const first = row(10)
+    const second = row(11)
 
-    expect(mealButtonClass(ctx, day, 'LUNCH')).toMatchObject({
-      'readonly-calendar__meal-button--scheduled': true,
-      'readonly-calendar__meal-button--excluded': true,
-      'readonly-calendar__meal-button--scheduled-cancelled': true
+    page.vm.openOrderCalendar(first)
+    page.vm.openOrderCalendar(second)
+    secondRequest.resolve(calendar(11))
+    await flushPromises()
+    firstRequest.resolve(calendar(10))
+    await flushPromises()
+
+    expect(getOrderMealCalendar).toHaveBeenNthCalledWith(1, 10, page.vm.calendarMonth)
+    expect(getOrderMealCalendar).toHaveBeenNthCalledWith(2, 11, page.vm.calendarMonth)
+    expect(page.vm.calendarData.orderId).toBe(11)
+  })
+
+  test('saves only the selected order and preserves zero quantity in the override snapshot', async() => {
+    const page = await mountPage()
+    page.vm.selectedRow = row(22)
+    page.vm.calendarMonth = '2026-09'
+    page.vm.calendarData = calendar(22)
+    page.vm.calendarLoaded = true
+    page.vm.calendarRevision = 'revision-22'
+    page.vm.calendarDraftOverrides = [{
+      date: '2026-09-23',
+      mealType: 'LUNCH',
+      quantity: 0,
+      soupQuantity: null,
+      remark: '停餐'
+    }]
+    page.vm.calendarDialogVisible = true
+
+    await page.vm.saveCalendar()
+
+    expect(saveOrderMealCalendar).toHaveBeenCalledWith(22, {
+      statsMonth: '2026-09',
+      expectedRevision: 'revision-22',
+      overrides: [{ date: '2026-09-23', mealType: 'LUNCH', quantity: 0, soupQuantity: null, remark: '停餐' }]
     })
   })
 })

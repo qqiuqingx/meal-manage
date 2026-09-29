@@ -10,8 +10,7 @@ jest.mock('@/api/customer/profile', () => ({
   confirmCustomerImport: jest.fn(),
   add: jest.fn(),
   edit: jest.fn(),
-  del: jest.fn(),
-  saveMealScheduleAdjustments: jest.fn()
+  del: jest.fn()
 }))
 jest.mock('@/api/dishIngredient', () => ({ queryIngredients: jest.fn() }))
 jest.mock('@/api/dish', () => ({ queryDishes: jest.fn() }))

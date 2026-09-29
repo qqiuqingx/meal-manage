@@ -3,16 +3,18 @@ package me.zhengjie.modules.customer.profile.rest;
 import me.zhengjie.annotation.Log;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
-import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentRequest;
-import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentResult;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsRowDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerOrderMealCalendarDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerOrderMealCalendarSaveDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerOrderMealCalendarSaveResult;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
 import me.zhengjie.modules.customer.profile.domain.dto.intake.CustomerIntakeParseRequest;
 import me.zhengjie.modules.customer.profile.domain.dto.intake.CustomerIntakeParseResult;
 import me.zhengjie.modules.customer.profile.service.CustomerIntakeParseService;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
+import me.zhengjie.modules.customer.profile.service.CustomerMealStatsService;
 import me.zhengjie.utils.PageResult;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +35,9 @@ public class CustomerProfileController {
 
     @Autowired
     private CustomerProfileService profileService;
+
+    @Autowired
+    private CustomerMealStatsService customerMealStatsService;
 
     @Autowired
     private CustomerIntakeParseService intakeParseService;
@@ -56,19 +61,31 @@ public class CustomerProfileController {
     @PreAuthorize("@el.check('customerProfile:list')")
     public ResponseEntity<PageResult<CustomerMealStatsRowDto>> queryMealStats(CustomerMealStatsQueryCriteria criteria,
                                                                               @RequestParam(defaultValue = "1") Integer page,
-                                                                              @RequestParam(defaultValue = "10") Integer size) {
-        return ResponseEntity.ok(profileService.queryMealStats(criteria, page, size));
+                                                                              @RequestParam(defaultValue = "20") Integer size) {
+        return ResponseEntity.ok(customerMealStatsService.queryMealStats(criteria, page, size));
     }
 
     /**
-     * 保存客户排餐日历调整
+     * 查询单笔订单指定月份的排餐日历。
      */
-    @PutMapping("/mealStats/scheduleAdjustments")
-    @Log("保存客户排餐日历调整")
+    @GetMapping("/mealStats/orders/{orderId}/calendar")
+    @PreAuthorize("@el.check('customerProfile:list')")
+    public ResponseEntity<CustomerOrderMealCalendarDto> getOrderMealCalendar(
+            @PathVariable Long orderId,
+            @RequestParam String statsMonth) {
+        return ResponseEntity.ok(customerMealStatsService.getOrderCalendar(orderId, statsMonth));
+    }
+
+    /**
+     * 保存单笔订单指定月份的完整排餐覆盖快照。
+     */
+    @PutMapping("/mealStats/orders/{orderId}/calendar")
+    @Log("保存订单排餐日历")
     @PreAuthorize("@el.check('customerProfile:edit')")
-    public ResponseEntity<CustomerMealScheduleAdjustmentResult> saveMealScheduleAdjustments(
-            @Validated @RequestBody CustomerMealScheduleAdjustmentRequest request) {
-        return ResponseEntity.ok(profileService.saveMealScheduleAdjustments(request));
+    public ResponseEntity<CustomerOrderMealCalendarSaveResult> saveOrderMealCalendar(
+            @PathVariable Long orderId,
+            @Validated @RequestBody CustomerOrderMealCalendarSaveDto request) {
+        return ResponseEntity.ok(customerMealStatsService.saveOrderCalendar(orderId, request));
     }
 
     /**

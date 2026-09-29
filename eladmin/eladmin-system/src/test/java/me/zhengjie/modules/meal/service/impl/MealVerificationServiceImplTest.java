@@ -72,6 +72,7 @@ class MealVerificationServiceImplTest {
 
         when(mealPlanCustomerMapper.selectById(anyLong())).thenAnswer(invocation -> servings.get(invocation.getArgument(0)));
         when(mealPlanMapper.selectById(20L)).thenReturn(plan);
+        when(customerOrderMapper.selectInlineUpdateByIdForUpdate(10L)).thenReturn(order);
         when(customerOrderMapper.selectById(10L)).thenReturn(order);
         when(mealPlanCustomerMapper.markVerifiedIfPending(anyLong(), any(Date.class), eq("tester"))).thenReturn(1);
         when(customerOrderMapper.incrementVerifiedCountAndAmount(10L, new BigDecimal("45.00"))).thenAnswer(invocation -> {

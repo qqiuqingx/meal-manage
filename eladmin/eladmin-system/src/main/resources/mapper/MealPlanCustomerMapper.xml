@@ -118,6 +118,17 @@
           and deleted = 0
     </update>
 
+    <update id="softDeleteUnverifiedByIds">
+        update meal_plan_customer
+        set deleted = 1
+        where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          and deleted = 0
+          and (is_verified = 0 or is_verified is null)
+    </update>
+
     <select id="selectByMealPlanId" resultMap="BaseResultMap">
         select mpc.id, mpc.meal_plan_id, mpc.customer_id, mpc.customer_name, mpc.phone,
                cp.customer_code, mpc.order_id, mpc.serving_no, mpc.parent_package_id, mpc.child_package_id,
@@ -334,7 +345,9 @@
         group by mpc.order_id
     </select>
 
-    <select id="selectScheduledMealsByCustomerIdsAndDateRange" resultType="me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto">
+
+
+    <select id="selectScheduledMealsByOrderIdAndDateRange" resultType="me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto">
         select
             mpc.customer_id as customerId,
             mpc.order_id as orderId,
@@ -347,17 +360,14 @@
         join meal_plan mp on mpc.meal_plan_id = mp.id
         where mpc.deleted = 0
           and mp.deleted = 0
+          and mpc.order_id = #{orderId}
           and mp.record_date &gt;= #{startDate}
           and mp.record_date &lt;= #{endDate}
-          and mpc.customer_id in
-        <foreach collection="customerIds" item="customerId" open="(" separator="," close=")">
-            #{customerId}
-        </foreach>
         group by mpc.customer_id, mpc.order_id, mp.record_date, mp.meal_type
-        order by mpc.customer_id asc, mpc.order_id asc, mp.record_date asc, mp.meal_type asc
+        order by mp.record_date asc, mp.meal_type asc
     </select>
 
-    <select id="selectGeneratedByCustomerDateMeal" resultType="me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto">
+    <select id="selectGeneratedByOrderDateMeal" resultType="me.zhengjie.modules.meal.domain.dto.CustomerGeneratedMealPlanDto">
         select
             mp.id as mealPlanId,
             mpc.id as customerPlanId,
@@ -373,10 +383,25 @@
         where mpc.deleted = 0
           and mp.deleted = 0
           and mpc.customer_id = #{customerId}
+          and mpc.order_id = #{orderId}
           and mp.record_date = #{recordDate}
           and mp.meal_type = #{mealType}
         order by mpc.id asc
     </select>
+
+    <select id="countSuccessfulScheduledByOrderIdGroupedByMealType" resultType="me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto">
+        select mpc.order_id as orderId, mp.meal_type as mealType, count(*) as scheduledCount
+        from meal_plan_customer mpc
+        join meal_plan mp on mpc.meal_plan_id = mp.id
+        where mpc.deleted = 0
+          and mp.deleted = 0
+          and mpc.status = 1
+          and mpc.order_id = #{orderId}
+        group by mpc.order_id, mp.meal_type
+        order by mp.meal_type asc
+    </select>
+
+
 
     <!-- 根据排餐计划ID查询所有未核销的客户排餐记录 -->
     <select id="selectUnverifiedByMealPlanId" resultMap="BaseResultMap">

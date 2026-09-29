@@ -6,6 +6,7 @@ import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
 import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import me.zhengjie.modules.customer.order.domain.dto.OrderVerifiedCountDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -68,6 +69,18 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
     List<CustomerOrder> findAll(@Param("criteria") CustomerOrderQueryCriteria criteria, @Param("page") Page<CustomerOrder> page);
 
     /**
+     * 按客户用餐统计筛选条件对订单分页，避免按客户整月聚合后再内存切片。
+     *
+     * @param criteria 客户编号、姓名、手机号和月份筛选条件
+     * @param startedBeforeDate 订单开始日期上界（不含），为空时不按月份限制
+     * @param page MyBatis-Plus 分页对象
+     * @return 当前页订单及符合条件的总数
+     */
+    Page<CustomerOrder> findMealStatsOrders(@Param("criteria") CustomerMealStatsQueryCriteria criteria,
+                                            @Param("startedBeforeDate") LocalDate startedBeforeDate,
+                                            @Param("page") Page<CustomerOrder> page);
+
+    /**
      * 根据订单编号查询(排除指定ID)
      */
     int countByCodeExcludeId(@Param("orderCode") String orderCode, @Param("excludeId") Long excludeId);
@@ -106,16 +119,6 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      */
     List<CustomerOrder> findActiveOrdersByCustomerIds(@Param("customerIds") List<Long> customerIds,
                                                       @Param("startedBeforeDate") LocalDate startedBeforeDate);
-
-    /**
-     * 查询客户用餐统计日历可见的未完订单，包含进行中和暂停订单。
-     *
-     * @param customerIds 客户ID集合
-     * @param startedBeforeDate 订单开始日期上界（不含）
-     * @return 进行中或暂停且仍有剩余餐数的订单
-     */
-    List<CustomerOrder> findMealStatsCalendarOrdersByCustomerIds(@Param("customerIds") List<Long> customerIds,
-                                                                  @Param("startedBeforeDate") LocalDate startedBeforeDate);
 
     /**
      * 统计同一客户在同一时间段内的订单数量

@@ -118,7 +118,8 @@ public class MealVerificationServiceImpl implements MealVerificationService {
         }
 
         // 4. 获取订单信息
-        CustomerOrder order = customerOrderMapper.selectById(customerPlan.getOrderId());
+        // 核销事务统一按订单→排餐记录顺序串行化，与订单日历调整保持相同锁顺序。
+        CustomerOrder order = customerOrderMapper.selectInlineUpdateByIdForUpdate(customerPlan.getOrderId());
         if (order == null) {
             throw new BadRequestException("关联订单不存在");
         }
@@ -229,7 +230,8 @@ public class MealVerificationServiceImpl implements MealVerificationService {
         }
 
         // 查询订单，获取价格
-        CustomerOrder order = customerOrderMapper.selectById(logRecord.getOrderId());
+        // 先锁订单，再回退排餐核销状态，避免与日历减份形成“排餐记录→订单”死锁环。
+        CustomerOrder order = customerOrderMapper.selectInlineUpdateByIdForUpdate(logRecord.getOrderId());
         if (order == null) {
             throw new BadRequestException("关联订单不存在");
         }

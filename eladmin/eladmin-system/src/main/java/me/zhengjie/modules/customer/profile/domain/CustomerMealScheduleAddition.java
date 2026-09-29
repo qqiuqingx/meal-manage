@@ -10,7 +10,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 客户排餐日历人工新增记录。
+ * 订单排餐日历的日期餐次数量覆盖记录。
  */
 @Data
 @TableName("customer_meal_schedule_addition")
@@ -45,7 +45,7 @@ public class CustomerMealScheduleAddition implements Serializable {
     private String mealType;
 
     /**
-     * 该订单日期餐次的目标配送份数，历史记录缺省为一份。
+     * 该订单日期餐次的目标配送份数；缺省按一份处理，零份表示仅停用当前订单该日期餐次。
      */
     private Integer quantity;
 

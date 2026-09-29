@@ -16,9 +16,17 @@ export function getMealStats(params) {
   })
 }
 
-export function saveMealScheduleAdjustments(data) {
+export function getOrderMealCalendar(orderId, statsMonth) {
   return axios({
-    url: '/api/customerProfile/mealStats/scheduleAdjustments',
+    url: `/api/customerProfile/mealStats/orders/${orderId}/calendar`,
+    method: 'get',
+    params: { statsMonth }
+  })
+}
+
+export function saveOrderMealCalendar(orderId, data) {
+  return axios({
+    url: `/api/customerProfile/mealStats/orders/${orderId}/calendar`,
     method: 'put',
     data
   })
@@ -108,6 +116,8 @@ export function del(ids) {
 export default {
   getProfiles,
   getMealStats,
+  getOrderMealCalendar,
+  saveOrderMealCalendar,
   getProfile,
   getDietOptions,
   generateCode,
@@ -116,6 +126,5 @@ export default {
   confirmCustomerImport,
   add,
   edit,
-  del,
-  saveMealScheduleAdjustments
+  del
 }

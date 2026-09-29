@@ -134,16 +134,6 @@ public interface MealPlanService {
     void deleteMealPlanCustomers(List<Long> customerPlanIds);
 
     /**
-     * 删除客户指定日期餐次的未核销排餐记录；若存在已核销记录则抛出异常。
-     *
-     * @param customerId 客户ID
-     * @param recordDate 排餐日期，格式 yyyy-MM-dd
-     * @param mealType 餐次，支持 BREAKFAST / LUNCH / DINNER
-     * @return 删除的客户排餐记录数量
-     */
-    int deleteUnverifiedCustomerMealForCalendarAdjustment(Long customerId, String recordDate, String mealType);
-
-    /**
      * 将指定订单日期餐次的未核销结果行减到目标份数，保留已核销份及优先成功的结果。
      *
      * @param customerId 客户ID

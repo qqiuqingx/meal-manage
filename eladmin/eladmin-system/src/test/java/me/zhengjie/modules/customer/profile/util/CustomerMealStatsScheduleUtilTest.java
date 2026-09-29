@@ -1,7 +1,10 @@
 package me.zhengjie.modules.customer.profile.util;
 
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleCellDto;
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
+import me.zhengjie.exception.BadRequestException;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -10,43 +13,11 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CustomerMealStatsScheduleUtilTest {
-
-    @Test
-    void shouldBuildWeekdayScheduleFromStartMealAndExcludeDates() {
-        CustomerOrder order = new CustomerOrder();
-        order.setId(1L);
-        order.setCustomerId(10L);
-        order.setBreakfastCount(0);
-        order.setLunchDinnerCount(20);
-        order.setRemainingCount(20);
-        order.setStartDate(LocalDate.of(2026, 4, 1));
-        order.setEndDate(LocalDate.of(2026, 4, 7));
-        order.setStartMealType("LUNCH");
-        order.setMealType("ALL");
-        order.setScheduleMode("WEEKDAY");
-
-        ExcludedDateDto excluded = new ExcludedDateDto();
-        excluded.setDate("2026-04-02");
-        excluded.setMealTypes(Arrays.asList("DINNER"));
-
-        List<CustomerMealStatsScheduleUtil.ScheduleDay> days = CustomerMealStatsScheduleUtil.buildMonthScheduleDays(
-                Arrays.asList(order), Arrays.asList(excluded), "2026-04", "LUNCH_DINNER", Collections.emptyMap());
-
-        assertEquals(5, days.size());
-        assertEquals("2026-04-01", days.get(0).getDate());
-        assertEquals(Arrays.asList("LUNCH", "DINNER"), days.get(0).getMealTypes());
-        assertEquals("2026-04-02", days.get(1).getDate());
-        assertEquals(Arrays.asList("LUNCH"), days.get(1).getMealTypes());
-        assertEquals("2026-04-03", days.get(2).getDate());
-        assertEquals(Arrays.asList("LUNCH", "DINNER"), days.get(2).getMealTypes());
-        assertEquals("2026-04-06", days.get(3).getDate());
-        assertEquals(Arrays.asList("LUNCH", "DINNER"), days.get(3).getMealTypes());
-        assertEquals("2026-04-07", days.get(4).getDate());
-        assertEquals(Arrays.asList("LUNCH", "DINNER"), days.get(4).getMealTypes());
-    }
 
     @Test
     void shouldOnlyScheduleFutureMealsAfterImportedHistoricalVerification() {
@@ -71,66 +42,6 @@ class CustomerMealStatsScheduleUtilTest {
         assertEquals(Integer.valueOf(1), quantities.get("2026-09-26#DINNER"));
         assertEquals(Integer.valueOf(1), quantities.get("2026-09-27#LUNCH"));
         assertEquals(Integer.valueOf(1), quantities.get("2026-09-27#DINNER"));
-    }
-
-    @Test
-    void shouldRespectScheduledDeliveryDatesWithMealTypes() {
-        CustomerOrder order = new CustomerOrder();
-        order.setId(2L);
-        order.setCustomerId(10L);
-        order.setBreakfastCount(5);
-        order.setLunchDinnerCount(5);
-        order.setRemainingCount(10);
-        order.setStartDate(LocalDate.of(2026, 4, 1));
-        order.setEndDate(LocalDate.of(2026, 4, 30));
-        order.setStartMealType("BREAKFAST");
-        order.setMealType("ALL");
-        order.setScheduleMode("SCHEDULE");
-        order.setDeliveryDates("[{\"date\":\"2026-04-05\",\"mealTypes\":[\"BREAKFAST\",\"DINNER\"]},{\"date\":\"2026-05-01\",\"mealTypes\":[\"LUNCH\"]}]");
-
-        List<CustomerMealStatsScheduleUtil.ScheduleDay> breakfastDays = CustomerMealStatsScheduleUtil.buildMonthScheduleDays(
-                Arrays.asList(order), null, "2026-04", "BREAKFAST", Collections.emptyMap());
-        List<CustomerMealStatsScheduleUtil.ScheduleDay> lunchDinnerDays = CustomerMealStatsScheduleUtil.buildMonthScheduleDays(
-                Arrays.asList(order), null, "2026-04", "LUNCH_DINNER", Collections.emptyMap());
-
-        assertEquals(1, breakfastDays.size());
-        assertEquals("2026-04-05", breakfastDays.get(0).getDate());
-        assertEquals(Arrays.asList("BREAKFAST"), breakfastDays.get(0).getMealTypes());
-        assertEquals(1, lunchDinnerDays.size());
-        assertEquals("2026-04-05", lunchDinnerDays.get(0).getDate());
-        assertEquals(Arrays.asList("DINNER"), lunchDinnerDays.get(0).getMealTypes());
-    }
-
-    @Test
-    void shouldBuildBaseScheduleWithoutApplyingExcludedDates() {
-        CustomerOrder order = new CustomerOrder();
-        order.setId(3L);
-        order.setCustomerId(10L);
-        order.setBreakfastCount(0);
-        order.setLunchDinnerCount(20);
-        order.setStartDate(LocalDate.of(2026, 4, 1));
-        order.setEndDate(LocalDate.of(2026, 4, 1));
-        order.setStartMealType("LUNCH");
-        order.setMealType("ALL");
-        order.setScheduleMode("DAILY");
-
-        ExcludedDateDto excluded = new ExcludedDateDto();
-        excluded.setDate("2026-04-01");
-        excluded.setMealTypes(Arrays.asList("DINNER"));
-
-        List<CustomerMealStatsScheduleUtil.ScheduleDay> effectiveDays = CustomerMealStatsScheduleUtil.buildMonthScheduleDays(
-                Arrays.asList(order), Arrays.asList(excluded), "2026-04", "LUNCH_DINNER", Collections.emptyMap());
-        List<CustomerMealStatsScheduleUtil.ScheduleDay> baseDays = CustomerMealStatsScheduleUtil.buildMonthBaseScheduleDays(
-                Arrays.asList(order), "2026-04", "LUNCH_DINNER");
-
-        assertEquals(Arrays.asList("LUNCH"), effectiveDays.get(0).getMealTypes());
-        assertEquals(Arrays.asList("LUNCH", "DINNER"), baseDays.get(0).getMealTypes());
-        baseDays.get(0).addBaseMealTypes(baseDays.get(0).getMealTypes());
-        baseDays.get(0).addExcludedMealType("DINNER");
-        baseDays.get(0).addAddedMealType("BREAKFAST");
-        assertEquals(Arrays.asList("LUNCH", "DINNER"), baseDays.get(0).getBaseMealTypes());
-        assertEquals(Arrays.asList("DINNER"), baseDays.get(0).getExcludedMealTypes());
-        assertEquals(Arrays.asList("BREAKFAST"), baseDays.get(0).getAddedMealTypes());
     }
 
     @Test
@@ -159,9 +70,180 @@ class CustomerMealStatsScheduleUtilTest {
         assertEquals(0, cells.get(0).getQuantity());
         assertEquals("2026-04-02", cells.get(2).getDate());
         assertEquals("LUNCH", cells.get(2).getMealType());
-        assertEquals(1, cells.get(2).getBaseQuantity());
+        assertEquals(0, cells.get(2).getBaseQuantity());
         assertEquals(0, cells.get(2).getQuantity());
-        assertTrue(cells.get(2).getExcluded());
+        assertTrue(cells.get(2).getCustomerExcluded());
         assertTrue(cells.get(2).getDefaultIncludesSoup());
+    }
+
+    @Test
+    void shouldTreatZeroOverrideAsCancellationAndReleaseMealPoolForLaterDates() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(41L);
+        order.setLunchDinnerCount(3);
+        order.setStartDate(LocalDate.of(2026, 4, 1));
+        order.setEndDate(LocalDate.of(2026, 4, 2));
+        order.setMealType("LUNCH_DINNER");
+        order.setStartMealType("LUNCH");
+        order.setScheduleMode("DAILY");
+
+        CustomerMealScheduleAddition cancellation = new CustomerMealScheduleAddition();
+        cancellation.setOrderId(41L);
+        cancellation.setRecordDate(LocalDate.of(2026, 4, 1));
+        cancellation.setMealType("LUNCH");
+        cancellation.setQuantity(0);
+
+        java.util.Map<String, Integer> quantities = CustomerMealStatsScheduleUtil.buildOrderQuantities(
+                order, Collections.emptyList(), Collections.singletonList(cancellation), LocalDate.of(2026, 4, 2));
+
+        assertEquals(Integer.valueOf(0), quantities.get("2026-04-01#LUNCH"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-04-01#DINNER"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-04-02#LUNCH"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-04-02#DINNER"));
+    }
+
+    @Test
+    void shouldApplyHistoricalZeroOverrideBeforeAllocatingTheSelectedMonth() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(44L);
+        order.setLunchDinnerCount(2);
+        order.setStartDate(LocalDate.of(2026, 9, 30));
+        order.setEndDate(LocalDate.of(2026, 10, 2));
+        order.setMealType("LUNCH_DINNER");
+        order.setStartMealType("LUNCH");
+        order.setScheduleMode("DAILY");
+
+        CustomerMealScheduleAddition historicalCancellation = new CustomerMealScheduleAddition();
+        historicalCancellation.setOrderId(44L);
+        historicalCancellation.setRecordDate(LocalDate.of(2026, 9, 30));
+        historicalCancellation.setMealType("LUNCH");
+        historicalCancellation.setQuantity(0);
+
+        java.util.Map<String, Integer> quantities = CustomerMealStatsScheduleUtil.buildOrderQuantities(
+                order, Collections.emptyList(), Collections.singletonList(historicalCancellation), LocalDate.of(2026, 10, 1));
+
+        assertEquals(Integer.valueOf(0), quantities.get("2026-09-30#LUNCH"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-09-30#DINNER"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-10-01#LUNCH"));
+    }
+
+    @Test
+    void shouldKeepBreakfastPoolIndependentFromSharedLunchDinnerPoolWhenCancelled() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(45L);
+        order.setBreakfastCount(1);
+        order.setLunchDinnerCount(1);
+        order.setStartDate(LocalDate.of(2026, 4, 1));
+        order.setEndDate(LocalDate.of(2026, 4, 2));
+        order.setMealType("ALL");
+        order.setStartMealType("BREAKFAST");
+        order.setScheduleMode("DAILY");
+
+        CustomerMealScheduleAddition cancellation = new CustomerMealScheduleAddition();
+        cancellation.setOrderId(45L);
+        cancellation.setRecordDate(LocalDate.of(2026, 4, 1));
+        cancellation.setMealType("BREAKFAST");
+        cancellation.setQuantity(0);
+
+        java.util.Map<String, Integer> quantities = CustomerMealStatsScheduleUtil.buildOrderQuantities(
+                order, Collections.emptyList(), Collections.singletonList(cancellation), LocalDate.of(2026, 4, 2));
+
+        assertEquals(Integer.valueOf(0), quantities.get("2026-04-01#BREAKFAST"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-04-01#LUNCH"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-04-02#BREAKFAST"));
+        assertFalse(quantities.containsKey("2026-04-01#DINNER"));
+        assertFalse(quantities.containsKey("2026-04-02#LUNCH"));
+    }
+
+    @Test
+    void shouldExposeCustomerAndOrderExclusionsAsIndependentCellSources() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(42L);
+        order.setLunchDinnerCount(2);
+        order.setStartDate(LocalDate.of(2026, 4, 1));
+        order.setEndDate(LocalDate.of(2026, 4, 1));
+        order.setMealType("ALL");
+        order.setStartMealType("LUNCH");
+        order.setScheduleMode("DAILY");
+
+        CustomerMealScheduleAddition cancellation = new CustomerMealScheduleAddition();
+        cancellation.setOrderId(42L);
+        cancellation.setRecordDate(LocalDate.of(2026, 4, 1));
+        cancellation.setMealType("LUNCH");
+        cancellation.setQuantity(0);
+
+        ExcludedDateDto customerExclusion = new ExcludedDateDto();
+        customerExclusion.setDate("2026-04-01");
+        customerExclusion.setMealTypes(Collections.singletonList("DINNER"));
+
+        List<CustomerMealScheduleCellDto> cells = CustomerMealStatsScheduleUtil.buildMonthMealScheduleCells(
+                order, Collections.singletonList(customerExclusion), "2026-04", Collections.singletonList(cancellation));
+
+        CustomerMealScheduleCellDto lunch = cells.get(0);
+        assertEquals("LUNCH", lunch.getMealType());
+        assertEquals(0, lunch.getQuantity());
+        assertEquals(1, lunch.getBaseQuantity());
+        assertTrue(lunch.getManualOverride());
+        assertFalse(lunch.getCustomerExcluded());
+        assertTrue(lunch.getOrderExcluded());
+
+        CustomerMealScheduleCellDto dinner = cells.get(1);
+        assertEquals("DINNER", dinner.getMealType());
+        assertEquals(0, dinner.getQuantity());
+        assertFalse(dinner.getManualOverride());
+        assertTrue(dinner.getCustomerExcluded());
+        assertFalse(dinner.getOrderExcluded());
+    }
+
+    @Test
+    void shouldCalculateBaseQuantityWithEarlierMonthOverridesStillApplied() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(46L);
+        order.setLunchDinnerCount(2);
+        order.setStartDate(LocalDate.of(2026, 9, 30));
+        order.setEndDate(LocalDate.of(2026, 10, 1));
+        order.setMealType("LUNCH_DINNER");
+        order.setStartMealType("LUNCH");
+        order.setScheduleMode("DAILY");
+
+        CustomerMealScheduleAddition historicalCancellation = new CustomerMealScheduleAddition();
+        historicalCancellation.setOrderId(46L);
+        historicalCancellation.setRecordDate(LocalDate.of(2026, 9, 30));
+        historicalCancellation.setMealType("LUNCH");
+        historicalCancellation.setQuantity(0);
+        CustomerMealScheduleAddition currentCancellation = new CustomerMealScheduleAddition();
+        currentCancellation.setOrderId(46L);
+        currentCancellation.setRecordDate(LocalDate.of(2026, 10, 1));
+        currentCancellation.setMealType("LUNCH");
+        currentCancellation.setQuantity(0);
+
+        List<CustomerMealScheduleCellDto> cells = CustomerMealStatsScheduleUtil.buildMonthMealScheduleCells(
+                order, Collections.emptyList(), "2026-10", Arrays.asList(historicalCancellation, currentCancellation));
+        CustomerMealScheduleCellDto lunch = cells.stream()
+                .filter(cell -> "2026-10-01".equals(cell.getDate()) && "LUNCH".equals(cell.getMealType()))
+                .findFirst().orElseThrow(AssertionError::new);
+
+        assertEquals(1, lunch.getBaseQuantity());
+        assertEquals(0, lunch.getQuantity());
+        assertTrue(lunch.getOrderExcluded());
+    }
+
+    @Test
+    void shouldRejectNegativeQuantityOverrides() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(43L);
+        order.setLunchDinnerCount(2);
+        order.setStartDate(LocalDate.of(2026, 4, 1));
+        order.setEndDate(LocalDate.of(2026, 4, 1));
+        order.setMealType("LUNCH_DINNER");
+        order.setScheduleMode("DAILY");
+        CustomerMealScheduleAddition invalid = new CustomerMealScheduleAddition();
+        invalid.setOrderId(43L);
+        invalid.setRecordDate(LocalDate.of(2026, 4, 1));
+        invalid.setMealType("LUNCH");
+        invalid.setQuantity(-1);
+
+        assertThrows(BadRequestException.class, () -> CustomerMealStatsScheduleUtil.buildOrderQuantities(
+                order, Collections.emptyList(), Collections.singletonList(invalid), LocalDate.of(2026, 4, 1)));
     }
 }
