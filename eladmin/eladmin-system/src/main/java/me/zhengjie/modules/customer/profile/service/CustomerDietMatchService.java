@@ -69,9 +69,9 @@ public class CustomerDietMatchService {
     private static final Pattern WANT_SUFFIX = Pattern.compile("^(.+?)(?:想吃|爱吃|喜欢吃?)$");
     /** 并列连接词，仅在整词查不到字典时才拆。 */
     private static final Pattern CONNECTOR = Pattern.compile("以及|还有|或者|和|及|与|或|跟");
-    /** 查字典前可以去掉的修饰：「所有的鱼」「各类内脏」「辣的」。 */
+    /** 查字典前可以去掉的修饰：「所有的鱼」「各类内脏」「辣的」「肥腻食物」「花菜类」。整词能查到字典时不会去。 */
     private static final Pattern LOOKUP_NOISE_HEAD = Pattern.compile("^(?:所有的|所有|一切|各类|各种|任何|全部)");
-    private static final Pattern LOOKUP_NOISE_TAIL = Pattern.compile("(?:之类|等等|等|的|也|都)$");
+    private static final Pattern LOOKUP_NOISE_TAIL = Pattern.compile("(?:之类|等等|类食物|食物|食品|菜品|饮食|类|等|的|也|都)$");
 
     /** 词项所属方向：WANT=客户想吃（D 列语义），AVOID=客户不想吃/过敏（E 列语义）。 */
     private enum Polarity { WANT, AVOID }
