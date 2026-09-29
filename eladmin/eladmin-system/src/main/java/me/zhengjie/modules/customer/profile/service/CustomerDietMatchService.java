@@ -16,9 +16,11 @@ import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -27,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -37,9 +40,48 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CustomerDietMatchService {
 
-    private static final Pattern ITEM_SEPARATOR = Pattern.compile("[、，,；;；/／\\r\\n]+");
-    private static final List<String> KNOWN_PREFIXES = Arrays.asList(
-            "不喜欢吃", "不能吃", "不吃", "喜欢吃", "想吃", "忌口", "避免");
+    private static final String SIDE_WANT = "DISH_REQUIREMENTS";
+    private static final String SIDE_AVOID = "DIETARY_RESTRICTIONS";
+
+    /** 词项分隔符（文本已先做 NFKC 归一化，全角标点此时已是半角）。 */
+    private static final Pattern ITEM_SEPARATOR = Pattern.compile("[、,;:。.·/\\s&+|!?()]+");
+    /** 括号内的补充说明，如「海鲜（除鱼虾）」「[偷笑]」「【饮食禁忌】」，拆词前整体去掉。 */
+    private static final Pattern ANNOTATION = Pattern.compile("\\([^)]*\\)|\\[[^\\]]*\\]|【[^】]*】|「[^」]*」");
+    private static final Pattern ZERO_WIDTH = Pattern.compile("[\\u200B-\\u200D\\u2060\\uFEFF\\uFE0F]");
+    private static final Pattern SYMBOLS = Pattern.compile("\\p{So}");
+    private static final Pattern EDGE_PUNCTUATION = Pattern.compile("^[\\p{P}\\p{S}\\s]+|[\\p{P}\\p{S}\\s]+$");
+    private static final Pattern PURE_NUMBER = Pattern.compile("\\d+(?:\\.\\d+)?");
+
+    /** 否定表达（客户不想吃）。长的写在前面，Java 正则按顺序而不是最长匹配。 */
+    private static final String AVOID_CORE = "不(?:太|是很|怎么|特别|大)?(?:喜欢吃?|爱吃|想吃|能吃|可以吃|要吃)"
+            + "|不吃|不要吃?|忌口|禁止|禁用|避免|拒绝|少安排|少吃";
+    /** 肯定表达（客户想吃）。 */
+    private static final String WANT_CORE = "喜欢吃?|爱吃|想吃|要吃|多安排|多吃";
+    /** 词首前缀：允许「忌」「禁忌」「过敏食物」这类标签式前缀。 */
+    private static final Pattern AVOID_PREFIX = Pattern.compile("^(?:" + AVOID_CORE + "|禁忌|忌|过敏(?:食物|源|原)?)");
+    private static final Pattern WANT_PREFIX = Pattern.compile("^(?:" + WANT_CORE + ")");
+    /** 词中粘连拆分用：不含单字「忌」和「禁忌」，避免把「痛风禁忌」拆坏。 */
+    private static final Pattern AVOID_GLUE = Pattern.compile("(?:" + AVOID_CORE + ")");
+    private static final Pattern WANT_GLUE = Pattern.compile("(?:" + WANT_CORE + ")");
+    /** 后缀：山药过敏、虾有轻微过敏、金耳过敏一定注意点缀。 */
+    private static final Pattern ALLERGY_SUFFIX = Pattern.compile("^(.+?)有?(?:轻微|轻度|严重|一点)?(?:过敏|不耐受)");
+    private static final Pattern AVOID_SUFFIX = Pattern.compile("^(.+?)(?:不吃|不能吃|不要|不喜欢|不爱吃|忌口)$");
+    private static final Pattern WANT_SUFFIX = Pattern.compile("^(.+?)(?:想吃|爱吃|喜欢吃?)$");
+    /** 并列连接词，仅在整词查不到字典时才拆。 */
+    private static final Pattern CONNECTOR = Pattern.compile("以及|还有|或者|和|及|与|或|跟");
+    /** 查字典前可以去掉的修饰：「所有的鱼」「各类内脏」「辣的」。 */
+    private static final Pattern LOOKUP_NOISE_HEAD = Pattern.compile("^(?:所有的|所有|一切|各类|各种|任何|全部)");
+    private static final Pattern LOOKUP_NOISE_TAIL = Pattern.compile("(?:之类|等等|等|的|也|都)$");
+
+    /** 词项所属方向：WANT=客户想吃（D 列语义），AVOID=客户不想吃/过敏（E 列语义）。 */
+    private enum Polarity { WANT, AVOID }
+
+    /** 一个词项拆出的前缀方向、后缀方向和剩余正文。 */
+    private static final class ParsedTerm {
+        private Polarity prefix;
+        private Polarity suffix;
+        private String body;
+    }
 
     /**
      * 计算有序饮食字典快照摘要，确认时用于拒绝过期候选。
@@ -92,9 +134,10 @@ public class CustomerDietMatchService {
             rowsByCode.computeIfAbsent(sourceRow.getEffectiveCode(), key -> new ArrayList<>()).add(sourceRow);
         }
 
+        Map<String, List<CustomerDietOptionDto>> index = buildIndex(options);
         for (Map.Entry<String, List<CustomerDietSourceRow>> entry : rowsByCode.entrySet()) {
             ImportCandidate candidate = byCode.get(entry.getKey());
-            CustomerDietImportData data = aggregate(entry.getValue(), options);
+            CustomerDietImportData data = aggregate(entry.getValue(), index);
             candidate.getParsed().setDietImportData(data);
             mergeWithExisting(candidate, data);
         }
@@ -177,11 +220,11 @@ public class CustomerDietMatchService {
      * 合并客户第二工作表的医嘱、日期、术后文本及饮食原文块。
      *
      * @param rows 同一编号下按来源行排序的记录
-     * @param options 当前字典选项
+     * @param index 按名称建好的字典索引
      * @return 合并后的导入数据及词项匹配结果
      */
     private CustomerDietImportData aggregate(List<CustomerDietSourceRow> rows,
-                                             List<CustomerDietOptionDto> options) {
+                                             Map<String, List<CustomerDietOptionDto>> index) {
         CustomerDietImportData data = new CustomerDietImportData();
         Set<String> medical = new LinkedHashSet<>();
         Set<String> postoperative = new LinkedHashSet<>();
@@ -201,8 +244,8 @@ public class CustomerDietMatchService {
             for (String issue : row.getIssues()) {
                 data.getIssues().add(issue);
             }
-            data.getMatches().addAll(matchCell(row, 4, "DISH_REQUIREMENTS", row.getDishRequirementsRaw(), options));
-            data.getMatches().addAll(matchCell(row, 5, "DIETARY_RESTRICTIONS", row.getDietaryRestrictionsRaw(), options));
+            data.getMatches().addAll(matchCell(row, 4, "DISH_REQUIREMENTS", row.getDishRequirementsRaw(), index));
+            data.getMatches().addAll(matchCell(row, 5, "DIETARY_RESTRICTIONS", row.getDietaryRestrictionsRaw(), index));
         }
         data.setMedicalRequirements(singleNonBlank(medical));
         if (nonBlankValues(medical).size() > 1) {
@@ -222,39 +265,220 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 对 D/E 单元格先整段匹配，再按分隔符拆词做精确匹配。
+     * 对 D/E 单元格先整段匹配，再清洗、拆词、判断肯定/否定方向后逐词精确匹配。
+     * <p>
+     * 方向规则：D 列默认是客户想吃，E 列默认是客户不想吃/过敏。词项自带的前缀
+     * （不要、不喜欢、喜欢吃、想吃…）或后缀（…过敏）优先于列默认值；前缀会延续到后面没有
+     * 前缀的词项，直到出现新的前缀。词项最终方向与所在列相反时，归入相反方向并在提示里说明。
      *
      * @param row 原始来源行
      * @param sourceColumn Excel 列号，1 基
-     * @param side 列方向
+     * @param side 所在列的默认方向
      * @param rawText 完整单元格原文
-     * @param options 当前字典候选
+     * @param index 当前字典名称索引
      * @return 逐词项匹配结果
      */
     private List<CustomerDietMatchDto> matchCell(CustomerDietSourceRow row, int sourceColumn,
                                                  String side, String rawText,
-                                                 List<CustomerDietOptionDto> options) {
+                                                 Map<String, List<CustomerDietOptionDto>> index) {
         if (isBlank(rawText)) {
             return new ArrayList<>();
         }
-        List<CustomerDietOptionDto> exactWholeCell = findOptions(rawText.trim(), options);
+        List<CustomerDietOptionDto> exactWholeCell = findOptions(rawText, index);
         if (!exactWholeCell.isEmpty()) {
             return new ArrayList<>(Arrays.asList(createMatch(row, sourceColumn, side, rawText,
-                    rawText.trim(), rawText, 0, exactWholeCell)));
+                    rawText.trim(), rawText.trim(), 0, exactWholeCell)));
         }
-        String[] terms = ITEM_SEPARATOR.split(rawText, -1);
+        Polarity sticky = SIDE_WANT.equals(side) ? Polarity.WANT : Polarity.AVOID;
         List<CustomerDietMatchDto> matches = new ArrayList<>();
         int termIndex = 0;
-        for (String term : terms) {
-            String rawTerm = term.trim();
-            if (rawTerm.isEmpty()) {
+        for (String rawTerm : ITEM_SEPARATOR.split(cleanCell(rawText))) {
+            String term = EDGE_PUNCTUATION.matcher(rawTerm).replaceAll("");
+            if (term.isEmpty() || PURE_NUMBER.matcher(term).matches()) {
                 continue;
             }
-            String lookup = stripKnownPrefix(rawTerm);
-            List<CustomerDietOptionDto> candidates = findOptions(lookup, options);
-            matches.add(createMatch(row, sourceColumn, side, rawText, rawTerm, lookup, termIndex++, candidates));
+            ParsedTerm whole = parseTerm(term, index);
+            boolean wholeKnown = whole.body.isEmpty() || !findOptions(whole.body, index).isEmpty();
+            List<String> expressions = wholeKnown ? Collections.singletonList(term) : splitConnectedExpressions(term);
+            for (String expression : expressions) {
+                ParsedTerm parsed = parseTerm(expression, index);
+                if (parsed.prefix != null) {
+                    sticky = parsed.prefix;
+                }
+                if (parsed.body.isEmpty()) {
+                    continue;
+                }
+                Polarity polarity = parsed.suffix != null ? parsed.suffix : sticky;
+                String effectiveSide = polarity == Polarity.WANT ? SIDE_WANT : SIDE_AVOID;
+                List<String> pieces = splitConnectors(parsed.body, index);
+                for (String piece : pieces) {
+                    String lookup = refineLookup(piece, index);
+                    String rawItem = pieces.size() == 1 ? expression : piece;
+                    CustomerDietMatchDto match = createMatch(row, sourceColumn, effectiveSide, rawText,
+                            rawItem, lookup, termIndex++, findOptions(lookup, index));
+                    if (!effectiveSide.equals(side)) {
+                        String note = "来源在" + (sourceColumn == 4 ? "D" : "E") + "列，但原文是"
+                                + (polarity == Polarity.WANT ? "肯定" : "否定") + "表达，已归入"
+                                + (polarity == Polarity.WANT ? "客户想吃" : "客户不想吃/过敏");
+                        match.setMessage(join(match.getMessage(), note));
+                    }
+                    matches.add(match);
+                }
+            }
         }
         return matches;
+    }
+
+    /**
+     * 拆词前的文本清洗：NFKC 归一化（全角转半角、NBSP 转空格）、去零宽字符、
+     * 去括号说明和表情符号。只做字符层面的规整，不涉及任何近似匹配。
+     */
+    private String cleanCell(String text) {
+        String result = canonical(text);
+        result = ANNOTATION.matcher(result).replaceAll(" ");
+        return SYMBOLS.matcher(result).replaceAll(" ");
+    }
+
+    /** 字典名称与查找文本共用的规范形式。 */
+    private String canonical(String text) {
+        String result = Normalizer.normalize(text, Normalizer.Form.NFKC);
+        return ZERO_WIDTH.matcher(result).replaceAll("").trim();
+    }
+
+    /**
+     * 拆出词项的前缀方向、后缀方向和正文。整词本身就是字典名称时不做任何剥离，
+     * 正文剥完前缀后是字典名称时也不再剥后缀。
+     */
+    private ParsedTerm parseTerm(String expression, Map<String, List<CustomerDietOptionDto>> index) {
+        ParsedTerm term = new ParsedTerm();
+        term.body = expression;
+        if (!findOptions(expression, index).isEmpty()) {
+            return term;
+        }
+        Matcher matcher = AVOID_PREFIX.matcher(expression);
+        if (matcher.find()) {
+            term.prefix = Polarity.AVOID;
+        } else {
+            matcher = WANT_PREFIX.matcher(expression);
+            if (matcher.find()) {
+                term.prefix = Polarity.WANT;
+            }
+        }
+        if (term.prefix != null) {
+            term.body = expression.substring(matcher.end()).trim();
+        }
+        if (term.body.isEmpty() || !findOptions(term.body, index).isEmpty()) {
+            return term;
+        }
+        matcher = ALLERGY_SUFFIX.matcher(term.body);
+        if (matcher.find()) {
+            term.suffix = Polarity.AVOID;
+            term.body = cleanBody(matcher.group(1).trim(), index);
+            return term;
+        }
+        matcher = AVOID_SUFFIX.matcher(term.body);
+        if (matcher.find()) {
+            term.suffix = Polarity.AVOID;
+            term.body = cleanBody(matcher.group(1).trim(), index);
+            return term;
+        }
+        matcher = WANT_SUFFIX.matcher(term.body);
+        if (matcher.find()) {
+            term.suffix = Polarity.WANT;
+            term.body = cleanBody(matcher.group(1).trim(), index);
+        }
+        return term;
+    }
+
+    /**
+     * 按重复出现的明确表达前缀拆开紧邻词项（「不吃猪肉不吃牛肉」）。
+     * 从开头前缀之后开始扫描，且每次命中后跳过整个前缀，避免「不太喜欢吃」被从中间拆开。
+     * 拆出的残片（如「也」「都」）没有正文，后续会被丢弃。
+     *
+     * @param term 已按标点与空白拆出的原词项
+     * @return 顺序不变的独立表达
+     */
+    private List<String> splitConnectedExpressions(String term) {
+        List<String> expressions = new ArrayList<>();
+        int start = 0;
+        int index = leadingPrefixLength(term);
+        while (index < term.length()) {
+            int length = gluePrefixLength(term, index);
+            if (length > 0) {
+                if (index > start) {
+                    expressions.add(term.substring(start, index));
+                    start = index;
+                }
+                index += length;
+            } else {
+                index++;
+            }
+        }
+        expressions.add(term.substring(start));
+        return expressions;
+    }
+
+    private int leadingPrefixLength(String text) {
+        Matcher matcher = AVOID_PREFIX.matcher(text);
+        if (matcher.find()) {
+            return matcher.end();
+        }
+        matcher = WANT_PREFIX.matcher(text);
+        return matcher.find() ? matcher.end() : 0;
+    }
+
+    private int gluePrefixLength(String text, int from) {
+        Matcher matcher = AVOID_GLUE.matcher(text).region(from, text.length());
+        if (matcher.lookingAt()) {
+            return matcher.end() - from;
+        }
+        matcher = WANT_GLUE.matcher(text).region(from, text.length());
+        return matcher.lookingAt() ? matcher.end() - from : 0;
+    }
+
+    /**
+     * 按「和/及/与/或…」拆并列词项。整词能查到字典、或连接词在开头/结尾（如「和牛」）时不拆。
+     */
+    private List<String> splitConnectors(String body, Map<String, List<CustomerDietOptionDto>> index) {
+        if (!findOptions(body, index).isEmpty()) {
+            return Collections.singletonList(body);
+        }
+        String[] parts = CONNECTOR.split(body);
+        if (parts.length < 2) {
+            return Collections.singletonList(body);
+        }
+        List<String> result = new ArrayList<>();
+        for (String part : parts) {
+            String trimmed = part.trim();
+            if (trimmed.isEmpty()) {
+                return Collections.singletonList(body);
+            }
+            result.add(trimmed);
+        }
+        return result;
+    }
+
+    /** 整词查不到时，去掉「所有的」「…的」「…也」这类不影响名称的修饰再查。 */
+    private String refineLookup(String piece, Map<String, List<CustomerDietOptionDto>> index) {
+        if (!findOptions(piece, index).isEmpty()) {
+            return piece;
+        }
+        String refined = LOOKUP_NOISE_HEAD.matcher(piece).replaceFirst("").trim();
+        refined = cleanBody(refined, index);
+        return refined.isEmpty() ? piece : refined;
+    }
+
+    /** 正文本身是字典名称时原样返回，否则反复去掉尾部的「的/也/都/等」。 */
+    private String cleanBody(String body, Map<String, List<CustomerDietOptionDto>> index) {
+        String result = body;
+        while (findOptions(result, index).isEmpty()) {
+            String next = LOOKUP_NOISE_TAIL.matcher(result).replaceFirst("").trim();
+            if (next.isEmpty() || next.equals(result)) {
+                break;
+            }
+            result = next;
+        }
+        return result;
     }
 
     /**
@@ -271,8 +495,8 @@ public class CustomerDietMatchService {
      * @return 匹配展示 DTO
      */
     private CustomerDietMatchDto createMatch(CustomerDietSourceRow row, int sourceColumn,
-                                              String side, String cellText, String rawText, String lookup,
-                                              int termIndex, List<CustomerDietOptionDto> candidates) {
+                                             String side, String cellText, String rawText, String lookup,
+                                             int termIndex, List<CustomerDietOptionDto> candidates) {
         CustomerDietMatchDto match = new CustomerDietMatchDto();
         match.setSourceKey("DIET:" + row.getSourceRow() + ":" + sourceColumn + ":" + termIndex);
         match.setSourceRow(row.getSourceRow());
@@ -311,36 +535,33 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 按字典名称做全等匹配，不执行模糊或相似度搜索。
+     * 按名称建立字典索引，每次导入只建一次，避免每个词项都全表扫描。
      *
-     * @param exactName 规范查找文本
-     * @param options 当前可选字典
-     * @return 名称相同的所有候选
+     * @param options 当前有效字典选项
+     * @return 规范化名称到同名候选列表（保持原顺序）的映射
      */
-    private List<CustomerDietOptionDto> findOptions(String exactName, List<CustomerDietOptionDto> options) {
-        return options.stream().filter(option -> exactName.equals(option.getName())).collect(Collectors.toList());
+    private Map<String, List<CustomerDietOptionDto>> buildIndex(List<CustomerDietOptionDto> options) {
+        Map<String, List<CustomerDietOptionDto>> index = new HashMap<>();
+        for (CustomerDietOptionDto option : options) {
+            if (option == null || option.getName() == null) {
+                continue;
+            }
+            index.computeIfAbsent(canonical(option.getName()), key -> new ArrayList<>()).add(option);
+        }
+        return index;
     }
 
     /**
-     * 只去除已确认支持的表达前缀，不改变 D/E 的业务方向。
+     * 按字典名称做全等匹配（仅忽略全半角、NBSP、零宽字符和首尾空白），不执行模糊或相似度搜索。
      *
-     * @param term 原词项
-     * @return 去除前缀后的字典查找文本
+     * @param exactName 查找文本
+     * @param index 字典名称索引
+     * @return 名称相同的所有候选
      */
-    private String stripKnownPrefix(String term) {
-        String result = term;
-        boolean changed;
-        do {
-            changed = false;
-            for (String prefix : KNOWN_PREFIXES) {
-                if (result.startsWith(prefix) && result.length() > prefix.length()) {
-                    result = result.substring(prefix.length()).trim();
-                    changed = true;
-                    break;
-                }
-            }
-        } while (changed);
-        return result;
+    private List<CustomerDietOptionDto> findOptions(String exactName,
+                                                    Map<String, List<CustomerDietOptionDto>> index) {
+        List<CustomerDietOptionDto> found = index.get(canonical(exactName));
+        return found == null ? Collections.<CustomerDietOptionDto>emptyList() : found;
     }
 
     /**
