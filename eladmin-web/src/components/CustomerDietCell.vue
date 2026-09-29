@@ -6,10 +6,10 @@
     </div>
     <div v-else class="customer-diet-cell__text">—</div>
     <div class="customer-diet-cell__label">已确认对象</div>
-    <div v-if="matchedItems.length" class="customer-diet-cell__text">
-      <span v-for="(item, index) in matchedItems" :key="item.type + ':' + item.id">
-        {{ index ? '、' : '' }}{{ typeLabel(item.type) }}：{{ item.name || ('#' + item.id) }}
-      </span>
+    <div v-if="matchedGroups.length">
+      <div v-for="group in matchedGroups" :key="group.type" class="customer-diet-cell__text">
+        {{ typeLabel(group.type) }}：{{ group.names }}
+      </div>
     </div>
     <div v-else class="customer-diet-cell__text">—</div>
   </div>
@@ -28,6 +28,23 @@ export default {
     },
     matchedItems() {
       return (this.items || []).filter(item => item && item.type && item.id != null)
+    },
+    /** 按类型合并已确认对象，相同类型的名称用顿号连接，每个类型单独一行展示。
+     * @returns {Array<{type: string, names: string}>} 合并后的分组，保持类型首次出现顺序
+     */
+    matchedGroups() {
+      const groups = []
+      const indexByType = {}
+      this.matchedItems.forEach(item => {
+        const name = item.name || ('#' + item.id)
+        if (indexByType[item.type] === undefined) {
+          indexByType[item.type] = groups.length
+          groups.push({ type: item.type, names: name })
+        } else {
+          groups[indexByType[item.type]].names += '、' + name
+        }
+      })
+      return groups
     }
   },
   methods: {
