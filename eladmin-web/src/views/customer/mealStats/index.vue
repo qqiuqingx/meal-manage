@@ -99,6 +99,21 @@
           {{ row.soupLabel || '-' }}
         </template>
       </el-table-column>
+      <el-table-column column-key="medicalRequirements" label="医嘱" min-width="180">
+        <template slot-scope="{ row }">
+          <div class="multiline-cell">{{ row.medicalRequirements || '-' }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column column-key="dishRequirements" label="菜品特殊要求" min-width="240">
+        <template slot-scope="{ row }">
+          <CustomerDietCell :raw="row.dishRequirementsRaw" :items="row.dishRequirements" />
+        </template>
+      </el-table-column>
+      <el-table-column column-key="dietaryRestrictions" label="客户禁忌" min-width="240">
+        <template slot-scope="{ row }">
+          <CustomerDietCell :raw="row.dietaryRestrictionsRaw" :items="row.dietaryRestrictions" />
+        </template>
+      </el-table-column>
       <el-table-column label="送餐情况" prop="deliveryInfo" min-width="150" />
       <el-table-column label="购买时间" prop="purchaseDateText" width="100" align="center">
         <template slot-scope="{ row }">
@@ -133,7 +148,7 @@
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="110" align="center" fixed="right">
+      <el-table-column column-key="actions" label="操作" width="110" align="center" fixed="right">
         <template slot-scope="{ row }">
           <el-button
             v-if="row.firstRowInGroup"
@@ -233,6 +248,7 @@
 import { getMealStats, saveMealScheduleAdjustments } from '@/api/customer/profile'
 import { getDepletionWarnings } from '@/api/mealPlan'
 import CustomerMealQuantityGrid from './CustomerMealQuantityGrid'
+import CustomerDietCell from '@/components/CustomerDietCell.vue'
 
 const defaultQuery = () => ({
   customerCode: '',
@@ -249,7 +265,7 @@ function formatCurrentMonth() {
 
 export default {
   name: 'CustomerMealStats',
-  components: { CustomerMealQuantityGrid },
+  components: { CustomerMealQuantityGrid, CustomerDietCell },
   data() {
     return {
       loading: false,
@@ -513,8 +529,13 @@ export default {
       this.query = defaultQuery()
       this.loadData(true)
     },
-    tableSpanMethod({ row, columnIndex }) {
-      if (columnIndex > 4 && columnIndex !== 11) {
+    /** 合并同一客户的共享资料与操作列，保留餐池专属列逐行展示。
+     * @param {Object} context 当前表格行、列及列位置
+     * @returns {number[]} 单元格跨行与跨列数量
+     */
+    tableSpanMethod({ row, column, columnIndex }) {
+      const sharedColumn = columnIndex <= 4 || ['medicalRequirements', 'dishRequirements', 'dietaryRestrictions', 'actions'].includes(column.columnKey)
+      if (!sharedColumn) {
         return [1, 1]
       }
       if (row.firstRowInGroup) {

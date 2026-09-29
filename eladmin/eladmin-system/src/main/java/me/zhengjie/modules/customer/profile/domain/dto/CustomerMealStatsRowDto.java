@@ -32,6 +32,19 @@ public class CustomerMealStatsRowDto {
 
     private String soupLabel;
 
+    /** 客户档案中的医嘱原文。 */
+    private String medicalRequirements;
+
+    /** 客户想吃或菜品特殊要求的已确认对象与完整原文。 */
+    private List<CustomerDietItemDto> dishRequirements;
+
+    private List<String> dishRequirementsRaw;
+
+    /** 客户禁忌的已确认对象与完整原文。 */
+    private List<CustomerDietItemDto> dietaryRestrictions;
+
+    private List<String> dietaryRestrictionsRaw;
+
     private String deliveryInfo;
 
     private String purchaseDateText;

@@ -83,12 +83,14 @@
           <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'specialRequirements')">{{ scope.row.specialRequirements || '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column column-key="dietInfo" label="饮食资料" width="100" align="center">
+      <el-table-column column-key="dishRequirements" label="菜品特殊要求" min-width="240">
         <template slot-scope="scope">
-          <el-popover placement="left" width="380" trigger="click">
-            <CustomerDietInfo :customer="scope.row" />
-            <el-button slot="reference" type="text" size="mini">查看</el-button>
-          </el-popover>
+          <CustomerDietCell :raw="scope.row.dishRequirementsRaw" :items="scope.row.dishRequirements" />
+        </template>
+      </el-table-column>
+      <el-table-column column-key="dietaryRestrictions" label="客户禁忌" min-width="240">
+        <template slot-scope="scope">
+          <CustomerDietCell :raw="scope.row.dietaryRestrictionsRaw" :items="scope.row.dietaryRestrictions" />
         </template>
       </el-table-column>
       <el-table-column label="手机号" prop="phone" width="145">
@@ -470,7 +472,10 @@
       <el-form ref="form" :model="form" :rules="rules" size="small" label-width="110px">
         <el-card v-if="form.id" shadow="never" class="order-diet-card">
           <div slot="header">客户饮食共享信息</div>
-          <CustomerDietInfo :customer="form" />
+          <div class="order-diet-card__heading">菜品特殊要求</div>
+          <CustomerDietCell :raw="form.dishRequirementsRaw" :items="form.dishRequirements" />
+          <div class="order-diet-card__heading">客户禁忌</div>
+          <CustomerDietCell :raw="form.dietaryRestrictionsRaw" :items="form.dietaryRestrictions" />
         </el-card>
         <OrderForm
           ref="orderFormRef"
@@ -537,7 +542,7 @@ import { parseTime } from '@/utils/index'
 import { getToken } from '@/utils/auth'
 import { mapGetters } from 'vuex'
 import Sortable from 'sortablejs'
-import CustomerDietInfo from '@/components/CustomerDietInfo.vue'
+import CustomerDietCell from '@/components/CustomerDietCell.vue'
 
 const COLUMN_ORDER_STORAGE_KEY = 'customer-order-column-order-v1'
 
@@ -605,7 +610,7 @@ function cleanReplaceRules(rules) {
 
 export default {
   name: 'CustomerOrder',
-  components: { crudOperation, rrOperation, OrderForm, CustomerDietInfo },
+  components: { crudOperation, rrOperation, OrderForm, CustomerDietCell },
   mixins: [presenter(), header(), form(createOrderDefaultForm()), crud()],
   cruds() {
     return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }, query: { orderCode: '', customerCode: '', customerName: '', status: null, customerSource: null, scheduleDate: null }})
@@ -1509,5 +1514,12 @@ export default {
   display: flex;
   align-items: center;
   width: 100%;
+}
+.order-diet-card__heading {
+  font-weight: 600;
+  margin: 12px 0 6px;
+}
+.order-diet-card__heading:first-of-type {
+  margin-top: 0;
 }
 </style>

@@ -2083,6 +2083,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         row.setAddressText(buildAddressText(profile, addresses));
         row.setRemarkInfo(defaultString(profile.getRemark()));
         row.setSpecialRequirementText(buildSpecialRequirementText(profile));
+        row.setMedicalRequirements(profile.getMedicalRequirements());
+        row.setDishRequirements(profile.getDishRequirements());
+        row.setDishRequirementsRaw(profile.getDishRequirementsRaw());
+        row.setDietaryRestrictions(profile.getDietaryRestrictions());
+        row.setDietaryRestrictionsRaw(profile.getDietaryRestrictionsRaw());
         row.setMealBucket(mealBucket);
         row.setScheduleDays(CustomerMealStatsScheduleUtil.buildMonthScheduleDays(
                 orders, profile.getExcludedDates(), statsMonth, mealBucket, additionsByOrder));

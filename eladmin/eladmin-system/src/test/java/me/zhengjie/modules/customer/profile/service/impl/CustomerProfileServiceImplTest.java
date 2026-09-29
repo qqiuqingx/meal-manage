@@ -1097,6 +1097,12 @@ class CustomerProfileServiceImplTest {
         customer.setCustomerName("张三");
         customer.setPhone("13800138000");
 
+        customer.setMedicalRequirements("少盐少油");
+        customer.setDishRequirementsRaw(Collections.singletonList("想吃南瓜"));
+        customer.setDietaryRestrictionsRaw(Collections.singletonList("不吃花生"));
+        customer.setDishRequirements(Collections.singletonList(new me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto()));
+        customer.setDietaryRestrictions(Collections.singletonList(new me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto()));
+
         CustomerOrder order = new CustomerOrder();
         order.setId(10L);
         order.setCustomerId(1L);
@@ -1124,6 +1130,11 @@ class CustomerProfileServiceImplTest {
         assertEquals(1, result.getContent().size());
         assertEquals(Integer.valueOf(5), result.getContent().get(0).getRemainingMealCount());
         assertEquals(5, result.getContent().get(0).getScheduleDays().size());
+        assertEquals("少盐少油", result.getContent().get(0).getMedicalRequirements());
+        assertEquals(customer.getDishRequirementsRaw(), result.getContent().get(0).getDishRequirementsRaw());
+        assertEquals(customer.getDishRequirements(), result.getContent().get(0).getDishRequirements());
+        assertEquals(customer.getDietaryRestrictionsRaw(), result.getContent().get(0).getDietaryRestrictionsRaw());
+        assertEquals(customer.getDietaryRestrictions(), result.getContent().get(0).getDietaryRestrictions());
         verify(customerOrderMapper).findMealStatsCalendarOrdersByCustomerIds(Collections.singletonList(1L), LocalDate.of(2026, 5, 1));
     }
 
