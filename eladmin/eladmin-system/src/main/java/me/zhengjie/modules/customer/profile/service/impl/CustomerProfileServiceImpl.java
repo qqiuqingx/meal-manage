@@ -25,6 +25,7 @@ import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdditionDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleCellDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleOrderDto;
@@ -32,6 +33,7 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjus
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentResult;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileDetailDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsRowDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileQueryCriteria;
@@ -42,6 +44,7 @@ import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionM
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
+import me.zhengjie.modules.customer.profile.service.CustomerDietDictionaryService;
 import me.zhengjie.modules.customer.profile.util.CustomerMealStatsScheduleUtil;
 import me.zhengjie.modules.customer.numberpool.domain.NumberPoolConfig;
 import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
@@ -97,6 +100,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private final MealPlanCustomerMapper mealPlanCustomerMapper;
     private final CustomerMealScheduleAdditionMapper customerMealScheduleAdditionMapper;
     private final MealPlanService mealPlanService;
+    private final CustomerDietDictionaryService dietDictionaryService;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ORDER_CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -1176,7 +1180,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         detail.setExcludedDates(profile.getExcludedDates());
         detail.setMedicalRequirements(profile.getMedicalRequirements());
         detail.setSpecialRequirements(profile.getSpecialRequirements());
-        detail.setProductionDate(profile.getProductionDate());
+        detail.setDishRequirements(profile.getDishRequirements());
+        detail.setDietaryRestrictions(profile.getDietaryRestrictions());
+        detail.setDishRequirementsRaw(profile.getDishRequirementsRaw());
+        detail.setDietaryRestrictionsRaw(profile.getDietaryRestrictionsRaw());
+        detail.setPostoperativeInfo(profile.getPostoperativeInfo());
         //
         detail.setCreateTime(profile.getCreateTime() != null ? profile.getCreateTime().toLocalDate() : null);
         detail.setUpdateTime(profile.getUpdateTime() != null ? profile.getUpdateTime().toLocalDate() : null);
@@ -1196,6 +1204,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         return detail;
     }
 
+    /**
+     * 创建客户档案、地址及首单，并按当前饮食字典校验结构化对象引用。
+     *
+     * @param dto 客户资料和首单请求
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void create(CustomerProfileSaveDto dto) {
@@ -1203,6 +1216,8 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         String customerCode = resolveCustomerCode(dto.getCustomerCode(), orderInfo.getParentPackageId());
 
         CustomerProfile profile = new CustomerProfile();
+        List<CustomerDietOptionDto> activeDietOptions = loadDietOptionsIfNeeded(
+                dto.getDishRequirements(), dto.getDietaryRestrictions());
         profile.setCustomerCode(customerCode);
         profile.setCustomerName(dto.getCustomerName());
         profile.setPhone(dto.getPhone());
@@ -1213,9 +1228,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profile.setExcludedDates(dto.getExcludedDates());
         profile.setMedicalRequirements(dto.getMedicalRequirements());
         profile.setSpecialRequirements(dto.getSpecialRequirements());
-        if (StringUtils.isNotBlank(dto.getProductionDate())) {
-            profile.setProductionDate(LocalDate.parse(dto.getProductionDate().substring(0, 10), DATE_FORMATTER));
-        }
+        profile.setDishRequirements(dietDictionaryService.normalizeSelections(
+                dto.getDishRequirements(), null, activeDietOptions));
+        profile.setDietaryRestrictions(dietDictionaryService.normalizeSelections(
+                dto.getDietaryRestrictions(), null, activeDietOptions));
+        profile.setPostoperativeInfo(dto.getPostoperativeInfo());
         //
         profile.setCreateBy(getCurrentUsername());
         profileMapper.insert(profile);
@@ -1224,6 +1241,11 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         saveFirstOrder(profile, orderInfo);
     }
 
+    /**
+     * 更新客户基本资料、地址和可选饮食对象；只读导入原文不由此接口修改。
+     *
+     * @param dto 客户资料更新请求；饮食对象字段的 null 表示保留
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void update(CustomerProfileSaveDto dto) {
@@ -1238,6 +1260,9 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
             throw new BadRequestException("客户档案不存在");
         }
 
+        List<CustomerDietOptionDto> activeDietOptions = loadDietOptionsIfNeeded(
+                dto.getDishRequirements(), dto.getDietaryRestrictions());
+
         profile.setCustomerName(dto.getCustomerName());
         profile.setPhone(dto.getPhone());
         if (dto.getDeliveryPhoneInfo() != null) {
@@ -1249,8 +1274,16 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
         profile.setExcludedDates(dto.getExcludedDates());
         profile.setMedicalRequirements(dto.getMedicalRequirements());
         profile.setSpecialRequirements(dto.getSpecialRequirements());
-        if (StringUtils.isNotBlank(dto.getProductionDate())) {
-            profile.setProductionDate(LocalDate.parse(dto.getProductionDate().substring(0, 10), DATE_FORMATTER));
+        if (dto.getDishRequirements() != null) {
+            profile.setDishRequirements(dietDictionaryService.normalizeSelections(
+                    dto.getDishRequirements(), profile.getDishRequirements(), activeDietOptions));
+        }
+        if (dto.getDietaryRestrictions() != null) {
+            profile.setDietaryRestrictions(dietDictionaryService.normalizeSelections(
+                    dto.getDietaryRestrictions(), profile.getDietaryRestrictions(), activeDietOptions));
+        }
+        if (dto.getPostoperativeInfo() != null) {
+            profile.setPostoperativeInfo(dto.getPostoperativeInfo());
         }
         profile.setRemark(dto.getRemark());
         profile.setUpdateBy(getCurrentUsername());
@@ -1783,6 +1816,23 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     private void updateAddresses(Long customerId, List<CustomerProfileSaveDto.AddressDto> addresses) {
         addressMapper.delete(new QueryWrapper<CustomerProfileAddress>().eq("customer_id", customerId));
         saveAddresses(customerId, addresses);
+    }
+
+    /**
+     * 在请求包含新饮食对象时读取一次有效字典，供两个字段共同校验。
+     *
+     * @param dishRequirements 想吃对象引用
+     * @param dietaryRestrictions 禁忌对象引用
+     * @return 当前可用字典快照；请求未提交非空对象时为空列表
+     */
+    private List<CustomerDietOptionDto> loadDietOptionsIfNeeded(
+            List<CustomerDietItemDto> dishRequirements,
+            List<CustomerDietItemDto> dietaryRestrictions) {
+        if ((dishRequirements == null || dishRequirements.isEmpty())
+                && (dietaryRestrictions == null || dietaryRestrictions.isEmpty())) {
+            return Collections.emptyList();
+        }
+        return dietDictionaryService.listActiveOptions();
     }
 
     private void saveFirstOrder(CustomerProfile profile, CustomerProfileSaveDto.OrderInfoDto orderInfo) {

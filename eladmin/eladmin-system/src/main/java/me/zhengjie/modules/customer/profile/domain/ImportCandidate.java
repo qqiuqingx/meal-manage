@@ -3,6 +3,7 @@ package me.zhengjie.modules.customer.profile.domain;
 import lombok.Data;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportDraftDto;
+import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 
 import java.io.Serializable;
 
@@ -39,6 +40,12 @@ public class ImportCandidate implements Serializable {
      * 该编号是否已存在于客户档案（幂等跳过）
      */
     private boolean alreadyExists;
+
+    /** 编号与手机号一致时表示本次只补录客户共享资料。 */
+    private boolean supplemental;
+
+    /** 预览时已存在的客户，用于冲突提示；确认时仍须按主键加锁复核。 */
+    private CustomerProfile existingProfile;
 
     /**
      * 是否可以写入数据库

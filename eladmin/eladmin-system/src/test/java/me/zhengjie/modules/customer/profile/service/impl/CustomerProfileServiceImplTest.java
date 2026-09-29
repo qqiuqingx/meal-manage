@@ -17,6 +17,7 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAddit
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerScheduledMealDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentRequest;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealScheduleAdjustmentResult;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsRowDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerProfileSaveDto;
@@ -26,6 +27,7 @@ import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
+import me.zhengjie.modules.customer.profile.service.CustomerDietDictionaryService;
 import me.zhengjie.modules.meal.domain.Dish;
 import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.modules.meal.mapper.MealPlanCustomerMapper;
@@ -105,6 +107,9 @@ class CustomerProfileServiceImplTest {
     private MealPlanService mealPlanService;
 
     @Mock
+    private CustomerDietDictionaryService dietDictionaryService;
+
+    @Mock
     private NumberPoolService numberPoolService;
 
     @Mock
@@ -156,6 +161,9 @@ class CustomerProfileServiceImplTest {
     @Test
     void getDetailShouldReturnDeliveryPhoneInfoSeparatelyFromCustomerPhone() {
         profile.setDeliveryPhoneInfo("13900139000\n13700137000");
+        profile.setMedicalRequirements("少盐");
+        profile.setPostoperativeInfo("5天");
+        profile.setDishRequirementsRaw(Collections.singletonList("想吃鲈鱼"));
         when(profileMapper.selectByIdWithJson(1L)).thenReturn(profile);
         when(addressMapper.selectList(any())).thenReturn(Collections.singletonList(address1));
 
@@ -163,11 +171,20 @@ class CustomerProfileServiceImplTest {
 
         assertEquals("13800138000", detail.getPhone());
         assertEquals("13900139000\n13700137000", detail.getDeliveryPhoneInfo());
+        assertEquals("少盐", detail.getMedicalRequirements());
+        assertEquals("5天", detail.getPostoperativeInfo());
+        assertEquals(Collections.singletonList("想吃鲈鱼"), detail.getDishRequirementsRaw());
     }
 
     @Test
     void updateShouldPreserveOmittedDeliveryPhonesAndAllowExplicitClear() {
         profile.setDeliveryPhoneInfo("13900139000\n13700137000");
+        profile.setPostoperativeInfo("5天");
+        CustomerDietItemDto savedDiet = new CustomerDietItemDto();
+        savedDiet.setType("DISH");
+        savedDiet.setId(1L);
+        savedDiet.setName("历史菜名");
+        profile.setDishRequirements(Collections.singletonList(savedDiet));
         CustomerProfileSaveDto dto = new CustomerProfileSaveDto();
         dto.setId(1L);
         dto.setCustomerName("张三");
@@ -180,6 +197,12 @@ class CustomerProfileServiceImplTest {
 
         customerProfileService.update(dto);
         assertEquals("13900139000\n13700137000", profile.getDeliveryPhoneInfo());
+        assertEquals("5天", profile.getPostoperativeInfo());
+        assertEquals(Collections.singletonList(savedDiet), profile.getDishRequirements());
+
+        dto.setDishRequirements(Collections.emptyList());
+        customerProfileService.update(dto);
+        assertTrue(profile.getDishRequirements().isEmpty());
 
         dto.setDeliveryPhoneInfo("");
         customerProfileService.update(dto);

@@ -5,6 +5,7 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportAddressDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportIssueCategory;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportIssueDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportMealCellDto;
+import me.zhengjie.modules.customer.profile.domain.CustomerDietImportData;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -153,6 +154,9 @@ public class ParsedCustomer implements Serializable {
      * 阻塞性问题：非空表示该客户本次不导入
      */
     private List<CustomerImportIssueDto> issues = new ArrayList<>();
+
+    /** 从客户禁忌工作表按客户编号合并的医嘱、饮食、成交时间与术后信息。 */
+    private CustomerDietImportData dietImportData;
 
     /**
      * 追加一条阻塞性问题。

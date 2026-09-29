@@ -20,7 +20,7 @@ public class CustomerImportItemResultDto implements Serializable {
     /** 客户编号。 */
     private String customerCode;
 
-    /** CREATED / ALREADY_EXISTS / SKIPPED / FAILED。 */
+    /** CREATED / UPDATED / ALREADY_EXISTS / SKIPPED / FAILED。 */
     private String status;
 
     /** 面向操作人的处理结果。 */

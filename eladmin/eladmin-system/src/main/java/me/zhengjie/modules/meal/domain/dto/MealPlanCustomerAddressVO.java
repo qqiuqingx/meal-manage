@@ -17,6 +17,7 @@ package me.zhengjie.modules.meal.domain.dto;
 
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 
 import java.io.Serializable;
 import java.util.List;
@@ -54,6 +55,24 @@ public class MealPlanCustomerAddressVO implements Serializable {
 
     @ApiModelProperty(value = "特殊要求")
     private String specialRequirements;
+
+    /** 客户共享的医嘱文本。 */
+    private String medicalRequirements;
+
+    /** 客户共享的菜品特殊要求来源原文。 */
+    private List<String> dishRequirementsRaw;
+
+    /** 客户共享的菜品特殊要求已确认对象。 */
+    private List<CustomerDietItemDto> dishRequirements;
+
+    /** 客户共享的禁忌来源原文。 */
+    private List<String> dietaryRestrictionsRaw;
+
+    /** 客户共享的禁忌已确认对象。 */
+    private List<CustomerDietItemDto> dietaryRestrictions;
+
+    /** 客户术后信息原文。 */
+    private String postoperativeInfo;
 
     @ApiModelProperty(value = "自定义菜单图片地址")
     private String customMenuImage;

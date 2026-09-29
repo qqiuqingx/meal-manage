@@ -1,11 +1,13 @@
 package me.zhengjie.modules.customer.profile.rest;
 
+import com.alibaba.fastjson2.JSON;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import me.zhengjie.annotation.Log;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportPreviewDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportResultDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietSelectionDto;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileImportService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +51,7 @@ public class CustomerProfileImportController {
      *
      * @param file 第三版客户用餐计划表（xlsx）
      * @param importDate 计划导入日期，格式 yyyy-MM-dd；为空时取当天
+     * @param dietOnly 是否仅预览「客户禁忌」工作表并补录已有客户
      * @return 逐位客户草稿、来源行与跳过原因
      */
     @Log("客户批量导入预览")
@@ -58,13 +61,16 @@ public class CustomerProfileImportController {
     public ResponseEntity<CustomerImportPreviewDto> preview(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "importDate", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate importDate) throws IOException {
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate importDate,
+            @RequestParam(value = "dietOnly", defaultValue = "false") boolean dietOnly) throws IOException {
         try {
             if (file == null || file.isEmpty()) {
                 throw new BadRequestException("请上传客户用餐计划表文件");
             }
             validateXlsxFile(file);
-            CustomerImportPreviewDto preview = importService.preview(file.getBytes(), file.getOriginalFilename(), importDate);
+            CustomerImportPreviewDto preview = dietOnly
+                    ? importService.previewDietOnly(file.getBytes(), file.getOriginalFilename(), importDate)
+                    : importService.preview(file.getBytes(), file.getOriginalFilename(), importDate);
             return ResponseEntity.ok(preview);
         } catch (BadRequestException e) {
             log.warn("客户批量导入预览校验失败: reason={}", e.getMessage());
@@ -80,7 +86,10 @@ public class CustomerProfileImportController {
      *
      * @param file 确认提交的工作簿
      * @param fileHash 操作人预览确认的 SHA-256
+     * @param dictionaryHash 预览饮食字典摘要
+     * @param dietSelections 歧义词项的选择 JSON
      * @param importDate 预览时的计划导入日期
+     * @param dietOnly 是否仅补录「客户禁忌」工作表到已有客户
      * @return 含创建、跳过、失败原因的逐位处理结果
      */
     @Log("客户批量导入提交")
@@ -90,15 +99,29 @@ public class CustomerProfileImportController {
     public ResponseEntity<CustomerImportResultDto> confirm(
             @RequestParam("file") MultipartFile file,
             @RequestParam("fileHash") String fileHash,
+            @RequestParam(value = "dictionaryHash", required = false) String dictionaryHash,
+            @RequestParam(value = "dietSelections", required = false) String dietSelections,
             @RequestParam(value = "importDate", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate importDate) throws IOException {
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate importDate,
+            @RequestParam(value = "dietOnly", defaultValue = "false") boolean dietOnly) throws IOException {
         try {
             if (file == null || file.isEmpty()) {
                 throw new BadRequestException("请上传客户用餐计划表文件");
             }
             validateXlsxFile(file);
-            CustomerImportResultDto result = importService.importCustomers(
-                    file.getBytes(), file.getOriginalFilename(), fileHash, importDate);
+            java.util.List<CustomerDietSelectionDto> selections;
+            try {
+                selections = dietSelections == null || dietSelections.trim().isEmpty()
+                        ? java.util.Collections.emptyList()
+                        : JSON.parseArray(dietSelections, CustomerDietSelectionDto.class);
+            } catch (RuntimeException e) {
+                throw new BadRequestException("饮食匹配选择格式无效，请重新预览");
+            }
+            CustomerImportResultDto result = dietOnly
+                    ? importService.importDietOnly(file.getBytes(), file.getOriginalFilename(), fileHash,
+                    dictionaryHash, selections, importDate)
+                    : importService.importCustomers(file.getBytes(), file.getOriginalFilename(), fileHash,
+                    dictionaryHash, selections, importDate);
             return ResponseEntity.ok(result);
         } catch (BadRequestException e) {
             log.warn("客户批量导入提交校验失败: reason={}", e.getMessage());

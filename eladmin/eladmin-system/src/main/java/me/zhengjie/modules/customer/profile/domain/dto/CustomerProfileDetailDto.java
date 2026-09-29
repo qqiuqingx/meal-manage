@@ -1,6 +1,7 @@
 package me.zhengjie.modules.customer.profile.domain.dto;
 
 import lombok.Data;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 
 import java.io.Serializable;
 import java.time.LocalDate;
@@ -37,9 +38,21 @@ public class CustomerProfileDetailDto implements Serializable {
     private String specialRequirements;
 
     /**
-     * 生产日期
+     * 客户希望食用的结构化对象。
      */
-    private LocalDate productionDate;
+    private List<CustomerDietItemDto> dishRequirements;
+
+    /** 客户不能食用的结构化对象。 */
+    private List<CustomerDietItemDto> dietaryRestrictions;
+
+    /** 导入来源中的想吃内容原文块，只读。 */
+    private List<String> dishRequirementsRaw;
+
+    /** 导入来源中的禁忌内容原文块，只读。 */
+    private List<String> dietaryRestrictionsRaw;
+
+    /** 术后情况原文。 */
+    private String postoperativeInfo;
 
     //
     private String remark;

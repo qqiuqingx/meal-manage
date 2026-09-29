@@ -13,11 +13,13 @@ import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
+import me.zhengjie.modules.customer.profile.domain.CustomerDietImportData;
 import me.zhengjie.modules.customer.profile.domain.ImportCandidate;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportAddressDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportDraftDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportItemResultDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportMealCellDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
@@ -31,6 +33,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,19 +60,26 @@ public class CustomerProfileImportWriter {
      *
      * @param candidate 已重新解析并完成只读校验的客户候选
      * @param importDate 实际订单开始日期
-     * @return 创建结果，包含客户主键；无待导入餐数时首单主键为空
+     * @param confirmedAt 确认请求开始时间，用于缺省成交时间
+     * @return CREATED/UPDATED/ALREADY_EXISTS 结果；补录和无餐数建档的订单主键为空
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
-    public CustomerImportItemResultDto write(ImportCandidate candidate, LocalDate importDate) {
+    public CustomerImportItemResultDto write(ImportCandidate candidate, LocalDate importDate, LocalDateTime confirmedAt) {
         CustomerImportDraftDto draft = candidate.getDraft();
+        if (candidate.isSupplemental()) {
+            return updateExistingCustomer(candidate, true);
+        }
         ParentPackage parent = lockAndValidatePackage(candidate);
         CustomerProfile existing = profileMapper.selectOne(
                 new QueryWrapper<CustomerProfile>().eq("customer_code", draft.getCustomerCode()));
         if (existing != null) {
             if (draft.getCustomerCode().equals(existing.getCustomerCode())
-                    && draft.getPhoneMasked() != null
                     && sameNormalizedPhone(existing.getPhone(), candidate.getParsed().getPhoneNormalized())) {
-                return result(candidate, "ALREADY_EXISTS", "客户编号已存在，本次跳过（幂等重传）", null, null);
+                CustomerProfile locked = profileMapper.selectByIdForImportUpdate(existing.getId());
+                boolean updated = mergeSupplementalFields(locked, candidate);
+                return result(candidate, updated ? "UPDATED" : "ALREADY_EXISTS",
+                        updated ? "客户饮食信息已补录" : "客户已存在且无新增资料；未修改历史订单成交时间",
+                        locked.getId(), null);
             }
             throw new BadRequestException("客户编号已存在且身份信息不一致，本次跳过");
         }
@@ -80,6 +91,15 @@ public class CustomerProfileImportWriter {
         profile.setDeliveryPhoneInfo(candidate.getParsed().getDeliveryPhoneInfo());
         profile.setRemark(draft.getRemark());
         profile.setSpecialRequirements(draft.getSpecialRequirements());
+        CustomerDietImportData dietData = candidate.getParsed().getDietImportData();
+        if (dietData != null) {
+            profile.setMedicalRequirements(dietData.getMedicalRequirements());
+            profile.setPostoperativeInfo(dietData.getPostoperativeInfo());
+            profile.setDishRequirements(copyItems(dietData.getDishRequirements()));
+            profile.setDietaryRestrictions(copyItems(dietData.getDietaryRestrictions()));
+            profile.setDishRequirementsRaw(copyBlocks(dietData.getDishRequirementsRaw()));
+            profile.setDietaryRestrictionsRaw(copyBlocks(dietData.getDietaryRestrictionsRaw()));
+        }
         profile.setCreateBy(currentUser());
         profileMapper.insert(profile);
 
@@ -97,10 +117,171 @@ public class CustomerProfileImportWriter {
         if (draft.getLunchDinnerCount() == 0) {
             return result(candidate, "CREATED", "客户档案已创建", profile.getId(), null);
         }
-        CustomerOrder order = buildFirstOrder(profile, parent, draft, importDate);
+        CustomerOrder order = buildFirstOrder(profile, parent, draft, importDate, confirmedAt,
+                candidate.getParsed().getDietImportData());
         Long orderId = customerOrderService.createImportedFirstOrder(order);
         saveFutureMealCells(profile.getId(), orderId, draft.getMealCells());
         return result(candidate, "CREATED", "客户档案、首单和未来逐餐计划已创建", profile.getId(), orderId);
+    }
+
+    /**
+     * 仅按第二工作表编号补录已存在客户的饮食资料。
+     *
+     * @param candidate 预览中已找到对应客户的第二工作表候选
+     * @return 更新或无变化的结果；不会创建客户、地址和订单
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public CustomerImportItemResultDto writeDietOnly(ImportCandidate candidate) {
+        if (!candidate.isSupplemental() || candidate.getExistingProfile() == null
+                || candidate.getParsed().getDietImportData() == null) {
+            throw new BadRequestException("第二工作表补录缺少已有客户或饮食资料，请重新预览");
+        }
+        return updateExistingCustomer(candidate, false);
+    }
+
+    /**
+     * 锁定已存在客户并补录饮食共享字段，不触碰地址或任何历史订单。
+     *
+     * @param candidate 已通过预览核验的补录候选
+     * @param verifyPhone 是否复核月份工作表提供的手机号
+     * @return 更新或无变化的结果
+     */
+    private CustomerImportItemResultDto updateExistingCustomer(ImportCandidate candidate, boolean verifyPhone) {
+        Long customerId = candidate.getExistingProfile() == null ? null : candidate.getExistingProfile().getId();
+        CustomerProfile profile = customerId == null ? null : profileMapper.selectByIdForImportUpdate(customerId);
+        if (profile == null
+                || !candidate.getParsed().getEffectiveCode().equals(profile.getCustomerCode())
+                || (verifyPhone && !sameNormalizedPhone(profile.getPhone(), candidate.getParsed().getPhoneNormalized()))) {
+            throw new BadRequestException("已有客户身份资料已变化，请重新预览后补录");
+        }
+        boolean updated = mergeSupplementalFields(profile, candidate);
+        return result(candidate, updated ? "UPDATED" : "ALREADY_EXISTS",
+                updated ? "客户饮食信息已补录" : "客户已存在且无新增资料；未修改历史订单成交时间",
+                profile.getId(), null);
+    }
+
+    /**
+     * 仅在目标字段为空时补充医嘱和术后信息，并去重合并对象引用与来源原文。
+     *
+     * @param profile 已锁定的客户档案
+     * @param candidate 已完成来源和身份核验的导入候选
+     * @return 档案确有变更时为 true
+     */
+    private boolean mergeSupplementalFields(CustomerProfile profile, ImportCandidate candidate) {
+        CustomerDietImportData data = candidate.getParsed().getDietImportData();
+        if (data == null) {
+            return false;
+        }
+        boolean changed = false;
+        if (isBlank(profile.getMedicalRequirements()) && !isBlank(data.getMedicalRequirements())) {
+            profile.setMedicalRequirements(data.getMedicalRequirements());
+            changed = true;
+        }
+        if (isBlank(profile.getPostoperativeInfo()) && !isBlank(data.getPostoperativeInfo())) {
+            profile.setPostoperativeInfo(data.getPostoperativeInfo());
+            changed = true;
+        }
+        List<CustomerDietItemDto> mergedDish = mergeItems(profile.getDishRequirements(), data.getDishRequirements());
+        if (!mergedDish.equals(nullToEmpty(profile.getDishRequirements()))) {
+            profile.setDishRequirements(mergedDish);
+            changed = true;
+        }
+        List<CustomerDietItemDto> mergedRestrictions = mergeItems(
+                profile.getDietaryRestrictions(), data.getDietaryRestrictions());
+        if (!mergedRestrictions.equals(nullToEmpty(profile.getDietaryRestrictions()))) {
+            profile.setDietaryRestrictions(mergedRestrictions);
+            changed = true;
+        }
+        List<String> mergedDishRaw = mergeBlocks(profile.getDishRequirementsRaw(), data.getDishRequirementsRaw());
+        if (!mergedDishRaw.equals(nullToEmpty(profile.getDishRequirementsRaw()))) {
+            profile.setDishRequirementsRaw(mergedDishRaw);
+            changed = true;
+        }
+        List<String> mergedRestrictionRaw = mergeBlocks(
+                profile.getDietaryRestrictionsRaw(), data.getDietaryRestrictionsRaw());
+        if (!mergedRestrictionRaw.equals(nullToEmpty(profile.getDietaryRestrictionsRaw()))) {
+            profile.setDietaryRestrictionsRaw(mergedRestrictionRaw);
+            changed = true;
+        }
+        if (changed) {
+            profile.setUpdateBy(currentUser());
+            profile.setUpdateTime(LocalDateTime.now());
+            profileMapper.updateById(profile);
+        }
+        return changed;
+    }
+
+    /**
+     * 合并饮食对象列表，按类型+ID去重并保留已有名称快照。
+     *
+     * @param existing 当前客户对象列表
+     * @param incoming 本次确认对象列表
+     * @return 去重后的引用列表
+     */
+    private List<CustomerDietItemDto> mergeItems(List<CustomerDietItemDto> existing,
+                                                  List<CustomerDietItemDto> incoming) {
+        Map<String, CustomerDietItemDto> merged = new LinkedHashMap<>();
+        for (CustomerDietItemDto item : nullToEmpty(existing)) {
+            if (item != null && item.getType() != null && item.getId() != null) {
+                merged.put(item.getType() + ":" + item.getId(), item);
+            }
+        }
+        for (CustomerDietItemDto item : nullToEmpty(incoming)) {
+            if (item == null || item.getType() == null || item.getId() == null) {
+                continue;
+            }
+            String key = item.getType() + ":" + item.getId();
+            if (!merged.containsKey(key)) {
+                merged.put(key, copyItem(item));
+            }
+        }
+        return new ArrayList<>(merged.values());
+    }
+
+    /**
+     * 合并完整原文块并按精确文本去重。
+     *
+     * @param existing 当前客户原文块
+     * @param incoming 本次来源原文块
+     * @return 保持原顺序的去重结果
+     */
+    private List<String> mergeBlocks(List<String> existing, List<String> incoming) {
+        LinkedHashSet<String> merged = new LinkedHashSet<>(nullToEmpty(existing));
+        for (String block : nullToEmpty(incoming)) {
+            if (block != null && !block.trim().isEmpty()) {
+                merged.add(block);
+            }
+        }
+        return new ArrayList<>(merged);
+    }
+
+    /** 复制并规范新建客户的饮食对象引用。 */
+    private List<CustomerDietItemDto> copyItems(List<CustomerDietItemDto> items) {
+        return new ArrayList<>(mergeItems(Collections.emptyList(), items));
+    }
+
+    /** 复制并去重新建客户的原文块。 */
+    private List<String> copyBlocks(List<String> blocks) {
+        return new ArrayList<>(mergeBlocks(Collections.emptyList(), blocks));
+    }
+
+    /** 复制饮食对象引用，避免保存导入预览上的临时属性。 */
+    private CustomerDietItemDto copyItem(CustomerDietItemDto item) {
+        CustomerDietItemDto copy = new CustomerDietItemDto();
+        copy.setType(item.getType());
+        copy.setId(item.getId());
+        copy.setName(item.getName());
+        return copy;
+    }
+
+    /** 将可空列表统一读取为空列表。 */
+    private <T> List<T> nullToEmpty(List<T> values) {
+        return values == null ? Collections.emptyList() : values;
+    }
+
+    /** 判断字符串是否为空或只含空白字符。 */
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     /**
@@ -145,10 +326,13 @@ public class CustomerProfileImportWriter {
      * @param parent 唯一匹配父套餐
      * @param draft 已通过预览的客户草稿
      * @param importDate 实际导入日期；订单从次日开始承接未来计划
+     * @param confirmedAt 确认请求开始时间，成交时间为空时使用
+     * @param dietData 第二工作表解析结果，用于设置成交时间
      * @return 可交由订单服务保存的首单
      */
     private CustomerOrder buildFirstOrder(CustomerProfile profile, ParentPackage parent,
-                                          CustomerImportDraftDto draft, LocalDate importDate) {
+                                          CustomerImportDraftDto draft, LocalDate importDate,
+                                          LocalDateTime confirmedAt, CustomerDietImportData dietData) {
         int importedVerified = draft.getImportedVerifiedCount() == null ? 0 : draft.getImportedVerifiedCount();
         CustomerOrder order = new CustomerOrder();
         order.setCustomerId(profile.getId());
@@ -166,7 +350,8 @@ public class CustomerProfileImportWriter {
         order.setVerifiedAmount(BigDecimal.ZERO);
         order.setMealBalance(BigDecimal.ZERO);
         order.setRemainingCount(draft.getLunchDinnerCount() - importedVerified);
-        order.setDealTime(LocalDateTime.now());
+        order.setDealTime(dietData != null && dietData.getDealTime() != null
+                ? dietData.getDealTime() : confirmedAt);
         order.setStartDate(importDate.plusDays(1));
         order.setStartMealType(draft.getMealType() == null ? null
                 : OrderStartMealTypeUtil.normalizeStartMealType(draft.getMealType(), null));
@@ -243,10 +428,10 @@ public class CustomerProfileImportWriter {
      * 组装当前客户的提交结果。
      *
      * @param candidate 当前客户导入候选
-     * @param status CREATED / ALREADY_EXISTS
+     * @param status CREATED / UPDATED / ALREADY_EXISTS
      * @param message 面向操作人的结果说明
-     * @param customerId 新建客户主键；跳过时为空
-     * @param orderId 新建首单主键；跳过时为空
+     * @param customerId 新建或补录客户主键；未处理时为空
+     * @param orderId 新建首单主键；补录或零餐数时为空
      * @return 单客户处理结果
      */
     private CustomerImportItemResultDto result(ImportCandidate candidate, String status, String message,

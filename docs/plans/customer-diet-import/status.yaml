@@ -1,0 +1,16 @@
+feature: customer-diet-import
+approval: approved
+current_phase: complete
+phases:
+  - id: phase-01
+    name: profile
+    depends_on: []
+    status: complete
+  - id: phase-02
+    name: import
+    depends_on: [phase-01]
+    status: complete
+  - id: phase-03
+    name: ui-validation
+    depends_on: [phase-01, phase-02]
+    status: complete

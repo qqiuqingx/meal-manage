@@ -31,9 +31,6 @@
             </el-tag>
             <span v-if="!customer.allergyTags || customer.allergyTags.length === 0">-</span>
           </el-descriptions-item>
-          <el-descriptions-item label="医嘱要求" :span="3">
-            {{ customer.medicalRequirements || '-' }}
-          </el-descriptions-item>
           <el-descriptions-item label="默认地址" :span="3">
             {{ customer.defaultAddress || '-' }}
           </el-descriptions-item>
@@ -41,6 +38,13 @@
             {{ customer.remark || '-' }}
           </el-descriptions-item>
         </el-descriptions>
+      </el-card>
+
+      <el-card class="info-card" shadow="never" style="margin-top: 15px;">
+        <div slot="header" class="card-header">
+          <span class="card-title">医嘱与饮食共享信息</span>
+        </div>
+        <CustomerDietInfo :customer="customer" />
       </el-card>
 
       <!-- 订单列表 -->
@@ -99,6 +103,14 @@
               {{ formatDeliveryDates(scope.row.deliveryDates) }}
             </template>
           </el-table-column>
+          <el-table-column label="饮食资料" width="90" align="center">
+            <template slot-scope="scope">
+              <el-popover placement="left" width="380" trigger="click">
+                <CustomerDietInfo :customer="scope.row" />
+                <el-button slot="reference" type="text" size="mini">查看</el-button>
+              </el-popover>
+            </template>
+          </el-table-column>
           <el-table-column label="成交时间" prop="dealTime" width="150" show-overflow-tooltip />
         </el-table>
 
@@ -134,9 +146,11 @@
 import { getOrdersByCustomer } from '@/api/customer/order'
 import * as packageApi from '@/api/customer/package'
 import { mapGetters } from 'vuex'
+import CustomerDietInfo from '@/components/CustomerDietInfo.vue'
 
 export default {
   name: 'CustomerDetailDialog',
+  components: { CustomerDietInfo },
   props: {
     visible: {
       type: Boolean,

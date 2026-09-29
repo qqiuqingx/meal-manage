@@ -1323,6 +1323,10 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             dto.setPhone(profile.getPhone());
             dto.setSpecialRequirements(profile.getSpecialRequirements());
             dto.setAllergyTags(profile.getAllergyTags());
+            dto.setDishRequirements(profile.getDishRequirements());
+            dto.setDietaryRestrictions(profile.getDietaryRestrictions());
+            dto.setDishRequirementsRaw(profile.getDishRequirementsRaw());
+            dto.setDietaryRestrictionsRaw(profile.getDietaryRestrictionsRaw());
         }
 
         // 填充套餐名称

@@ -198,10 +198,10 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
             addParsedField(parsedFields, "客户编号", customerCode, "customerCode", customerCode);
         }
 
-        String productionDate = normalizeProductionDate(firstNonBlank(rawFields, "生产日期"));
-        if (StringUtils.isNotBlank(productionDate)) {
-            draft.setProductionDate(productionDate);
-            addParsedField(parsedFields, "生产日期", rawFields.get("生产日期"), "productionDate", productionDate);
+        String postoperativeInfo = firstNonBlank(rawFields, "术后情况", "术后");
+        if (StringUtils.isNotBlank(postoperativeInfo)) {
+            draft.setPostoperativeInfo(postoperativeInfo);
+            addParsedField(parsedFields, "术后情况", postoperativeInfo, "postoperativeInfo", postoperativeInfo);
         }
     }
 
@@ -942,34 +942,6 @@ public class CustomerIntakeParseServiceImpl implements CustomerIntakeParseServic
             } catch (RuntimeException ignored) {
                 return null;
             }
-        }
-        return null;
-    }
-
-    /**
-     * 归一化生产日期，支持 yyyy-MM-dd、yyyy/MM/dd、M月d日。
-     *
-     * @param productionDateText 原始生产日期文本
-     * @return 标准化后的生产日期，无法识别时返回 null
-     */
-    private String normalizeProductionDate(String productionDateText) {
-        if (StringUtils.isBlank(productionDateText)) {
-            return null;
-        }
-        String normalized = productionDateText.trim();
-        try {
-            if (normalized.matches("\\d{4}-\\d{2}-\\d{2}")) {
-                return LocalDate.parse(normalized, DATE_FORMATTER).format(DATE_FORMATTER);
-            }
-            if (normalized.matches("\\d{4}/\\d{2}/\\d{2}")) {
-                return LocalDate.parse(normalized.replace('/', '-'), DATE_FORMATTER).format(DATE_FORMATTER);
-            }
-            String date = extractDateFromText(normalized);
-            if (StringUtils.isNotBlank(date)) {
-                return date;
-            }
-        } catch (RuntimeException ignored) {
-            return null;
         }
         return null;
     }

@@ -64,6 +64,7 @@ function buildWrapper() {
       'el-table-column': true,
       'el-tag': true,
       'el-image': true,
+      'el-popover': true,
       'el-pagination': true,
       'el-tooltip': {
         template: '<div class="el-tooltip" :data-content="content"><slot /></div>',
@@ -184,7 +185,7 @@ describe('scheduleRecord special requirements display', () => {
     })
   })
 
-  test('production date badge is shown together with first meal badge', async() => {
+  test('postoperative source text is shown directly with the first meal badge', async() => {
     const wrapper = buildWrapper()
 
     wrapper.setData({
@@ -204,8 +205,7 @@ describe('scheduleRecord special requirements display', () => {
           customerCode: 'C001',
           customerName: '张三',
           firstMealOfOrder: true,
-          nearProductionDate: true,
-          productionDateDiffDays: 2,
+          postoperativeInfo: '4个月',
           items: []
         }]
       }
@@ -214,19 +214,17 @@ describe('scheduleRecord special requirements display', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.find('.code-first-badge').text()).toBe('首')
-    expect(wrapper.find('.code-production-badge').text()).toBe('产')
-    expect(wrapper.findAll('.el-tooltip').at(0).attributes('data-content')).toBe('生产后第2天')
+    expect(wrapper.find('.code-postoperative-badge').text()).toBe('术后 4个月')
 
     wrapper.destroy()
   })
 
-  test('production date badge tooltip shows production day for same-day records', () => {
-    const wrapper = buildWrapper()
-
-    expect(wrapper.vm.getProductionDateBadgeTip({ productionDateDiffDays: 0 })).toBe('生产当天')
-    expect(wrapper.vm.getProductionDateBadgeTip({ productionDateDiffDays: 3 })).toBe('生产后第3天')
-
-    wrapper.destroy()
+  test('schedule page removes production date fields and reads shared dietary info', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../../../../src/views/meal/scheduleRecord/index.vue'), 'utf8')
+    expect(source).toContain('customer.postoperativeInfo')
+    expect(source).toContain('<CustomerDietInfo :customer="customer" />')
+    expect(source).not.toContain('nearProductionDate')
+    expect(source).not.toContain('productionDateDiffDays')
   })
 
   test('soup row code details include customers without soup', () => {

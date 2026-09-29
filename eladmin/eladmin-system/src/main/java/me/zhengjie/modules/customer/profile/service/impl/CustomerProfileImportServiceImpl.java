@@ -10,6 +10,7 @@ import me.zhengjie.modules.customer.profile.domain.ImportCandidate;
 import me.zhengjie.modules.customer.profile.domain.ImportResolution;
 import me.zhengjie.modules.customer.profile.domain.ParsedCustomer;
 import me.zhengjie.modules.customer.profile.domain.ParsedWorkbook;
+import me.zhengjie.modules.customer.profile.domain.CustomerDietImportData;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportAddressDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportDraftDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportIssueCategory;
@@ -18,8 +19,12 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportMealCellDto
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportPreviewDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportItemResultDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportResultDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietSelectionDto;
 import me.zhengjie.modules.customer.profile.service.CustomerOrderImportParser;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileImportService;
+import me.zhengjie.modules.customer.profile.service.CustomerDietDictionaryService;
+import me.zhengjie.modules.customer.profile.service.CustomerDietMatchService;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +33,9 @@ import org.springframework.stereotype.Service;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -57,6 +64,8 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
     private final CustomerProfileMapper profileMapper;
     private final ParentPackageMapper parentPackageMapper;
     private final CustomerProfileImportWriter importWriter;
+    private final CustomerDietDictionaryService dietDictionaryService;
+    private final CustomerDietMatchService dietMatchService;
 
     /**
      * 允许上传的最大字节数，第三版工作簿约 24MB
@@ -64,37 +73,105 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
     private static final long MAX_UPLOAD_BYTES = 40L * 1024 * 1024;
 
     private static final Pattern CODE_PATTERN = Pattern.compile("^([A-Za-z]+)(\\d+)$");
+    private static final DateTimeFormatter DEAL_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Override
     public CustomerImportPreviewDto preview(byte[] content, String fileName, LocalDate importDate) {
-        ImportResolution resolution = resolve(content, fileName, importDate);
+        ImportResolution resolution = resolve(content, fileName, importDate, false);
         return buildPreview(resolution);
     }
 
     /**
-     * 复核文件摘要后按客户独立事务创建档案、首单与未来逐餐计划。
+     * 仅生成第二工作表已有客户补录预览。
+     *
+     * @param content 工作簿内容
+     * @param fileName 文件名
+     * @param importDate 导入日期
+     * @return 只读预览
+     */
+    @Override
+    public CustomerImportPreviewDto previewDietOnly(byte[] content, String fileName, LocalDate importDate) {
+        ImportResolution resolution = resolve(content, fileName, importDate, true);
+        return buildPreview(resolution);
+    }
+
+    /**
+     * 复核文件与饮食字典摘要及全部歧义选择，再逐客户新建或补录。
      *
      * @param content 上传的工作簿
      * @param fileName 上传文件名，仅用于处理上下文
      * @param expectedFileHash 操作人确认的预览 SHA-256
+     * @param expectedDictionaryHash 第二工作表使用的饮食字典摘要
+     * @param selections 歧义词项的候选选择或明确跳过
      * @param importDate 预览时使用的导入日期
      * @return 逐位导入结果及重新解析的预览
      */
     @Override
     public CustomerImportResultDto importCustomers(byte[] content, String fileName, String expectedFileHash,
+                                                   String expectedDictionaryHash,
+                                                   List<CustomerDietSelectionDto> selections,
                                                    LocalDate importDate) {
+        return importResolved(content, fileName, expectedFileHash, expectedDictionaryHash, selections, importDate, false);
+    }
+
+    /**
+     * 仅确认第二工作表的已有客户补录，不创建客户或订单。
+     *
+     * @param content 工作簿内容
+     * @param fileName 文件名
+     * @param expectedFileHash 预览文件摘要
+     * @param expectedDictionaryHash 预览字典摘要
+     * @param selections 歧义词项选择
+     * @param importDate 导入日期
+     * @return 逐位补录结果
+     */
+    @Override
+    public CustomerImportResultDto importDietOnly(byte[] content, String fileName, String expectedFileHash,
+                                                  String expectedDictionaryHash,
+                                                  List<CustomerDietSelectionDto> selections,
+                                                  LocalDate importDate) {
+        return importResolved(content, fileName, expectedFileHash, expectedDictionaryHash, selections, importDate, true);
+    }
+
+    /**
+     * 重新解析预览范围并逐客户提交。
+     *
+     * @param content 工作簿内容
+     * @param fileName 文件名
+     * @param expectedFileHash 预览文件摘要
+     * @param expectedDictionaryHash 预览字典摘要
+     * @param selections 歧义选择
+     * @param importDate 导入日期
+     * @param dietOnly 是否仅补录第二工作表
+     * @return 逐客户结果
+     */
+    private CustomerImportResultDto importResolved(byte[] content, String fileName, String expectedFileHash,
+                                                   String expectedDictionaryHash,
+                                                   List<CustomerDietSelectionDto> selections,
+                                                   LocalDate importDate, boolean dietOnly) {
+        LocalDateTime confirmedAt = LocalDateTime.now();
         validateUpload(content);
         if (isBlank(expectedFileHash)) {
             throw new BadRequestException("缺少预览文件摘要，请先重新预览");
         }
         LocalDate resolvedImportDate = importDate == null ? LocalDate.now() : importDate;
-        ImportResolution resolution = resolve(content, fileName, resolvedImportDate);
+        ImportResolution resolution = resolve(content, fileName, resolvedImportDate, dietOnly);
         ParsedWorkbook workbook = resolution.getWorkbook();
         if (!expectedFileHash.equalsIgnoreCase(workbook.getFileHash())) {
             throw new BadRequestException("上传文件与预览文件不同，请重新预览后再确认");
         }
         if (!workbook.isStructureValid()) {
             throw new BadRequestException("工作簿结构校验失败，无法提交");
+        }
+        if (workbook.isDietSheetPresent()
+                && (isBlank(expectedDictionaryHash)
+                || !expectedDictionaryHash.equalsIgnoreCase(workbook.getDictionaryHash()))) {
+            throw new BadRequestException("饮食字典已变化或摘要缺失，请重新预览后确认");
+        }
+        dietMatchService.validateAndApplySelections(resolution.getCandidates(), selections);
+        for (ImportCandidate candidate : resolution.getCandidates()) {
+            candidate.setDraft(buildDraft(candidate.getParsed(), candidate.getParentPackage(), candidate.isSupplemental()));
+            candidate.setImportable(isCandidateImportable(candidate));
         }
 
         CustomerImportResultDto result = new CustomerImportResultDto();
@@ -111,7 +188,8 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
                 result.setSkippedCount(result.getSkippedCount() + 1);
             } else {
                 try {
-                    item = importWriter.write(candidate, resolvedImportDate);
+                    item = dietOnly ? importWriter.writeDietOnly(candidate)
+                            : importWriter.write(candidate, resolvedImportDate, confirmedAt);
                     if ("CREATED".equals(item.getStatus())) {
                         result.setCreatedCount(result.getCreatedCount() + 1);
                         if (Integer.valueOf(0).equals(candidate.getDraft().getSheetRemainingCount())) {
@@ -119,6 +197,8 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
                                     candidate.getParsed().getSourceRows(), candidate.getParsed().getEffectiveCode(),
                                     item.getCustomerId(), item.getOrderId());
                         }
+                    } else if ("UPDATED".equals(item.getStatus())) {
+                        result.setUpdatedCount(result.getUpdatedCount() + 1);
                     } else if ("ALREADY_EXISTS".equals(item.getStatus())) {
                         result.setAlreadyExistsCount(result.getAlreadyExistsCount() + 1);
                     }
@@ -141,9 +221,9 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
                     item.getSourceRows(), item.getCustomerCode(), item.getStatus(),
                     item.getCustomerId(), item.getOrderId());
         }
-        log.info("客户批量导入提交完成: hashPrefix={}, importDate={}, created={}, alreadyExists={}, skipped={}, failed={}",
+        log.info("客户批量导入提交完成: hashPrefix={}, importDate={}, created={}, updated={}, alreadyExists={}, skipped={}, failed={}",
                 workbook.getFileHash().substring(0, 8), resolvedImportDate,
-                result.getCreatedCount(), result.getAlreadyExistsCount(),
+                result.getCreatedCount(), result.getUpdatedCount(), result.getAlreadyExistsCount(),
                 result.getSkippedCount(), result.getFailedCount());
         return result;
     }
@@ -205,27 +285,52 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
      * @return 解析与只读校验结果
      */
     public ImportResolution resolve(byte[] content, String fileName, LocalDate importDate) {
+        return resolve(content, fileName, importDate, false);
+    }
+
+    /**
+     * 按指定范围解析工作簿并完成只读校验。
+     *
+     * @param content 工作簿内容
+     * @param fileName 上传文件名
+     * @param importDate 导入日期
+     * @param dietOnly 是否仅处理第二工作表
+     * @return 解析与只读校验结果
+     */
+    private ImportResolution resolve(byte[] content, String fileName, LocalDate importDate, boolean dietOnly) {
         validateUpload(content);
         String fileHash = sha256(content);
         log.info("客户批量导入解析开始: fileName={}, size={}KB, 摘要前 8 位={}",
                 fileName, content.length / 1024, fileHash.substring(0, 8));
 
-        ParsedWorkbook workbook = parser.parse(content, fileHash, importDate);
+        ParsedWorkbook workbook = dietOnly ? parser.parseDietOnly(content, fileHash, importDate)
+                : parser.parse(content, fileHash, importDate);
         ImportResolution resolution = new ImportResolution();
         resolution.setWorkbook(workbook);
         if (!workbook.isStructureValid()) {
             log.warn("客户批量导入解析失败：工作簿结构不符合第三版模板");
             return resolution;
         }
-        resolution.setCandidates(resolveCandidates(workbook));
+        List<ImportCandidate> candidates = dietOnly ? resolveDietOnlyCandidates(workbook) : resolveCandidates(workbook);
+        List<CustomerDietOptionDto> dietOptions = Collections.emptyList();
+        if (workbook.isDietSheetPresent()) {
+            dietOptions = dietDictionaryService.listActiveOptions();
+            workbook.setDictionaryHash(dietMatchService.dictionaryHash(dietOptions));
+            dietMatchService.attachDietRows(workbook, candidates, dietOptions);
+        }
+        for (ImportCandidate candidate : candidates) {
+            candidate.setDraft(buildDraft(candidate.getParsed(), candidate.getParentPackage(), candidate.isSupplemental()));
+            candidate.setImportable(isCandidateImportable(candidate));
+        }
+        resolution.setCandidates(candidates);
         return resolution;
     }
 
     /**
-     * 逐位补齐套餐与重复判定。
+     * 逐位补齐套餐归属，并判断新建、身份冲突或同身份补录。
      *
      * @param workbook 工作簿解析结果
-     * @return 客户候选列表
+     * @return 按来源行排序的客户候选列表
      */
     private List<ImportCandidate> resolveCandidates(ParsedWorkbook workbook) {
         List<ParentPackage> enabledPackages = parentPackageMapper.selectList(
@@ -239,7 +344,7 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
                 .filter(this::isNotBlank)
                 .distinct()
                 .collect(Collectors.toList());
-        Map<String, String> existingCodePhones = loadExistingCodePhones(codes);
+        Map<String, CustomerProfile> existingProfiles = loadExistingProfiles(codes);
 
         List<ImportCandidate> candidates = new ArrayList<>();
         for (ParsedCustomer parsed : workbook.getCustomers()) {
@@ -254,19 +359,49 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
                         describePackageMismatch(parsed.getEffectiveCode(), enabledPackages));
             }
 
-            if (existingCodePhones.containsKey(parsed.getEffectiveCode())) {
-                candidate.setAlreadyExists(true);
-                String existingPhone = existingCodePhones.get(parsed.getEffectiveCode());
-                String message = existingPhone != null && parsed.getPhoneNormalized() != null
-                        && !existingPhone.equals(parsed.getPhoneNormalized())
-                        ? "编号已存在且手机号与本次不同，按业务规则不合并，本次跳过"
-                        : "客户编号已存在，本次跳过（幂等重传）";
-                parsed.addIssue(CustomerImportIssueCategory.ALREADY_EXISTS, message);
+            CustomerProfile existing = existingProfiles.get(parsed.getEffectiveCode());
+            if (existing != null) {
+                candidate.setExistingProfile(existing);
+                if (sameNormalizedPhone(existing.getPhone(), parsed.getPhoneNormalized())) {
+                    candidate.setSupplemental(true);
+                } else {
+                    candidate.setAlreadyExists(true);
+                    parsed.addIssue(CustomerImportIssueCategory.ALREADY_EXISTS,
+                            "同一客户编号已存在但手机号不一致，身份冲突，本次不合并");
+                }
             }
+            candidates.add(candidate);
+        }
+        candidates.sort(Comparator.comparingInt(candidate -> candidate.getParsed().getSourceRows().get(0)));
+        return candidates;
+    }
 
-            CustomerImportDraftDto draft = buildDraft(parsed, matched);
-            candidate.setDraft(draft);
-            candidate.setImportable(parsed.isImportable());
+    /**
+     * 按第二工作表编号查找已有客户，缺失编号只提示错误，不新建客户或订单。
+     *
+     * @param workbook 第二工作表解析结果
+     * @return 仅包含第二工作表来源行的补录候选
+     */
+    private List<ImportCandidate> resolveDietOnlyCandidates(ParsedWorkbook workbook) {
+        List<String> codes = workbook.getCustomers().stream()
+                .map(ParsedCustomer::getEffectiveCode)
+                .filter(this::isNotBlank)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<String, CustomerProfile> existingProfiles = loadExistingProfiles(codes);
+        List<ImportCandidate> candidates = new ArrayList<>();
+        for (ParsedCustomer parsed : workbook.getCustomers()) {
+            ImportCandidate candidate = new ImportCandidate();
+            candidate.setParsed(parsed);
+            CustomerProfile existing = existingProfiles.get(parsed.getEffectiveCode());
+            if (existing == null) {
+                parsed.addIssue(CustomerImportIssueCategory.PROFILE_ERROR,
+                        "数据库中未找到该客户编号，仅导入第二页时不会新建客户");
+            } else {
+                candidate.setExistingProfile(existing);
+                candidate.setSupplemental(true);
+                parsed.setPhoneNormalized(existing.getPhone());
+            }
             candidates.add(candidate);
         }
         candidates.sort(Comparator.comparingInt(candidate -> candidate.getParsed().getSourceRows().get(0)));
@@ -278,9 +413,10 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
      *
      * @param parsed 解析草稿
      * @param parentPackage 匹配到的父套餐
+     * @param supplemental 是否仅补录已有客户共享资料
      * @return 客户草稿
      */
-    private CustomerImportDraftDto buildDraft(ParsedCustomer parsed, ParentPackage parentPackage) {
+    private CustomerImportDraftDto buildDraft(ParsedCustomer parsed, ParentPackage parentPackage, boolean supplemental) {
         CustomerImportDraftDto draft = new CustomerImportDraftDto();
         draft.setSourceRows(new ArrayList<>(parsed.getSourceRows()));
         draft.setOriginalCodeA(parsed.getOriginalCodeA());
@@ -311,6 +447,18 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
         }).collect(Collectors.toList()));
         draft.setRemark(parsed.getRemark());
         draft.setSpecialRequirements(parsed.getSpecialRequirements());
+        draft.setSupplemental(supplemental);
+        CustomerDietImportData dietData = parsed.getDietImportData();
+        if (dietData != null) {
+            draft.setMedicalRequirements(dietData.getMedicalRequirements());
+            draft.setDealTimeSource(dietData.getDealTimeSource());
+            draft.setDealTime(dietData.getDealTime() == null ? null : dietData.getDealTime().format(DEAL_TIME_FORMATTER));
+            draft.setDealTimeAtConfirmation(isBlank(dietData.getDealTimeSource()));
+            draft.setPostoperativeInfo(dietData.getPostoperativeInfo());
+            draft.setDishRequirementsRaw(new ArrayList<>(dietData.getDishRequirementsRaw()));
+            draft.setDietaryRestrictionsRaw(new ArrayList<>(dietData.getDietaryRestrictionsRaw()));
+            draft.setDietMatches(new ArrayList<>(dietData.getMatches()));
+        }
         draft.setMealCells(new ArrayList<>(parsed.getFutureMealCells()));
         draft.setWarnings(new ArrayList<>(parsed.getWarnings()));
         draft.setSheetRemainingCount(parsed.getSheetRemainingCount());
@@ -330,11 +478,28 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
         draft.setTotalCount(lunchDinnerCount);
         draft.setImportedVerifiedCount(Math.max(lunchDinnerCount - remaining - futureQuantity, 0));
 
-        draft.setErrors(parsed.getIssues().stream()
+        List<String> errors = parsed.getIssues().stream()
                 .map(CustomerImportIssueDto::getMessage)
-                .collect(Collectors.toList()));
-        draft.setImportable(parsed.isImportable());
+                .collect(Collectors.toList());
+        long ambiguousCount = dietData == null ? 0 : dietData.getMatches().stream()
+                .filter(match -> "AMBIGUOUS".equals(match.getStatus())).count();
+        draft.setDietMatchesNeedReview(parsed.isImportable() && ambiguousCount > 0);
+        if (parsed.isImportable() && ambiguousCount > 0) {
+            errors.add("有 " + ambiguousCount + " 个饮食词项存在多个候选，请逐项选择或明确跳过");
+        }
+        draft.setErrors(errors);
+        draft.setImportable(parsed.isImportable() && ambiguousCount == 0);
         return draft;
+    }
+
+    /**
+     * 判断候选是否通过客户资料和身份校验；饮食歧义由确认选择单独校验。
+     *
+     * @param candidate 当前客户候选
+     * @return 可进入确认处理时为 true
+     */
+    private boolean isCandidateImportable(ImportCandidate candidate) {
+        return !candidate.isAlreadyExists() && candidate.getParsed().isImportable();
     }
 
     /**
@@ -464,13 +629,13 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
     }
 
     /**
-     * 批量查询已存在的客户编号及其手机号。
+     * 分批读取已存在客户档案，供预览阶段复核手机号和共享资料。
      *
      * @param codes 待查编号
-     * @return 编号到手机号的映射；手机号为空时值为 null
+     * @return 客户编号到完整客户档案的映射
      */
-    private Map<String, String> loadExistingCodePhones(List<String> codes) {
-        Map<String, String> existing = new HashMap<>();
+    private Map<String, CustomerProfile> loadExistingProfiles(List<String> codes) {
+        Map<String, CustomerProfile> existing = new HashMap<>();
         if (codes.isEmpty()) {
             return existing;
         }
@@ -483,7 +648,7 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
                 continue;
             }
             for (CustomerProfile profile : profiles) {
-                existing.put(profile.getCustomerCode(), profile.getPhone());
+                existing.put(profile.getCustomerCode(), profile);
             }
         }
         return existing;
@@ -499,6 +664,8 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
         ParsedWorkbook workbook = resolution.getWorkbook();
         CustomerImportPreviewDto preview = new CustomerImportPreviewDto();
         preview.setFileHash(workbook.getFileHash());
+        preview.setDictionaryHash(workbook.getDictionaryHash());
+        preview.setDietSheetPresent(workbook.isDietSheetPresent());
         preview.setSheetName(workbook.getSheetName());
         preview.setCalendarMonth(workbook.getCalendarMonthStart() == null
                 ? null : YearMonth.from(workbook.getCalendarMonthStart()).toString());
@@ -510,6 +677,7 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
         List<CustomerImportIssueDto> issues = new ArrayList<>(workbook.getIssues());
         int importable = 0;
         int alreadyExists = 0;
+        int supplemental = 0;
         int errors = 0;
         int futureQuantity = 0;
         for (ImportCandidate candidate : resolution.getCandidates()) {
@@ -521,12 +689,16 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
                 alreadyExists++;
             } else if (candidate.isImportable()) {
                 importable++;
+                if (candidate.isSupplemental()) {
+                    supplemental++;
+                }
             } else {
                 errors++;
             }
         }
         preview.setImportableCount(importable);
         preview.setAlreadyExistsCount(alreadyExists);
+        preview.setSupplementalCount(supplemental);
         preview.setErrorCount(errors);
         preview.setFutureMealQuantity(futureQuantity);
 
@@ -583,6 +755,18 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
             return null;
         }
         return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
+    }
+
+    /**
+     * 按数字序列比较现有手机号与工作簿手机号。
+     *
+     * @param existingPhone 已存手机号
+     * @param sourcePhone 已规范化来源手机号
+     * @return 两者数字序列一致时为 true
+     */
+    private boolean sameNormalizedPhone(String existingPhone, String sourcePhone) {
+        return existingPhone != null && sourcePhone != null
+                && existingPhone.replaceAll("[^0-9]", "").equals(sourcePhone);
     }
 
     private boolean isBlank(String value) {

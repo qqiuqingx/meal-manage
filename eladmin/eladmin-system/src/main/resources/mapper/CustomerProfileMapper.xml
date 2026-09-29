@@ -17,7 +17,15 @@
                 typeHandler="me.zhengjie.modules.customer.profile.handler.ExcludedDateListTypeHandler"/>
         <result column="medical_requirements" property="medicalRequirements"/>
         <result column="special_requirements" property="specialRequirements"/>
-        <result column="production_date" property="productionDate"/>
+        <result column="dish_requirements" property="dishRequirements"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietItemsTypeHandler"/>
+        <result column="dietary_restrictions" property="dietaryRestrictions"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietItemsTypeHandler"/>
+        <result column="dish_requirements_raw" property="dishRequirementsRaw"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietRawBlocksTypeHandler"/>
+        <result column="dietary_restrictions_raw" property="dietaryRestrictionsRaw"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietRawBlocksTypeHandler"/>
+        <result column="postoperative_info" property="postoperativeInfo"/>
         <result column="remark" property="remark"/>
         <result column="create_by" property="createBy"/>
         <result column="update_by" property="updateBy"/>
@@ -45,6 +53,10 @@
     </select>
 
     <select id="selectByIdForInlineUpdate" resultMap="BaseResultMap">
+        SELECT * FROM customer_profile WHERE id = #{id} FOR UPDATE
+    </select>
+
+    <select id="selectByIdForImportUpdate" resultMap="BaseResultMap">
         SELECT * FROM customer_profile WHERE id = #{id} FOR UPDATE
     </select>
 

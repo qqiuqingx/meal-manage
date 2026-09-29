@@ -151,6 +151,9 @@ describe('CustomerOrder edit flow', () => {
     expect(source).toContain("@click=\"beginInlineEdit(scope.row, 'vegCount')\"")
     expect(source).toContain('@click="openCustomMenuDialog(scope.row)"')
     expect(source).toContain("{{ menuDialogRow.customMenuImage ? '替换菜单图片' : '上传菜单图片' }}")
+    expect(source).toContain('<el-table-column column-key="dietInfo" label="饮食资料" width="100" align="center">')
+    expect(source).toContain('<CustomerDietInfo :customer="scope.row" />')
+    expect(source).toContain('<CustomerDietInfo :customer="form" />')
   })
 
   test('clicking one value opens only its editor and focuses the existing value', async() => {

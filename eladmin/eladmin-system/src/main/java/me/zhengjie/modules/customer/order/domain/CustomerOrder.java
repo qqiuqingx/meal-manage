@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -254,6 +255,22 @@ public class CustomerOrder implements Serializable {
      */
     @TableField(exist = false)
     private String specialRequirements;
+
+    /** 客户共享的菜品特殊要求结构化对象，只用于订单查询投影。 */
+    @TableField(exist = false)
+    private List<CustomerDietItemDto> dishRequirements;
+
+    /** 客户共享的禁忌结构化对象，只用于订单查询投影。 */
+    @TableField(exist = false)
+    private List<CustomerDietItemDto> dietaryRestrictions;
+
+    /** 客户共享的想吃原文，只用于订单查询投影。 */
+    @TableField(exist = false)
+    private List<String> dishRequirementsRaw;
+
+    /** 客户共享的禁忌原文，只用于订单查询投影。 */
+    @TableField(exist = false)
+    private List<String> dietaryRestrictionsRaw;
 
     /**
      * 客户地址列表(查询时填充，来自 customer_profile_address)

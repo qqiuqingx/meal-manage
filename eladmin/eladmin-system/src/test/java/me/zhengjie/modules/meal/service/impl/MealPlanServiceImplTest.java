@@ -13,6 +13,7 @@ import me.zhengjie.modules.customer.orderReplaceRule.mapper.CustomerOrderReplace
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.meal.domain.Dish;
@@ -49,6 +50,8 @@ import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -106,6 +109,34 @@ class MealPlanServiceImplTest {
     void shouldRejectInvalidMealType() {
         assertThrows(BadRequestException.class, () -> mealPlanService.generateMealPlan("2026-04-01", "INVALID", null));
         verify(mealPlanMapper, never()).insert(any(MealPlan.class));
+    }
+
+    @Test
+    void shouldAssembleSharedDietInfoAndPostoperativeTextIntoPlanDetail() throws Exception {
+        MealPlanCustomer customer = new MealPlanCustomer();
+        customer.setId(10L);
+        customer.setMedicalRequirements("少盐");
+        customer.setDishRequirementsRaw(Collections.singletonList("想吃鲈鱼"));
+        CustomerDietItemDto dish = new CustomerDietItemDto();
+        dish.setType("DISH");
+        dish.setId(12L);
+        dish.setName("清蒸鲈鱼");
+        customer.setDishRequirements(Collections.singletonList(dish));
+        customer.setDietaryRestrictionsRaw(Collections.singletonList("不吃牛肉"));
+        customer.setDietaryRestrictions(Collections.singletonList(dish));
+        customer.setPostoperativeInfo("4个月");
+
+        Method method = MealPlanServiceImpl.class.getDeclaredMethod("assembleCustomerDetail",
+                MealPlanCustomer.class, Map.class, Map.class, Set.class);
+        method.setAccessible(true);
+        MealPlanDetailVO.CustomerPlanDetail detail = (MealPlanDetailVO.CustomerPlanDetail) method.invoke(
+                mealPlanService, customer, Collections.emptyMap(), Collections.emptyMap(), Collections.emptySet());
+
+        assertEquals("少盐", detail.getMedicalRequirements());
+        assertEquals(Collections.singletonList("想吃鲈鱼"), detail.getDishRequirementsRaw());
+        assertEquals("清蒸鲈鱼", detail.getDishRequirements().get(0).getName());
+        assertEquals(Collections.singletonList("不吃牛肉"), detail.getDietaryRestrictionsRaw());
+        assertEquals("4个月", detail.getPostoperativeInfo());
     }
 
     @Test

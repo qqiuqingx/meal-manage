@@ -1,6 +1,7 @@
 package me.zhengjie.modules.customer.profile.domain.dto;
 
 import lombok.Data;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
 
 import java.io.Serializable;
@@ -47,9 +48,19 @@ public class CustomerProfileSaveDto implements Serializable {
     private String specialRequirements;
 
     /**
-     * 生产日期（格式：yyyy-MM-dd）
+     * 客户希望食用的结构化对象；编辑时 null 保留，空数组清空。
      */
-    private String productionDate;
+    private List<CustomerDietItemDto> dishRequirements;
+
+    /**
+     * 客户不能食用的结构化对象；编辑时 null 保留，空数组清空。
+     */
+    private List<CustomerDietItemDto> dietaryRestrictions;
+
+    /**
+     * 术后情况原文，例如“5天”或“4个月”。
+     */
+    private String postoperativeInfo;
 
     // 备注
     private String remark;

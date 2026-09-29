@@ -74,6 +74,14 @@ public interface CustomerProfileMapper extends BaseMapper<CustomerProfile> {
     CustomerProfile selectByIdForInlineUpdate(@Param("id") Long id);
 
     /**
+     * 锁定客户主档行，供批量导入补录时复核身份并合并共享客户信息。
+     *
+     * @param id 客户主键
+     * @return 锁定后的客户档案；不存在时返回 null
+     */
+    CustomerProfile selectByIdForImportUpdate(@Param("id") Long id);
+
+    /**
      * 定向更新客户过敏标签，并记录最后修改人。
      *
      * @param id 客户主键

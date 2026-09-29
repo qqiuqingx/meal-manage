@@ -55,6 +55,14 @@
         <result column="child_package_name" property="childPackageName"/>
         <result column="allergy_tags" property="allergyTags" typeHandler="me.zhengjie.modules.customer.profile.handler.AllergyTagsTypeHandler"/>
         <result column="special_requirements" property="specialRequirements"/>
+        <result column="dish_requirements" property="dishRequirements"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietItemsTypeHandler"/>
+        <result column="dietary_restrictions" property="dietaryRestrictions"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietItemsTypeHandler"/>
+        <result column="dish_requirements_raw" property="dishRequirementsRaw"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietRawBlocksTypeHandler"/>
+        <result column="dietary_restrictions_raw" property="dietaryRestrictionsRaw"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietRawBlocksTypeHandler"/>
         <result column="addresses" property="addresses" typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
         <result column="trial_order_code" property="trialOrderCode"/>
     </resultMap>
@@ -98,6 +106,7 @@
     <!-- 条件查询订单列表(关联客户姓名、手机号、套餐名称和过敏标签) -->
     <select id="findAll" resultMap="JoinResultMap">
         SELECT o.*, cp.customer_name, cp.phone, cp.allergy_tags, cp.special_requirements,
+               cp.dish_requirements, cp.dietary_restrictions, cp.dish_requirements_raw, cp.dietary_restrictions_raw,
                pp.package_name as parent_package_name,
                sp.sub_package_name as child_package_name,
                trial_o.order_code as trial_order_code,

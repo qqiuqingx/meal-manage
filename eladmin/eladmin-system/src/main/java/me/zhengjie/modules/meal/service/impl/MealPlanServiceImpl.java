@@ -76,7 +76,6 @@ import org.springframework.util.CollectionUtils;
 
 import java.sql.Timestamp;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
@@ -2347,9 +2346,17 @@ public class MealPlanServiceImpl implements MealPlanService {
         return buildDishIngredientsMap(dishIds);
     }
 
+    /**
+     * 组装排餐客户详情及关联客户当前的医嘱、饮食和术后共享资料。
+     *
+     * @param customer 排餐客户记录及联表读取的客户档案字段
+     * @param itemsByCustomerPlanId 排餐份数到菜品明细的索引
+     * @param ingredientsMap 菜品ID到配料信息的索引
+     * @param firstMealCustomerPlanIds 首餐排餐ID集合
+     * @return 完整客户排餐详情
+     */
     private MealPlanDetailVO.CustomerPlanDetail assembleCustomerDetail(
             MealPlanCustomer customer,
-            LocalDate recordDate,
             Map<Long, List<MealPlanCustomerItem>> itemsByCustomerPlanId,
             Map<Integer, List<me.zhengjie.modules.meal.domain.dto.DishIngredientItemVO>> ingredientsMap,
             Set<Long> firstMealCustomerPlanIds) {
@@ -2381,7 +2388,12 @@ public class MealPlanServiceImpl implements MealPlanService {
         detail.setVerificationTime(customer.getVerificationTime() != null ? customer.getVerificationTime().toString() : null);
         detail.setVerificationOperator(customer.getVerificationOperator());
         detail.setSpecialRequirements(customer.getSpecialRequirements());
-        fillProductionDateMark(detail, customer.getProductionDate(), recordDate);
+        detail.setMedicalRequirements(customer.getMedicalRequirements());
+        detail.setDishRequirementsRaw(customer.getDishRequirementsRaw());
+        detail.setDishRequirements(customer.getDishRequirements());
+        detail.setDietaryRestrictionsRaw(customer.getDietaryRestrictionsRaw());
+        detail.setDietaryRestrictions(customer.getDietaryRestrictions());
+        detail.setPostoperativeInfo(customer.getPostoperativeInfo());
 
         List<MealPlanCustomerItem> items = itemsByCustomerPlanId.getOrDefault(customer.getId(), Collections.emptyList());
         List<MealPlanCustomerItemVO> itemVOs = items.stream()
@@ -2389,26 +2401,6 @@ public class MealPlanServiceImpl implements MealPlanService {
                 .collect(Collectors.toList());
         detail.setItems(itemVOs);
         return detail;
-    }
-
-    /**
-     * 填充排餐详情中的生产日期标记信息。
-     *
-     * @param detail 排餐客户详情
-     * @param productionDate 客户生产日期
-     * @param recordDate 排餐日期
-     */
-    private void fillProductionDateMark(MealPlanDetailVO.CustomerPlanDetail detail, LocalDate productionDate, LocalDate recordDate) {
-        detail.setProductionDate(productionDate != null ? productionDate.toString() : null);
-        if (productionDate == null || recordDate == null) {
-            detail.setNearProductionDate(false);
-            detail.setProductionDateDiffDays(null);
-            return;
-        }
-        long diffDays = ChronoUnit.DAYS.between(productionDate, recordDate);
-        boolean nearProductionDate = diffDays >= 0 && diffDays <= 3;
-        detail.setNearProductionDate(nearProductionDate);
-        detail.setProductionDateDiffDays(nearProductionDate ? (int) diffDays : null);
     }
 
     private Set<Long> buildFirstMealCustomerPlanIdSet(List<MealPlanCustomer> customers) {
@@ -2442,7 +2434,7 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         Set<Long> firstMealCustomerPlanIds = buildFirstMealCustomerPlanIdSet(customers);
         List<MealPlanDetailVO.CustomerPlanDetail> customerDetails = customers.stream()
-                .map(customer -> assembleCustomerDetail(customer, plan.getRecordDate(), itemsByCustomerPlanId, ingredientsMap, firstMealCustomerPlanIds))
+                .map(customer -> assembleCustomerDetail(customer, itemsByCustomerPlanId, ingredientsMap, firstMealCustomerPlanIds))
                 .collect(Collectors.toList());
         vo.setCustomers(customerDetails);
         vo.setTotalCustomers((int) customerDetails.stream()
@@ -2768,7 +2760,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         // 设置客户列表
         Set<Long> firstMealCustomerPlanIds = buildFirstMealCustomerPlanIdSet(customers);
         List<MealPlanDetailVO.CustomerPlanDetail> customerDetails = customers.stream()
-                .map(customer -> assembleCustomerDetail(customer, mealPlan.getRecordDate(), itemsMap, finalIngredientsMap, firstMealCustomerPlanIds))
+                .map(customer -> assembleCustomerDetail(customer, itemsMap, finalIngredientsMap, firstMealCustomerPlanIds))
                 .collect(Collectors.toList());
 
         result.setCustomers(customerDetails);

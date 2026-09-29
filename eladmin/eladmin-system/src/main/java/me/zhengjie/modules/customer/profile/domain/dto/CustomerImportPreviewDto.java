@@ -24,6 +24,12 @@ public class CustomerImportPreviewDto implements Serializable {
      */
     private String fileHash;
 
+    /** 当前饮食字典快照摘要，确认请求必须回传以防止候选过期。 */
+    private String dictionaryHash;
+
+    /** 是否包含可选的客户禁忌工作表。 */
+    private boolean dietSheetPresent;
+
     /**
      * 解析的工作表名称
      */
@@ -58,6 +64,9 @@ public class CustomerImportPreviewDto implements Serializable {
      * 已存在客户数（幂等跳过）
      */
     private int alreadyExistsCount;
+
+    /** 编号与手机号一致、可补录共享客户资料的客户数。 */
+    private int supplementalCount;
 
     /**
      * 存在阻塞问题的客户数

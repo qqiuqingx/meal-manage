@@ -23,8 +23,9 @@ import io.swagger.annotations.ApiModelProperty;
 import lombok.Getter;
 import lombok.Setter;
 import me.zhengjie.base.BaseEntity;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 
-import java.time.LocalDate;
+import java.util.List;
 
 /**
  * 排餐计划客户结果
@@ -145,9 +146,30 @@ public class MealPlanCustomer extends BaseEntity {
     private String specialRequirements;
 
     /**
-     * 客户生产日期（关联 customer_profile 查询填充）
+     * 客户医嘱（关联 customer_profile 查询填充）。
      */
     @TableField(exist = false)
-    @ApiModelProperty(value = "客户生产日期")
-    private LocalDate productionDate;
+    @ApiModelProperty(value = "客户医嘱")
+    private String medicalRequirements;
+
+    /** 客户希望食用的结构化对象（关联 customer_profile 查询填充）。 */
+    @TableField(exist = false)
+    private List<CustomerDietItemDto> dishRequirements;
+
+    /** 客户不能食用的结构化对象（关联 customer_profile 查询填充）。 */
+    @TableField(exist = false)
+    private List<CustomerDietItemDto> dietaryRestrictions;
+
+    /** 客户希望食用的来源原文块（关联 customer_profile 查询填充）。 */
+    @TableField(exist = false)
+    private List<String> dishRequirementsRaw;
+
+    /** 客户禁忌的来源原文块（关联 customer_profile 查询填充）。 */
+    @TableField(exist = false)
+    private List<String> dietaryRestrictionsRaw;
+
+    /** 客户术后情况原文（关联 customer_profile 查询填充）。 */
+    @TableField(exist = false)
+    @ApiModelProperty(value = "客户术后情况")
+    private String postoperativeInfo;
 }

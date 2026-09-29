@@ -28,12 +28,16 @@
       :close-on-click-modal="false"
     >
       <el-alert
-        title="先预览并核对编号池、地址和逐餐计划。原审计快照截至 2026-09-24；导入日期晚于快照或 9 月 25—30 日已有送餐时，必须使用更新后的业务工作簿重新预览。确认提交会真实创建客户；有待导入餐数时还会创建首单及未来计划。导入前请完成业务备份。"
+        :title="importDietOnly ? '仅处理“客户禁忌”工作表：按编号补录数据库已有客户的医嘱、饮食和术后资料，不创建客户或订单。请先核对预览，再确认提交。' : '先预览并核对编号池、地址和逐餐计划。原审计快照截至 2026-09-24；导入日期晚于快照或 9 月 25—30 日已有送餐时，必须使用更新后的业务工作簿重新预览。确认提交会真实创建客户；有待导入餐数时还会创建首单及未来计划。导入前请完成业务备份。'"
         type="warning"
         :closable="false"
         show-icon
         style="margin-bottom: 16px;"
       />
+      <el-radio-group v-model="importDietOnly" size="small" style="margin-bottom: 14px;" @change="resetImportPreview">
+        <el-radio-button :label="true">仅导入客户禁忌（第二页）</el-radio-button>
+        <el-radio-button :label="false">完整工作簿导入</el-radio-button>
+      </el-radio-group>
       <el-row :gutter="16" type="flex" align="middle" style="margin-bottom: 14px;">
         <el-col :span="10">
           <el-upload
@@ -87,17 +91,36 @@
           <span>文件摘要：{{ importPreview.fileHash }}</span>
           <span>数据行：{{ importPreview.dataRowCount }}</span>
           <span>客户：{{ importPreview.customerCount }}</span>
-          <span>可新增：{{ importPreview.importableCount }}</span>
+          <span>待处理：{{ importPreview.importableCount }}</span>
+          <span>其中补录：{{ importPreview.supplementalCount || 0 }}</span>
           <span>已存在：{{ importPreview.alreadyExistsCount }}</span>
           <span>资料错误：{{ importPreview.errorCount }}</span>
-          <span>未来份数：{{ importPreview.futureMealQuantity }}</span>
+          <span>待确认歧义：{{ unresolvedDietMatchCount }}</span>
+          <span v-if="!importDietOnly">未来份数：{{ importPreview.futureMealQuantity }}</span>
         </div>
+        <el-alert
+          v-if="importDietOnly && importMissingCustomerCount > 0"
+          :title="`第二页有 ${importMissingCustomerCount} 位客户在数据库中未找到，已在下方标红并跳过；不会新建客户。`"
+          type="error"
+          :closable="false"
+          show-icon
+          style="margin-top: 8px;"
+        />
+        <el-alert
+          v-if="unresolvedDietMatchCount > 0"
+          :title="`还有 ${unresolvedDietMatchCount} 个饮食匹配歧义未确认。请用下方“待确认匹配”筛选，逐项选择候选或明确跳过后才能提交。`"
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-top: 8px;"
+        />
         <div v-if="importPreview.drafts && importPreview.drafts.length" class="customer-import-filter">
           <el-radio-group v-model="importDraftFilter" size="mini">
             <el-radio-button label="all">全部 {{ importDraftCounts.all }}</el-radio-button>
             <el-radio-button label="error" :disabled="!importDraftCounts.error">仅错误 {{ importDraftCounts.error }}</el-radio-button>
             <el-radio-button label="warning" :disabled="!importDraftCounts.warning">仅提示 {{ importDraftCounts.warning }}</el-radio-button>
             <el-radio-button label="issue" :disabled="!importDraftCounts.issue">有问题 {{ importDraftCounts.issue }}</el-radio-button>
+            <el-radio-button label="ambiguous" :disabled="!importDraftCounts.ambiguous">待确认匹配 {{ importDraftCounts.ambiguous }}</el-radio-button>
           </el-radio-group>
           <el-input
             v-model="importDraftKeyword"
@@ -116,13 +139,62 @@
           </el-table-column>
           <el-table-column label="客户编号" prop="customerCode" width="110" />
           <el-table-column label="手机号" prop="phoneMasked" width="120" />
-          <el-table-column label="父套餐" prop="parentPackageName" width="120" />
-          <el-table-column label="午晚餐数" prop="lunchDinnerCount" width="95" />
-          <el-table-column label="未来计划" width="90">
+          <el-table-column label="处理" width="75">
+            <template slot-scope="scope">{{ importDietOnly ? (scope.row.supplemental ? '补录' : '跳过') : (scope.row.supplemental ? '补录' : '新建') }}</template>
+          </el-table-column>
+          <el-table-column v-if="!importDietOnly" label="父套餐" prop="parentPackageName" width="120" />
+          <el-table-column v-if="!importDietOnly" label="午晚餐数" prop="lunchDinnerCount" width="95" />
+          <el-table-column v-if="!importDietOnly" label="未来计划" width="90">
             <template slot-scope="scope">{{ scope.row.futureMealCount || 0 }} 份</template>
           </el-table-column>
-          <el-table-column label="订单状态" width="90">
+          <el-table-column v-if="!importDietOnly" label="订单状态" width="90">
             <template slot-scope="scope">{{ scope.row.lunchDinnerCount === 0 ? '-' : (scope.row.paused ? '暂停 / 待通知' : '进行中') }}</template>
+          </el-table-column>
+          <el-table-column label="医嘱与饮食匹配" min-width="440">
+            <template slot-scope="scope">
+              <div class="customer-import-diet-field"><strong>C 医嘱：</strong>{{ scope.row.medicalRequirements || '—' }}</div>
+              <div class="customer-import-diet-field"><strong>F 成交时间：</strong>{{ scope.row.dealTimeSource || '空' }} → {{ importDietOnly ? '不修改历史订单' : (scope.row.dealTime || (scope.row.dealTimeAtConfirmation ? '确认时填入' : '—')) }}</div>
+              <div class="customer-import-diet-field"><strong>G 术后：</strong>{{ scope.row.postoperativeInfo || '—' }}</div>
+              <div class="customer-import-diet-field">
+                <strong>D 想吃原文：</strong>
+                <span v-if="scope.row.dishRequirementsRaw && scope.row.dishRequirementsRaw.length">{{ scope.row.dishRequirementsRaw.join(' ｜ ') }}</span>
+                <span v-else>—</span>
+              </div>
+              <div class="customer-import-diet-field">
+                <strong>E 禁忌原文：</strong>
+                <span v-if="scope.row.dietaryRestrictionsRaw && scope.row.dietaryRestrictionsRaw.length">{{ scope.row.dietaryRestrictionsRaw.join(' ｜ ') }}</span>
+                <span v-else>—</span>
+              </div>
+              <div v-for="match in (scope.row.dietMatches || [])" :key="match.sourceKey" class="customer-import-match">
+                <div>
+                  <strong>{{ match.side === 'DISH_REQUIREMENTS' ? 'D 想吃' : 'E 禁忌' }} 第{{ match.sourceRow }}行：</strong>
+                  <span>{{ match.rawText }}</span>
+                  <span v-if="match.lookupText !== match.rawText"> → {{ match.lookupText }}</span>
+                </div>
+                <div v-if="match.status === 'UNIQUE'" class="customer-import-match-result">唯一匹配：{{ dietOptionLabel(match.selectedItem) }}</div>
+                <div v-else-if="match.status === 'SELECTED'" class="customer-import-match-result">已选择：{{ dietOptionLabel(match.selectedItem) }}</div>
+                <div v-else-if="match.status === 'SKIPPED'" class="customer-import-warning">已明确跳过，完整原文仍会保存</div>
+                <div v-else-if="match.status === 'UNMATCHED'" class="customer-import-warning">未匹配到字典对象，完整原文仍会保存</div>
+                <div v-else-if="match.status === 'AMBIGUOUS'">
+                  <span v-if="!scope.row.dietMatchesNeedReview" class="customer-import-warning">该客户有其他阻塞问题，当前候选无需处理</span>
+                  <el-select
+                    v-else
+                    :value="dietSelectionValues[match.sourceKey]"
+                    size="mini"
+                    clearable
+                    placeholder="选择候选或明确跳过"
+                    style="width: 270px; margin-top: 4px;"
+                    @change="setDietMatchSelection(match, $event)"
+                  >
+                    <el-option v-for="option in match.candidates" :key="option.type + ':' + option.id" :label="dietOptionLabel(option)" :value="dietMatchOptionValue(option)" />
+                    <el-option label="明确跳过（保留原文）" value="SKIP" />
+                  </el-select>
+                  <div v-if="dietSelectionValues[match.sourceKey] === 'SKIP'" class="customer-import-match-result">已明确跳过</div>
+                  <div v-else-if="dietSelectionValues[match.sourceKey]" class="customer-import-match-result">已选择：{{ selectedDietOptionLabel(match) }}</div>
+                </div>
+              </div>
+              <div v-if="!(scope.row.dietMatches || []).length" class="customer-import-diet-field">D/E 原文为空，无需匹配</div>
+            </template>
           </el-table-column>
           <el-table-column label="问题与提示" min-width="260">
             <template slot-scope="scope">
@@ -138,6 +210,7 @@
         <el-divider content-position="left">提交结果</el-divider>
         <div class="customer-import-summary">
           <span>新建：{{ importResult.createdCount }}</span>
+          <span>补录：{{ importResult.updatedCount || 0 }}</span>
           <span>已存在：{{ importResult.alreadyExistsCount }}</span>
           <span>跳过：{{ importResult.skippedCount }}</span>
           <span>失败：{{ importResult.failedCount }}</span>
@@ -421,14 +494,48 @@
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="生产日期">
-              <el-date-picker
-                v-model="form.productionDate"
-                type="date"
-                placeholder="选择生产日期"
-                value-format="yyyy-MM-dd"
+            <el-form-item label="菜品特殊要求">
+              <el-select
+                v-model="form.dishRequirements"
+                multiple
+                filterable
+                value-key="selectionKey"
+                :loading="dietOptionsLoading"
+                placeholder="搜索并选择客户想吃的菜品、配料或标签"
                 style="width: 100%;"
-              />
+              >
+                <el-option
+                  v-for="item in dietOptionChoices"
+                  :key="item.selectionKey"
+                  :label="dietOptionLabel(item)"
+                  :value="item"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="客户禁忌">
+              <el-select
+                v-model="form.dietaryRestrictions"
+                multiple
+                filterable
+                value-key="selectionKey"
+                :loading="dietOptionsLoading"
+                placeholder="搜索并选择不能食用的菜品、配料或标签"
+                style="width: 100%;"
+              >
+                <el-option
+                  v-for="item in dietOptionChoices"
+                  :key="item.selectionKey"
+                  :label="dietOptionLabel(item)"
+                  :value="item"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="术后信息">
+              <el-input v-model="form.postoperativeInfo" maxlength="255" placeholder="例如：5天、4个月；按原文记录" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -516,7 +623,7 @@
             <div>“米换成糙米”会映射为“三色糙米”。</div>
             <div>订餐描述支持“14天每天午餐和晚餐”这类写法，自动推导餐次、开始餐次和餐数。</div>
             <div>如显式填写“开始餐次：晚餐”，则以显式值为准。</div>
-            <div>生产日期支持“2026-05-02”“2026/05/02”“5月2日”这类写法。</div>
+            <div>术后信息按原文记录，例如“5天”“4个月”，不会按排餐日期自动递增。</div>
           </div>
         </div>
         <div class="intake-guide__section">
@@ -593,7 +700,9 @@ const defaultForm = {
   excludedDates: [],
   medicalRequirements: null,
   specialRequirements: null,
-  productionDate: null,
+  dishRequirements: [],
+  dietaryRestrictions: [],
+  postoperativeInfo: null,
   remark: null,
   addresses: createDefaultAddresses(),
   orderInfo: createFirstOrderDefaultForm()
@@ -677,6 +786,10 @@ export default {
       excludeDatesExpanded: false,
       allergyOptions: [],
       allergyLoading: false,
+      dietOptions: [],
+      dietOptionsLoading: false,
+      dietOptionsLoaded: false,
+      dietOptionsPromise: null,
       excludedDishOptions: [],
       excludedDishLoading: false,
       editRequestId: 0,
@@ -691,12 +804,14 @@ export default {
       importFile: null,
       importFileList: [],
       importDate: null,
+      importDietOnly: true,
       importLoading: false,
       importConfirmLoading: false,
       importPreview: null,
       importResult: null,
       importDraftFilter: 'all',
-      importDraftKeyword: ''
+      importDraftKeyword: '',
+      dietSelectionValues: {}
     }
   },
   computed: {
@@ -731,6 +846,8 @@ export default {
         this.importPreview &&
         this.importPreview.structureValid &&
         Number(this.importPreview.importableCount) > 0 &&
+        (!this.importPreview.dietSheetPresent || this.importPreview.dictionaryHash) &&
+        this.unresolvedDietMatchCount === 0 &&
         this.importFile &&
         this.importDate &&
         !this.importLoading &&
@@ -742,6 +859,10 @@ export default {
       return Boolean(this.importResult &&
         (Number(this.importResult.failedCount) > 0 || Number(this.importResult.skippedCount) > 0))
     },
+    importMissingCustomerCount() {
+      if (!this.importDietOnly || !this.importPreview || !this.importPreview.structureValid) return 0
+      return (this.importPreview.drafts || []).filter(draft => !draft.supplemental).length
+    },
     /**
      * 导入预览草稿的分组计数：全部 / 仅错误 / 仅提示（无错误但有提示）/ 有问题（错误+提示）
      */
@@ -749,14 +870,18 @@ export default {
       const drafts = (this.importPreview && this.importPreview.drafts) || []
       let error = 0
       let warning = 0
+      let ambiguous = 0
       drafts.forEach((d) => {
         if (d.errors && d.errors.length) {
           error += 1
         } else if (d.warnings && d.warnings.length) {
           warning += 1
         }
+        if (d.dietMatchesNeedReview && (d.dietMatches || []).some(match =>
+          match.status === 'AMBIGUOUS' && !this.dietSelectionValues[match.sourceKey]
+        )) ambiguous += 1
       })
-      return { all: drafts.length, error, warning, issue: error + warning }
+      return { all: drafts.length, error, warning, issue: error + warning, ambiguous }
     },
     /**
      * 按「错误/提示筛选 + 客户编号/来源行关键字」过滤后的导入预览草稿列表
@@ -770,6 +895,10 @@ export default {
         list = drafts.filter((d) => (!d.errors || !d.errors.length) && d.warnings && d.warnings.length)
       } else if (this.importDraftFilter === 'issue') {
         list = drafts.filter((d) => (d.errors && d.errors.length) || (d.warnings && d.warnings.length))
+      } else if (this.importDraftFilter === 'ambiguous') {
+        list = drafts.filter(d => d.dietMatchesNeedReview && (d.dietMatches || []).some(match =>
+          match.status === 'AMBIGUOUS' && !this.dietSelectionValues[match.sourceKey]
+        ))
       }
       const keyword = (this.importDraftKeyword || '').trim()
       if (keyword) {
@@ -779,17 +908,118 @@ export default {
         )
       }
       return list
+    },
+    unresolvedDietMatchCount() {
+      const drafts = (this.importPreview && this.importPreview.drafts) || []
+      return drafts.reduce((total, draft) => {
+        if (!draft.dietMatchesNeedReview) return total
+        return total + (draft.dietMatches || []).filter(match =>
+          match.status === 'AMBIGUOUS' && !this.dietSelectionValues[match.sourceKey]
+        ).length
+      }, 0)
+    },
+    dietOptionChoices() {
+      const choices = new Map()
+      ;(this.dietOptions || []).forEach(option => {
+        const normalized = this.toDietSelection(option)
+        choices.set(normalized.selectionKey, normalized)
+      })
+      ;[...(this.form.dishRequirements || []), ...(this.form.dietaryRestrictions || [])].forEach(item => {
+        const normalized = this.toDietSelection(item)
+        if (!choices.has(normalized.selectionKey)) {
+          normalized.historical = true
+          choices.set(normalized.selectionKey, normalized)
+        }
+      })
+      return Array.from(choices.values())
     }
   },
+  created() {
+    this.loadDietOptions()
+  },
   methods: {
+    loadDietOptions() {
+      if (this.dietOptionsLoaded) return Promise.resolve()
+      if (this.dietOptionsPromise) return this.dietOptionsPromise
+      this.dietOptionsLoading = true
+      this.dietOptionsPromise = profileApi.getDietOptions().then(response => {
+        const result = response.data || response
+        this.dietOptions = Array.isArray(result) ? result.map(item => this.toDietSelection(item)) : []
+        this.dietOptionsLoaded = true
+      }).catch(e => {
+        this.$message.error((e.message || '') || '加载饮食对象选项失败')
+      }).finally(() => {
+        this.dietOptionsLoading = false
+        this.dietOptionsPromise = null
+      })
+      return this.dietOptionsPromise
+    },
+    toDietSelection(item) {
+      const source = item || {}
+      const type = source.type || ''
+      const id = source.id == null ? '' : source.id
+      return Object.assign({}, source, { selectionKey: `${type}:${id}` })
+    },
+    dietOptionLabel(item) {
+      const labels = {
+        DISH: '菜品',
+        INGREDIENT: '配料',
+        INGREDIENT_TAG: '配料标签',
+        INGREDIENT_CATEGORY: '配料二级分类',
+        DISH_TAG: '菜品标签'
+      }
+      const path = item.categoryPath ? `${item.categoryPath} · ` : ''
+      return `${labels[item.type] || item.type} · ${path}${item.name || ('#' + item.id)}${item.historical ? '（历史引用）' : ''}`
+    },
+    dietMatchOptionValue(option) {
+      return `${option.type}:${option.id}`
+    },
+    setDietMatchSelection(match, value) {
+      this.$set(this.dietSelectionValues, match.sourceKey, value)
+      const drafts = (this.importPreview && this.importPreview.drafts) || []
+      const draft = drafts.find(item => (item.dietMatches || []).some(candidate => candidate.sourceKey === match.sourceKey))
+      if (!draft || !draft.dietMatchesNeedReview) return
+      const unresolved = (draft.dietMatches || []).filter(candidate =>
+        candidate.status === 'AMBIGUOUS' && !this.dietSelectionValues[candidate.sourceKey]
+      ).length
+      const reviewErrorPattern = /^有 \d+ 个饮食词项存在多个候选/
+      const errors = (draft.errors || []).filter(error => !reviewErrorPattern.test(error))
+      if (unresolved > 0) errors.push(`有 ${unresolved} 个饮食词项存在多个候选，请逐项选择或明确跳过`)
+      this.$set(draft, 'errors', errors)
+      this.$set(draft, 'importable', errors.length === 0)
+    },
+    selectedDietOptionLabel(match) {
+      const value = this.dietSelectionValues[match.sourceKey]
+      const option = (match.candidates || []).find(item => this.dietMatchOptionValue(item) === value)
+      return option ? this.dietOptionLabel(option) : ''
+    },
+    serializeDietSelections() {
+      const drafts = (this.importPreview && this.importPreview.drafts) || []
+      const matches = drafts.reduce((all, draft) => all.concat(draft.dietMatches || []), [])
+      return matches.reduce((selections, match) => {
+        const value = this.dietSelectionValues[match.sourceKey]
+        if (!value || match.status !== 'AMBIGUOUS') return selections
+        if (value === 'SKIP') {
+          selections.push({ sourceKey: match.sourceKey, action: 'SKIP' })
+          return selections
+        }
+        const option = (match.candidates || []).find(item => this.dietMatchOptionValue(item) === value)
+        if (option) {
+          selections.push({ sourceKey: match.sourceKey, action: 'SELECT', type: option.type, id: option.id })
+        }
+        return selections
+      }, [])
+    },
     openCustomerImport() {
       this.importFile = null
       this.importFileList = []
       this.importDate = this.currentDateString()
+      this.importDietOnly = true
       this.importPreview = null
       this.importResult = null
       this.importDraftFilter = 'all'
       this.importDraftKeyword = ''
+      this.dietSelectionValues = {}
       this.importDialogVisible = true
     },
     /**
@@ -839,14 +1069,16 @@ export default {
     resetImportPreview() {
       this.importPreview = null
       this.importResult = null
+      this.dietSelectionValues = {}
     },
     async previewCustomerImport() {
       if (!this.importFile || !this.importDate) return
       this.importLoading = true
       this.importResult = null
       try {
-        const response = await profileApi.previewCustomerImport(this.importFile, this.importDate)
+        const response = await profileApi.previewCustomerImport(this.importFile, this.importDate, this.importDietOnly)
         this.importPreview = response.data || response
+        this.dietSelectionValues = {}
       } catch (e) {
         this.importPreview = null
         this.$message.error((e.message || '') || '工作簿预览失败')
@@ -858,7 +1090,9 @@ export default {
       if (!this.canConfirmImport) return
       try {
         await this.$confirm(
-          `将按 ${this.importDate} 为 ${this.importPreview.importableCount} 位客户创建档案；有待导入餐数时还会创建首单和未来计划。请确认工作簿反映当前配送情况，并已核对编号池配置和业务备份。`,
+          this.importDietOnly
+            ? `将仅按“客户禁忌”工作表补录 ${this.importPreview.importableCount} 位数据库已有客户，不创建客户或订单。请核对歧义对象选择。`
+            : `将处理 ${this.importPreview.importableCount} 位新建或补录客户（其中已有客户 ${this.importPreview.supplementalCount || 0} 位）；只有新客户会按餐数创建首单。请核对歧义对象选择，并确认工作簿、编号池和业务备份。`,
           '确认批量导入',
           { type: 'warning', confirmButtonText: '确认提交', cancelButtonText: '返回预览' }
         )
@@ -868,13 +1102,14 @@ export default {
       this.importConfirmLoading = true
       try {
         const response = await profileApi.confirmCustomerImport(
-          this.importFile, this.importPreview.fileHash, this.importDate)
+          this.importFile, this.importPreview.fileHash, this.importPreview.dictionaryHash,
+          this.serializeDietSelections(), this.importDate, this.importDietOnly)
         this.importResult = response.data || response
         this.importPreview = this.importResult.preview || this.importPreview
-        if (Number(this.importResult.createdCount) > 0) {
+        if (Number(this.importResult.createdCount) > 0 || Number(this.importResult.updatedCount) > 0) {
           this.crud.refresh()
         }
-        this.$message.success(`导入处理完成：新建 ${this.importResult.createdCount} 位，失败 ${this.importResult.failedCount} 位`)
+        this.$message.success(`导入处理完成：新建 ${this.importResult.createdCount} 位，补录 ${this.importResult.updatedCount || 0} 位，失败 ${this.importResult.failedCount} 位`)
       } catch (e) {
         this.$message.error((e.message || '') || '客户批量导入失败')
       } finally {
@@ -958,7 +1193,9 @@ export default {
         excludedDates: Array.isArray(formData.excludedDates) ? formData.excludedDates : [],
         medicalRequirements: formData.medicalRequirements,
         specialRequirements: formData.specialRequirements,
-        productionDate: formData.productionDate,
+        dishRequirements: (formData.dishRequirements || []).map(item => ({ type: item.type, id: item.id, name: item.name })),
+        dietaryRestrictions: (formData.dietaryRestrictions || []).map(item => ({ type: item.type, id: item.id, name: item.name })),
+        postoperativeInfo: formData.postoperativeInfo,
         remark: formData.remark,
         addresses: this.createAddressesFromForm(formData)
       }
@@ -1127,6 +1364,11 @@ export default {
       if (!this.form.excludedDishIds || !Array.isArray(this.form.excludedDishIds)) {
         this.$set(this.form, 'excludedDishIds', [])
       }
+      const dietFields = ['dishRequirements', 'dietaryRestrictions']
+      dietFields.forEach(field => {
+        const values = Array.isArray(this.form[field]) ? this.form[field] : []
+        this.$set(this.form, field, values.map(item => this.toDietSelection(item)))
+      })
       // 回填排除菜品的选项（编辑时详情已有 ids，需要把对应菜品预加载到 options 中）
       if (this.form.excludedDishIds.length > 0) {
         this.preloadExcludedDishes(this.form.excludedDishIds)
@@ -1162,11 +1404,14 @@ export default {
       const requestId = this.editRequestId + 1
       this.editRequestId = requestId
       try {
+        await this.loadDietOptions()
         const res = await profileApi.getProfile(row.id)
         if (requestId !== this.editRequestId) {
           return
         }
         const detail = res.data || res
+        detail.dishRequirements = (detail.dishRequirements || []).map(item => this.toDietSelection(item))
+        detail.dietaryRestrictions = (detail.dietaryRestrictions || []).map(item => this.toDietSelection(item))
         this.crud.toEdit(detail)
       } catch (e) {
         if (requestId !== this.editRequestId) {
@@ -1310,6 +1555,23 @@ export default {
 }
 .customer-import-error {
   color: #f56c6c;
+  line-height: 1.5;
+}
+.customer-import-diet-field {
+  margin-bottom: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.customer-import-match {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid #ebeef5;
+  overflow-wrap: anywhere;
+}
+.customer-import-match-result {
+  margin-top: 4px;
+  color: #67c23a;
   line-height: 1.5;
 }
 .customer-import-filter {

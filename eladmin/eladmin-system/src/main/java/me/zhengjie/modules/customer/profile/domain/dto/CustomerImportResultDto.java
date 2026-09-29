@@ -29,6 +29,9 @@ public class CustomerImportResultDto implements Serializable {
     /** 成功新建客户数。 */
     private int createdCount;
 
+    /** 成功补录的已有客户数。 */
+    private int updatedCount;
+
     /** 已存在而跳过的客户数。 */
     private int alreadyExistsCount;
 

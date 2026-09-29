@@ -17,6 +17,7 @@ package me.zhengjie.modules.meal.domain.dto;
 
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 
 import java.util.List;
 
@@ -150,13 +151,22 @@ public class MealPlanDetailVO {
         @ApiModelProperty(value = "特殊要求")
         private String specialRequirements;
 
-        @ApiModelProperty(value = "客户生产日期，格式 yyyy-MM-dd")
-        private String productionDate;
+        @ApiModelProperty(value = "客户医嘱")
+        private String medicalRequirements;
 
-        @ApiModelProperty(value = "是否处于生产当天至生产后3天内")
-        private Boolean nearProductionDate;
+        @ApiModelProperty(value = "菜品特殊要求原文块")
+        private List<String> dishRequirementsRaw;
 
-        @ApiModelProperty(value = "排餐日期距离生产日期的天数，生产当天为0")
-        private Integer productionDateDiffDays;
+        @ApiModelProperty(value = "菜品特殊要求已确认对象")
+        private List<CustomerDietItemDto> dishRequirements;
+
+        @ApiModelProperty(value = "禁忌食物原文块")
+        private List<String> dietaryRestrictionsRaw;
+
+        @ApiModelProperty(value = "禁忌食物已确认对象")
+        private List<CustomerDietItemDto> dietaryRestrictions;
+
+        @ApiModelProperty(value = "客户术后情况原文")
+        private String postoperativeInfo;
     }
 }

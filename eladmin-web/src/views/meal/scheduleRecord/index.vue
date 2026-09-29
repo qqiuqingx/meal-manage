@@ -132,16 +132,9 @@
                   class="code-text"
                   :class="{ 'code-text--soup-missing': customer.isSoupMissing }"
                 >{{ servingLabel(customer) }}</span>
-                <div v-if="customer.firstMealOfOrder || customer.nearProductionDate" class="code-badges">
+                <div v-if="customer.firstMealOfOrder || customer.postoperativeInfo" class="code-badges">
                   <span v-if="customer.firstMealOfOrder" class="code-first-badge">首</span>
-                  <el-tooltip
-                    v-if="customer.nearProductionDate"
-                    effect="dark"
-                    placement="top"
-                    :content="getProductionDateBadgeTip(customer)"
-                  >
-                    <span class="code-production-badge">产</span>
-                  </el-tooltip>
+                  <span v-if="customer.postoperativeInfo" class="code-postoperative-badge">术后 {{ customer.postoperativeInfo }}</span>
                 </div>
               </div>
               <div v-if="customer.specialRequirementTags && customer.specialRequirementTags.length > 0" class="special-requirement-tags">
@@ -151,6 +144,10 @@
                   class="special-requirement-tag"
                 >{{ tag }}</span>
               </div>
+              <el-popover placement="right" width="380" trigger="click">
+                <CustomerDietInfo :customer="customer" />
+                <el-button slot="reference" type="text" size="mini" class="code-diet-info-link">医嘱与饮食</el-button>
+              </el-popover>
               <div v-if="showSupplementaryTags && customer.supplementaryTags && customer.supplementaryTags.length > 0" class="supplementary-tags">
                 <span
                   v-for="(tag, idx) in customer.supplementaryTags"
@@ -598,6 +595,14 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
+        <el-table-column label="饮食共享信息" align="center" width="110">
+          <template slot-scope="scope">
+            <el-popover placement="left" width="380" trigger="click">
+              <CustomerDietInfo :customer="scope.row" />
+              <el-button slot="reference" type="text" size="mini">查看</el-button>
+            </el-popover>
+          </template>
+        </el-table-column>
         <el-table-column label="地址类型" prop="addressType" align="center" width="100">
           <template slot-scope="scope">
             <el-tag v-if="scope.row.addressType" :type="scope.row.addressType === 'WEEKEND' ? 'warning' : (scope.row.addressType === 'WORKDAY' ? 'success' : 'info')" size="mini">
@@ -623,6 +628,7 @@
 </template>
 
 <script>
+import CustomerDietInfo from '@/components/CustomerDietInfo.vue'
 import { getMealPlanList, getMealPlanFullDetail, getMealPlanCustomers, generateMealPlan, delMealPlan, delMealPlanCustomers, getMealPlanCustomerAddresses, getManualReplaces, saveManualReplaces } from '@/api/mealPlan'
 import { getProfiles } from '@/api/customer/profile'
 import { queryDishes } from '@/api/dish'
@@ -631,6 +637,7 @@ import { MealTypeName } from '@/utils/calendar'
 
 export default {
   name: 'ScheduleRecord',
+  components: { CustomerDietInfo },
   data() {
     return {
       loading: false,
@@ -1488,22 +1495,6 @@ export default {
       const dishTypes = (customer.items || []).map(item => item.dishType)
       return !dishTypes.includes('SOUP') && customer.includeSoup !== 1
     },
-    /**
-     * 生成生产日期标记的悬浮提示文案。
-     *
-     * @param {Object} customer 客户排餐信息
-     * @returns {string} 标记提示文案
-     */
-    getProductionDateBadgeTip(customer) {
-      const days = Number(customer.productionDateDiffDays)
-      if (days === 0) {
-        return '生产当天'
-      }
-      if (days > 0) {
-        return `生产后第${days}天`
-      }
-      return '临近生产日期'
-    },
     getRiceRequirement(customer) {
       const tags = this.getSpecialRequirementTags(customer)
       return tags.find(tag => this.getSpecialRequirementDishType(tag) === 'RICE' && tag.startsWith('加')) || ''
@@ -1900,20 +1891,22 @@ export default {
   font-weight: 800;
   line-height: 1;
 }
-.code-production-badge {
+.code-postoperative-badge {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
   height: 22px;
   padding: 0 8px;
   border-radius: 6px;
-  border: 1px solid #fdba74;
-  background: #ffedd5;
-  color: #9a3412;
-  font-size: 12px;
-  font-weight: 800;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
   line-height: 1;
+}
+.code-diet-info-link {
+  padding: 2px 0;
+  font-size: 11px;
 }
 .code-text--soup-missing {
   display: inline-block;

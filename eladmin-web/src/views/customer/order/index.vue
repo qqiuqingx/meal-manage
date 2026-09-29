@@ -83,6 +83,14 @@
           <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'specialRequirements')">{{ scope.row.specialRequirements || '-' }}</span>
         </template>
       </el-table-column>
+      <el-table-column column-key="dietInfo" label="饮食资料" width="100" align="center">
+        <template slot-scope="scope">
+          <el-popover placement="left" width="380" trigger="click">
+            <CustomerDietInfo :customer="scope.row" />
+            <el-button slot="reference" type="text" size="mini">查看</el-button>
+          </el-popover>
+        </template>
+      </el-table-column>
       <el-table-column label="手机号" prop="phone" width="145">
         <template slot-scope="scope">
           <el-input
@@ -460,6 +468,10 @@
       top="5vh"
     >
       <el-form ref="form" :model="form" :rules="rules" size="small" label-width="110px">
+        <el-card v-if="form.id" shadow="never" class="order-diet-card">
+          <div slot="header">客户饮食共享信息</div>
+          <CustomerDietInfo :customer="form" />
+        </el-card>
         <OrderForm
           ref="orderFormRef"
           v-model="form"
@@ -525,6 +537,7 @@ import { parseTime } from '@/utils/index'
 import { getToken } from '@/utils/auth'
 import { mapGetters } from 'vuex'
 import Sortable from 'sortablejs'
+import CustomerDietInfo from '@/components/CustomerDietInfo.vue'
 
 const COLUMN_ORDER_STORAGE_KEY = 'customer-order-column-order-v1'
 
@@ -592,7 +605,7 @@ function cleanReplaceRules(rules) {
 
 export default {
   name: 'CustomerOrder',
-  components: { crudOperation, rrOperation, OrderForm },
+  components: { crudOperation, rrOperation, OrderForm, CustomerDietInfo },
   mixins: [presenter(), header(), form(createOrderDefaultForm()), crud()],
   cruds() {
     return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }, query: { orderCode: '', customerCode: '', customerName: '', status: null, customerSource: null, scheduleDate: null }})

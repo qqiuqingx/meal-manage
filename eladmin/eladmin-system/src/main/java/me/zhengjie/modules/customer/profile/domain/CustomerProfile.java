@@ -13,7 +13,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import me.zhengjie.modules.customer.profile.domain.dto.ExcludedDateDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 import me.zhengjie.modules.customer.profile.handler.AllergyTagsTypeHandler;
+import me.zhengjie.modules.customer.profile.handler.CustomerDietItemsTypeHandler;
+import me.zhengjie.modules.customer.profile.handler.CustomerDietRawBlocksTypeHandler;
 import me.zhengjie.modules.customer.profile.handler.ExcludedDateListTypeHandler;
 
 /**
@@ -128,10 +131,34 @@ public class CustomerProfile implements Serializable {
     private String specialRequirements;
 
     /**
-     * 生产日期
+     * 客户希望食用的结构化饮食对象。
      */
-    @TableField(value = "production_date")
-    private LocalDate productionDate;
+    @TableField(value = "dish_requirements", typeHandler = CustomerDietItemsTypeHandler.class)
+    private List<CustomerDietItemDto> dishRequirements;
+
+    /**
+     * 客户明确不能食用的结构化饮食对象。
+     */
+    @TableField(value = "dietary_restrictions", typeHandler = CustomerDietItemsTypeHandler.class)
+    private List<CustomerDietItemDto> dietaryRestrictions;
+
+    /**
+     * 导入来源中的想吃内容原文块，普通客户编辑不修改此字段。
+     */
+    @TableField(value = "dish_requirements_raw", typeHandler = CustomerDietRawBlocksTypeHandler.class)
+    private List<String> dishRequirementsRaw;
+
+    /**
+     * 导入来源中的禁忌内容原文块，普通客户编辑不修改此字段。
+     */
+    @TableField(value = "dietary_restrictions_raw", typeHandler = CustomerDietRawBlocksTypeHandler.class)
+    private List<String> dietaryRestrictionsRaw;
+
+    /**
+     * 术后情况原文，不按日期解析或随时间推算。
+     */
+    @TableField(value = "postoperative_info")
+    private String postoperativeInfo;
 
     //
     private String remark;

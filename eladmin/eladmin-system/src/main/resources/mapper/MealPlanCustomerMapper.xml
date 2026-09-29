@@ -28,7 +28,16 @@
         <result column="supplementary_rice_count" property="supplementaryRiceCount"/>
         <result column="supplementary_soup_count" property="supplementarySoupCount"/>
         <result column="special_requirements" property="specialRequirements"/>
-        <result column="production_date" property="productionDate"/>
+        <result column="medical_requirements" property="medicalRequirements"/>
+        <result column="dish_requirements" property="dishRequirements"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietItemsTypeHandler"/>
+        <result column="dietary_restrictions" property="dietaryRestrictions"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietItemsTypeHandler"/>
+        <result column="dish_requirements_raw" property="dishRequirementsRaw"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietRawBlocksTypeHandler"/>
+        <result column="dietary_restrictions_raw" property="dietaryRestrictionsRaw"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietRawBlocksTypeHandler"/>
+        <result column="postoperative_info" property="postoperativeInfo"/>
         <result column="create_by" property="createBy"/>
         <result column="update_by" property="updateBy"/>
         <result column="deleted" property="deleted"/>
@@ -49,7 +58,8 @@
                mpc.meat_required_count, mpc.veg_required_count, mpc.include_soup, mpc.include_rice,
                mpc.supplementary_main_count, mpc.supplementary_side_count, mpc.supplementary_veg_count,
                mpc.supplementary_rice_count, mpc.supplementary_soup_count,
-               cp.special_requirements, cp.production_date,
+               cp.special_requirements, cp.medical_requirements, cp.dish_requirements, cp.dietary_restrictions,
+               cp.dish_requirements_raw, cp.dietary_restrictions_raw, cp.postoperative_info,
                mpc.create_by, mpc.update_by, mpc.deleted, mpc.create_time, mpc.update_time
         from meal_plan_customer mpc
         left join customer_profile cp on mpc.customer_id = cp.id
@@ -116,7 +126,8 @@
                mpc.include_soup, mpc.include_rice, mpc.supplementary_main_count,
                mpc.supplementary_side_count, mpc.supplementary_veg_count,
                mpc.supplementary_rice_count, mpc.supplementary_soup_count,
-               cp.special_requirements, cp.production_date,
+               cp.special_requirements, cp.medical_requirements, cp.dish_requirements, cp.dietary_restrictions,
+               cp.dish_requirements_raw, cp.dietary_restrictions_raw, cp.postoperative_info,
                mpc.create_by, mpc.update_by,
                mpc.deleted, mpc.create_time, mpc.update_time
         from meal_plan_customer mpc
@@ -134,7 +145,8 @@
                mpc.include_soup, mpc.include_rice, mpc.supplementary_main_count,
                mpc.supplementary_side_count, mpc.supplementary_veg_count,
                mpc.supplementary_rice_count, mpc.supplementary_soup_count,
-               cp.special_requirements, cp.production_date,
+               cp.special_requirements, cp.medical_requirements, cp.dish_requirements, cp.dietary_restrictions,
+               cp.dish_requirements_raw, cp.dietary_restrictions_raw, cp.postoperative_info,
                mpc.create_by, mpc.update_by,
                mpc.deleted, mpc.create_time, mpc.update_time
         from meal_plan_customer mpc
@@ -195,6 +207,16 @@
         <result column="allergy_tags" property="allergyTags"
                 typeHandler="me.zhengjie.modules.customer.profile.handler.AllergyTagsTypeHandler"/>
         <result column="special_requirements" property="specialRequirements"/>
+        <result column="medical_requirements" property="medicalRequirements"/>
+        <result column="dish_requirements_raw" property="dishRequirementsRaw"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietRawBlocksTypeHandler"/>
+        <result column="dish_requirements" property="dishRequirements"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietItemsTypeHandler"/>
+        <result column="dietary_restrictions_raw" property="dietaryRestrictionsRaw"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietRawBlocksTypeHandler"/>
+        <result column="dietary_restrictions" property="dietaryRestrictions"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietItemsTypeHandler"/>
+        <result column="postoperative_info" property="postoperativeInfo"/>
         <result column="custom_menu_image" property="customMenuImage"/>
     </resultMap>
 
@@ -227,6 +249,12 @@
             END AS address_type,
             cp.allergy_tags,
             cp.special_requirements,
+            cp.medical_requirements,
+            cp.dish_requirements_raw,
+            cp.dish_requirements,
+            cp.dietary_restrictions_raw,
+            cp.dietary_restrictions,
+            cp.postoperative_info,
             co.custom_menu_image
         FROM meal_plan_customer mpc
         JOIN meal_plan mp ON mpc.meal_plan_id = mp.id

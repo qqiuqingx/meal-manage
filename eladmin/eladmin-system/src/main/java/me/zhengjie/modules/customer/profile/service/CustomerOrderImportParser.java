@@ -2,6 +2,7 @@ package me.zhengjie.modules.customer.profile.service;
 
 import me.zhengjie.modules.customer.profile.domain.ParsedCustomer;
 import me.zhengjie.modules.customer.profile.domain.ParsedWorkbook;
+import me.zhengjie.modules.customer.profile.domain.CustomerDietSourceRow;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportAddressDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportIssueCategory;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportIssueDto;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Component;
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -27,6 +29,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -38,7 +41,8 @@ import java.util.regex.Pattern;
  * 客户与首单批量导入的工作簿解析器。
  *
  * <p>只做「读工作簿 → 聚合客户草稿 → 逐行校验」的纯解析工作，不访问数据库、不写任何数据，
- * 因此预览阶段可以安全地反复调用。父套餐映射、编号池校验与重复建档判定由
+ * 因此预览阶段可以安全地反复调用。可选的「客户禁忌」工作表按固定 A～G 列读取。
+ * 父套餐映射、编号池校验与重复建档判定由
  * {@link CustomerProfileImportService} 在只读校验阶段补齐。</p>
  *
  * <p>列定位策略：按第 1 行标题联合第 2、3 行日历表头定位，兼容后续版本增删列，
@@ -131,20 +135,60 @@ public class CustomerOrderImportParser {
      */
     private static final Pattern MULTI_PORTION_PATTERN = Pattern.compile("[两二2三3]\\s*份");
 
+    private static final Pattern FULL_DEAL_TIME_PATTERN = Pattern.compile(
+            "^(\\d{4})[./-](\\d{1,2})[./-](\\d{1,2})(?:日)?(?:\\s*(\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?$");
+
+    private static final Pattern FULL_CHINESE_DEAL_TIME_PATTERN = Pattern.compile(
+            "^(\\d{4})年(\\d{1,2})月(\\d{1,2})日?(?:\\s*(\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?$");
+
+    private static final Pattern MONTH_DAY_DEAL_TIME_PATTERN = Pattern.compile(
+            "^(\\d{1,2})[./-](\\d{1,2})(?:日)?(?:\\s*(\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?$");
+
+    private static final Pattern CHINESE_MONTH_DAY_DEAL_TIME_PATTERN = Pattern.compile(
+            "^(\\d{1,2})月(\\d{1,2})日?(?:\\s*(\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?$");
+
     /**
      * 解析工作簿字节内容并聚合客户草稿。
      *
      * @param content 工作簿字节内容
      * @param fileHash 工作簿 SHA-256 摘要，由调用方计算，用于预览与提交之间的一致性校验
      * @param importDate 计划导入日期，晚于该日期的非零午晚餐格视为未来计划；为空时取当天
-     * @return 解析结果；结构校验失败时 {@code structureValid=false} 且客户列表为空
+     * @return 解析结果；结构校验失败时 {@code structureValid=false}，可选饮食工作表按名称解析
      */
     public ParsedWorkbook parse(byte[] content, String fileHash, LocalDate importDate) {
+        return parseWorkbook(content, fileHash, importDate, false);
+    }
+
+    /**
+     * 仅解析「客户禁忌」工作表；月份页只读取名称供月日成交时间补年，不解析客户或餐数。
+     *
+     * @param content 工作簿字节内容
+     * @param fileHash 工作簿 SHA-256 摘要
+     * @param importDate 导入日期；没有月份页时用其年份解释月日成交时间
+     * @return 第二工作表解析结果和按编号聚合的客户草稿
+     */
+    public ParsedWorkbook parseDietOnly(byte[] content, String fileHash, LocalDate importDate) {
+        return parseWorkbook(content, fileHash, importDate, true);
+    }
+
+    /**
+     * 根据导入范围解析工作簿。
+     *
+     * @param content 工作簿字节内容
+     * @param fileHash 工作簿摘要
+     * @param importDate 导入日期
+     * @param dietOnly 是否只处理「客户禁忌」工作表
+     * @return 解析结果
+     */
+    private ParsedWorkbook parseWorkbook(byte[] content, String fileHash, LocalDate importDate, boolean dietOnly) {
         ParsedWorkbook result = new ParsedWorkbook();
         result.setFileHash(fileHash);
         result.setImportDate(importDate != null ? importDate : LocalDate.now());
 
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(content))) {
+            if (dietOnly) {
+                return parseDietOnlySheet(workbook, result);
+            }
             Sheet sheet = resolveBusinessSheet(workbook);
             if (sheet == null) {
                 result.getIssues().add(CustomerImportIssueDto.of(CustomerImportIssueCategory.WORKBOOK_ERROR, null, null,
@@ -175,6 +219,16 @@ public class CustomerOrderImportParser {
             List<ParsedCustomer> customers = aggregateCustomers(sheet, layout, calendarMonth, result);
             result.setCustomers(customers);
             result.setCustomerCount(customers.size());
+            Sheet dietSheet = workbook.getSheet("客户禁忌");
+            if (dietSheet != null) {
+                result.setDietSheetPresent(true);
+                List<CustomerDietSourceRow> dietRows = parseDietRows(dietSheet, calendarMonth, result);
+                if (dietRows == null) {
+                    result.setStructureValid(false);
+                    return result;
+                }
+                result.setDietRows(dietRows);
+            }
             log.info("客户导入工作簿解析完成: sheet={}, 数据行={}, 客户草稿={}",
                     sheet.getSheetName(), result.getDataRowCount(), customers.size());
             return result;
@@ -189,7 +243,58 @@ public class CustomerOrderImportParser {
     }
 
     /**
-     * 选择业务工作表：忽略「客户禁忌」与 WPS 保留页，取名称形如「26年9月」的工作表。
+     * 解析第二工作表并按有效编号建立补录草稿。
+     *
+     * @param workbook 已打开的工作簿
+     * @param result 待填写的解析结果
+     * @return 第二工作表解析结果
+     */
+    private ParsedWorkbook parseDietOnlySheet(Workbook workbook, ParsedWorkbook result) {
+        Sheet dietSheet = workbook.getSheet("客户禁忌");
+        if (dietSheet == null) {
+            result.getIssues().add(CustomerImportIssueDto.of(CustomerImportIssueCategory.WORKBOOK_ERROR,
+                    null, null, "未找到「客户禁忌」工作表，无法仅导入第二页"));
+            return result;
+        }
+        result.setSheetName(dietSheet.getSheetName());
+        result.setDietSheetPresent(true);
+        Sheet monthSheet = resolveBusinessSheet(workbook);
+        YearMonth calendarMonth = monthSheet == null ? null : parseCalendarMonth(monthSheet.getSheetName());
+        if (calendarMonth == null) {
+            calendarMonth = YearMonth.from(result.getImportDate());
+        }
+        result.setCalendarMonthStart(calendarMonth.atDay(1));
+        List<CustomerDietSourceRow> dietRows = parseDietRows(dietSheet, calendarMonth, result);
+        if (dietRows == null) {
+            return result;
+        }
+        result.setDietRows(dietRows);
+        result.setDataRowCount(dietRows.size());
+        Map<String, ParsedCustomer> byCode = new LinkedHashMap<>();
+        for (CustomerDietSourceRow row : dietRows) {
+            String code = row.getEffectiveCode();
+            if (code == null || code.trim().isEmpty()) {
+                continue;
+            }
+            ParsedCustomer customer = byCode.computeIfAbsent(code, key -> {
+                ParsedCustomer parsed = new ParsedCustomer();
+                parsed.setEffectiveCode(key);
+                parsed.setOriginalCodeA(row.getOriginalCodeA());
+                parsed.setOriginalCodeB(row.getOriginalCodeB());
+                parsed.setSheetMealCount(0);
+                parsed.setSheetRemainingCount(0);
+                return parsed;
+            });
+            customer.getSourceRows().add(row.getSourceRow());
+        }
+        result.setCustomers(new ArrayList<>(byCode.values()));
+        result.setCustomerCount(byCode.size());
+        result.setStructureValid(true);
+        return result;
+    }
+
+    /**
+     * 选择月份业务工作表，忽略客户禁忌页与 WPS 保留页。
      *
      * @param workbook 工作簿
      * @return 业务工作表；不存在时返回 null
@@ -206,6 +311,331 @@ public class CustomerOrderImportParser {
             }
         }
         return null;
+    }
+
+    /**
+     * 校验并解析「客户禁忌」工作表固定 A～G 列中的客户信息。
+     *
+     * @param sheet 客户禁忌工作表
+     * @param calendarMonth 月份工作表所属年月，用于补齐成交时间年份
+     * @param result 工作簿解析结果，结构错误会写入其中
+     * @return 来源行列表；表头结构错误时返回 null
+     */
+    private List<CustomerDietSourceRow> parseDietRows(Sheet sheet, YearMonth calendarMonth, ParsedWorkbook result) {
+        int headerRowIndex = findDietHeaderRow(sheet);
+        if (headerRowIndex < 0) {
+            result.getIssues().add(CustomerImportIssueDto.of(CustomerImportIssueCategory.WORKBOOK_ERROR,
+                    null, null, "「客户禁忌」工作表未找到 A～G 列饮食信息表头"));
+            return null;
+        }
+        Row header = sheet.getRow(headerRowIndex);
+        String[] expected = {"编号", "新编号", "医嘱", "特殊需求", "禁忌", "成单时间", "术后"};
+        int[] requiredColumns = {0, 3, 4, 5, 6};
+        for (int column : requiredColumns) {
+            if (!headerMatches(text(header.getCell(column)), expected[column])) {
+                result.getIssues().add(CustomerImportIssueDto.of(CustomerImportIssueCategory.WORKBOOK_ERROR,
+                        headerRowIndex + 1, null, "「客户禁忌」工作表第 " + (column + 1)
+                                + " 列表头不符合约定，应为「" + expected[column] + "」"));
+                return null;
+            }
+        }
+        String newCodeHeader = text(header.getCell(1));
+        if (!newCodeHeader.isEmpty() && !headerMatches(newCodeHeader, "新编号")) {
+            result.getIssues().add(CustomerImportIssueDto.of(CustomerImportIssueCategory.WORKBOOK_ERROR,
+                    headerRowIndex + 1, null, "「客户禁忌」工作表 B 列表头应为空或「新编号」"));
+            return null;
+        }
+        String medicalHeader = text(header.getCell(2));
+        if (!medicalHeader.isEmpty() && !headerMatches(medicalHeader, "医嘱")) {
+            result.getIssues().add(CustomerImportIssueDto.of(CustomerImportIssueCategory.WORKBOOK_ERROR,
+                    headerRowIndex + 1, null, "「客户禁忌」工作表 C 列表头应为空或「医嘱」"));
+            return null;
+        }
+
+        int firstDataRow = headerRowIndex + 1;
+        Row following = sheet.getRow(firstDataRow);
+        if (following != null) {
+            String firstCell = text(following.getCell(0));
+            if (firstCell.startsWith("注意") || firstCell.startsWith("说明")) {
+                firstDataRow++;
+            }
+        }
+
+        List<CustomerDietSourceRow> rows = new ArrayList<>();
+        for (int rowIndex = firstDataRow; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+            Row row = sheet.getRow(rowIndex);
+            if (row == null) {
+                continue;
+            }
+            String firstCell = text(row.getCell(0));
+            if (firstCell.startsWith("注意") || firstCell.startsWith("说明")) {
+                continue;
+            }
+            CustomerDietSourceRow source = readDietSourceRow(row, calendarMonth);
+            if (source == null) {
+                continue;
+            }
+            rows.add(source);
+        }
+        return rows;
+    }
+
+    /**
+     * 在工作表前 13 行中定位固定列标题。
+     *
+     * @param sheet 客户禁忌工作表
+     * @return 标题行的 0 基行号；未找到时为 -1
+     */
+    private int findDietHeaderRow(Sheet sheet) {
+        int last = Math.min(sheet.getLastRowNum(), sheet.getFirstRowNum() + 12);
+        for (int rowIndex = sheet.getFirstRowNum(); rowIndex <= last; rowIndex++) {
+            Row row = sheet.getRow(rowIndex);
+            if (row == null) {
+                continue;
+            }
+            if (headerMatches(text(row.getCell(0)), "编号")
+                    && headerMatches(text(row.getCell(3)), "特殊需求")
+                    && headerMatches(text(row.getCell(4)), "禁忌")
+                    && headerMatches(text(row.getCell(5)), "成单时间")
+                    && headerMatches(text(row.getCell(6)), "术后")) {
+                return rowIndex;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * 判断表头文本是否符合指定列允许的名称。
+     *
+     * @param actual 工作簿中的表头文本
+     * @param expected 该列语义名称
+     * @return 表头符合该列语义时为 true
+     */
+    private boolean headerMatches(String actual, String expected) {
+        if (actual == null) {
+            return false;
+        }
+        if ("编号".equals(expected)) {
+            return actual.contains("编号");
+        }
+        if ("新编号".equals(expected)) {
+            return actual.contains("新编号");
+        }
+        if ("医嘱".equals(expected)) {
+            return actual.contains("医嘱") || actual.contains("医疗");
+        }
+        if ("特殊需求".equals(expected)) {
+            return actual.contains("特殊需求") || actual.contains("想吃");
+        }
+        if ("禁忌".equals(expected)) {
+            return actual.contains("禁忌") || actual.contains("不能吃") || actual.contains("忌口");
+        }
+        if ("成单时间".equals(expected)) {
+            return actual.contains("成单时间") || actual.contains("成交时间");
+        }
+        return "术后".equals(expected) && actual.contains("术后");
+    }
+
+    /**
+     * 读取第二工作表 A～G 列并解析月日成交时间。
+     *
+     * @param row 工作簿来源行
+     * @param calendarMonth 月份工作表年月，用于成交时间补年
+     * @return 客户来源行；全空行返回 null
+     */
+    private CustomerDietSourceRow readDietSourceRow(Row row, YearMonth calendarMonth) {
+        String codeA = plainCellText(row.getCell(0));
+        String codeB = plainCellText(row.getCell(1));
+        String medical = dietCellText(row.getCell(2));
+        String wants = dietCellText(row.getCell(3));
+        String restrictions = dietCellText(row.getCell(4));
+        String dealTimeSource = dietCellText(row.getCell(5));
+        String postoperative = dietCellText(row.getCell(6));
+        if (isBlank(codeA) && isBlank(codeB) && isBlank(medical) && isBlank(wants)
+                && isBlank(restrictions) && isBlank(dealTimeSource) && isBlank(postoperative)) {
+            return null;
+        }
+
+        CustomerDietSourceRow source = new CustomerDietSourceRow();
+        source.setSourceRow(row.getRowNum() + 1);
+        source.setOriginalCodeA(trimToNull(codeA));
+        source.setOriginalCodeB(trimToNull(codeB));
+        source.setEffectiveCode(isBlank(codeB) ? trimToNull(codeA) : codeB.trim());
+        source.setMedicalRequirements(nonBlankOriginal(medical));
+        source.setDishRequirementsRaw(nonBlankOriginal(wants));
+        source.setDietaryRestrictionsRaw(nonBlankOriginal(restrictions));
+        source.setDealTimeSource(nonBlankOriginal(dealTimeSource));
+        source.setPostoperativeInfo(nonBlankOriginal(postoperative));
+
+        addFormulaReadIssue(row.getCell(2), "C", source);
+        addFormulaReadIssue(row.getCell(3), "D", source);
+        addFormulaReadIssue(row.getCell(4), "E", source);
+        addFormulaReadIssue(row.getCell(5), "F", source);
+        addFormulaReadIssue(row.getCell(6), "G", source);
+        if (!isBlank(dealTimeSource)) {
+            LocalDateTime dealTime = parseDealTime(row.getCell(5), dealTimeSource, calendarMonth);
+            if (dealTime == null) {
+                source.getIssues().add("第 " + source.getSourceRow() + " 行 F 列成交时间无法解析：「" + dealTimeSource + "」");
+            } else {
+                source.setDealTime(dealTime);
+            }
+        }
+        if (source.getEffectiveCode() == null) {
+            source.getIssues().add("第 " + source.getSourceRow() + " 行缺少编号，无法关联月份工作表客户");
+        }
+        return source;
+    }
+
+    /**
+     * 为没有缓存结果的非图片公式记录来源列问题。
+     *
+     * @param cell 待读公式单元格
+     * @param column Excel 列字母
+     * @param source 归属来源行
+     */
+    private void addFormulaReadIssue(Cell cell, String column, CustomerDietSourceRow source) {
+        if (cell == null || cell.getCellType() != CellType.FORMULA || isDispImgFormula(cell)) {
+            return;
+        }
+        CellType cachedType = cell.getCachedFormulaResultType();
+        if (cachedType == CellType.BLANK || cachedType == CellType.ERROR) {
+            source.getIssues().add("第 " + source.getSourceRow() + " 行 " + column + " 列公式没有可读取的缓存值");
+        }
+    }
+
+    /**
+     * 读取编号单元格文本并使用现有公式缓存规则。
+     *
+     * @param cell 编号单元格
+     * @return 编号文本；空单元格返回空字符串
+     */
+    private String plainCellText(Cell cell) {
+        return cell == null ? "" : text(cell);
+    }
+
+    /**
+     * 读取饮食信息单元格原文，跳过 DISPIMG 图片公式。
+     *
+     * @param cell C～G 列单元格
+     * @return 原文文本；图片公式和空单元格返回空字符串
+     */
+    private String dietCellText(Cell cell) {
+        if (cell == null || isDispImgFormula(cell)) {
+            return "";
+        }
+        CellType type = cell.getCellType();
+        if (type == CellType.FORMULA) {
+            type = cell.getCachedFormulaResultType();
+        }
+        switch (type) {
+            case STRING:
+                return cell.getStringCellValue();
+            case NUMERIC:
+                if (DateUtil.isCellDateFormatted(cell)) {
+                    return cell.getLocalDateTimeCellValue().toString();
+                }
+                return plainNumber(cell.getNumericCellValue());
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            default:
+                return "";
+        }
+    }
+
+    /**
+     * 判断单元格是否为 WPS DISPIMG 图片公式。
+     *
+     * @param cell 待判断单元格
+     * @return 是图片公式时为 true
+     */
+    private boolean isDispImgFormula(Cell cell) {
+        return cell != null && cell.getCellType() == CellType.FORMULA
+                && cell.getCellFormula().trim().toUpperCase(Locale.ROOT).startsWith("DISPIMG(");
+    }
+
+    /**
+     * 解析 Excel 日期或文本成交时间；月日文本使用月份工作表年份。
+     *
+     * @param cell 原始单元格，用于识别 Excel 日期格式
+     * @param source 单元格原文
+     * @param calendarMonth 月份工作表所属年月
+     * @return 解析结果；无法识别时返回 null
+     */
+    private LocalDateTime parseDealTime(Cell cell, String source, YearMonth calendarMonth) {
+        if (cell != null) {
+            CellType type = cell.getCellType();
+            if (type == CellType.FORMULA) {
+                type = cell.getCachedFormulaResultType();
+            }
+            if (type == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
+                return cell.getLocalDateTimeCellValue();
+            }
+        }
+        String value = source == null ? "" : source.trim();
+        Matcher full = FULL_DEAL_TIME_PATTERN.matcher(value);
+        if (full.matches()) {
+            return buildDealTime(full.group(1), full.group(2), full.group(3), full.group(4), full.group(5), full.group(6));
+        }
+        full = FULL_CHINESE_DEAL_TIME_PATTERN.matcher(value);
+        if (full.matches()) {
+            return buildDealTime(full.group(1), full.group(2), full.group(3), full.group(4), full.group(5), full.group(6));
+        }
+        Matcher monthDay = MONTH_DAY_DEAL_TIME_PATTERN.matcher(value);
+        if (!monthDay.matches()) {
+            monthDay = CHINESE_MONTH_DAY_DEAL_TIME_PATTERN.matcher(value);
+        }
+        if (monthDay.matches()) {
+            return buildDealTime(String.valueOf(calendarMonth.getYear()), monthDay.group(1), monthDay.group(2),
+                    monthDay.group(3), monthDay.group(4), monthDay.group(5));
+        }
+        return null;
+    }
+
+    /**
+     * 按各日期时间字段构造成交时间，并将缺省时分秒设为 00:00:00。
+     *
+     * @param year 年份文本
+     * @param month 月份文本
+     * @param day 日期文本
+     * @param hour 小时文本；为空时取 0
+     * @param minute 分钟文本；为空时取 0
+     * @param second 秒文本；为空时取 0
+     * @return 成交时间；字段越界或日期无效时返回 null
+     */
+    private LocalDateTime buildDealTime(String year, String month, String day,
+                                       String hour, String minute, String second) {
+        try {
+            LocalDate date = LocalDate.of(Integer.parseInt(year), Integer.parseInt(month), Integer.parseInt(day));
+            int hours = hour == null ? 0 : Integer.parseInt(hour);
+            int minutes = minute == null ? 0 : Integer.parseInt(minute);
+            int seconds = second == null ? 0 : Integer.parseInt(second);
+            if (hours > 23 || minutes > 59 || seconds > 59) {
+                return null;
+            }
+            return date.atTime(hours, minutes, seconds);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 仅过滤全空白文本，其他情况下完整保留来源原文。
+     *
+     * @param value 单元格原文
+     * @return 非空原文或 null
+     */
+    private String nonBlankOriginal(String value) {
+        return isBlank(value) ? null : value;
+    }
+
+    /**
+     * 规范化编号空值，非空编号去除首尾空白。
+     *
+     * @param value 原始编号
+     * @return 去首尾空白的编号或 null
+     */
+    private String trimToNull(String value) {
+        return isBlank(value) ? null : value.trim();
     }
 
     /**

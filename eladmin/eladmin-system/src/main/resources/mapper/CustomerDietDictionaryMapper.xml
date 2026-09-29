@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="me.zhengjie.modules.customer.profile.mapper.CustomerDietDictionaryMapper">
+
+    <select id="selectActiveOptions" resultType="me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto">
+        SELECT option_type AS type, option_id AS id, option_name AS name, category_path AS categoryPath
+        FROM (
+            SELECT CONVERT('DISH' USING utf8mb4) COLLATE utf8mb4_unicode_ci AS option_type,
+                   d.id AS option_id,
+                   CONVERT(d.name USING utf8mb4) COLLATE utf8mb4_unicode_ci AS option_name,
+                   CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS category_path
+            FROM dish d
+            WHERE d.enabled = 1 AND d.name IS NOT NULL AND d.name != ''
+            UNION ALL
+            SELECT CONVERT('INGREDIENT' USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   i.id,
+                   CONVERT(i.name USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+            FROM dish_ingredient i
+            WHERE i.enabled = 1 AND i.name IS NOT NULL AND i.name != ''
+            UNION ALL
+            SELECT CONVERT('INGREDIENT_TAG' USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   t.id,
+                   CONVERT(t.name USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+            FROM dish_ingredient_tag t
+            WHERE t.name IS NOT NULL AND t.name != ''
+            UNION ALL
+            SELECT CONVERT('INGREDIENT_CATEGORY' USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   c.id,
+                   CONVERT(c.name USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   CONVERT(CONCAT(p.name, ' / ', c.name) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+            FROM dish_ingredient_category c
+            INNER JOIN dish_ingredient_category p ON p.id = c.parent_id
+            WHERE c.level = 2 AND c.enabled = 1 AND p.enabled = 1
+              AND c.name IS NOT NULL AND c.name != ''
+            UNION ALL
+            SELECT CONVERT('DISH_TAG' USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   t.id,
+                   CONVERT(t.name USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+            FROM dish_tag t
+            WHERE t.name IS NOT NULL AND t.name != ''
+        ) options
+        ORDER BY option_type, option_name, option_id
+    </select>
+</mapper>

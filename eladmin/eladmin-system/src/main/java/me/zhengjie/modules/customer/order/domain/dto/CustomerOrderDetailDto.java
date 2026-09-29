@@ -1,6 +1,7 @@
 package me.zhengjie.modules.customer.order.domain.dto;
 
 import lombok.Data;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 import me.zhengjie.modules.customer.orderReplaceRule.domain.CustomerOrderReplaceRuleDto;
 
 import java.io.Serializable;
@@ -92,6 +93,18 @@ public class CustomerOrderDetailDto implements Serializable {
     private String remark;
 
     private String specialRequirements;
+
+    /** 客户共享的菜品特殊要求结构化对象。 */
+    private List<CustomerDietItemDto> dishRequirements;
+
+    /** 客户共享的禁忌结构化对象。 */
+    private List<CustomerDietItemDto> dietaryRestrictions;
+
+    /** 客户共享的想吃原文块。 */
+    private List<String> dishRequirementsRaw;
+
+    /** 客户共享的禁忌原文块。 */
+    private List<String> dietaryRestrictionsRaw;
 
     private List<String> allergyTags;
 

@@ -31,6 +31,13 @@ export function getProfile(id) {
   })
 }
 
+export function getDietOptions() {
+  return axios({
+    url: '/api/customerProfile/diet-options',
+    method: 'get'
+  })
+}
+
 export function generateCode(parentPackageId) {
   return axios({
     url: '/api/customerProfile/generateCode',
@@ -47,10 +54,11 @@ export function parseIntakeText(data) {
   })
 }
 
-export function previewCustomerImport(file, importDate) {
+export function previewCustomerImport(file, importDate, dietOnly = false) {
   const data = new FormData()
   data.append('file', file)
   if (importDate) data.append('importDate', importDate)
+  data.append('dietOnly', String(dietOnly))
   return axios({
     url: '/api/customerProfile/import/preview',
     method: 'post',
@@ -58,11 +66,14 @@ export function previewCustomerImport(file, importDate) {
   })
 }
 
-export function confirmCustomerImport(file, fileHash, importDate) {
+export function confirmCustomerImport(file, fileHash, dictionaryHash, dietSelections, importDate, dietOnly = false) {
   const data = new FormData()
   data.append('file', file)
   data.append('fileHash', fileHash)
+  if (dictionaryHash) data.append('dictionaryHash', dictionaryHash)
+  if (dietSelections && dietSelections.length) data.append('dietSelections', JSON.stringify(dietSelections))
   if (importDate) data.append('importDate', importDate)
+  data.append('dietOnly', String(dietOnly))
   return axios({
     url: '/api/customerProfile/import/confirm',
     method: 'post',
@@ -98,6 +109,7 @@ export default {
   getProfiles,
   getMealStats,
   getProfile,
+  getDietOptions,
   generateCode,
   parseIntakeText,
   previewCustomerImport,

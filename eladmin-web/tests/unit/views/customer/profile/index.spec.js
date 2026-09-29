@@ -54,7 +54,10 @@ function buildSubmitPayload(ctx) {
     phone: formData.phone,
     gestationalWeek: formData.gestationalWeek,
     allergyTags: Array.isArray(formData.allergyTags) ? formData.allergyTags : [],
+    dishRequirements: (formData.dishRequirements || []).map(item => ({ type: item.type, id: item.id, name: item.name })),
+    dietaryRestrictions: (formData.dietaryRestrictions || []).map(item => ({ type: item.type, id: item.id, name: item.name })),
     medicalRequirements: formData.medicalRequirements,
+    postoperativeInfo: formData.postoperativeInfo,
     remark: formData.remark,
     addresses: createAddressesFromForm(formData)
   }
@@ -267,6 +270,29 @@ describe('CustomerProfile payload building', () => {
     expect(payload.addresses[0].contactName).toBe('张三')
     expect(payload.addresses[1].contactName).toBe('李四')
     expect(payload.addresses[2].contactName).toBe('王五')
+  })
+
+  test('submits selected diet object identities and the raw postoperative value', () => {
+    const ctx = {
+      form: {
+        id: 7,
+        customerName: '匿名客户',
+        phone: '13800000000',
+        dishRequirements: [{ type: 'DISH', id: 3, name: '鸡汤', selectionKey: 'DISH:3' }],
+        dietaryRestrictions: [{ type: 'INGREDIENT_CATEGORY', id: 8, name: '牛肉', selectionKey: 'INGREDIENT_CATEGORY:8' }],
+        postoperativeInfo: '4个月',
+        addresses: [{ addressType: 'DEFAULT', addressDetail: '匿名地址' }]
+      },
+      crud: { form: {}, status: { add: CRUD_STATUS.PROCESSING }},
+      isCreateMode: () => false
+    }
+
+    const payload = buildSubmitPayload(ctx)
+
+    expect(payload.dishRequirements).toEqual([{ type: 'DISH', id: 3, name: '鸡汤' }])
+    expect(payload.dietaryRestrictions).toEqual([{ type: 'INGREDIENT_CATEGORY', id: 8, name: '牛肉' }])
+    expect(payload.postoperativeInfo).toBe('4个月')
+    expect(payload.dishRequirements[0].selectionKey).toBeUndefined()
   })
 
   test('normalizes returned addresses by type for edit form', () => {
@@ -534,5 +560,11 @@ describe('CustomerProfile excluded dates (UI-01, UI-03)', () => {
 
     expect(excludedDates).toHaveLength(1)
     expect(excludedDates[0].date).toBe('2026-04-16')
+  })
+
+  test('customer edit form exposes postoperative text and no production date field', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../../../../../src/views/customer/profile/index.vue'), 'utf8')
+    expect(source).toContain('v-model="form.postoperativeInfo"')
+    expect(source).not.toContain('productionDate')
   })
 })

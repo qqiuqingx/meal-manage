@@ -8,6 +8,7 @@ import me.zhengjie.modules.customer.order.service.CustomerOrderService;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.domain.CustomerDietImportData;
 import me.zhengjie.modules.customer.profile.domain.ImportCandidate;
 import me.zhengjie.modules.customer.profile.domain.ParsedCustomer;
 import me.zhengjie.modules.customer.profile.domain.ParsedWorkbook;
@@ -15,6 +16,7 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportDraftDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportItemResultDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportMealCellDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportPreviewDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
@@ -27,6 +29,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -137,7 +140,8 @@ class CustomerProfileImportFlowTest {
         CustomerProfileImportWriter writer = new CustomerProfileImportWriter(profileMapper, addressMapper,
                 scheduleAdditionMapper, numberPoolMapper, customerOrderService);
 
-        CustomerImportItemResultDto result = writer.write(candidate, LocalDate.of(2026, 9, 25));
+        CustomerImportItemResultDto result = writer.write(candidate, LocalDate.of(2026, 9, 25),
+                LocalDateTime.of(2026, 9, 25, 10, 30));
 
         assertEquals("CREATED", result.getStatus());
         assertEquals(Long.valueOf(123L), result.getCustomerId());
@@ -173,7 +177,8 @@ class CustomerProfileImportFlowTest {
         CustomerProfileImportWriter writer = new CustomerProfileImportWriter(profileMapper, addressMapper,
                 scheduleAdditionMapper, numberPoolMapper, customerOrderService);
 
-        CustomerImportItemResultDto result = writer.write(candidate, LocalDate.of(2026, 9, 25));
+        CustomerImportItemResultDto result = writer.write(candidate, LocalDate.of(2026, 9, 25),
+                LocalDateTime.of(2026, 9, 25, 10, 30));
 
         ArgumentCaptor<CustomerProfile> profileCaptor = ArgumentCaptor.forClass(CustomerProfile.class);
         verify(profileMapper).insert(profileCaptor.capture());
@@ -189,8 +194,94 @@ class CustomerProfileImportFlowTest {
         assertEquals(Integer.valueOf(4), orderCaptor.getValue().getRemainingCount());
         assertEquals(LocalDate.of(2026, 9, 26), orderCaptor.getValue().getStartDate());
         assertEquals(Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()), orderCaptor.getValue().getStatus());
+        assertEquals(LocalDateTime.of(2026, 9, 25, 10, 30), orderCaptor.getValue().getDealTime());
         assertEquals(Long.valueOf(456L), result.getOrderId());
         assertEquals("CREATED", result.getStatus());
+    }
+
+    @Test
+    void writerShouldUseSpreadsheetDealTimeWhenCreatingOrder() {
+        ParentPackage parent = parentPackage();
+        CustomerImportDraftDto draft = new CustomerImportDraftDto();
+        draft.setCustomerCode("A004");
+        draft.setParentPackageId(parent.getId());
+        draft.setLunchDinnerCount(1);
+        ParsedCustomer parsed = parsedCustomer();
+        CustomerDietImportData dietData = new CustomerDietImportData();
+        dietData.setDealTime(LocalDateTime.of(2026, 6, 11, 9, 30));
+        parsed.setDietImportData(dietData);
+        ImportCandidate candidate = new ImportCandidate();
+        candidate.setParsed(parsed);
+        candidate.setDraft(draft);
+        when(numberPoolMapper.selectForUpdate(parent.getId())).thenReturn(parent);
+        doAnswer(invocation -> {
+            CustomerProfile profile = invocation.getArgument(0);
+            profile.setId(123L);
+            return 1;
+        }).when(profileMapper).insert(any(CustomerProfile.class));
+        when(customerOrderService.createImportedFirstOrder(any(CustomerOrder.class))).thenReturn(456L);
+        CustomerProfileImportWriter writer = new CustomerProfileImportWriter(profileMapper, addressMapper,
+                scheduleAdditionMapper, numberPoolMapper, customerOrderService);
+
+        writer.write(candidate, LocalDate.of(2026, 9, 25), LocalDateTime.of(2026, 9, 28, 10, 30));
+
+        ArgumentCaptor<CustomerOrder> orderCaptor = ArgumentCaptor.forClass(CustomerOrder.class);
+        verify(customerOrderService).createImportedFirstOrder(orderCaptor.capture());
+        assertEquals(LocalDateTime.of(2026, 6, 11, 9, 30), orderCaptor.getValue().getDealTime());
+    }
+
+    @Test
+    void writerShouldSupplementExistingProfileWithoutChangingAddressOrOrders() {
+        CustomerProfile existing = new CustomerProfile();
+        existing.setId(88L);
+        existing.setCustomerCode("A004");
+        existing.setPhone("13800138000");
+        existing.setSpecialRequirements("原有普通特殊要求");
+        CustomerDietItemDto selected = new CustomerDietItemDto();
+        selected.setType("INGREDIENT");
+        selected.setId(3L);
+        selected.setName("香菜");
+        CustomerDietImportData data = new CustomerDietImportData();
+        data.setMedicalRequirements("少盐");
+        data.setPostoperativeInfo("4个月");
+        data.setDishRequirementsRaw(Collections.singletonList("想吃香菜"));
+        data.setDishRequirements(Collections.singletonList(selected));
+        ParsedCustomer parsed = parsedCustomer();
+        parsed.setDietImportData(data);
+        ImportCandidate candidate = new ImportCandidate();
+        candidate.setParsed(parsed);
+        CustomerImportDraftDto draft = new CustomerImportDraftDto();
+        draft.setCustomerCode("A004");
+        candidate.setDraft(draft);
+        candidate.setSupplemental(true);
+        candidate.setExistingProfile(existing);
+        CustomerProfile locked = new CustomerProfile();
+        locked.setId(88L);
+        locked.setCustomerCode("A004");
+        locked.setPhone("13800138000");
+        locked.setSpecialRequirements("原有普通特殊要求");
+        when(profileMapper.selectByIdForImportUpdate(88L)).thenReturn(locked);
+        CustomerProfileImportWriter writer = new CustomerProfileImportWriter(profileMapper, addressMapper,
+                scheduleAdditionMapper, numberPoolMapper, customerOrderService);
+
+        CustomerImportItemResultDto result = writer.write(candidate, LocalDate.of(2026, 9, 25),
+                LocalDateTime.of(2026, 9, 25, 10, 30));
+
+        assertEquals("UPDATED", result.getStatus());
+        assertNull(result.getOrderId());
+        ArgumentCaptor<CustomerProfile> profileCaptor = ArgumentCaptor.forClass(CustomerProfile.class);
+        verify(profileMapper).updateById(profileCaptor.capture());
+        assertEquals("少盐", profileCaptor.getValue().getMedicalRequirements());
+        assertEquals("4个月", profileCaptor.getValue().getPostoperativeInfo());
+        assertEquals(Collections.singletonList("想吃香菜"), profileCaptor.getValue().getDishRequirementsRaw());
+        assertEquals("香菜", profileCaptor.getValue().getDishRequirements().get(0).getName());
+        assertEquals("原有普通特殊要求", profileCaptor.getValue().getSpecialRequirements());
+        CustomerImportItemResultDto duplicate = writer.write(candidate, LocalDate.of(2026, 9, 25),
+                LocalDateTime.of(2026, 9, 25, 10, 30));
+        assertEquals("ALREADY_EXISTS", duplicate.getStatus());
+        verify(addressMapper, never()).insert(any());
+        verify(customerOrderService, never()).createImportedFirstOrder(any());
+        verify(numberPoolMapper, never()).selectForUpdate(any());
     }
 
     @Test
@@ -215,7 +306,7 @@ class CustomerProfileImportFlowTest {
         CustomerProfileImportWriter writer = new CustomerProfileImportWriter(profileMapper, addressMapper,
                 scheduleAdditionMapper, numberPoolMapper, customerOrderService);
 
-        writer.write(candidate, LocalDate.of(2026, 9, 25));
+        writer.write(candidate, LocalDate.of(2026, 9, 25), LocalDateTime.of(2026, 9, 25, 10, 30));
 
         ArgumentCaptor<CustomerOrder> orderCaptor = ArgumentCaptor.forClass(CustomerOrder.class);
         verify(customerOrderService).createImportedFirstOrder(orderCaptor.capture());

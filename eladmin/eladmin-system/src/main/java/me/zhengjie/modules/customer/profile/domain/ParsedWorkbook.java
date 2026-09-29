@@ -11,8 +11,8 @@ import java.util.List;
 /**
  * 一次工作簿解析的完整结果。
  *
- * <p>结构校验失败时 {@code structureValid=false}，此时不允许进入任何导入流程，
- * 操作人需要先修正工作簿或确认模板版本。</p>
+ * <p>结构校验失败时 {@code structureValid=false}，不允许进入导入流程；已能解析的月份草稿
+ * 仍可保留供诊断，操作人需要先修正工作簿结构。</p>
  *
  * @author qqx
  * @date 2026-09-24
@@ -61,6 +61,15 @@ public class ParsedWorkbook implements Serializable {
      * 客户草稿列表
      */
     private List<ParsedCustomer> customers = new ArrayList<>();
+
+    /** 第二工作表中的饮食信息来源行；未提供该工作表时为空。 */
+    private List<CustomerDietSourceRow> dietRows = new ArrayList<>();
+
+    /** 工作簿是否包含客户禁忌工作表。 */
+    private boolean dietSheetPresent;
+
+    /** 饮食字典快照摘要；未提供第二工作表时为空。 */
+    private String dictionaryHash;
 
     /**
      * 工作簿级与行级问题列表

@@ -265,13 +265,13 @@ class CustomerIntakeParseServiceImplTest {
     }
 
     @Test
-    void parseProductionDateShouldSupportMultipleFormats() {
+    void parsePostoperativeInfoShouldPreserveText() {
         CustomerIntakeParseRequest request = new CustomerIntakeParseRequest();
-        request.setText("生产日期：5月2日");
+        request.setText("术后情况：4个月");
 
         CustomerIntakeParseResult result = service.parse(request);
 
-        assertEquals("2026-05-02", result.getDraft().getProductionDate());
+        assertEquals("4个月", result.getDraft().getPostoperativeInfo());
     }
 
     @Test
