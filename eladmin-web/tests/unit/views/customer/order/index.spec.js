@@ -24,7 +24,8 @@ jest.mock('@crud/crud', () => {
   crudFactory.HOOK = {
     beforeToCU: 'beforeToCU',
     beforeToAdd: 'beforeToAdd',
-    beforeSubmit: 'beforeSubmit'
+    beforeSubmit: 'beforeSubmit',
+    beforeRefresh: 'beforeRefresh'
   }
   return {
     __esModule: true,
@@ -61,6 +62,7 @@ function createVm(overrides = {}) {
   return Object.assign({}, customerOrderPage.data(), customerOrderPage.methods, {
     roles: ['customerOrder:edit'],
     crud: { refresh: jest.fn(() => Promise.resolve()) },
+    loadOrders: jest.fn(() => Promise.resolve(true)),
     $refs: {
       table: {
         bodyWrapper: { scrollLeft: 24 },
@@ -93,6 +95,7 @@ function mountDietPage(row) {
     created() {},
     mounted() {},
     activated() {},
+    methods: { ...customerOrderPage.methods, loadOrders: jest.fn(() => Promise.resolve(true)) },
     data() {
       return Object.assign({}, customerOrderPage.data.call(this), {
         roles: ['customerOrder:edit'],
@@ -352,7 +355,7 @@ describe('CustomerOrder edit flow', () => {
     })
     expect(vm.activeInlineKey).toBeNull()
     expect(vm.inlineDietDrafts['29:dishRequirements']).toBeUndefined()
-    expect(vm.crud.refresh).toHaveBeenCalledTimes(1)
+    expect(vm.loadOrders).toHaveBeenCalledWith(true, true)
   })
 
   test.each(['dishRequirements', 'dietaryRestrictions'])('clicking %s opens the multiselect and closing it saves all changes once', async field => {
@@ -502,7 +505,7 @@ describe('CustomerOrder edit flow', () => {
       value: 3,
       expectedValue: 2
     })
-    expect(vm.crud.refresh).toHaveBeenCalledTimes(1)
+    expect(vm.loadOrders).toHaveBeenCalledWith(true, true)
     expect(vm.$refs.table.bodyWrapper.scrollLeft).toBe(24)
     expect(vm.$message.success).toHaveBeenCalledWith('保存成功')
   })
@@ -651,7 +654,7 @@ describe('CustomerOrder edit flow', () => {
 
     expect(saved).toBe(false)
     expect(vm.$message.warning).toHaveBeenCalledWith('数据已被其他操作修改，已刷新最新值')
-    expect(vm.crud.refresh).toHaveBeenCalledTimes(1)
+    expect(vm.loadOrders).toHaveBeenCalledWith(true, true)
     expect(vm.inlineDrafts['18:mainDishCount']).toBeUndefined()
     expect(row.mainDishCount).toBe(1)
   })

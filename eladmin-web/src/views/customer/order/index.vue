@@ -45,9 +45,11 @@
       ref="table"
       v-loading="crud.loading"
       :data="crud.data"
+      :height="tableHeight"
+      row-key="id"
       @selection-change="crud.selectionChangeHandler"
     >
-      <el-table-column :selectable="checkboxT" type="selection" width="55" />
+      <el-table-column :selectable="checkboxT" :reserve-selection="true" type="selection" width="55" />
       <el-table-column label="手机号" prop="phone" width="145">
         <template slot-scope="scope">
           <el-input
@@ -496,16 +498,14 @@
       </el-table-column>
     </el-table>
 
-    <!--分页-->
-    <el-pagination
-      :current-page="crud.page.current"
-      :page-sizes="[10, 20, 50, 100]"
-      :page-size="crud.page.size"
-      :total="crud.page.total"
-      layout="total, sizes, prev, pager, next, jumper"
-      @size-change="crud.sizeChangeHandler"
-      @current-change="crud.pageChangeHandler"
-    />
+    <div class="order-load-status" role="status">
+      <span>已加载 {{ crud.data.length }} / {{ crud.page.total }} 条订单</span>
+      <span v-if="loadingMore"><i class="el-icon-loading" /> 正在加载更多…</span>
+      <el-button v-else-if="loadError" type="text" @click="retryLoadOrders">加载失败，点击重试</el-button>
+      <span v-else-if="crud.loading">正在加载…</span>
+      <span v-else-if="hasMoreOrders">向下滚动加载更多</span>
+      <span v-else>已全部加载</span>
+    </div>
 
     <el-dialog title="自定义菜单" :visible.sync="menuDialogVisible" width="420px" append-to-body :close-on-click-modal="false" @closed="menuDialogRow = null">
       <div v-if="menuDialogRow" class="menu-dialog-body">
@@ -697,7 +697,7 @@ export default {
   components: { crudOperation, rrOperation, OrderForm, CustomerDietCell },
   mixins: [presenter(), header(), form(createOrderDefaultForm()), crud()],
   cruds() {
-    return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }, query: { orderCode: '', customerCode: '', customerName: '', status: null, customerSource: null, scheduleDate: null }})
+    return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }, queryOnPresenterCreated: false, query: { orderCode: '', customerCode: '', customerName: '', status: null, customerSource: null, scheduleDate: null }})
   },
   data() {
     return {
@@ -706,6 +706,14 @@ export default {
         edit: ['admin', 'customerOrder:edit'],
         del: ['admin', 'customerOrder:del']
       },
+      tableHeight: 520,
+      loadingMore: false,
+      loadError: false,
+      listExhausted: false,
+      listRequestSequence: 0,
+      listQueryParams: {},
+      failedLoad: null,
+      listActive: true,
       submitLoading: false,
       refundLoading: false,
       refundDialogVisible: false,
@@ -774,6 +782,9 @@ export default {
   },
   computed: {
     ...mapGetters(['baseApi', 'imagesUploadApi', 'roles']),
+    hasMoreOrders() {
+      return !this.listExhausted && this.crud.data.length < this.crud.page.total
+    },
     uploadHeaders() {
       const token = getToken()
       return token ? { Authorization: token } : {}
@@ -799,6 +810,9 @@ export default {
     }
   },
   watch: {
+    'crud.props.searchToggle'() {
+      this.$nextTick(() => this.updateTableHeight())
+    },
     canViewAmount() {
       this.$nextTick(() => this.initializeColumnOrder())
     }
@@ -808,20 +822,148 @@ export default {
     this.columnHeaderRow = null
     this.columnOrderLoaded = false
     this.loadCustomerSourceDict()
+    this.crud.page.size = 20
+    this.crud.page.page = 0
+    this.crud.toQuery()
   },
   mounted() {
-    this.$nextTick(() => this.initializeColumnOrder())
+    this.activateOrderList()
   },
   activated() {
-    this.$nextTick(() => this.initializeColumnOrder())
+    this.activateOrderList()
   },
   deactivated() {
+    this.deactivateOrderList()
     this.destroyColumnSortable()
   },
   beforeDestroy() {
+    this.deactivateOrderList()
+    this.listRequestSequence += 1
     this.destroyColumnSortable()
   },
   methods: {
+    /** 将工具栏、筛选及订单操作触发的 CRUD 刷新接入滚动加载。 */
+    [CRUD.HOOK.beforeRefresh]() {
+      this.loadOrders(true)
+      return false
+    },
+    /** 恢复表格滚动监听和高度计算，适用于首次挂载与缓存页面重新激活。 */
+    activateOrderList() {
+      this.listActive = true
+      window.addEventListener('resize', this.updateTableHeight)
+      this.$nextTick(() => {
+        if (!this.listActive) return
+        this.initializeColumnOrder()
+        this.updateTableHeight()
+        this.bindTableScroll()
+        this.loadMoreWhenTableFits()
+      })
+    },
+    /** 页面离开时移除监听，停止自动追加请求。 */
+    deactivateOrderList() {
+      this.listActive = false
+      window.removeEventListener('resize', this.updateTableHeight)
+      if (this.orderScrollBody) this.orderScrollBody.removeEventListener('scroll', this.handleTableScroll)
+      this.orderScrollBody = null
+    },
+    /** 按可用窗口高度设置订单表格高度，保持表头可见。 */
+    updateTableHeight() {
+      const table = this.$refs.table
+      if (!table || !table.$el) return
+      this.tableHeight = Math.max(window.innerHeight - table.$el.getBoundingClientRect().top - 100, 300)
+      this.$nextTick(() => this.loadMoreWhenTableFits())
+    },
+    /** 返回订单表格的纵向滚动容器。 */
+    getTableScrollContainer() {
+      const table = this.$refs.table
+      return table && table.bodyWrapper
+    },
+    /** 绑定实际表格滚动容器，避免缓存页面重复注册监听。 */
+    bindTableScroll() {
+      const body = this.getTableScrollContainer()
+      if (!body || body === this.orderScrollBody) return
+      if (this.orderScrollBody) this.orderScrollBody.removeEventListener('scroll', this.handleTableScroll)
+      this.orderScrollBody = body
+      body.addEventListener('scroll', this.handleTableScroll)
+    },
+    /** 表格接近底部 100 像素时请求下一批订单。 */
+    handleTableScroll() {
+      const body = this.getTableScrollContainer()
+      if (body && body.scrollHeight - body.scrollTop - body.clientHeight <= 100) this.loadNextPage()
+    },
+    /** 数据未填满可见表格时继续加载，保证用户能够触发后续滚动。 */
+    loadMoreWhenTableFits() {
+      const body = this.getTableScrollContainer()
+      if (body && body.clientHeight > 0 && body.scrollHeight <= body.clientHeight) this.loadNextPage()
+    },
+    /** 加载当前已提交筛选条件的下一页；加载中、失败或结束时停止自动请求。 */
+    loadNextPage() {
+      if (!this.listActive || this.crud.loading || this.loadingMore || this.loadError || !this.hasMoreOrders) return
+      return this.loadOrders(false)
+    },
+    /** 重试失败的首批、追加或行内编辑刷新请求。 */
+    retryLoadOrders() {
+      if (!this.failedLoad || this.crud.loading || this.loadingMore) return
+      return this.loadOrders(this.failedLoad.reset, this.failedLoad.preserveLoaded)
+    },
+    /**
+     * 使用现有分页接口按需加载订单，丢弃筛选切换前的旧响应。
+     * @param {boolean} reset 是否重新查询并替换列表
+     * @param {boolean} preserveLoaded 行内编辑后是否刷新已加载范围并保留列表
+     * @returns {Promise<boolean>} 当前请求是否成功
+     */
+    async loadOrders(reset = true, preserveLoaded = false) {
+      const requestId = ++this.listRequestSequence
+      const loadedPages = Math.max(this.crud.page.page, 1)
+      const requestPage = reset ? 1 : this.crud.page.page + 1
+      const requestSize = reset && preserveLoaded ? loadedPages * this.crud.page.size : this.crud.page.size
+      if (reset) {
+        if (!preserveLoaded) this.listQueryParams = { ...this.crud.getQueryParams() }
+        this.crud.loading = true
+        this.loadingMore = false
+        this.activeInlineKey = null
+        this.inlineDrafts = {}
+        this.inlineDietDrafts = {}
+        this.crud.selections = []
+        const table = this.$refs.table
+        if (table && table.clearSelection) table.clearSelection()
+        if (!preserveLoaded) {
+          this.crud.data = []
+          this.crud.page.page = 0
+          this.crud.page.total = 0
+          const body = this.getTableScrollContainer()
+          if (body) body.scrollTop = 0
+        }
+      } else {
+        this.loadingMore = true
+      }
+      this.loadError = false
+      this.failedLoad = null
+      try {
+        const res = await orderApi.getOrders({ ...this.listQueryParams, page: requestPage, size: requestSize })
+        if (requestId !== this.listRequestSequence) return false
+        const content = Array.isArray(res.content) ? res.content : []
+        const existingIds = new Set(this.crud.data.map(row => row.id))
+        this.crud.data = reset ? content : this.crud.data.concat(content.filter(row => !existingIds.has(row.id)))
+        this.crud.page.page = reset && preserveLoaded ? loadedPages : requestPage
+        this.crud.page.total = Number(res.totalElements) || 0
+        this.listExhausted = content.length < requestSize
+        this.crud.resetDataStatus()
+        return true
+      } catch (error) {
+        if (requestId === this.listRequestSequence) {
+          this.loadError = true
+          this.failedLoad = { reset, preserveLoaded }
+        }
+        return false
+      } finally {
+        if (requestId === this.listRequestSequence) {
+          this.crud.loading = false
+          this.loadingMore = false
+          this.$nextTick(() => this.loadMoreWhenTableFits())
+        }
+      }
+    },
     /** 读取当前浏览器保存的订单列顺序。
      * @returns {string[]} 已保存的列标识，格式无效时返回空数组
      */
@@ -1278,15 +1420,17 @@ export default {
       this.$delete(this.savingRows, row.id)
       return saved
     },
+    /** 刷新已加载订单并保留纵向及横向位置，返回是否取得最新数据。 */
     async refreshInlineRows() {
       const table = this.$refs.table
+      const bodyScrollTop = table && table.bodyWrapper ? table.bodyWrapper.scrollTop : 0
       const bodyScrollLeft = table && table.bodyWrapper ? table.bodyWrapper.scrollLeft : 0
       const headerScrollLeft = table && table.headerWrapper ? table.headerWrapper.scrollLeft : bodyScrollLeft
       let refreshed = true
       try {
-        const refreshPromise = this.crud.refresh()
+        const refreshPromise = this.loadOrders(true, true)
         if (refreshPromise) {
-          await refreshPromise
+          refreshed = (await refreshPromise) !== false
         }
         await new Promise(resolve => this.$nextTick(resolve))
       } catch (error) {
@@ -1294,6 +1438,7 @@ export default {
       } finally {
         const refreshedTable = this.$refs.table
         if (refreshedTable && refreshedTable.bodyWrapper) {
+          refreshedTable.bodyWrapper.scrollTop = bodyScrollTop
           refreshedTable.bodyWrapper.scrollLeft = bodyScrollLeft
         }
         if (refreshedTable && refreshedTable.headerWrapper) {
@@ -1608,6 +1753,15 @@ export default {
 </script>
 
 <style scoped>
+.order-load-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 40px;
+  color: #909399;
+  font-size: 13px;
+}
 .head-container {
   padding: 10px;
   margin-bottom: 10px;
