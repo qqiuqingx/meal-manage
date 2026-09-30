@@ -83,7 +83,7 @@
       <el-table-column label="客户编号" prop="customerCode" width="105" fixed="left">
         <template slot-scope="{ row }">{{ row.customerCode || '-' }}</template>
       </el-table-column>
-      <el-table-column label="客户姓名" prop="customerName" width="110">
+      <el-table-column label="客户姓名" prop="customerName" width="110" fixed="left">
         <template slot-scope="{ row }">{{ row.customerName || '-' }}</template>
       </el-table-column>
       <el-table-column label="特殊要求" prop="specialRequirements" min-width="180">
