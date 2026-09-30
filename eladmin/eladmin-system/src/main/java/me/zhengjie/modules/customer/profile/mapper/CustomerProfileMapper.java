@@ -87,6 +87,34 @@ public interface CustomerProfileMapper extends BaseMapper<CustomerProfile> {
                                 @Param("updateTime") java.time.LocalDateTime updateTime);
 
     /**
+     * 定向更新客户菜品特殊要求对象引用 JSON。
+     *
+     * @param id 客户主键
+     * @param json 规范化后的对象引用 JSON 数组
+     * @param updateBy 最后修改人
+     * @param updateTime 最后修改时间
+     * @return 更新行数
+     */
+    int updateDishRequirementsInline(@Param("id") Long id,
+                                     @Param("json") String json,
+                                     @Param("updateBy") String updateBy,
+                                     @Param("updateTime") java.time.LocalDateTime updateTime);
+
+    /**
+     * 定向更新客户禁忌对象引用 JSON。
+     *
+     * @param id 客户主键
+     * @param json 规范化后的对象引用 JSON 数组
+     * @param updateBy 最后修改人
+     * @param updateTime 最后修改时间
+     * @return 更新行数
+     */
+    int updateDietaryRestrictionsInline(@Param("id") Long id,
+                                        @Param("json") String json,
+                                        @Param("updateBy") String updateBy,
+                                        @Param("updateTime") java.time.LocalDateTime updateTime);
+
+    /**
      * 定向更新客户特殊要求，并记录最后修改人。
      *
      * @param id 客户主键

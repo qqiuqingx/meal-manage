@@ -20,7 +20,6 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportPreviewDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportItemResultDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportResultDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto;
-import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietSelectionDto;
 import me.zhengjie.modules.customer.profile.service.CustomerOrderImportParser;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileImportService;
 import me.zhengjie.modules.customer.profile.service.CustomerDietDictionaryService;
@@ -96,22 +95,20 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
     }
 
     /**
-     * 复核文件与饮食字典摘要及全部歧义选择，再逐客户新建或补录。
+     * 复核文件与饮食字典摘要，再逐客户新建或补录。
      *
      * @param content 上传的工作簿
      * @param fileName 上传文件名，仅用于处理上下文
      * @param expectedFileHash 操作人确认的预览 SHA-256
      * @param expectedDictionaryHash 第二工作表使用的饮食字典摘要
-     * @param selections 歧义词项的候选选择或明确跳过
      * @param importDate 预览时使用的导入日期
      * @return 逐位导入结果及重新解析的预览
      */
     @Override
     public CustomerImportResultDto importCustomers(byte[] content, String fileName, String expectedFileHash,
                                                    String expectedDictionaryHash,
-                                                   List<CustomerDietSelectionDto> selections,
                                                    LocalDate importDate) {
-        return importResolved(content, fileName, expectedFileHash, expectedDictionaryHash, selections, importDate, false);
+        return importResolved(content, fileName, expectedFileHash, expectedDictionaryHash, importDate, false);
     }
 
     /**
@@ -121,16 +118,14 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
      * @param fileName 文件名
      * @param expectedFileHash 预览文件摘要
      * @param expectedDictionaryHash 预览字典摘要
-     * @param selections 歧义词项选择
      * @param importDate 导入日期
      * @return 逐位补录结果
      */
     @Override
     public CustomerImportResultDto importDietOnly(byte[] content, String fileName, String expectedFileHash,
                                                   String expectedDictionaryHash,
-                                                  List<CustomerDietSelectionDto> selections,
                                                   LocalDate importDate) {
-        return importResolved(content, fileName, expectedFileHash, expectedDictionaryHash, selections, importDate, true);
+        return importResolved(content, fileName, expectedFileHash, expectedDictionaryHash, importDate, true);
     }
 
     /**
@@ -140,14 +135,12 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
      * @param fileName 文件名
      * @param expectedFileHash 预览文件摘要
      * @param expectedDictionaryHash 预览字典摘要
-     * @param selections 歧义选择
      * @param importDate 导入日期
      * @param dietOnly 是否仅补录第二工作表
      * @return 逐客户结果
      */
     private CustomerImportResultDto importResolved(byte[] content, String fileName, String expectedFileHash,
                                                    String expectedDictionaryHash,
-                                                   List<CustomerDietSelectionDto> selections,
                                                    LocalDate importDate, boolean dietOnly) {
         LocalDateTime confirmedAt = LocalDateTime.now();
         validateUpload(content);
@@ -168,7 +161,7 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
                 || !expectedDictionaryHash.equalsIgnoreCase(workbook.getDictionaryHash()))) {
             throw new BadRequestException("饮食字典已变化或摘要缺失，请重新预览后确认");
         }
-        dietMatchService.validateAndApplySelections(resolution.getCandidates(), selections);
+        dietMatchService.applyAllMatches(resolution.getCandidates());
         for (ImportCandidate candidate : resolution.getCandidates()) {
             candidate.setDraft(buildDraft(candidate.getParsed(), candidate.getParentPackage(), candidate.isSupplemental()));
             candidate.setImportable(isCandidateImportable(candidate));
@@ -481,19 +474,13 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
         List<String> errors = parsed.getIssues().stream()
                 .map(CustomerImportIssueDto::getMessage)
                 .collect(Collectors.toList());
-        long ambiguousCount = dietData == null ? 0 : dietData.getMatches().stream()
-                .filter(match -> "AMBIGUOUS".equals(match.getStatus())).count();
-        draft.setDietMatchesNeedReview(parsed.isImportable() && ambiguousCount > 0);
-        if (parsed.isImportable() && ambiguousCount > 0) {
-            errors.add("有 " + ambiguousCount + " 个饮食词项存在多个候选，请逐项选择或明确跳过");
-        }
         draft.setErrors(errors);
-        draft.setImportable(parsed.isImportable() && ambiguousCount == 0);
+        draft.setImportable(parsed.isImportable());
         return draft;
     }
 
     /**
-     * 判断候选是否通过客户资料和身份校验；饮食歧义由确认选择单独校验。
+     * 判断候选是否通过客户资料和身份校验；饮食匹配的全部候选会自动录入，不另行阻塞。
      *
      * @param candidate 当前客户候选
      * @return 可进入确认处理时为 true

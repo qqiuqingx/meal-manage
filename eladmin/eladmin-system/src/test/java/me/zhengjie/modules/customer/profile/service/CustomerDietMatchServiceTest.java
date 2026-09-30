@@ -2,7 +2,6 @@ package me.zhengjie.modules.customer.profile.service;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
-import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.profile.domain.CustomerDietImportData;
 import me.zhengjie.modules.customer.profile.domain.CustomerDietSourceRow;
 import me.zhengjie.modules.customer.profile.domain.ImportCandidate;
@@ -11,7 +10,6 @@ import me.zhengjie.modules.customer.profile.domain.ParsedWorkbook;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietMatchDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto;
-import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietSelectionDto;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -22,7 +20,6 @@ import java.time.LocalDateTime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CustomerDietMatchServiceTest {
@@ -30,7 +27,7 @@ class CustomerDietMatchServiceTest {
     private final CustomerDietMatchService service = new CustomerDietMatchService();
 
     @Test
-    void shouldKeepDirectionFromColumnAndRequireChoiceForCrossTypeAmbiguity() {
+    void shouldKeepDirectionFromColumnAndApplyAllCrossTypeCandidates() {
         CustomerDietSourceRow row = sourceRow("A100", "不吃香菜，芹菜", "喜欢吃牛肉");
         Fixture fixture = fixture(row);
 
@@ -38,27 +35,23 @@ class CustomerDietMatchServiceTest {
 
         CustomerDietImportData data = fixture.parsed.getDietImportData();
         assertEquals(3, data.getMatches().size());
-        CustomerDietMatchDto ambiguous = data.getMatches().get(0);
-        assertEquals("DIET:4:4:0", ambiguous.getSourceKey());
-        assertEquals("DISH_REQUIREMENTS", ambiguous.getSide());
-        assertEquals("不吃香菜", ambiguous.getRawText());
-        assertEquals("香菜", ambiguous.getLookupText());
-        assertEquals("AMBIGUOUS", ambiguous.getStatus());
+        CustomerDietMatchDto multi = data.getMatches().get(0);
+        assertEquals("DIET:4:4:0", multi.getSourceKey());
+        assertEquals("DISH_REQUIREMENTS", multi.getSide());
+        assertEquals("不吃香菜", multi.getRawText());
+        assertEquals("香菜", multi.getLookupText());
+        assertEquals("MULTI", multi.getStatus());
+        assertEquals(2, multi.getSelectedItems().size());
         assertEquals("DIETARY_RESTRICTIONS", data.getMatches().get(2).getSide());
         assertEquals("UNIQUE", data.getMatches().get(2).getStatus());
         assertEquals("不吃香菜，芹菜", data.getDishRequirementsRaw().get(0));
 
-        assertThrows(BadRequestException.class,
-                () -> service.validateAndApplySelections(fixture.candidates, Collections.emptyList()));
-        CustomerDietSelectionDto selection = new CustomerDietSelectionDto();
-        selection.setSourceKey("DIET:4:4:0");
-        selection.setAction("SELECT");
-        selection.setType("INGREDIENT");
-        selection.setId(2L);
-        service.validateAndApplySelections(fixture.candidates, Collections.singletonList(selection));
+        service.applyAllMatches(fixture.candidates);
 
-        assertEquals(2, data.getDishRequirements().size());
+        assertEquals(3, data.getDishRequirements().size());
         assertEquals("香菜", data.getDishRequirements().get(0).getName());
+        assertEquals("香菜", data.getDishRequirements().get(1).getName());
+        assertEquals("芹菜", data.getDishRequirements().get(2).getName());
         assertEquals("牛肉", data.getDietaryRestrictions().get(0).getName());
     }
 
@@ -75,22 +68,25 @@ class CustomerDietMatchServiceTest {
                 .getJSONObject(0).getString("type"));
         assertEquals(Long.valueOf(1L), matches.getJSONObject(1).getJSONArray("candidates")
                 .getJSONObject(0).getLong("id"));
+
+        service.applyAllMatches(fixture.candidates);
+        assertEquals(2, fixture.parsed.getDietImportData().getDishRequirements().size());
     }
 
     @Test
-    void shouldAllowExplicitSkipAndKeepRawText() {
+    void shouldApplyAllSameNameObjectsAndKeepRawText() {
         Fixture fixture = fixture(sourceRow("A100", "香菜", null));
-        fixture.options.add(option("DISH", 99L, "香菜"));
+        fixture.options.add(option("INGREDIENT_TAG", 99L, "香菜"));
         service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
         CustomerDietImportData data = fixture.parsed.getDietImportData();
 
-        CustomerDietSelectionDto skip = new CustomerDietSelectionDto();
-        skip.setSourceKey("DIET:4:4:0");
-        skip.setAction("SKIP");
-        service.validateAndApplySelections(fixture.candidates, Collections.singletonList(skip));
+        service.applyAllMatches(fixture.candidates);
 
-        assertEquals("SKIPPED", data.getMatches().get(0).getStatus());
-        assertTrue(data.getDishRequirements().isEmpty());
+        assertEquals("MULTI", data.getMatches().get(0).getStatus());
+        assertEquals(3, data.getDishRequirements().size());
+        assertEquals(Arrays.asList("DISH", "INGREDIENT", "INGREDIENT_TAG"),
+                data.getDishRequirements().stream().map(CustomerDietItemDto::getType)
+                        .collect(java.util.stream.Collectors.toList()));
         assertEquals(Collections.singletonList("香菜"), data.getDishRequirementsRaw());
     }
 
@@ -103,7 +99,7 @@ class CustomerDietMatchServiceTest {
         assertTrue(fixture.parsed.isImportable());
         assertEquals("UNMATCHED", data.getMatches().get(0).getStatus());
         assertEquals(Collections.singletonList("最近不太想吃有味道的东西"), data.getDishRequirementsRaw());
-        service.validateAndApplySelections(fixture.candidates, Collections.emptyList());
+        service.applyAllMatches(fixture.candidates);
         assertTrue(data.getDishRequirements().isEmpty());
     }
 

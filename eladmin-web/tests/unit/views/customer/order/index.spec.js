@@ -3,6 +3,7 @@ jest.mock('@/api/customer/order', () => ({
   getOrder: jest.fn(),
   updateInline: jest.fn()
 }))
+jest.mock('@/api/customer/profile', () => ({ getDietOptions: jest.fn() }))
 jest.mock('@/api/system/dictDetail', () => ({ get: jest.fn() }))
 jest.mock('@/api/mealRefund', () => ({ refundMeal: jest.fn() }))
 jest.mock('@/components/Order/OrderForm.vue', () => ({
@@ -43,6 +44,7 @@ jest.mock('vuex', () => ({ mapGetters: () => ({}) }))
 const fs = require('fs')
 const path = require('path')
 const orderApi = require('@/api/customer/order')
+const profileApi = require('@/api/customer/profile')
 const customerOrderPage = require('@/views/customer/order/index.vue').default
 
 function beforeToCU(ctx) {
@@ -84,6 +86,7 @@ describe('CustomerOrder edit flow', () => {
   beforeEach(() => {
     orderApi.getOrder.mockReset()
     orderApi.updateInline.mockReset()
+    profileApi.getDietOptions.mockReset()
   })
 
   test('loads order detail before entering edit mode', async() => {
@@ -155,7 +158,70 @@ describe('CustomerOrder edit flow', () => {
     expect(source).toContain('<el-table-column column-key="dietaryRestrictions" label="客户禁忌" min-width="240">')
     expect(source).toContain('<CustomerDietCell :raw="scope.row.dishRequirementsRaw" :items="scope.row.dishRequirements" />')
     expect(source).toContain('<CustomerDietCell :raw="scope.row.dietaryRestrictionsRaw" :items="scope.row.dietaryRestrictions" />')
+    expect(source).toContain("@click=\"beginInlineDietEdit(scope.row, 'dishRequirements')\"")
+    expect(source).toContain("@click=\"beginInlineDietEdit(scope.row, 'dietaryRestrictions')\"")
+    expect(source).toContain("@click=\"saveInlineDietDraft(scope.row, 'dishRequirements')\"")
+    expect(source).toContain("@click=\"cancelInlineDietDraft(scope.row, 'dietaryRestrictions')\"")
     expect(source).not.toContain('<el-popover placement="left" width="380" trigger="click">')
+  })
+
+  test('loads active dictionary options and keeps selected historical references in the draft', async() => {
+    profileApi.getDietOptions.mockResolvedValue({ data: [{ type: 'DISH', id: 2, name: '新菜' }] })
+    const vm = createVm()
+    const row = {
+      id: 28,
+      status: 1,
+      dishRequirements: [{ type: 'INGREDIENT_TAG', id: 9, name: '旧标签名' }]
+    }
+
+    await vm.beginInlineDietEdit(row, 'dishRequirements')
+
+    expect(profileApi.getDietOptions).toHaveBeenCalledTimes(1)
+    expect(vm.isInlineEditing(row, 'dishRequirements')).toBe(true)
+    expect(vm.getInlineDietDraft(row, 'dishRequirements')).toEqual(['INGREDIENT_TAG:9'])
+    expect(vm.getInlineDietChoices(row, 'dishRequirements')).toEqual([
+      { type: 'DISH', id: 2, name: '新菜', selectionKey: 'DISH:2', historical: false },
+      { type: 'INGREDIENT_TAG', id: 9, name: '旧标签名', selectionKey: 'INGREDIENT_TAG:9', historical: true }
+    ])
+  })
+
+  test('saves one complete diet selection array with its entry snapshot as expectedValue', async() => {
+    orderApi.updateInline.mockResolvedValue({})
+    const vm = createVm({
+      dietOptionsLoaded: true,
+      dietOptions: [{ type: 'DISH', id: 2, name: '服务端名称' }]
+    })
+    const oldItems = [{ type: 'INGREDIENT_TAG', id: 9, name: '历史名称' }]
+    const row = { id: 29, status: 1, dishRequirements: oldItems }
+    await vm.beginInlineDietEdit(row, 'dishRequirements')
+    vm.setInlineDietDraft(row, 'dishRequirements', ['INGREDIENT_TAG:9', 'DISH:2'])
+
+    await vm.saveInlineDietDraft(row, 'dishRequirements')
+
+    expect(orderApi.updateInline).toHaveBeenCalledWith(29, {
+      field: 'dishRequirements',
+      value: [
+        { type: 'INGREDIENT_TAG', id: 9, name: '历史名称' },
+        { type: 'DISH', id: 2, name: '服务端名称' }
+      ],
+      expectedValue: oldItems
+    })
+    expect(vm.activeInlineKey).toBeNull()
+    expect(vm.inlineDietDrafts['29:dishRequirements']).toBeUndefined()
+    expect(vm.crud.refresh).toHaveBeenCalledTimes(1)
+  })
+
+  test('cancelling a diet selection draft does not send an update', async() => {
+    const vm = createVm({ dietOptionsLoaded: true, dietOptions: [] })
+    const row = { id: 30, status: 1, dietaryRestrictions: [] }
+    await vm.beginInlineDietEdit(row, 'dietaryRestrictions')
+    vm.setInlineDietDraft(row, 'dietaryRestrictions', ['DISH:1'])
+
+    vm.cancelInlineDietDraft(row, 'dietaryRestrictions')
+
+    expect(vm.activeInlineKey).toBeNull()
+    expect(orderApi.updateInline).not.toHaveBeenCalled()
+    expect(vm.inlineDietDrafts['30:dietaryRestrictions']).toBeUndefined()
   })
 
   test('clicking one value opens only its editor and focuses the existing value', async() => {

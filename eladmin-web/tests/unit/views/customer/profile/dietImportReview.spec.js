@@ -41,69 +41,34 @@ jest.mock('vuex', () => ({ mapGetters: () => ({}) }))
 
 const customerProfilePage = require('@/views/customer/profile/index.vue').default
 
-function createReviewContext() {
-  const first = {
-    sourceKey: 'DIET:4:4:0',
-    side: 'DISH_REQUIREMENTS',
-    status: 'AMBIGUOUS',
-    candidates: [
-      { type: 'DISH', id: 1, name: '香菜' },
-      { type: 'INGREDIENT', id: 2, name: '香菜' }
-    ]
-  }
-  const second = {
-    sourceKey: 'DIET:8:5:0',
-    side: 'DIETARY_RESTRICTIONS',
-    status: 'AMBIGUOUS',
-    candidates: [
-      { type: 'DISH_TAG', id: 3, name: '海鲜' },
-      { type: 'INGREDIENT_TAG', id: 4, name: '海鲜' }
-    ]
-  }
-  return {
-    importPreview: {
-      structureValid: true,
-      dictionaryHash: 'dictionary-hash',
-      dietSheetPresent: true,
-      importableCount: 2,
-      drafts: [
-        { dietMatchesNeedReview: true, dietMatches: [first], errors: ['有 1 个饮食词项存在多个候选，请逐项选择或明确跳过'] },
-        { dietMatchesNeedReview: true, dietMatches: [second], errors: ['有 1 个饮食词项存在多个候选，请逐项选择或明确跳过'] }
-      ]
-    },
-    dietSelectionValues: {},
-    importFile: {},
-    importDate: '2026-09-28',
-    importLoading: false,
-    importConfirmLoading: false,
-    importResult: null,
-    dietMatchOptionValue: customerProfilePage.methods.dietMatchOptionValue,
-    $set(target, key, value) { target[key] = value }
-  }
-}
+describe('customer diet import preview', () => {
+  test('allows confirmation when a same-name term will add every candidate', () => {
+    const context = {
+      importPreview: {
+        structureValid: true,
+        dictionaryHash: 'dictionary-hash',
+        dietSheetPresent: true,
+        importableCount: 1,
+        drafts: [{
+          importable: true,
+          dietMatches: [{
+            status: 'MULTI',
+            selectedItems: [
+              { type: 'DISH', id: 1, name: '海鲜' },
+              { type: 'INGREDIENT', id: 2, name: '海鲜' },
+              { type: 'DISH_TAG', id: 3, name: '海鲜' }
+            ]
+          }]
+        }]
+      },
+      importFile: {},
+      importDate: '2026-09-28',
+      importLoading: false,
+      importConfirmLoading: false,
+      importResult: null
+    }
 
-describe('customer diet import review', () => {
-  test('counts unresolved ambiguity across drafts, including rows outside the current filter', () => {
-    const context = createReviewContext()
-
-    expect(customerProfilePage.computed.unresolvedDietMatchCount.call(context)).toBe(2)
-    customerProfilePage.methods.setDietMatchSelection.call(context, context.importPreview.drafts[0].dietMatches[0], 'SKIP')
-
-    expect(customerProfilePage.computed.unresolvedDietMatchCount.call(context)).toBe(1)
-    expect(customerProfilePage.computed.canConfirmImport.call(context)).toBe(false)
-  })
-
-  test('serializes explicit skip and typed candidate choices by stable source key', () => {
-    const context = createReviewContext()
-    context.dietSelectionValues['DIET:4:4:0'] = 'SKIP'
-    context.dietSelectionValues['DIET:8:5:0'] = 'INGREDIENT_TAG:4'
-
-    expect(customerProfilePage.methods.serializeDietSelections.call(context)).toEqual([
-      { sourceKey: 'DIET:4:4:0', action: 'SKIP' },
-      { sourceKey: 'DIET:8:5:0', action: 'SELECT', type: 'INGREDIENT_TAG', id: 4 }
-    ])
-    context.unresolvedDietMatchCount = customerProfilePage.computed.unresolvedDietMatchCount.call(context)
-    expect(context.unresolvedDietMatchCount).toBe(0)
     expect(customerProfilePage.computed.canConfirmImport.call(context)).toBe(true)
+    expect(context.importPreview.drafts[0].dietMatches[0].selectedItems).toHaveLength(3)
   })
 })

@@ -2,7 +2,6 @@ package me.zhengjie.modules.customer.profile.service;
 
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportPreviewDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportResultDto;
-import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietSelectionDto;
 
 import java.time.LocalDate;
 
@@ -44,13 +43,11 @@ public interface CustomerProfileImportService {
      * @param fileName 上传文件名，仅供处理上下文使用
      * @param expectedFileHash 预览返回的 SHA-256
      * @param expectedDictionaryHash 预览饮食字典摘要；含客户禁忌工作表时必填
-     * @param selections 歧义词项的候选选择或显式跳过
      * @param importDate 预览使用的导入日期
      * @return 逐位导入结果
      */
     CustomerImportResultDto importCustomers(byte[] content, String fileName, String expectedFileHash,
                                             String expectedDictionaryHash,
-                                            java.util.List<CustomerDietSelectionDto> selections,
                                             LocalDate importDate);
 
     /**
@@ -60,12 +57,10 @@ public interface CustomerProfileImportService {
      * @param fileName 上传文件名
      * @param expectedFileHash 预览文件摘要
      * @param expectedDictionaryHash 预览饮食字典摘要
-     * @param selections 歧义词项选择
      * @param importDate 预览时的导入日期
      * @return 逐位补录结果
      */
     CustomerImportResultDto importDietOnly(byte[] content, String fileName, String expectedFileHash,
                                            String expectedDictionaryHash,
-                                           java.util.List<CustomerDietSelectionDto> selections,
                                            LocalDate importDate);
 }

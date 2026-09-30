@@ -24,13 +24,13 @@ public class CustomerDietDictionaryController {
     }
 
     /**
-     * 返回客户编辑和导入审查可使用的五类当前有效饮食对象。
+     * 返回客户维护、订单行内编辑和导入预览可使用的五类当前有效饮食对象。
      *
      * @return 可选饮食对象列表
      */
     @GetMapping
     @ApiOperation("查询客户饮食对象选项")
-    @PreAuthorize("@el.check('customerProfile:list') or @el.check('customerProfile:add') or @el.check('customerProfile:edit') or @el.check('customerProfile:import')")
+    @PreAuthorize("@el.check('customerProfile:list') or @el.check('customerProfile:add') or @el.check('customerProfile:edit') or @el.check('customerProfile:import') or @el.check('customerOrder:edit')")
     public List<CustomerDietOptionDto> listOptions() {
         return dictionaryService.listActiveOptions();
     }

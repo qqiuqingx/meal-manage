@@ -85,12 +85,92 @@
       </el-table-column>
       <el-table-column column-key="dishRequirements" label="菜品特殊要求" min-width="240">
         <template slot-scope="scope">
-          <CustomerDietCell :raw="scope.row.dishRequirementsRaw" :items="scope.row.dishRequirements" />
+          <div v-if="isInlineEditing(scope.row, 'dishRequirements')" class="inline-diet-editor">
+            <div class="customer-diet-cell__label">原文</div>
+            <div v-if="scope.row.dishRequirementsRaw && scope.row.dishRequirementsRaw.length">
+              <div v-for="(block, index) in scope.row.dishRequirementsRaw" :key="index" class="customer-diet-cell__text">{{ block }}</div>
+            </div>
+            <div v-else class="customer-diet-cell__text">—</div>
+            <div class="customer-diet-cell__label">已确认对象</div>
+            <el-select
+              :value="getInlineDietDraft(scope.row, 'dishRequirements')"
+              multiple
+              filterable
+              collapse-tags
+              size="mini"
+              placeholder="搜索并选择对象"
+              :disabled="isInlineBusy(scope.row)"
+              style="width: 100%;"
+              @input="setInlineDietDraft(scope.row, 'dishRequirements', $event)"
+            >
+              <el-option
+                v-for="option in getInlineDietChoices(scope.row, 'dishRequirements')"
+                :key="option.selectionKey"
+                :label="dietOptionLabel(option)"
+                :value="option.selectionKey"
+                :disabled="option.historical && !isInlineDietSelected(scope.row, 'dishRequirements', option.selectionKey)"
+              />
+            </el-select>
+            <div class="inline-diet-actions">
+              <el-button size="mini" type="primary" :disabled="isInlineBusy(scope.row)" @click="saveInlineDietDraft(scope.row, 'dishRequirements')">保存</el-button>
+              <el-button size="mini" :disabled="isInlineBusy(scope.row)" @click="cancelInlineDietDraft(scope.row, 'dishRequirements')">取消</el-button>
+            </div>
+          </div>
+          <div v-else class="inline-diet-display">
+            <CustomerDietCell :raw="scope.row.dishRequirementsRaw" :items="scope.row.dishRequirements" />
+            <el-button
+              v-if="isInlineEditable(scope.row)"
+              type="text"
+              size="mini"
+              :disabled="isInlineBusy(scope.row) || dietOptionsLoading"
+              @click="beginInlineDietEdit(scope.row, 'dishRequirements')"
+            >编辑对象</el-button>
+          </div>
         </template>
       </el-table-column>
       <el-table-column column-key="dietaryRestrictions" label="客户禁忌" min-width="240">
         <template slot-scope="scope">
-          <CustomerDietCell :raw="scope.row.dietaryRestrictionsRaw" :items="scope.row.dietaryRestrictions" />
+          <div v-if="isInlineEditing(scope.row, 'dietaryRestrictions')" class="inline-diet-editor">
+            <div class="customer-diet-cell__label">原文</div>
+            <div v-if="scope.row.dietaryRestrictionsRaw && scope.row.dietaryRestrictionsRaw.length">
+              <div v-for="(block, index) in scope.row.dietaryRestrictionsRaw" :key="index" class="customer-diet-cell__text">{{ block }}</div>
+            </div>
+            <div v-else class="customer-diet-cell__text">—</div>
+            <div class="customer-diet-cell__label">已确认对象</div>
+            <el-select
+              :value="getInlineDietDraft(scope.row, 'dietaryRestrictions')"
+              multiple
+              filterable
+              collapse-tags
+              size="mini"
+              placeholder="搜索并选择对象"
+              :disabled="isInlineBusy(scope.row)"
+              style="width: 100%;"
+              @input="setInlineDietDraft(scope.row, 'dietaryRestrictions', $event)"
+            >
+              <el-option
+                v-for="option in getInlineDietChoices(scope.row, 'dietaryRestrictions')"
+                :key="option.selectionKey"
+                :label="dietOptionLabel(option)"
+                :value="option.selectionKey"
+                :disabled="option.historical && !isInlineDietSelected(scope.row, 'dietaryRestrictions', option.selectionKey)"
+              />
+            </el-select>
+            <div class="inline-diet-actions">
+              <el-button size="mini" type="primary" :disabled="isInlineBusy(scope.row)" @click="saveInlineDietDraft(scope.row, 'dietaryRestrictions')">保存</el-button>
+              <el-button size="mini" :disabled="isInlineBusy(scope.row)" @click="cancelInlineDietDraft(scope.row, 'dietaryRestrictions')">取消</el-button>
+            </div>
+          </div>
+          <div v-else class="inline-diet-display">
+            <CustomerDietCell :raw="scope.row.dietaryRestrictionsRaw" :items="scope.row.dietaryRestrictions" />
+            <el-button
+              v-if="isInlineEditable(scope.row)"
+              type="text"
+              size="mini"
+              :disabled="isInlineBusy(scope.row) || dietOptionsLoading"
+              @click="beginInlineDietEdit(scope.row, 'dietaryRestrictions')"
+            >编辑对象</el-button>
+          </div>
         </template>
       </el-table-column>
       <el-table-column label="手机号" prop="phone" width="145">
@@ -531,6 +611,7 @@
 
 <script>
 import * as orderApi from '@/api/customer/order'
+import * as profileApi from '@/api/customer/profile'
 import * as dictDetailApi from '@/api/system/dictDetail'
 import { refundMeal } from '@/api/mealRefund'
 import { createOrderDefaultForm } from '@/components/Order/OrderForm.vue'
@@ -641,6 +722,11 @@ export default {
       menuDialogRow: null,
       activeInlineKey: null,
       inlineDrafts: {},
+      inlineDietDrafts: {},
+      dietOptions: [],
+      dietOptionsLoaded: false,
+      dietOptionsPromise: null,
+      dietOptionsLoading: false,
       allergyInputDrafts: {},
       savingRows: {},
       uploadingRows: {},
@@ -937,6 +1023,106 @@ export default {
     inlineDraftKey(row, field) {
       return `${row.id}:${field}`
     },
+    /** 加载订单行饮食编辑所需的当前有效字典；同一时刻复用正在进行的请求。 */
+    loadInlineDietOptions() {
+      if (this.dietOptionsLoaded) return Promise.resolve(true)
+      if (this.dietOptionsPromise) return this.dietOptionsPromise
+      this.dietOptionsLoading = true
+      this.dietOptionsPromise = profileApi.getDietOptions().then(response => {
+        const result = response.data || response
+        this.dietOptions = Array.isArray(result) ? result : []
+        this.dietOptionsLoaded = true
+        return true
+      }).catch(error => {
+        this.$message.error((error && error.message) || '加载饮食对象选项失败')
+        return false
+      }).finally(() => {
+        this.dietOptionsLoading = false
+        this.dietOptionsPromise = null
+      })
+      return this.dietOptionsPromise
+    },
+    /** 进入饮食对象编辑态，并分别保存完整草稿和进入时的并发校验值。 */
+    async beginInlineDietEdit(row, field) {
+      if (!this.isInlineEditable(row) || this.isInlineBusy(row)) return
+      if (!await this.loadInlineDietOptions()) return
+      const currentItems = Array.isArray(row[field]) ? row[field] : []
+      const key = this.inlineDraftKey(row, field)
+      this.$set(this.inlineDietDrafts, key, {
+        selectionKeys: currentItems.map(item => this.inlineDietSelectionKey(item)),
+        expectedItems: JSON.parse(JSON.stringify(currentItems))
+      })
+      this.activeInlineKey = key
+    },
+    inlineDietSelectionKey(item) {
+      return item && item.type && item.id != null ? `${item.type}:${item.id}` : ''
+    },
+    /** 返回有效字典与该字段历史引用的并集；历史引用仅在当前已选中时可保留。 */
+    getInlineDietChoices(row, field) {
+      const choices = new Map()
+      ;(this.dietOptions || []).forEach(item => {
+        const key = this.inlineDietSelectionKey(item)
+        if (key) choices.set(key, Object.assign({}, item, { selectionKey: key, historical: false }))
+      })
+      ;(Array.isArray(row[field]) ? row[field] : []).forEach(item => {
+        const key = this.inlineDietSelectionKey(item)
+        if (!key) return
+        const current = choices.get(key)
+        if (current) {
+          choices.set(key, Object.assign({}, current, { name: item.name || current.name }))
+        } else {
+          choices.set(key, Object.assign({}, item, { selectionKey: key, historical: true }))
+        }
+      })
+      return Array.from(choices.values())
+    },
+    getInlineDietDraft(row, field) {
+      const draft = this.inlineDietDrafts[this.inlineDraftKey(row, field)]
+      return draft ? draft.selectionKeys : []
+    },
+    setInlineDietDraft(row, field, selectionKeys) {
+      const key = this.inlineDraftKey(row, field)
+      const draft = this.inlineDietDrafts[key]
+      if (!draft) return
+      this.$set(this.inlineDietDrafts, key, Object.assign({}, draft, {
+        selectionKeys: Array.isArray(selectionKeys) ? selectionKeys : []
+      }))
+    },
+    isInlineDietSelected(row, field, selectionKey) {
+      return this.getInlineDietDraft(row, field).includes(selectionKey)
+    },
+    dietOptionLabel(item) {
+      const labels = {
+        DISH: '菜品',
+        INGREDIENT: '配料',
+        INGREDIENT_TAG: '配料标签',
+        INGREDIENT_CATEGORY: '配料分类',
+        DISH_TAG: '菜品标签'
+      }
+      const path = item && item.categoryPath ? `${item.categoryPath} · ` : ''
+      const name = item && item.name ? item.name : `#${item && item.id}`
+      return `${labels[item && item.type] || (item && item.type) || '对象'} · ${path}${name}${item && item.historical ? '（历史引用）' : ''}`
+    },
+    /** 将当前多选草稿映射为对象数组并一次提交；服务端根据进入时的完整值校验并发。 */
+    saveInlineDietDraft(row, field) {
+      const key = this.inlineDraftKey(row, field)
+      const draft = this.inlineDietDrafts[key]
+      if (!draft || this.isInlineBusy(row)) return Promise.resolve(false)
+      const choices = this.getInlineDietChoices(row, field)
+      const value = draft.selectionKeys.map(selectionKey => {
+        const option = choices.find(item => item.selectionKey === selectionKey)
+        return option ? { type: option.type, id: Number(option.id), name: option.name } : null
+      }).filter(Boolean)
+      this.$delete(this.inlineDietDrafts, key)
+      this.activeInlineKey = null
+      return this.saveInlineValue(row, field, value, draft.expectedItems)
+    },
+    /** 丢弃饮食对象草稿，不发起请求。 */
+    cancelInlineDietDraft(row, field) {
+      const key = this.inlineDraftKey(row, field)
+      this.$delete(this.inlineDietDrafts, key)
+      if (this.activeInlineKey === key) this.activeInlineKey = null
+    },
     /** 根据地址槽位返回行内编辑字段键。 */
     addressInlineField(address) {
       return `addressDetail:${address.addressType}`
@@ -955,6 +1141,11 @@ export default {
       Object.keys(this.inlineDrafts).forEach(key => {
         if (key.indexOf(prefix) === 0) {
           this.$delete(this.inlineDrafts, key)
+        }
+      })
+      Object.keys(this.inlineDietDrafts).forEach(key => {
+        if (key.indexOf(prefix) === 0) {
+          this.$delete(this.inlineDietDrafts, key)
         }
       })
     },

@@ -14,7 +14,7 @@ public class CustomerDietMatchDto implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    /** 可在确认请求中回传的稳定来源键。 */
+    /** 用于在预览中追踪来源行、列和词项的稳定标识。 */
     private String sourceKey;
 
     private Integer sourceRow;
@@ -34,13 +34,13 @@ public class CustomerDietMatchDto implements Serializable {
     /** 用于字典精确匹配的词项，不覆盖完整原文。 */
     private String lookupText;
 
-    /** UNIQUE / AMBIGUOUS / UNMATCHED / SKIPPED。 */
+    /** UNIQUE / MULTI / UNMATCHED。 */
     private String status;
 
     private List<CustomerDietOptionDto> candidates = new ArrayList<>();
 
-    /** 唯一命中或确认后选择的对象；未匹配、未选或显式跳过时为空。 */
-    private CustomerDietItemDto selectedItem;
+    /** 确认导入时将同时录入的全部对象。 */
+    private List<CustomerDietItemDto> selectedItems = new ArrayList<>();
 
     private String message;
 }

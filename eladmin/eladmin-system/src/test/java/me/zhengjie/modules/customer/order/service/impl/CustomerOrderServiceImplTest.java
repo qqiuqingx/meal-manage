@@ -17,8 +17,12 @@ import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto;
+import me.zhengjie.modules.customer.profile.mapper.CustomerDietDictionaryMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
+import me.zhengjie.modules.customer.profile.service.impl.CustomerDietDictionaryServiceImpl;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.modules.meal.mapper.DishMapper;
 import me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto;
@@ -38,6 +42,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
@@ -56,6 +61,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -85,6 +91,10 @@ class CustomerOrderServiceImplTest {
 
     @Mock
     private CustomerProfileService customerProfileService;
+
+    @Spy
+    private CustomerDietDictionaryServiceImpl dietDictionaryService =
+            new CustomerDietDictionaryServiceImpl(mock(CustomerDietDictionaryMapper.class));
 
     @Mock
     private CustomerOrderReplaceRuleMapper replaceRuleMapper;
@@ -435,6 +445,145 @@ class CustomerOrderServiceImplTest {
         verify(orderMapper, never()).updateInlineField(any(Long.class), any(String.class), any(Integer.class),
                 any(String.class), any(Integer.class), any(LocalDate.class), any(String.class),
                 any(java.time.LocalDateTime.class));
+    }
+
+    @Test
+    void updateInline_normalizesDietReferencesAndKeepsHistoricalSnapshot() {
+        CustomerOrder order = inlineOrder(91L, 9L);
+        CustomerProfile profile = inlineProfile(9L);
+        profile.setDishRequirements(Collections.singletonList(dietItem("INGREDIENT_TAG", 90L, "旧标签名")));
+        CustomerOrderInlineUpdateDto dto = inlineDietUpdate("dishRequirements",
+                Arrays.asList(dietItem("INGREDIENT_TAG", 90L, "客户端改名"), dietItem("DISH", 2L, "伪造名称")),
+                Collections.singletonList(dietItem("INGREDIENT_TAG", 90L, "客户端快照")));
+        doReturn(Collections.singletonList(dietOption("DISH", 2L, "服务端菜名")))
+                .when(dietDictionaryService).listActiveOptions();
+        when(orderMapper.selectInlineUpdateByIdForUpdate(91L)).thenReturn(order);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(profile);
+        when(profileMapper.updateDishRequirementsInline(eq(9L), any(String.class), eq("tester"),
+                any(java.time.LocalDateTime.class))).thenReturn(1);
+        when(inlineAuditMapper.insert(any(CustomerOrderInlineAudit.class))).thenReturn(1);
+
+        orderService.updateInline(91L, dto);
+
+        ArgumentCaptor<String> jsonCaptor = ArgumentCaptor.forClass(String.class);
+        verify(profileMapper).updateDishRequirementsInline(eq(9L), jsonCaptor.capture(), eq("tester"),
+                any(java.time.LocalDateTime.class));
+        List<CustomerDietItemDto> saved = JSON.parseArray(jsonCaptor.getValue(), CustomerDietItemDto.class);
+        assertEquals(Arrays.asList("旧标签名", "服务端菜名"),
+                Arrays.asList(saved.get(0).getName(), saved.get(1).getName()));
+
+        ArgumentCaptor<CustomerOrderInlineAudit> auditCaptor = ArgumentCaptor.forClass(CustomerOrderInlineAudit.class);
+        verify(inlineAuditMapper).insert(auditCaptor.capture());
+        JSONObject before = JSON.parseObject(auditCaptor.getValue().getBeforeState())
+                .getJSONObject("customer_profile:9");
+        JSONObject after = JSON.parseObject(auditCaptor.getValue().getAfterState())
+                .getJSONObject("customer_profile:9");
+        assertEquals("旧标签名", before.getJSONArray("dishRequirements").getJSONObject(0).getString("name"));
+        assertEquals("服务端菜名", after.getJSONArray("dishRequirements").getJSONObject(1).getString("name"));
+    }
+
+    @Test
+    void updateInline_rejectsUnsupportedDietType() {
+        CustomerOrder order = inlineOrder(92L, 9L);
+        CustomerProfile profile = inlineProfile(9L);
+        CustomerOrderInlineUpdateDto dto = inlineDietUpdate("dishRequirements",
+                Collections.singletonList(dietItem("UNKNOWN", 4L, "未知")), Collections.emptyList());
+        when(orderMapper.selectInlineUpdateByIdForUpdate(92L)).thenReturn(order);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(profile);
+
+        assertThrows(BadRequestException.class, () -> orderService.updateInline(92L, dto));
+
+        verify(profileMapper, never()).updateDishRequirementsInline(any(Long.class), any(String.class),
+                any(String.class), any(java.time.LocalDateTime.class));
+        verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
+    }
+
+    @Test
+    void updateInline_clearsDietReferencesWhenValueIsNullOrEmpty() {
+        CustomerOrder nullOrder = inlineOrder(93L, 9L);
+        CustomerProfile nullProfile = inlineProfile(9L);
+        nullProfile.setDietaryRestrictions(Collections.singletonList(dietItem("DISH", 1L, "菜")));
+        CustomerOrderInlineUpdateDto nullDto = inlineDietUpdate("dietaryRestrictions", null,
+                nullProfile.getDietaryRestrictions());
+        when(orderMapper.selectInlineUpdateByIdForUpdate(93L)).thenReturn(nullOrder);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(nullProfile);
+        when(profileMapper.updateDietaryRestrictionsInline(eq(9L), eq("[]"), eq("tester"),
+                any(java.time.LocalDateTime.class))).thenReturn(1);
+        when(inlineAuditMapper.insert(any(CustomerOrderInlineAudit.class))).thenReturn(1);
+
+        orderService.updateInline(93L, nullDto);
+
+        CustomerOrder emptyOrder = inlineOrder(94L, 10L);
+        CustomerProfile emptyProfile = inlineProfile(10L);
+        emptyProfile.setDishRequirements(Collections.singletonList(dietItem("DISH", 3L, "另一个菜")));
+        CustomerOrderInlineUpdateDto emptyDto = inlineDietUpdate("dishRequirements", Collections.emptyList(),
+                emptyProfile.getDishRequirements());
+        when(orderMapper.selectInlineUpdateByIdForUpdate(94L)).thenReturn(emptyOrder);
+        when(profileMapper.selectByIdForInlineUpdate(10L)).thenReturn(emptyProfile);
+        when(profileMapper.updateDishRequirementsInline(eq(10L), eq("[]"), eq("tester"),
+                any(java.time.LocalDateTime.class))).thenReturn(1);
+
+        orderService.updateInline(94L, emptyDto);
+
+        verify(profileMapper).updateDietaryRestrictionsInline(eq(9L), eq("[]"), eq("tester"),
+                any(java.time.LocalDateTime.class));
+        verify(profileMapper).updateDishRequirementsInline(eq(10L), eq("[]"), eq("tester"),
+                any(java.time.LocalDateTime.class));
+    }
+
+    @Test
+    void updateInline_rejectsStaleDietReferencesByTypeAndId() {
+        CustomerOrder order = inlineOrder(95L, 9L);
+        CustomerProfile profile = inlineProfile(9L);
+        profile.setDishRequirements(Collections.singletonList(dietItem("DISH", 1L, "当前菜名")));
+        CustomerOrderInlineUpdateDto dto = inlineDietUpdate("dishRequirements", Collections.emptyList(),
+                Collections.singletonList(dietItem("DISH", 2L, "预期菜名")));
+        when(orderMapper.selectInlineUpdateByIdForUpdate(95L)).thenReturn(order);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(profile);
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> orderService.updateInline(95L, dto));
+
+        assertEquals(409, ex.getStatus());
+        verify(dietDictionaryService, never()).listActiveOptions();
+        verify(profileMapper, never()).updateDishRequirementsInline(any(Long.class), any(String.class),
+                any(String.class), any(java.time.LocalDateTime.class));
+    }
+
+    @Test
+    void updateInline_ignoresDietNameSnapshotChangesWhenComparingExpectedValue() {
+        CustomerOrder order = inlineOrder(96L, 9L);
+        CustomerProfile profile = inlineProfile(9L);
+        profile.setDishRequirements(Collections.singletonList(dietItem("DISH", 1L, "旧菜名")));
+        CustomerOrderInlineUpdateDto dto = inlineDietUpdate("dishRequirements",
+                Collections.singletonList(dietItem("DISH", 1L, "新菜名")),
+                Collections.singletonList(dietItem("DISH", 1L, "新菜名")));
+        doReturn(Collections.singletonList(dietOption("DISH", 1L, "新菜名")))
+                .when(dietDictionaryService).listActiveOptions();
+        when(orderMapper.selectInlineUpdateByIdForUpdate(96L)).thenReturn(order);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(profile);
+
+        orderService.updateInline(96L, dto);
+
+        verify(profileMapper, never()).updateDishRequirementsInline(any(Long.class), any(String.class),
+                any(String.class), any(java.time.LocalDateTime.class));
+        verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
+    }
+
+    @Test
+    void updateInline_rejectsAddingHistoricalDietReferenceThatIsNotCurrentlySaved() {
+        CustomerOrder order = inlineOrder(97L, 9L);
+        CustomerProfile profile = inlineProfile(9L);
+        CustomerOrderInlineUpdateDto dto = inlineDietUpdate("dietaryRestrictions",
+                Collections.singletonList(dietItem("INGREDIENT", 99L, "已删除配料")), Collections.emptyList());
+        doReturn(Collections.emptyList()).when(dietDictionaryService).listActiveOptions();
+        when(orderMapper.selectInlineUpdateByIdForUpdate(97L)).thenReturn(order);
+        when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(profile);
+
+        assertThrows(BadRequestException.class, () -> orderService.updateInline(97L, dto));
+
+        verify(profileMapper, never()).updateDietaryRestrictionsInline(any(Long.class), any(String.class),
+                any(String.class), any(java.time.LocalDateTime.class));
+        verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
     }
 
     @Test
@@ -819,6 +968,46 @@ class CustomerOrderServiceImplTest {
         BadRequestException ex = assertThrows(BadRequestException.class, () -> orderService.create(dto));
 
         assertEquals("关联试餐订单不存在", ex.getMessage());
+    }
+
+    private CustomerOrder inlineOrder(Long id, Long customerId) {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(id);
+        order.setCustomerId(customerId);
+        order.setStatus(1);
+        return order;
+    }
+
+    private CustomerProfile inlineProfile(Long id) {
+        CustomerProfile profile = new CustomerProfile();
+        profile.setId(id);
+        profile.setDishRequirements(Collections.emptyList());
+        profile.setDietaryRestrictions(Collections.emptyList());
+        return profile;
+    }
+
+    private CustomerOrderInlineUpdateDto inlineDietUpdate(String field, Object value, Object expectedValue) {
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField(field);
+        dto.setValue(value);
+        dto.setExpectedValue(expectedValue);
+        return dto;
+    }
+
+    private CustomerDietItemDto dietItem(String type, Long id, String name) {
+        CustomerDietItemDto item = new CustomerDietItemDto();
+        item.setType(type);
+        item.setId(id);
+        item.setName(name);
+        return item;
+    }
+
+    private CustomerDietOptionDto dietOption(String type, Long id, String name) {
+        CustomerDietOptionDto option = new CustomerDietOptionDto();
+        option.setType(type);
+        option.setId(id);
+        option.setName(name);
+        return option;
     }
 
     private CustomerProfile buildProfile() {

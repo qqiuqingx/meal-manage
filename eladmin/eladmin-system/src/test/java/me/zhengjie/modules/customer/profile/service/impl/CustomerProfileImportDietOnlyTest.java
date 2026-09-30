@@ -9,6 +9,7 @@ import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.ImportCandidate;
 import me.zhengjie.modules.customer.profile.domain.ParsedCustomer;
 import me.zhengjie.modules.customer.profile.domain.ParsedWorkbook;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportItemResultDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportDraftDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportPreviewDto;
@@ -21,6 +22,7 @@ import me.zhengjie.modules.customer.profile.service.CustomerDietMatchService;
 import me.zhengjie.modules.customer.profile.service.CustomerOrderImportParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -58,7 +60,8 @@ class CustomerProfileImportDietOnlyTest {
         existing.setCustomerCode("A100");
         existing.setPhone("13800138100");
         when(profileMapper.selectList(any(QueryWrapper.class))).thenReturn(Collections.singletonList(existing));
-        when(dictionaryService.listActiveOptions()).thenReturn(Collections.emptyList());
+        when(dictionaryService.listActiveOptions()).thenReturn(Arrays.asList(
+                option("DISH", 1L, "海鲜"), option("INGREDIENT", 2L, "海鲜")));
         CustomerProfileImportServiceImpl service = new CustomerProfileImportServiceImpl(
                 parser, profileMapper, parentPackageMapper, importWriter, dictionaryService, new CustomerDietMatchService());
 
@@ -66,6 +69,8 @@ class CustomerProfileImportDietOnlyTest {
 
         assertEquals("客户禁忌", preview.getSheetName());
         assertEquals(1, preview.getImportableCount());
+        assertEquals("MULTI", preview.getDrafts().get(0).getDietMatches().get(0).getStatus());
+        assertEquals(2, preview.getDrafts().get(0).getDietMatches().get(0).getSelectedItems().size());
         assertEquals(1, preview.getErrorCount());
         assertEquals(Arrays.asList(4, 5), preview.getDrafts().get(0).getSourceRows());
         assertEquals("138****8100", preview.getDrafts().get(0).getPhoneMasked());
@@ -77,11 +82,15 @@ class CustomerProfileImportDietOnlyTest {
         updated.setSourceRows(Arrays.asList(4, 5));
         when(importWriter.writeDietOnly(any(ImportCandidate.class))).thenReturn(updated);
         CustomerImportResultDto result = service.importDietOnly(new byte[]{1}, "sample.xlsx",
-                preview.getFileHash(), preview.getDictionaryHash(), Collections.emptyList(), LocalDate.of(2026, 9, 29));
+                preview.getFileHash(), preview.getDictionaryHash(), LocalDate.of(2026, 9, 29));
 
         assertEquals(1, result.getUpdatedCount());
         assertEquals(0, result.getCreatedCount());
         assertEquals(1, result.getSkippedCount());
+        ArgumentCaptor<ImportCandidate> candidate = ArgumentCaptor.forClass(ImportCandidate.class);
+        verify(importWriter).writeDietOnly(candidate.capture());
+        assertEquals(Arrays.asList("海鲜", "海鲜"), candidate.getValue().getParsed().getDietImportData()
+                .getDishRequirements().stream().map(item -> item.getName()).collect(java.util.stream.Collectors.toList()));
         verify(importWriter, never()).write(any(ImportCandidate.class), any(LocalDate.class), any());
         verify(parentPackageMapper, never()).selectList(any(QueryWrapper.class));
     }
@@ -128,7 +137,9 @@ class CustomerProfileImportDietOnlyTest {
         workbook.setCustomers(Arrays.asList(customer("A100", 4, 5), customer("B200", 6)));
         workbook.setCustomerCount(2);
         workbook.setDataRowCount(3);
-        workbook.setDietRows(Arrays.asList(dietRow("A100", 4), dietRow("A100", 5), dietRow("B200", 6)));
+        CustomerDietSourceRow first = dietRow("A100", 4);
+        first.setDishRequirementsRaw("海鲜");
+        workbook.setDietRows(Arrays.asList(first, dietRow("A100", 5), dietRow("B200", 6)));
         return workbook;
     }
 
@@ -147,5 +158,13 @@ class CustomerProfileImportDietOnlyTest {
         source.setSourceRow(row);
         source.setMedicalRequirements("少盐");
         return source;
+    }
+
+    private CustomerDietOptionDto option(String type, Long id, String name) {
+        CustomerDietOptionDto option = new CustomerDietOptionDto();
+        option.setType(type);
+        option.setId(id);
+        option.setName(name);
+        return option;
     }
 }

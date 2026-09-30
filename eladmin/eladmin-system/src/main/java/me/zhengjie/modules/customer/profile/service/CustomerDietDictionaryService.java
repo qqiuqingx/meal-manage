@@ -11,7 +11,7 @@ import java.util.List;
 public interface CustomerDietDictionaryService {
 
     /**
-     * 查询供客户维护和导入预览使用的当前有效选项。
+     * 查询供客户维护、订单行内编辑和导入预览使用的当前有效选项。
      *
      * @return 五类字典的可选项
      */

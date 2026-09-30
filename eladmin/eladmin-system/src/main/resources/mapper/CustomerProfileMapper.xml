@@ -64,6 +64,22 @@
         WHERE id = #{id}
     </update>
 
+    <update id="updateDishRequirementsInline">
+        UPDATE customer_profile
+        SET dish_requirements = #{json, jdbcType=VARCHAR, typeHandler=org.apache.ibatis.type.StringTypeHandler},
+            update_by = #{updateBy, typeHandler=org.apache.ibatis.type.StringTypeHandler},
+            update_time = #{updateTime, jdbcType=TIMESTAMP}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateDietaryRestrictionsInline">
+        UPDATE customer_profile
+        SET dietary_restrictions = #{json, jdbcType=VARCHAR, typeHandler=org.apache.ibatis.type.StringTypeHandler},
+            update_by = #{updateBy, typeHandler=org.apache.ibatis.type.StringTypeHandler},
+            update_time = #{updateTime, jdbcType=TIMESTAMP}
+        WHERE id = #{id}
+    </update>
+
     <update id="updateSpecialRequirementsInline">
         UPDATE customer_profile
         SET special_requirements = #{specialRequirements, jdbcType=VARCHAR, typeHandler=org.apache.ibatis.type.StringTypeHandler},

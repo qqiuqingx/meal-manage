@@ -169,9 +169,6 @@ public class CustomerImportDraftDto implements Serializable {
     /** D/E 列匹配词项、候选与状态。 */
     private List<CustomerDietMatchDto> dietMatches = new ArrayList<>();
 
-    /** 只有客户其余数据均可导入时，才要求处理歧义词项。 */
-    private Boolean dietMatchesNeedReview;
-
     /** 本候选是否只补录已存在客户资料。 */
     private Boolean supplemental;
 

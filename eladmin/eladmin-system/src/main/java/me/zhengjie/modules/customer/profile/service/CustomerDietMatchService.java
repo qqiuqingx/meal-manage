@@ -2,7 +2,6 @@ package me.zhengjie.modules.customer.profile.service;
 
 import com.alibaba.fastjson2.JSON;
 import lombok.RequiredArgsConstructor;
-import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.profile.domain.CustomerDietImportData;
 import me.zhengjie.modules.customer.profile.domain.ImportCandidate;
 import me.zhengjie.modules.customer.profile.domain.ParsedCustomer;
@@ -11,7 +10,6 @@ import me.zhengjie.modules.customer.profile.domain.CustomerDietSourceRow;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietMatchDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto;
-import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietSelectionDto;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
@@ -23,7 +21,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -34,14 +31,12 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 第二工作表饮食原文的精确匹配、歧义选择校验和饮食字典摘要服务。
+ * 第二工作表饮食原文的精确匹配、全部候选应用和饮食字典摘要服务。
  */
 @Service
 @RequiredArgsConstructor
 public class CustomerDietMatchService {
 
-    private static final String SIDE_WANT = "DISH_REQUIREMENTS";
-    private static final String SIDE_AVOID = "DIETARY_RESTRICTIONS";
 
     /** 词项分隔符（文本已先做 NFKC 归一化，全角标点此时已是半角）。 */
     private static final Pattern ITEM_SEPARATOR = Pattern.compile("[、,;:。.·/\\s&+|!?()]+");
@@ -73,13 +68,8 @@ public class CustomerDietMatchService {
     private static final Pattern LOOKUP_NOISE_HEAD = Pattern.compile("^(?:所有的|所有|一切|各类|各种|任何|全部)");
     private static final Pattern LOOKUP_NOISE_TAIL = Pattern.compile("(?:之类|等等|类食物|食物|食品|菜品|饮食|类|等|的|也|都)$");
 
-    /** 词项所属方向：WANT=客户想吃（D 列语义），AVOID=客户不想吃/过敏（E 列语义）。 */
-    private enum Polarity { WANT, AVOID }
-
-    /** 一个词项拆出的前缀方向、后缀方向和剩余正文。 */
+    /** 一个词项去掉表达前后缀后的正文。 */
     private static final class ParsedTerm {
-        private Polarity prefix;
-        private Polarity suffix;
         private String body;
     }
 
@@ -144,54 +134,11 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 完整校验并应用所有歧义词项的确认选择。
+     * 将每个饮食匹配项的全部候选对象写入对应结构化字段。
      *
      * @param candidates 工作簿全部客户候选
-     * @param selections 客户端确认的选择或显式跳过
      */
-    public void validateAndApplySelections(List<ImportCandidate> candidates,
-                                           List<CustomerDietSelectionDto> selections) {
-        Map<String, CustomerDietSelectionDto> selectedByKey = new HashMap<>();
-        if (selections != null) {
-            for (CustomerDietSelectionDto selection : selections) {
-                if (selection == null || isBlank(selection.getSourceKey())) {
-                    throw new BadRequestException("饮食匹配选择缺少来源键");
-                }
-                if (selectedByKey.put(selection.getSourceKey(), selection) != null) {
-                    throw new BadRequestException("饮食匹配选择包含重复来源键");
-                }
-            }
-        }
-
-        Set<String> ambiguousKeys = new HashSet<>();
-        for (ImportCandidate candidate : candidates) {
-            if (!candidate.getParsed().isImportable() || candidate.isAlreadyExists()) {
-                continue;
-            }
-            CustomerDietImportData data = candidate.getParsed().getDietImportData();
-            if (data == null) {
-                continue;
-            }
-            for (CustomerDietMatchDto match : data.getMatches()) {
-                if ("AMBIGUOUS".equals(match.getStatus())) {
-                    ambiguousKeys.add(match.getSourceKey());
-                }
-            }
-        }
-        for (String key : selectedByKey.keySet()) {
-            if (!ambiguousKeys.contains(key)) {
-                throw new BadRequestException("饮食匹配选择来源无效或不再有歧义：" + key);
-            }
-        }
-
-        List<String> unresolved = ambiguousKeys.stream()
-                .filter(key -> !selectedByKey.containsKey(key))
-                .sorted()
-                .collect(Collectors.toList());
-        if (!unresolved.isEmpty()) {
-            throw new BadRequestException("仍有 " + unresolved.size() + " 个饮食词项未选择或未明确跳过，请完成预览确认");
-        }
-
+    public void applyAllMatches(List<ImportCandidate> candidates) {
         for (ImportCandidate candidate : candidates) {
             if (!candidate.getParsed().isImportable() || candidate.isAlreadyExists()) {
                 continue;
@@ -204,13 +151,10 @@ public class CustomerDietMatchService {
             data.getDishRequirements().clear();
             data.getDietaryRestrictions().clear();
             for (CustomerDietMatchDto match : data.getMatches()) {
-                if ("AMBIGUOUS".equals(match.getStatus())) {
-                    applySelection(match, selectedByKey.get(match.getSourceKey()));
-                }
-                if (match.getSelectedItem() != null) {
-                    List<CustomerDietItemDto> target = "DISH_REQUIREMENTS".equals(match.getSide())
-                            ? data.getDishRequirements() : data.getDietaryRestrictions();
-                    appendUnique(target, match.getSelectedItem());
+                List<CustomerDietItemDto> target = "DISH_REQUIREMENTS".equals(match.getSide())
+                        ? data.getDishRequirements() : data.getDietaryRestrictions();
+                for (CustomerDietItemDto item : match.getSelectedItems()) {
+                    appendUnique(target, item);
                 }
             }
         }
@@ -289,7 +233,6 @@ public class CustomerDietMatchService {
             return new ArrayList<>(Arrays.asList(createMatch(row, sourceColumn, side, rawText,
                     rawText.trim(), rawText.trim(), 0, exactWholeCell)));
         }
-        Polarity sticky = SIDE_WANT.equals(side) ? Polarity.WANT : Polarity.AVOID;
         List<CustomerDietMatchDto> matches = new ArrayList<>();
         int termIndex = 0;
         for (String rawTerm : ITEM_SEPARATOR.split(cleanCell(rawText))) {
@@ -302,26 +245,15 @@ public class CustomerDietMatchService {
             List<String> expressions = wholeKnown ? Collections.singletonList(term) : splitConnectedExpressions(term);
             for (String expression : expressions) {
                 ParsedTerm parsed = parseTerm(expression, index);
-                if (parsed.prefix != null) {
-                    sticky = parsed.prefix;
-                }
                 if (parsed.body.isEmpty()) {
                     continue;
                 }
-                Polarity polarity = parsed.suffix != null ? parsed.suffix : sticky;
-                String effectiveSide = polarity == Polarity.WANT ? SIDE_WANT : SIDE_AVOID;
                 List<String> pieces = splitConnectors(parsed.body, index);
                 for (String piece : pieces) {
                     String lookup = refineLookup(piece, index);
                     String rawItem = pieces.size() == 1 ? expression : piece;
-                    CustomerDietMatchDto match = createMatch(row, sourceColumn, effectiveSide, rawText,
+                    CustomerDietMatchDto match = createMatch(row, sourceColumn, side, rawText,
                             rawItem, lookup, termIndex++, findOptions(lookup, index));
-                    if (!effectiveSide.equals(side)) {
-                        String note = "来源在" + (sourceColumn == 4 ? "D" : "E") + "列，但原文是"
-                                + (polarity == Polarity.WANT ? "肯定" : "否定") + "表达，已归入"
-                                + (polarity == Polarity.WANT ? "客户想吃" : "客户不想吃/过敏");
-                        match.setMessage(join(match.getMessage(), note));
-                    }
                     matches.add(match);
                 }
             }
@@ -346,8 +278,8 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 拆出词项的前缀方向、后缀方向和正文。整词本身就是字典名称时不做任何剥离，
-     * 正文剥完前缀后是字典名称时也不再剥后缀。
+     * 去除有限表达前后缀并提取正文，不据此改变来源列决定的对象归属方向。
+     * 整词本身就是字典名称时不做任何剥离，正文剥完前缀后是字典名称时也不再剥后缀。
      */
     private ParsedTerm parseTerm(String expression, Map<String, List<CustomerDietOptionDto>> index) {
         ParsedTerm term = new ParsedTerm();
@@ -356,15 +288,12 @@ public class CustomerDietMatchService {
             return term;
         }
         Matcher matcher = AVOID_PREFIX.matcher(expression);
-        if (matcher.find()) {
-            term.prefix = Polarity.AVOID;
-        } else {
+        boolean hasPrefix = matcher.find();
+        if (!hasPrefix) {
             matcher = WANT_PREFIX.matcher(expression);
-            if (matcher.find()) {
-                term.prefix = Polarity.WANT;
-            }
+            hasPrefix = matcher.find();
         }
-        if (term.prefix != null) {
+        if (hasPrefix) {
             term.body = expression.substring(matcher.end()).trim();
         }
         if (term.body.isEmpty() || !findOptions(term.body, index).isEmpty()) {
@@ -372,19 +301,16 @@ public class CustomerDietMatchService {
         }
         matcher = ALLERGY_SUFFIX.matcher(term.body);
         if (matcher.find()) {
-            term.suffix = Polarity.AVOID;
             term.body = cleanBody(matcher.group(1).trim(), index);
             return term;
         }
         matcher = AVOID_SUFFIX.matcher(term.body);
         if (matcher.find()) {
-            term.suffix = Polarity.AVOID;
             term.body = cleanBody(matcher.group(1).trim(), index);
             return term;
         }
         matcher = WANT_SUFFIX.matcher(term.body);
         if (matcher.find()) {
-            term.suffix = Polarity.WANT;
             term.body = cleanBody(matcher.group(1).trim(), index);
         }
         return term;
@@ -482,7 +408,7 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 创建一个含稳定来源键、候选和自动唯一选择的匹配项。
+     * 创建一个含稳定来源键、候选及自动录入对象的匹配项。
      *
      * @param row 来源行
      * @param sourceColumn Excel 列号
@@ -508,10 +434,11 @@ public class CustomerDietMatchService {
         match.setCandidates(candidates.stream().map(this::copyOption).collect(Collectors.toList()));
         if (candidates.size() == 1) {
             match.setStatus("UNIQUE");
-            match.setSelectedItem(toItem(candidates.get(0)));
+            match.setSelectedItems(Collections.singletonList(toItem(candidates.get(0))));
         } else if (candidates.size() > 1) {
-            match.setStatus("AMBIGUOUS");
-            match.setMessage("找到多个同名对象，请选择一个或明确跳过");
+            match.setStatus("MULTI");
+            match.setSelectedItems(candidates.stream().map(this::toItem).collect(Collectors.toList()));
+            match.setMessage("同名对象 " + candidates.size() + " 个，确认后将全部录入");
         } else {
             match.setStatus("UNMATCHED");
             match.setMessage("未匹配到字典对象，原文仍会保留");
@@ -562,40 +489,6 @@ public class CustomerDietMatchService {
                                                     Map<String, List<CustomerDietOptionDto>> index) {
         List<CustomerDietOptionDto> found = index.get(canonical(exactName));
         return found == null ? Collections.<CustomerDietOptionDto>emptyList() : found;
-    }
-
-    /**
-     * 验证并应用一个歧义词项的选择或显式跳过。
-     *
-     * @param match 服务端重新计算的词项候选
-     * @param selection 客户端提交的选择
-     */
-    private void applySelection(CustomerDietMatchDto match, CustomerDietSelectionDto selection) {
-        if (selection == null) {
-            throw new BadRequestException("饮食匹配项未选择");
-        }
-        if ("SKIP".equals(selection.getAction())) {
-            if (selection.getType() != null || selection.getId() != null) {
-                throw new BadRequestException("显式跳过不能同时指定候选对象");
-            }
-            match.setStatus("SKIPPED");
-            match.setSelectedItem(null);
-            match.setMessage("操作人已明确跳过；来源原文仍会保留");
-            return;
-        }
-        if (!"SELECT".equals(selection.getAction()) || selection.getType() == null || selection.getId() == null) {
-            throw new BadRequestException("饮食匹配选择必须指定 SELECT 候选或 SKIP");
-        }
-        CustomerDietOptionDto option = match.getCandidates().stream()
-                .filter(candidate -> candidate.getId().equals(selection.getId())
-                        && candidate.getType().equals(selection.getType()))
-                .findFirst().orElse(null);
-        if (option == null) {
-            throw new BadRequestException("饮食匹配所选对象不属于当前候选列表");
-        }
-        match.setStatus("SELECTED");
-        match.setSelectedItem(toItem(option));
-        match.setMessage("已按操作人选择确认");
     }
 
     /**

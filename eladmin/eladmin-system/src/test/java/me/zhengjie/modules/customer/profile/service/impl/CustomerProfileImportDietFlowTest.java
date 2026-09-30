@@ -9,7 +9,6 @@ import me.zhengjie.modules.customer.profile.domain.ImportCandidate;
 import me.zhengjie.modules.customer.profile.domain.ParsedCustomer;
 import me.zhengjie.modules.customer.profile.domain.ParsedWorkbook;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto;
-import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietSelectionDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportItemResultDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportPreviewDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportResultDto;
@@ -85,32 +84,27 @@ class CustomerProfileImportDietFlowTest {
     }
 
     @Test
-    void shouldPreviewAmbiguityAndRejectInvalidSelectionBeforeAnyWrite() {
+    void shouldPreviewAllCandidatesAndRejectStaleDictionaryBeforeAnyWrite() {
         CustomerImportPreviewDto preview = importService.preview(
                 new byte[]{1}, "anonymous.xlsx", LocalDate.of(2026, 9, 25));
         assertNotNull(preview.getDictionaryHash());
         assertEquals(1, preview.getImportableCount());
-        assertEquals(Boolean.FALSE, preview.getDrafts().get(0).getImportable());
-        assertEquals("AMBIGUOUS", preview.getDrafts().get(0).getDietMatches().get(0).getStatus());
+        assertEquals(Boolean.TRUE, preview.getDrafts().get(0).getImportable());
+        assertEquals("MULTI", preview.getDrafts().get(0).getDietMatches().get(0).getStatus());
+        assertEquals(2, preview.getDrafts().get(0).getDietMatches().get(0).getSelectedItems().size());
         assertEquals("UNIQUE", preview.getDrafts().get(0).getDietMatches().get(1).getStatus());
 
         assertThrows(BadRequestException.class, () -> importService.importCustomers(
                 new byte[]{1}, "anonymous.xlsx", preview.getFileHash(), "stale-dictionary-hash",
-                Collections.emptyList(), LocalDate.of(2026, 9, 25)));
-
-        CustomerDietSelectionDto invalid = selection("DIET:4:4:0", "DISH_TAG", 999L);
-        assertThrows(BadRequestException.class, () -> importService.importCustomers(
-                new byte[]{1}, "anonymous.xlsx", preview.getFileHash(), preview.getDictionaryHash(),
-                Collections.singletonList(invalid), LocalDate.of(2026, 9, 25)));
+                LocalDate.of(2026, 9, 25)));
 
         verify(importWriter, never()).write(any(ImportCandidate.class), any(LocalDate.class), any());
     }
 
     @Test
-    void shouldPassConfirmedSelectionsAndRawBlocksToWriter() {
+    void shouldPassAllCandidatesAndRawBlocksToWriter() {
         CustomerImportPreviewDto preview = importService.preview(
                 new byte[]{1}, "anonymous.xlsx", LocalDate.of(2026, 9, 25));
-        CustomerDietSelectionDto selected = selection("DIET:4:4:0", "INGREDIENT", 2L);
         CustomerImportItemResultDto created = new CustomerImportItemResultDto();
         created.setStatus("CREATED");
         created.setCustomerCode("A004");
@@ -119,16 +113,16 @@ class CustomerProfileImportDietFlowTest {
 
         CustomerImportResultDto result = importService.importCustomers(
                 new byte[]{1}, "anonymous.xlsx", preview.getFileHash(), preview.getDictionaryHash(),
-                Collections.singletonList(selected), LocalDate.of(2026, 9, 25));
+                LocalDate.of(2026, 9, 25));
 
         assertEquals(1, result.getCreatedCount());
         ArgumentCaptor<ImportCandidate> candidate = ArgumentCaptor.forClass(ImportCandidate.class);
         verify(importWriter).write(candidate.capture(), any(LocalDate.class), any());
-        assertEquals("香菜", candidate.getValue().getParsed().getDietImportData()
-                .getDishRequirements().get(0).getName());
+        assertEquals(Arrays.asList("香菜", "香菜", "牛肉"), candidate.getValue().getParsed().getDietImportData()
+                .getDishRequirements().stream().map(item -> item.getName()).collect(java.util.stream.Collectors.toList()));
         assertEquals("香菜，牛肉", candidate.getValue().getParsed().getDietImportData()
                 .getDishRequirementsRaw().get(0));
-        assertEquals("SELECTED", candidate.getValue().getParsed().getDietImportData()
+        assertEquals("MULTI", candidate.getValue().getParsed().getDietImportData()
                 .getMatches().get(0).getStatus());
     }
 
@@ -145,7 +139,6 @@ class CustomerProfileImportDietFlowTest {
                 new byte[]{1}, "anonymous.xlsx", LocalDate.of(2026, 9, 25));
         assertEquals(1, preview.getSupplementalCount());
 
-        CustomerDietSelectionDto selected = selection("DIET:4:4:0", "INGREDIENT", 2L);
         CustomerImportItemResultDto updated = new CustomerImportItemResultDto();
         updated.setStatus("UPDATED");
         updated.setCustomerCode("A004");
@@ -154,7 +147,7 @@ class CustomerProfileImportDietFlowTest {
 
         CustomerImportResultDto result = importService.importCustomers(
                 new byte[]{1}, "anonymous.xlsx", preview.getFileHash(), preview.getDictionaryHash(),
-                Collections.singletonList(selected), LocalDate.of(2026, 9, 25));
+                LocalDate.of(2026, 9, 25));
 
         assertEquals(0, result.getCreatedCount());
         assertEquals(1, result.getUpdatedCount());
@@ -162,15 +155,6 @@ class CustomerProfileImportDietFlowTest {
         verify(importWriter).write(candidate.capture(), any(LocalDate.class), any());
         assertTrue(candidate.getValue().isSupplemental());
         assertEquals("少盐", candidate.getValue().getParsed().getDietImportData().getMedicalRequirements());
-    }
-
-    private CustomerDietSelectionDto selection(String sourceKey, String type, Long id) {
-        CustomerDietSelectionDto selection = new CustomerDietSelectionDto();
-        selection.setSourceKey(sourceKey);
-        selection.setAction("SELECT");
-        selection.setType(type);
-        selection.setId(id);
-        return selection;
     }
 
     private CustomerDietOptionDto option(String type, Long id, String name) {

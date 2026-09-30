@@ -22,8 +22,11 @@ import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
+import me.zhengjie.modules.customer.profile.service.CustomerDietDictionaryService;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.modules.meal.domain.Dish;
 import me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto;
@@ -81,6 +84,9 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
 
     @Autowired
     private CustomerProfileService customerProfileService;
+
+    @Autowired
+    private CustomerDietDictionaryService dietDictionaryService;
 
     @Autowired
     private ParentPackageMapper parentPackageMapper;
@@ -395,14 +401,23 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             }
         }
 
-        Object expectedValue = normalizeInlineValue(field, dto.getExpectedValue(), true);
-        Object requestedValue = normalizeInlineValue(field, dto.getValue(), false);
         Object actualValue = address == null ? getInlineValue(order, profile, field) : address.getAddressDetail();
-        Object comparableCurrentValue = normalizeInlineValue(field, actualValue, true);
+        Object expectedValue;
+        Object comparableCurrentValue;
+        if (isDietInlineField(field)) {
+            expectedValue = normalizeInlineDietIdentities(dto.getExpectedValue());
+            comparableCurrentValue = normalizeInlineDietIdentities(actualValue);
+        } else {
+            expectedValue = normalizeInlineValue(field, dto.getExpectedValue(), true);
+            comparableCurrentValue = normalizeInlineValue(field, actualValue, true);
+        }
         if (!Objects.equals(comparableCurrentValue, expectedValue)) {
             throw new BadRequestException(org.springframework.http.HttpStatus.CONFLICT,
                     "字段已被其他操作修改，请刷新后重试");
         }
+        Object requestedValue = isDietInlineField(field)
+                ? normalizeInlineDietSelection(dto.getValue(), actualValue)
+                : normalizeInlineValue(field, dto.getValue(), false);
         if (isInlineNoOp(order, profile, field, actualValue, requestedValue)) {
             return;
         }
@@ -506,7 +521,17 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
      */
     private boolean isProfileInlineField(String field) {
         return "allergyTags".equals(field) || "specialRequirements".equals(field)
-                || "phone".equals(field);
+                || "phone".equals(field) || isDietInlineField(field);
+    }
+
+    /**
+     * 判断字段是否为饮食对象引用数组。
+     *
+     * @param field 字段键
+     * @return 饮食对象字段时为 true
+     */
+    private boolean isDietInlineField(String field) {
+        return "dishRequirements".equals(field) || "dietaryRestrictions".equals(field);
     }
 
     /**
@@ -651,6 +676,79 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     }
 
     /**
+     * 按去重且排序后的 type:id 集合规范化饮食对象旧值，用于并发比较。
+     *
+     * @param rawValue 页面提交的预期值或数据库当前值
+     * @return 用于稳定比较的对象身份键
+     */
+    private List<String> normalizeInlineDietIdentities(Object rawValue) {
+        if (rawValue == null) {
+            return Collections.emptyList();
+        }
+        if (!(rawValue instanceof List)) {
+            throw new BadRequestException("饮食对象旧值必须是对象数组");
+        }
+        List<CustomerDietItemDto> items = parseInlineDietItems(rawValue);
+        List<String> keys = new ArrayList<>();
+        for (CustomerDietItemDto item : items) {
+            if (item == null || !isSupportedDietType(item.getType())
+                    || item.getId() == null || item.getId() <= 0) {
+                continue;
+            }
+            String key = item.getType() + ":" + item.getId();
+            if (!keys.contains(key)) {
+                keys.add(key);
+            }
+        }
+        Collections.sort(keys);
+        return keys;
+    }
+
+    /**
+     * 将订单行内提交的饮食对象数组按当前档案和有效字典规范化。
+     *
+     * @param rawValue 页面提交的新对象数组；null 表示清空
+     * @param existingValue 当前档案已保存的对象数组
+     * @return 权威对象引用数组，不采用客户端名称
+     */
+    private List<CustomerDietItemDto> normalizeInlineDietSelection(Object rawValue, Object existingValue) {
+        List<CustomerDietItemDto> requested = rawValue == null
+                ? Collections.<CustomerDietItemDto>emptyList() : parseInlineDietItems(rawValue);
+        List<CustomerDietItemDto> existing = existingValue == null
+                ? Collections.<CustomerDietItemDto>emptyList() : parseInlineDietItems(existingValue);
+        List<CustomerDietOptionDto> activeOptions = dietDictionaryService.listActiveOptions();
+        return dietDictionaryService.normalizeSelections(requested, existing, activeOptions);
+    }
+
+    /**
+     * 将 JSON 数组或 DTO 数组转换为饮食对象 DTO，并拒绝非数组值。
+     *
+     * @param rawValue 待解析对象数组
+     * @return 已解析的对象 DTO 列表
+     */
+    private List<CustomerDietItemDto> parseInlineDietItems(Object rawValue) {
+        if (!(rawValue instanceof List)) {
+            throw new BadRequestException("饮食对象必须是对象数组");
+        }
+        try {
+            return JSON.parseArray(JSON.toJSONString(rawValue), CustomerDietItemDto.class);
+        } catch (RuntimeException e) {
+            throw new BadRequestException("饮食对象格式不正确");
+        }
+    }
+
+    /**
+     * 检查饮食对象类型是否属于现有五类结构化字典。
+     *
+     * @param type 对象类型
+     * @return 类型受支持时为 true
+     */
+    private boolean isSupportedDietType(String type) {
+        return "DISH".equals(type) || "INGREDIENT".equals(type) || "INGREDIENT_TAG".equals(type)
+                || "INGREDIENT_CATEGORY".equals(type) || "DISH_TAG".equals(type);
+    }
+
+    /**
      * 读取严格为 JSON 整数的行内字段值，拒绝字符串和小数转换。
      *
      * @param field 字段键
@@ -688,6 +786,8 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             case "status": return order.getStatus();
             case "allergyTags": return profile == null ? null : profile.getAllergyTags();
             case "specialRequirements": return profile == null ? null : profile.getSpecialRequirements();
+            case "dishRequirements": return profile == null ? null : profile.getDishRequirements();
+            case "dietaryRestrictions": return profile == null ? null : profile.getDietaryRestrictions();
             case "phone": return profile == null ? null : profile.getPhone();
             case "customerCode": return order.getCustomerCode();
             default: throw new BadRequestException("不支持行内修改字段：" + field);
@@ -706,6 +806,10 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
      */
     private boolean isInlineNoOp(CustomerOrder order, CustomerProfile profile, String field,
                                  Object actualValue, Object requestedValue) {
+        if (isDietInlineField(field)) {
+            return Objects.equals(normalizeInlineDietIdentities(actualValue),
+                    normalizeInlineDietIdentities(requestedValue));
+        }
         if ("customerCode".equals(field)) {
             return Objects.equals(order.getCustomerCode(), requestedValue)
                     && Objects.equals(profile.getCustomerCode(), requestedValue);
@@ -714,7 +818,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     }
 
     /**
-     * 定向更新过敏标签或客户特殊要求，并记录客户档案实际修改前后值。
+     * 定向更新客户档案中的行内字段，并记录实际修改前后值。
      *
      * @param profile 已锁定客户档案
      * @param field 字段键
@@ -740,6 +844,12 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
                     JSON.toJSONString(requestedValue), operator, updateTime);
         } else if ("phone".equals(field)) {
             updated = profileMapper.updatePhoneInline(profile.getId(), (String) requestedValue, operator, updateTime);
+        } else if ("dishRequirements".equals(field)) {
+            updated = profileMapper.updateDishRequirementsInline(profile.getId(),
+                    JSON.toJSONString(requestedValue), operator, updateTime);
+        } else if ("dietaryRestrictions".equals(field)) {
+            updated = profileMapper.updateDietaryRestrictionsInline(profile.getId(),
+                    JSON.toJSONString(requestedValue), operator, updateTime);
         } else {
             updated = profileMapper.updateSpecialRequirementsInline(profile.getId(),
                     (String) requestedValue, operator, updateTime);
