@@ -57,6 +57,7 @@ describe('CustomerOrder lazy loading with real CRUD', () => {
   async function mountPage(realTable = false) {
     wrapper = (realTable ? mount : shallowMount)(CustomerOrder, {
       localVue,
+      sync: false,
       store: new Vuex.Store({ getters: { roles: () => ['admin'], baseApi: () => '', imagesUploadApi: () => '' }}),
       mocks: { checkPer: () => true, $message: { success: jest.fn(), warning: jest.fn(), error: jest.fn() }},
       stubs: realTable ? { crudOperation: true, rrOperation: true, OrderForm: true, 'el-dialog': true } : { 'el-table': tableStub, 'el-table-column': true, 'el-dialog': true }
@@ -99,6 +100,53 @@ describe('CustomerOrder lazy loading with real CRUD', () => {
     await flush()
     expect(table.selection).toEqual([])
     expect(vm.crud.selections).toEqual([])
+  })
+
+  test('restores fixed columns, adapts to viewport width and focuses visible inline editors', async() => {
+    window.localStorage.setItem('customer-order-fixed-column-count', '2')
+    const focus = jest.spyOn(HTMLInputElement.prototype, 'focus')
+    getOrders.mockResolvedValueOnce({ content: [{ ...orders(1, 1)[0], phone: '13800000000', specialRequirements: '少盐' }], totalElements: 1 })
+    try {
+      await mountPage(true)
+      const table = vm.$refs.table
+      const fixedKeys = () => table.store.states.fixedColumns.map(column => column.type === 'selection' ? 'selection' : column.property || column.columnKey)
+      expect(fixedKeys()).toEqual(['selection', 'phone', 'addresses'])
+      table.toggleRowSelection(vm.crud.data[0], true)
+      await wrapper.setData({ tableWidth: 360 })
+      await flush()
+      expect(fixedKeys()).toEqual(['selection', 'phone'])
+      expect(vm.crud.selections.map(row => row.id)).toEqual([1])
+      await wrapper.setData({ tableWidth: 900 })
+      await flush()
+      expect(fixedKeys()).toEqual(['selection', 'phone', 'addresses'])
+      expect(window.localStorage.getItem('customer-order-fixed-column-count')).toBe('2')
+      vm.beginInlineEdit(vm.crud.data[0], 'phone')
+      await flush()
+      expect(focus).toHaveBeenCalled()
+      expect(focus.mock.instances[focus.mock.instances.length - 1].closest('td.is-hidden')).toBeNull()
+      expect(focus.mock.instances[focus.mock.instances.length - 1].closest('.el-table__fixed')).not.toBeNull()
+      vm.beginInlineEdit(vm.crud.data[0], 'specialRequirements')
+      await flush()
+      expect(focus.mock.instances[focus.mock.instances.length - 1].closest('td.is-hidden')).toBeNull()
+      expect(focus.mock.instances[focus.mock.instances.length - 1].closest('.el-table__body-wrapper')).not.toBeNull()
+    } finally {
+      focus.mockRestore()
+      window.localStorage.removeItem('customer-order-fixed-column-count')
+    }
+  })
+
+  test('shows only month and day for deal time without changing the order data', async() => {
+    const dealTime = '2026-09-30T08:45:00'
+    getOrders.mockResolvedValueOnce({ content: [
+      { ...orders(1, 1)[0], dealTime },
+      { ...orders(2, 1)[0], dealTime: null }
+    ], totalElements: 2 })
+    await mountPage(true)
+    const index = vm.$refs.table.store.states.columns.findIndex(column => column.property === 'dealTime')
+    const rows = wrapper.findAll('.el-table__body-wrapper .el-table__body tbody tr')
+    expect(rows.at(0).findAll('td').at(index).text()).toBe('09-30')
+    expect(rows.at(1).findAll('td').at(index).text()).toBe('-')
+    expect(vm.crud.data[0].dealTime).toBe(dealTime)
   })
 
   test('renders full long text and edits completed orders through the real table', async() => {

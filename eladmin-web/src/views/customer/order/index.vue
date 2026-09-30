@@ -36,7 +36,19 @@
         :column-order="columnOrder"
         @column-visibility-change="handleColumnVisibilityChange"
       >
-        <el-button slot="right" size="mini" plain icon="el-icon-refresh-left" @click="resetColumnOrder">恢复列顺序</el-button>
+        <template slot="right">
+          <span class="fixed-column-control">
+            固定前几列
+            <el-tooltip content="按当前显示顺序固定业务列，勾选列会一起固定。先拖动列标题排好顺序，再选择固定数量；会为其余列保留滚动空间。" placement="top">
+              <i class="el-icon-question" />
+            </el-tooltip>
+            <select class="fixed-column-select" :value="effectiveFixedColumnCount" aria-label="固定前几列" @change="handleFixedColumnChange(Number($event.target.value))">
+              <option :value="0">不固定</option>
+              <option v-for="count in maxFixedColumnCount" :key="count" :value="count">前 {{ count }} 列</option>
+            </select>
+          </span>
+          <el-button size="mini" plain icon="el-icon-refresh-left" @click="resetColumnOrder">恢复列顺序</el-button>
+        </template>
       </crudOperation>
     </div>
 
@@ -55,7 +67,7 @@
         <template slot-scope="scope">
           <el-input
             v-if="isInlineEditing(scope.row, 'phone')"
-            :ref="inlineInputRef(scope.row, 'phone')"
+            :name="inlineInputName(scope.row, 'phone')"
             :value="getInlineDraft(scope.row, 'phone')"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
@@ -76,7 +88,7 @@
             <template v-if="isInlineEditing(scope.row, addressInlineField(addr))">
               <span>{{ addr.type }}:</span>
               <el-input
-                :ref="inlineInputRef(scope.row, addressInlineField(addr))"
+                :name="inlineInputName(scope.row, addressInlineField(addr))"
                 :value="getInlineDraft(scope.row, addressInlineField(addr))"
                 :disabled="isInlineBusy(scope.row)"
                 size="mini"
@@ -98,7 +110,7 @@
         <template slot-scope="scope">
           <el-input
             v-if="isInlineEditing(scope.row, 'customerCode')"
-            :ref="inlineInputRef(scope.row, 'customerCode')"
+            :name="inlineInputName(scope.row, 'customerCode')"
             :value="getInlineDraft(scope.row, 'customerCode')"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
@@ -116,7 +128,7 @@
         <template slot-scope="scope">
           <el-input
             v-if="isInlineEditing(scope.row, 'specialRequirements')"
-            :ref="inlineInputRef(scope.row, 'specialRequirements')"
+            :name="inlineInputName(scope.row, 'specialRequirements')"
             :value="getInlineDraft(scope.row, 'specialRequirements')"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
@@ -134,7 +146,7 @@
         <template slot-scope="scope">
           <el-select
             v-if="isInlineEditing(scope.row, 'scheduleMode')"
-            :ref="inlineInputRef(scope.row, 'scheduleMode')"
+            :name="inlineInputName(scope.row, 'scheduleMode')"
             :value="scope.row.scheduleMode"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
@@ -154,13 +166,13 @@
           {{ mealTypeText(scope.row.mealType, scope.row.status) }}
         </template>
       </el-table-column>
-      <el-table-column column-key="specification" label="规格" width="180">
+      <el-table-column column-key="specification" label="规格" width="180" align="center">
         <template slot-scope="scope">
           <div class="inline-spec-field">
             <span>主</span>
             <el-input
               v-if="isInlineEditing(scope.row, 'mainDishCount')"
-              :ref="inlineInputRef(scope.row, 'mainDishCount')"
+              :name="inlineInputName(scope.row, 'mainDishCount')"
               :value="getInlineDraft(scope.row, 'mainDishCount')"
               :disabled="isInlineBusy(scope.row)"
               size="mini"
@@ -176,7 +188,7 @@
             <span>副</span>
             <el-input
               v-if="isInlineEditing(scope.row, 'sideDishCount')"
-              :ref="inlineInputRef(scope.row, 'sideDishCount')"
+              :name="inlineInputName(scope.row, 'sideDishCount')"
               :value="getInlineDraft(scope.row, 'sideDishCount')"
               :disabled="isInlineBusy(scope.row)"
               size="mini"
@@ -192,7 +204,7 @@
             <span>素</span>
             <el-input
               v-if="isInlineEditing(scope.row, 'vegCount')"
-              :ref="inlineInputRef(scope.row, 'vegCount')"
+              :name="inlineInputName(scope.row, 'vegCount')"
               :value="getInlineDraft(scope.row, 'vegCount')"
               :disabled="isInlineBusy(scope.row)"
               size="mini"
@@ -212,7 +224,7 @@
         <template slot-scope="scope">
           <el-select
             v-if="isInlineEditing(scope.row, 'soupCount')"
-            :ref="inlineInputRef(scope.row, 'soupCount')"
+            :name="inlineInputName(scope.row, 'soupCount')"
             :value="scope.row.soupCount"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
@@ -229,7 +241,7 @@
         <template slot-scope="scope">
           <el-input
             v-if="isInlineEditing(scope.row, 'breakfastCount')"
-            :ref="inlineInputRef(scope.row, 'breakfastCount')"
+            :name="inlineInputName(scope.row, 'breakfastCount')"
             :value="getInlineDraft(scope.row, 'breakfastCount')"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
@@ -248,7 +260,7 @@
         <template slot-scope="scope">
           <el-input
             v-if="isInlineEditing(scope.row, 'lunchDinnerCount')"
-            :ref="inlineInputRef(scope.row, 'lunchDinnerCount')"
+            :name="inlineInputName(scope.row, 'lunchDinnerCount')"
             :value="getInlineDraft(scope.row, 'lunchDinnerCount')"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
@@ -301,7 +313,7 @@
         <template slot-scope="scope">
           <el-select
             v-if="isInlineEditing(scope.row, 'status')"
-            :ref="inlineInputRef(scope.row, 'status')"
+            :name="inlineInputName(scope.row, 'status')"
             :value="scope.row.status"
             :disabled="isInlineBusy(scope.row)"
             size="mini"
@@ -319,7 +331,9 @@
       <el-table-column label="基本情况" prop="medicalRequirements" min-width="150">
         <template slot-scope="{ row }"><div class="multiline-cell">{{ row.medicalRequirements || '-' }}</div></template>
       </el-table-column>
-      <el-table-column label="成单时间" prop="dealTime" width="150" />
+      <el-table-column label="成单时间" prop="dealTime" width="70" align="center" class-name="compact-column" label-class-name="compact-column">
+        <template slot-scope="{ row }">{{ parseTime(row.dealTime, '{m}-{d}') || '-' }}</template>
+      </el-table-column>
       <el-table-column label="术后天数" prop="postoperativeInfo" width="100" align="center">
         <template slot-scope="{ row }">{{ row.postoperativeInfo || '-' }}</template>
       </el-table-column>
@@ -333,7 +347,7 @@
             <div v-else class="customer-diet-cell__text">—</div>
             <div class="customer-diet-cell__label">已确认对象</div>
             <el-select
-              :ref="inlineInputRef(scope.row, 'dishRequirements')"
+              :name="inlineInputName(scope.row, 'dishRequirements')"
               :value="getInlineDietDraft(scope.row, 'dishRequirements')"
               multiple
               filterable
@@ -409,7 +423,7 @@
             <div v-else class="customer-diet-cell__text">—</div>
             <div class="customer-diet-cell__label">已确认对象</div>
             <el-select
-              :ref="inlineInputRef(scope.row, 'dietaryRestrictions')"
+              :name="inlineInputName(scope.row, 'dietaryRestrictions')"
               :value="getInlineDietDraft(scope.row, 'dietaryRestrictions')"
               multiple
               filterable
@@ -632,6 +646,7 @@ import CustomerDietCell from '@/components/CustomerDietCell.vue'
 import TableHorizontalScroll from '@/components/TableHorizontalScroll.vue'
 
 const COLUMN_ORDER_STORAGE_KEY = 'customer-order-column-order-v2'
+const FIXED_COLUMN_COUNT_STORAGE_KEY = 'customer-order-fixed-column-count'
 
 /** 返回订单表格列的稳定标识。
  * @param {Object} column Element UI 列配置
@@ -747,6 +762,8 @@ export default {
       hiddenColumns: ['mealBalance', 'customerSource', 'orderPeriod', 'depositAmount', 'totalAmount', 'finalAmount', 'orderCode'],
       columnOrder: [],
       defaultColumnOrder: [],
+      fixedColumnCount: 0,
+      tableWidth: 0,
       rules: {
         customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
         totalAmount: [{
@@ -785,6 +802,27 @@ export default {
   },
   computed: {
     ...mapGetters(['baseApi', 'imagesUploadApi', 'roles']),
+    /** 按可见列及窗口宽度计算可固定数量，保留至少一列和 120px 滚动区域。 */
+    maxFixedColumnCount() {
+      const table = this.crud.props.table
+      if (!table || !table.store) return 0
+      const columns = table.store.states._columns.filter(isOrderColumnMovable)
+      columns.sort((a, b) => this.columnOrder.indexOf(getOrderColumnKey(a)) - this.columnOrder.indexOf(getOrderColumnKey(b)))
+      const limit = Math.max(columns.length - 1, 0)
+      if (!this.tableWidth) return limit
+      let width = table.store.states._columns.filter(column => column.type === 'selection')
+        .reduce((sum, column) => sum + Number(column.realWidth || column.width || 55), 0)
+      let count = 0
+      while (count < limit) {
+        width += Number(columns[count].realWidth || columns[count].width || columns[count].minWidth || 80)
+        if (width > this.tableWidth - 120) break
+        count += 1
+      }
+      return count
+    },
+    effectiveFixedColumnCount() {
+      return Math.min(this.fixedColumnCount, this.maxFixedColumnCount)
+    },
     hasMoreOrders() {
       return !this.listExhausted && this.crud.data.length < this.crud.page.total
     },
@@ -813,6 +851,12 @@ export default {
     }
   },
   watch: {
+    effectiveFixedColumnCount() {
+      this.$nextTick(() => {
+        this.applyColumnOrder()
+        this.setupColumnSortable()
+      })
+    },
     'crud.props.searchToggle'() {
       this.$nextTick(() => this.updateTableHeight())
     },
@@ -824,6 +868,7 @@ export default {
     this.columnSorter = null
     this.columnHeaderRow = null
     this.columnOrderLoaded = false
+    this.fixedColumnCount = this.readFixedColumnCount()
     this.loadCustomerSourceDict()
     this.crud.page.size = 20
     this.crud.page.page = 0
@@ -873,6 +918,7 @@ export default {
     updateTableHeight() {
       const table = this.$refs.table
       if (!table || !table.$el) return
+      this.tableWidth = table.$el.clientWidth
       this.tableHeight = Math.max(window.innerHeight - table.$el.getBoundingClientRect().top - 100, 120)
       this.$nextTick(() => this.loadMoreWhenTableFits())
     },
@@ -986,7 +1032,31 @@ export default {
         this.$message.warning('浏览器未能保存列顺序')
       }
     },
-    /** 合并默认列与浏览器偏好，并在表格挂载后恢复列顺序。 */
+    /** 读取当前浏览器保存的固定业务列数量；无效值按不固定处理。
+     * @returns {number} 非负整数偏好
+     */
+    readFixedColumnCount() {
+      try {
+        const stored = Number(window.localStorage.getItem(FIXED_COLUMN_COUNT_STORAGE_KEY))
+        return Number.isSafeInteger(stored) && stored >= 0 ? stored : 0
+      } catch (error) {
+        return 0
+      }
+    },
+    /** 保存固定列数量，并按当前可见列顺序立即更新表格。
+     * @param {number} count 业务选择的固定数量，0 表示不固定
+     */
+    handleFixedColumnChange(count) {
+      this.fixedColumnCount = count
+      try {
+        window.localStorage.setItem(FIXED_COLUMN_COUNT_STORAGE_KEY, String(count))
+      } catch (error) {
+        this.$message.warning('浏览器未能保存固定列设置')
+      }
+      this.applyColumnOrder()
+      this.$nextTick(() => this.setupColumnSortable())
+    },
+    /** 合并默认列与浏览器偏好，并在表格挂载后恢复列顺序及固定设置。 */
     initializeColumnOrder() {
       const table = this.$refs.table
       if (!table || !table.store || !table.store.states._columns.length) return
@@ -998,7 +1068,7 @@ export default {
       this.applyColumnOrder()
       this.$nextTick(() => this.setupColumnSortable())
     },
-    /** 按浏览器偏好重排 Element UI 的列配置，并更新表头和表体布局。 */
+    /** 按浏览器偏好重排和固定可见列，并同步 Element UI 表头及表体布局。 */
     applyColumnOrder() {
       const table = this.$refs.table
       if (!table || !table.store) return
@@ -1014,8 +1084,18 @@ export default {
         return aRank - bRank
       })
       const next = selection.concat(movable, others, actions)
-      if (next.every((column, index) => column === columns[index])) return
-      columns.splice(0, columns.length, ...next)
+      const fixedColumns = new Set(movable.slice(0, this.effectiveFixedColumnCount))
+      let fixedChanged = false
+      next.forEach(column => {
+        const fixed = fixedColumns.has(column) || (column.type === 'selection' && fixedColumns.size > 0) ? 'left' : false
+        if (column.fixed !== fixed) {
+          column.fixed = fixed
+          fixedChanged = true
+        }
+      })
+      const orderChanged = !next.every((column, index) => column === columns[index])
+      if (!orderChanged && !fixedChanged) return
+      if (orderChanged) columns.splice(0, columns.length, ...next)
       table.store.updateColumns()
       table.store.scheduleLayout()
     },
@@ -1030,7 +1110,7 @@ export default {
       cells.forEach((cell, index) => {
         const column = columns[index]
         cell.dataset.orderColumnId = column.id
-        cell.classList.toggle('order-column-draggable', isOrderColumnMovable(column))
+        cell.classList.toggle('order-column-draggable', isOrderColumnMovable(column) && !column.fixed)
       })
       if (this.columnSorter && this.columnHeaderRow === headerRow) return
       this.destroyColumnSortable()
@@ -1154,24 +1234,23 @@ export default {
     isInlineEditing(row, field) {
       return this.isInlineEditable(row, field) && this.activeInlineKey === this.inlineDraftKey(row, field)
     },
-    /** 根据订单行和字段返回输入框的唯一引用名，用于点击数值后聚焦。 */
-    inlineInputRef(row, field) {
+    /** 根据订单行和字段返回输入框的唯一名称，用于定位固定列中的可见控件。 */
+    inlineInputName(row, field) {
       return `inline-input-${row.id}-${field}`
     },
-    /** 点击订单行的指定字段值时，只打开该字段的编辑控件。 */
+    /** 点击字段后打开编辑控件并聚焦可见输入框，避免固定列隐藏副本抢占焦点。 */
     beginInlineEdit(row, field) {
       if (!this.isInlineEditable(row, field) || this.isInlineBusy(row)) return
       this.activeInlineKey = this.inlineDraftKey(row, field)
       this.$nextTick(() => {
-        let input = this.$refs[this.inlineInputRef(row, field)]
-        // 地址列的 ref 位于 v-for 内，Vue 会收集为数组，取未被销毁的实例
-        if (Array.isArray(input)) {
-          input = input.find(item => !item._isDestroyed) || input[0]
-        }
-        if (input && this.activeInlineKey === this.inlineDraftKey(row, field)) {
+        const table = this.$refs.table
+        if (!table || !table.$el || this.activeInlineKey !== this.inlineDraftKey(row, field)) return
+        const name = this.inlineInputName(row, field)
+        const input = Array.from(table.$el.querySelectorAll('input[name]'))
+          .find(element => element.name === name && !element.closest('td.is-hidden'))
+        if (input) {
           input.focus()
-          const nativeInput = input.$el && input.$el.querySelector('input')
-          if (nativeInput) nativeInput.select()
+          input.select()
         }
       })
     },
@@ -1800,6 +1879,29 @@ export default {
   min-height: 40px;
   color: #909399;
   font-size: 13px;
+}
+.fixed-column-select {
+  width: 100px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #fff;
+  color: #606266;
+  font-size: 12px;
+  cursor: pointer;
+}
+.fixed-column-select:focus {
+  outline: none;
+  border-color: #409eff;
+}
+.fixed-column-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 10px;
+  font-size: 12px;
+  color: #606266;
 }
 .head-container {
   padding: 10px;

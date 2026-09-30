@@ -30,7 +30,7 @@ jest.mock('@crud/crud', () => {
   return {
     __esModule: true,
     default: crudFactory,
-    presenter: () => ({}),
+    presenter: () => ({ methods: { parseTime: (...args) => require('@/utils/index').parseTime(...args) }}),
     header: () => ({}),
     form: () => ({}),
     crud: () => ({})
@@ -280,6 +280,7 @@ describe('CustomerOrder edit flow', () => {
       }
     }, {
       localVue,
+      sync: false,
       mocks: { checkPer: () => true },
       stubs: { 'el-pagination': true }
     })
@@ -305,10 +306,31 @@ describe('CustomerOrder edit flow', () => {
       })
       await flushDietUi()
       expect(labels()).toEqual(expected.concat(hiddenColumns.map(column => column.label), '操作'))
+      const vm = wrapper.vm
+      await wrapper.find('.fixed-column-select').setValue('3')
+      await flushDietUi()
+      const fixedKeys = () => vm.$refs.table.store.states.fixedColumns.map(column => column.type === 'selection' ? 'selection' : column.property || column.columnKey)
+      expect(fixedKeys()).toEqual(['selection', 'phone', 'addresses', 'customerCode'])
+      expect(window.localStorage.getItem('customer-order-fixed-column-count')).toBe('3')
+      expect(vm.readFixedColumnCount()).toBe(3)
+      expect(wrapper.find('.el-table__fixed').exists()).toBe(true)
+      const phoneColumn = toolbar.tableColumns.find(column => column.key === 'phone')
+      phoneColumn.visible = false
+      toolbar.handleCheckedTableColumnsChange(phoneColumn)
+      await flushDietUi()
+      expect(fixedKeys()).toEqual(['selection', 'addresses', 'customerCode', 'customerName'])
+      vm.resetColumnOrder()
+      await flushDietUi()
+      expect(fixedKeys()).toEqual(['selection', 'addresses', 'customerCode', 'customerName'])
+      await wrapper.find('.fixed-column-select').setValue('0')
+      await flushDietUi()
+      expect(fixedKeys()).toEqual([])
+      expect(wrapper.find('.el-table__fixed').exists()).toBe(false)
     } finally {
       wrapper.destroy()
       window.localStorage.removeItem('customer-order-column-order-v1')
       window.localStorage.removeItem('customer-order-column-order-v2')
+      window.localStorage.removeItem('customer-order-fixed-column-count')
     }
   })
 
@@ -456,12 +478,20 @@ describe('CustomerOrder edit flow', () => {
   test('clicking one value opens only its editor and focuses the existing value', async() => {
     const vm = createVm()
     const row = { id: 20, status: 1, mainDishCount: 2, sideDishCount: 1 }
-    const select = jest.fn()
-    const focus = jest.fn()
-    vm.$refs[vm.inlineInputRef(row, 'mainDishCount')] = {
-      focus,
-      $el: { querySelector: () => ({ select }) }
-    }
+    const cell = document.createElement('div')
+    const hidden = document.createElement('td')
+    hidden.className = 'is-hidden'
+    const hiddenInput = document.createElement('input')
+    hiddenInput.name = vm.inlineInputName(row, 'mainDishCount')
+    hidden.appendChild(hiddenInput)
+    cell.appendChild(hidden)
+    const input = document.createElement('input')
+    input.name = vm.inlineInputName(row, 'mainDishCount')
+    cell.appendChild(input)
+    vm.$refs.table.$el = cell
+    const select = jest.spyOn(input, 'select')
+    const focus = jest.spyOn(input, 'focus')
+    const hiddenFocus = jest.spyOn(hiddenInput, 'focus')
 
     vm.beginInlineEdit(row, 'mainDishCount')
     await Promise.resolve()
@@ -471,6 +501,7 @@ describe('CustomerOrder edit flow', () => {
     expect(vm.getInlineDraft(row, 'mainDishCount')).toBe(2)
     expect(focus).toHaveBeenCalledTimes(1)
     expect(select).toHaveBeenCalledTimes(1)
+    expect(hiddenFocus).not.toHaveBeenCalled()
   })
 
   test('submitting one specification value keeps the other specification values unchanged', async() => {
