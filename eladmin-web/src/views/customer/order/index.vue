@@ -93,6 +93,7 @@
             <div v-else class="customer-diet-cell__text">—</div>
             <div class="customer-diet-cell__label">已确认对象</div>
             <el-select
+              :ref="inlineInputRef(scope.row, 'dishRequirements')"
               :value="getInlineDietDraft(scope.row, 'dishRequirements')"
               multiple
               filterable
@@ -102,6 +103,8 @@
               :disabled="isInlineBusy(scope.row)"
               style="width: 100%;"
               @input="setInlineDietDraft(scope.row, 'dishRequirements', $event)"
+              @visible-change="!$event && saveInlineDietDraft(scope.row, 'dishRequirements')"
+              @keydown.esc.native.capture.stop="cancelInlineDietDraft(scope.row, 'dishRequirements')"
             >
               <el-option
                 v-for="option in getInlineDietChoices(scope.row, 'dishRequirements')"
@@ -111,20 +114,15 @@
                 :disabled="option.historical && !isInlineDietSelected(scope.row, 'dishRequirements', option.selectionKey)"
               />
             </el-select>
-            <div class="inline-diet-actions">
-              <el-button size="mini" type="primary" :disabled="isInlineBusy(scope.row)" @click="saveInlineDietDraft(scope.row, 'dishRequirements')">保存</el-button>
-              <el-button size="mini" :disabled="isInlineBusy(scope.row)" @click="cancelInlineDietDraft(scope.row, 'dishRequirements')">取消</el-button>
-            </div>
           </div>
-          <div v-else class="inline-diet-display">
+          <div
+            v-else
+            class="inline-diet-display"
+            :class="{ 'is-editable': isInlineEditable(scope.row) && !isInlineBusy(scope.row) && !dietOptionsLoading }"
+            :title="isInlineEditable(scope.row) ? '点击编辑，收起下拉框后自动保存，Esc 取消' : null"
+            @click="beginInlineDietEdit(scope.row, 'dishRequirements')"
+          >
             <CustomerDietCell :raw="scope.row.dishRequirementsRaw" :items="scope.row.dishRequirements" />
-            <el-button
-              v-if="isInlineEditable(scope.row)"
-              type="text"
-              size="mini"
-              :disabled="isInlineBusy(scope.row) || dietOptionsLoading"
-              @click="beginInlineDietEdit(scope.row, 'dishRequirements')"
-            >编辑对象</el-button>
           </div>
         </template>
       </el-table-column>
@@ -138,6 +136,7 @@
             <div v-else class="customer-diet-cell__text">—</div>
             <div class="customer-diet-cell__label">已确认对象</div>
             <el-select
+              :ref="inlineInputRef(scope.row, 'dietaryRestrictions')"
               :value="getInlineDietDraft(scope.row, 'dietaryRestrictions')"
               multiple
               filterable
@@ -147,6 +146,8 @@
               :disabled="isInlineBusy(scope.row)"
               style="width: 100%;"
               @input="setInlineDietDraft(scope.row, 'dietaryRestrictions', $event)"
+              @visible-change="!$event && saveInlineDietDraft(scope.row, 'dietaryRestrictions')"
+              @keydown.esc.native.capture.stop="cancelInlineDietDraft(scope.row, 'dietaryRestrictions')"
             >
               <el-option
                 v-for="option in getInlineDietChoices(scope.row, 'dietaryRestrictions')"
@@ -156,20 +157,15 @@
                 :disabled="option.historical && !isInlineDietSelected(scope.row, 'dietaryRestrictions', option.selectionKey)"
               />
             </el-select>
-            <div class="inline-diet-actions">
-              <el-button size="mini" type="primary" :disabled="isInlineBusy(scope.row)" @click="saveInlineDietDraft(scope.row, 'dietaryRestrictions')">保存</el-button>
-              <el-button size="mini" :disabled="isInlineBusy(scope.row)" @click="cancelInlineDietDraft(scope.row, 'dietaryRestrictions')">取消</el-button>
-            </div>
           </div>
-          <div v-else class="inline-diet-display">
+          <div
+            v-else
+            class="inline-diet-display"
+            :class="{ 'is-editable': isInlineEditable(scope.row) && !isInlineBusy(scope.row) && !dietOptionsLoading }"
+            :title="isInlineEditable(scope.row) ? '点击编辑，收起下拉框后自动保存，Esc 取消' : null"
+            @click="beginInlineDietEdit(scope.row, 'dietaryRestrictions')"
+          >
             <CustomerDietCell :raw="scope.row.dietaryRestrictionsRaw" :items="scope.row.dietaryRestrictions" />
-            <el-button
-              v-if="isInlineEditable(scope.row)"
-              type="text"
-              size="mini"
-              :disabled="isInlineBusy(scope.row) || dietOptionsLoading"
-              @click="beginInlineDietEdit(scope.row, 'dietaryRestrictions')"
-            >编辑对象</el-button>
           </div>
         </template>
       </el-table-column>
@@ -1042,17 +1038,21 @@ export default {
       })
       return this.dietOptionsPromise
     },
-    /** 进入饮食对象编辑态，并分别保存完整草稿和进入时的并发校验值。 */
+    /** 点击饮食单元格后初始化对象草稿与并发校验快照，并聚焦展开多选框。
+     * @param {Object} row 当前订单行
+     * @param {string} field 饮食对象字段名
+     */
     async beginInlineDietEdit(row, field) {
       if (!this.isInlineEditable(row) || this.isInlineBusy(row)) return
       if (!await this.loadInlineDietOptions()) return
+      if (!this.isInlineEditable(row) || this.isInlineBusy(row)) return
       const currentItems = Array.isArray(row[field]) ? row[field] : []
       const key = this.inlineDraftKey(row, field)
       this.$set(this.inlineDietDrafts, key, {
         selectionKeys: currentItems.map(item => this.inlineDietSelectionKey(item)),
         expectedItems: JSON.parse(JSON.stringify(currentItems))
       })
-      this.activeInlineKey = key
+      this.beginInlineEdit(row, field)
     },
     inlineDietSelectionKey(item) {
       return item && item.type && item.id != null ? `${item.type}:${item.id}` : ''
@@ -1103,18 +1103,27 @@ export default {
       const name = item && item.name ? item.name : `#${item && item.id}`
       return `${labels[item && item.type] || (item && item.type) || '对象'} · ${path}${name}${item && item.historical ? '（历史引用）' : ''}`
     },
-    /** 将当前多选草稿映射为对象数组并一次提交；服务端根据进入时的完整值校验并发。 */
+    /** 收起饮食多选框时自动提交完整对象数组；对象集合未变化时直接退出。
+     * @param {Object} row 当前订单行
+     * @param {string} field 饮食对象字段名
+     * @returns {Promise<boolean>} 是否保存成功或无需保存
+     */
     saveInlineDietDraft(row, field) {
       const key = this.inlineDraftKey(row, field)
       const draft = this.inlineDietDrafts[key]
       if (!draft || this.isInlineBusy(row)) return Promise.resolve(false)
+      const expectedKeys = new Set(draft.expectedItems.map(item => this.inlineDietSelectionKey(item)))
+      const selectedKeys = new Set(draft.selectionKeys)
+      if (selectedKeys.size === expectedKeys.size && [...selectedKeys].every(key => expectedKeys.has(key))) {
+        this.cancelInlineDietDraft(row, field)
+        return Promise.resolve(true)
+      }
       const choices = this.getInlineDietChoices(row, field)
       const value = draft.selectionKeys.map(selectionKey => {
         const option = choices.find(item => item.selectionKey === selectionKey)
         return option ? { type: option.type, id: Number(option.id), name: option.name } : null
       }).filter(Boolean)
-      this.$delete(this.inlineDietDrafts, key)
-      this.activeInlineKey = null
+      this.cancelInlineDietDraft(row, field)
       return this.saveInlineValue(row, field, value, draft.expectedItems)
     },
     /** 丢弃饮食对象草稿，不发起请求。 */
@@ -1627,6 +1636,13 @@ export default {
 }
 .inline-spec-field .el-input {
   width: 42px;
+}
+.inline-diet-display.is-editable {
+  cursor: pointer;
+  border-radius: 4px;
+}
+.inline-diet-display.is-editable:hover {
+  background-color: #f5f7fa;
 }
 .inline-value.is-editable {
   cursor: pointer;

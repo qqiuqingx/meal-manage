@@ -41,6 +41,8 @@ jest.mock('@/utils/index', () => ({ parseTime: value => value }))
 jest.mock('@/utils/auth', () => ({ getToken: () => 'test-token' }))
 jest.mock('vuex', () => ({ mapGetters: () => ({}) }))
 
+const { mount, createLocalVue } = require('@vue/test-utils')
+const ElementUI = require('element-ui')
 const fs = require('fs')
 const path = require('path')
 const orderApi = require('@/api/customer/order')
@@ -80,6 +82,68 @@ function createVm(overrides = {}) {
       return Promise.resolve().then(() => callback && callback())
     }
   }, overrides)
+}
+
+// 使用页面真实模板和 Element UI 多选框，仅替换表格容器以提供测试订单行。
+function mountDietPage(row) {
+  const localVue = createLocalVue()
+  localVue.use(ElementUI)
+  return mount({
+    ...customerOrderPage,
+    created() {},
+    mounted() {},
+    activated() {},
+    data() {
+      return Object.assign({}, customerOrderPage.data.call(this), {
+        roles: ['customerOrder:edit'],
+        query: {},
+        form: {},
+        crud: {
+          props: { searchToggle: false },
+          status: { cu: 0, add: 0 },
+          page: { current: 1, size: 10, total: 1 },
+          data: [row],
+          selectionChangeHandler: jest.fn(),
+          sizeChangeHandler: jest.fn(),
+          pageChangeHandler: jest.fn(),
+          refresh: jest.fn(() => Promise.resolve())
+        },
+        dietOptionsLoaded: true,
+        dietOptions: [
+          { type: 'DISH', id: 2, name: '新菜' },
+          { type: 'INGREDIENT', id: 3, name: '花生' }
+        ]
+      })
+    }
+  }, {
+    localVue,
+    sync: false,
+    attachToDocument: true,
+    mocks: { checkPer: () => false, $message: { success: jest.fn(), warning: jest.fn(), error: jest.fn() }},
+    stubs: {
+      transition: false,
+      'transition-group': false,
+      crudOperation: true,
+      'el-pagination': true,
+      'el-table': { render(h) { return h('div', this.$slots.default) } },
+      'el-table-column': {
+        props: ['columnKey'],
+        render(h) {
+          const isDiet = ['dishRequirements', 'dietaryRestrictions'].includes(this.columnKey)
+          return h('div', { attrs: { 'data-field': this.columnKey }}, isDiet ? this.$scopedSlots.default({ row }) : [])
+        }
+      }
+    }
+  })
+}
+
+async function flushDietUi() {
+  for (let index = 0; index < 8; index++) await Promise.resolve()
+}
+
+function clickDietOption(wrapper, cell, index = 0) {
+  const select = wrapper.find(`${cell} .el-select`).vm
+  select.popperElm.querySelectorAll('.el-select-dropdown__item')[index].click()
 }
 
 describe('CustomerOrder edit flow', () => {
@@ -160,8 +224,10 @@ describe('CustomerOrder edit flow', () => {
     expect(source).toContain('<CustomerDietCell :raw="scope.row.dietaryRestrictionsRaw" :items="scope.row.dietaryRestrictions" />')
     expect(source).toContain("@click=\"beginInlineDietEdit(scope.row, 'dishRequirements')\"")
     expect(source).toContain("@click=\"beginInlineDietEdit(scope.row, 'dietaryRestrictions')\"")
-    expect(source).toContain("@click=\"saveInlineDietDraft(scope.row, 'dishRequirements')\"")
-    expect(source).toContain("@click=\"cancelInlineDietDraft(scope.row, 'dietaryRestrictions')\"")
+    expect(source).toContain("@visible-change=\"!$event && saveInlineDietDraft(scope.row, 'dishRequirements')\"")
+    expect(source).toContain("@keydown.esc.native.capture.stop=\"cancelInlineDietDraft(scope.row, 'dietaryRestrictions')\"")
+    expect(source).not.toContain('编辑对象')
+    expect(source).not.toContain('inline-diet-actions')
     expect(source).not.toContain('<el-popover placement="left" width="380" trigger="click">')
   })
 
@@ -209,6 +275,88 @@ describe('CustomerOrder edit flow', () => {
     expect(vm.activeInlineKey).toBeNull()
     expect(vm.inlineDietDrafts['29:dishRequirements']).toBeUndefined()
     expect(vm.crud.refresh).toHaveBeenCalledTimes(1)
+  })
+
+  test.each(['dishRequirements', 'dietaryRestrictions'])('clicking %s opens the multiselect and closing it saves all changes once', async field => {
+    orderApi.updateInline.mockResolvedValue({})
+    const row = { id: 31, status: 1, dishRequirements: [], dietaryRestrictions: [] }
+    const wrapper = mountDietPage(row)
+    const cell = `[data-field="${field}"]`
+    try {
+      wrapper.find(`${cell} .inline-diet-display`).trigger('click')
+      await flushDietUi()
+      const select = wrapper.find(`${cell} .el-select`).vm
+      expect(select.visible).toBe(true)
+      clickDietOption(wrapper, cell)
+      await flushDietUi()
+      expect(select.visible).toBe(true)
+      expect(orderApi.updateInline).not.toHaveBeenCalled()
+      clickDietOption(wrapper, cell, 1)
+      await flushDietUi()
+      if (field === 'dishRequirements') {
+        wrapper.find(`${cell} .el-select__input`).trigger('keydown', { keyCode: 9, key: 'Tab' })
+      } else {
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        document.body.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      }
+      await flushDietUi()
+      expect(orderApi.updateInline).toHaveBeenCalledTimes(1)
+      expect(orderApi.updateInline).toHaveBeenCalledWith(31, {
+        field,
+        value: [{ type: 'DISH', id: 2, name: '新菜' }, { type: 'INGREDIENT', id: 3, name: '花生' }],
+        expectedValue: []
+      })
+      expect(wrapper.find(`${cell} .inline-diet-editor`).exists()).toBe(false)
+    } finally {
+      wrapper.destroy()
+    }
+  })
+
+  test('Esc cancels changes before the multiselect close event can save them', async() => {
+    const wrapper = mountDietPage({ id: 32, status: 1, dishRequirements: [], dietaryRestrictions: [] })
+    const cell = '[data-field="dietaryRestrictions"]'
+    try {
+      wrapper.find(`${cell} .inline-diet-display`).trigger('click')
+      await flushDietUi()
+      clickDietOption(wrapper, cell)
+      await flushDietUi()
+      wrapper.find(`${cell} .el-select__input`).trigger('keydown', { keyCode: 27, key: 'Escape' })
+      await flushDietUi()
+      expect(orderApi.updateInline).not.toHaveBeenCalled()
+      expect(wrapper.find(`${cell} .inline-diet-editor`).exists()).toBe(false)
+      expect(wrapper.vm.inlineDietDrafts['32:dietaryRestrictions']).toBeUndefined()
+    } finally {
+      wrapper.destroy()
+    }
+  })
+
+  test('closing an unchanged diet selection skips updates even after reordering selections', async() => {
+    const vm = createVm({ dietOptionsLoaded: true })
+    const row = {
+      id: 33,
+      status: 1,
+      dishRequirements: [{ type: 'DISH', id: 2, name: '新菜' }, { type: 'INGREDIENT', id: 3, name: '花生' }]
+    }
+    await vm.beginInlineDietEdit(row, 'dishRequirements')
+    vm.setInlineDietDraft(row, 'dishRequirements', ['INGREDIENT:3', 'DISH:2'])
+
+    expect(await vm.saveInlineDietDraft(row, 'dishRequirements')).toBe(true)
+    expect(orderApi.updateInline).not.toHaveBeenCalled()
+    expect(vm.activeInlineKey).toBeNull()
+  })
+
+  test('removing the last diet object submits an empty array with the original snapshot', async() => {
+    orderApi.updateInline.mockResolvedValue({})
+    const vm = createVm({ dietOptionsLoaded: true })
+    const expectedValue = [{ type: 'INGREDIENT', id: 3, name: '花生' }]
+    const row = { id: 34, status: 1, dietaryRestrictions: expectedValue }
+    await vm.beginInlineDietEdit(row, 'dietaryRestrictions')
+    vm.setInlineDietDraft(row, 'dietaryRestrictions', [])
+
+    await vm.saveInlineDietDraft(row, 'dietaryRestrictions')
+
+    expect(orderApi.updateInline).toHaveBeenCalledWith(34, { field: 'dietaryRestrictions', value: [], expectedValue })
+    expect(vm.inlineDietDrafts['34:dietaryRestrictions']).toBeUndefined()
   })
 
   test('cancelling a diet selection draft does not send an update', async() => {
