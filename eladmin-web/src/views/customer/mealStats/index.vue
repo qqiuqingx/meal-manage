@@ -72,18 +72,18 @@
       border
       stripe
       row-key="orderId"
-      class="meal-stats-table"
+      class="meal-stats-table table-horizontal-scroll-table"
     >
-      <el-table-column label="手机号" prop="phone" width="125" fixed="left">
+      <el-table-column label="手机号" prop="phone" width="110" fixed="left" class-name="compact-column" label-class-name="compact-column">
         <template slot-scope="{ row }">{{ row.phone || '-' }}</template>
       </el-table-column>
       <el-table-column label="地址" prop="addressText" width="250" fixed="left">
         <template slot-scope="{ row }"><div class="multiline-cell">{{ row.addressText || '-' }}</div></template>
       </el-table-column>
-      <el-table-column label="客户编号" prop="customerCode" width="105" fixed="left">
+      <el-table-column label="客户编号" prop="customerCode" width="70" fixed="left" class-name="compact-column" label-class-name="compact-column" show-overflow-tooltip>
         <template slot-scope="{ row }">{{ row.customerCode || '-' }}</template>
       </el-table-column>
-      <el-table-column label="客户姓名" prop="customerName" width="110" fixed="left">
+      <el-table-column label="客户姓名" prop="customerName" width="70" fixed="left" class-name="compact-column" label-class-name="compact-column" show-overflow-tooltip>
         <template slot-scope="{ row }">{{ row.customerName || '-' }}</template>
       </el-table-column>
       <el-table-column label="特殊要求" prop="specialRequirements" min-width="180">
@@ -101,43 +101,43 @@
       <el-table-column label="含汤" prop="soupCount" width="70" align="center">
         <template slot-scope="{ row }">{{ Number(row.soupCount) > 0 ? '含汤' : '不含汤' }}</template>
       </el-table-column>
-      <el-table-column label="早餐" prop="breakfastCount" width="72" align="center">
+      <el-table-column label="早餐" prop="breakfastCount" width="50" align="center" class-name="compact-column" label-class-name="compact-column">
         <template slot-scope="{ row }">{{ countText(row.breakfastCount) }}</template>
       </el-table-column>
-      <el-table-column label="午晚" prop="lunchDinnerCount" width="72" align="center">
+      <el-table-column label="午晚" prop="lunchDinnerCount" width="50" align="center" class-name="compact-column" label-class-name="compact-column">
         <template slot-scope="{ row }">{{ countText(row.lunchDinnerCount) }}</template>
       </el-table-column>
-      <el-table-column label="合计" prop="totalCount" width="72" align="center">
+      <el-table-column label="合计" prop="totalCount" width="48" align="center" class-name="compact-column" label-class-name="compact-column">
         <template slot-scope="{ row }">{{ countText(row.totalCount) }}</template>
       </el-table-column>
-      <el-table-column prop="verifiedCount" width="80" align="center">
+      <el-table-column prop="verifiedCount" width="60" align="center" class-name="compact-column" label-class-name="compact-column">
         <template slot="header">
           <el-tooltip content="订单当前累计核销数，已包含导入历史核销基数。" placement="top">
-            <span>核销 <i class="el-icon-question metric-help" /></span>
+            <span class="metric-header">核销 <i class="el-icon-question metric-help" /></span>
           </el-tooltip>
         </template>
         <template slot-scope="{ row }">{{ countText(row.verifiedCount) }}</template>
       </el-table-column>
-      <el-table-column prop="scheduledCount" width="85" align="center">
+      <el-table-column prop="scheduledCount" width="74" align="center" class-name="compact-column" label-class-name="compact-column">
         <template slot="header">
           <el-tooltip content="当前订单全部有效排餐结果行数，包含成功和失败，不区分是否核销。" placement="top">
-            <span>已排餐 <i class="el-icon-question metric-help" /></span>
+            <span class="metric-header">已排餐 <i class="el-icon-question metric-help" /></span>
           </el-tooltip>
         </template>
         <template slot-scope="{ row }">{{ countText(row.scheduledCount) }}</template>
       </el-table-column>
-      <el-table-column label="剩余" prop="remainingCount" width="72" align="center">
+      <el-table-column label="剩余" prop="remainingCount" width="60" align="center" class-name="compact-column" label-class-name="compact-column">
         <template slot-scope="{ row }">{{ countText(row.remainingCount) }}</template>
       </el-table-column>
-      <el-table-column prop="estimatedRemainingCount" width="100" align="center">
+      <el-table-column prop="estimatedRemainingCount" width="90" align="center" class-name="compact-column" label-class-name="compact-column">
         <template slot="header">
           <el-tooltip content="当前剩余餐数减去今日成功且未核销的已排份数，小于 0 时按 0 展示。" placement="top">
-            <span>预计剩余 <i class="el-icon-question metric-help" /></span>
+            <span class="metric-header">预计剩余 <i class="el-icon-question metric-help" /></span>
           </el-tooltip>
         </template>
         <template slot-scope="{ row }"><span :class="{ 'danger-count': row.estimatedRemainingCount < 3 }">{{ countText(row.estimatedRemainingCount) }}</span></template>
       </el-table-column>
-      <el-table-column label="状态" prop="statusLabel" width="85" align="center">
+      <el-table-column label="状态" prop="statusLabel" width="70" align="center" class-name="compact-column" label-class-name="compact-column">
         <template slot-scope="{ row }">
           <el-tag size="mini" :type="statusTagType(row.status)">{{ row.statusLabel || '-' }}</el-tag>
         </template>
@@ -187,6 +187,7 @@
         </template>
       </el-table-column>
     </el-table>
+    <TableHorizontalScroll :table="scrollTable" />
 
     <div v-if="loadError && rows.length === 0" class="meal-stats-first-load-error">
       <span>统计列表加载失败</span>
@@ -299,6 +300,7 @@ import { getMealStats, getOrderMealCalendar, saveOrderMealCalendar } from '@/api
 import { getDepletionWarnings } from '@/api/mealPlan'
 import CustomerMealQuantityGrid from './CustomerMealQuantityGrid'
 import CustomerDietCell from '@/components/CustomerDietCell.vue'
+import TableHorizontalScroll from '@/components/TableHorizontalScroll.vue'
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
@@ -316,7 +318,7 @@ function formatCurrentMonth() {
 
 export default {
   name: 'CustomerMealStats',
-  components: { CustomerMealQuantityGrid, CustomerDietCell },
+  components: { CustomerMealQuantityGrid, CustomerDietCell, TableHorizontalScroll },
   data() {
     return {
       loading: false,
@@ -324,6 +326,7 @@ export default {
       loadError: false,
       rows: [],
       tableHeight: 520,
+      scrollTable: null,
       query: defaultQuery(),
       page: { current: 0, size: 20, total: 0 },
       listRequestSequence: 0,
@@ -399,6 +402,7 @@ export default {
     this.loadDepletionWarnings()
   },
   mounted() {
+    this.scrollTable = this.$refs.mealStatsTable
     this.$nextTick(() => {
       this.updateTableHeight()
       this.bindTableScroll()
@@ -512,7 +516,7 @@ export default {
       const tableRef = this.$refs.mealStatsTable
       if (!tableRef || !tableRef.$el) return
       const rect = tableRef.$el.getBoundingClientRect()
-      this.tableHeight = Math.max(window.innerHeight - rect.top - 140, 360)
+      this.tableHeight = Math.max(window.innerHeight - rect.top - 100, 120)
     },
     /**
      * 打开指定订单日历，并用请求序号隔离快速切换的迟到响应。
@@ -706,9 +710,28 @@ export default {
 </script>
 
 <style scoped>
-.meal-stats-table { margin-bottom: 16px; }
+
+::v-deep .el-table .compact-column .cell {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+::v-deep .el-table .compact-column .el-tag {
+  padding-left: 5px;
+  padding-right: 5px;
+}
+.metric-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.metric-header .metric-help {
+  margin-left: 0;
+}
+
+.meal-stats-table { margin-bottom: 0; }
 .meal-stats-value-note { margin-left: 8px; color: #8794a5; font-size: 12px; }
-.multiline-cell { white-space: pre-line; line-height: 1.5; }
+.multiline-cell { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; line-height: 1.5; }
 .allergy-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .metric-help { margin-left: 3px; color: #909399; cursor: help; }
 .depletion-warning-row { padding: 2px 0; font-size: 13px; }

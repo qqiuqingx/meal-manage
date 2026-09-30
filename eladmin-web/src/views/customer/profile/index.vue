@@ -197,14 +197,14 @@
       @selection-change="crud.selectionChangeHandler"
     >
       <el-table-column :selectable="checkboxT" type="selection" width="55" />
-      <el-table-column label="客户编号" prop="customerCode" width="100" fixed="left" />
-      <el-table-column label="姓名" prop="customerName" width="100" fixed="left" />
-      <el-table-column label="手机号" prop="phone" width="120" />
+      <el-table-column label="客户编号" prop="customerCode" width="70" fixed="left" class-name="compact-column" label-class-name="compact-column" show-overflow-tooltip />
+      <el-table-column label="姓名" prop="customerName" width="70" fixed="left" class-name="compact-column" label-class-name="compact-column" show-overflow-tooltip />
+      <el-table-column label="手机号" prop="phone" width="110" class-name="compact-column" label-class-name="compact-column" />
       <el-table-column label="地址" prop="defaultAddress" min-width="150" />
-      <el-table-column label="早餐数" prop="breakfastCount" width="80" align="center" />
-      <el-table-column label="午晚数" prop="lunchDinnerCount" width="80" align="center" />
-      <el-table-column label="剩余早餐" prop="remainingBreakfastCount" width="90" align="center" />
-      <el-table-column label="剩余午晚" prop="remainingLunchDinnerCount" width="90" align="center" />
+      <el-table-column label="早餐数" prop="breakfastCount" width="64" align="center" class-name="compact-column" label-class-name="compact-column" />
+      <el-table-column label="午晚数" prop="lunchDinnerCount" width="64" align="center" class-name="compact-column" label-class-name="compact-column" />
+      <el-table-column label="剩余早餐" prop="remainingBreakfastCount" width="74" align="center" class-name="compact-column" label-class-name="compact-column" />
+      <el-table-column label="剩余午晚" prop="remainingLunchDinnerCount" width="74" align="center" class-name="compact-column" label-class-name="compact-column" />
       <el-table-column label="送餐模式" prop="scheduleMode" width="90" align="center">
         <template slot-scope="scope">
           {{ scope.row.scheduleMode || '-' }}
@@ -229,9 +229,9 @@
           </template>
         </template>
       </el-table-column>
-      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip>
+      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140">
         <template slot-scope="scope">
-          {{ scope.row.specialRequirements || '-' }}
+          <div class="multiline-cell">{{ scope.row.specialRequirements || '-' }}</div>
         </template>
       </el-table-column>
       <el-table-column label="排除菜品" prop="excludedDishNamesStr" width="160" align="center">
@@ -1417,6 +1417,17 @@ export default {
 </script>
 
 <style scoped>
+.multiline-cell {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.5;
+}
+::v-deep .el-table .compact-column .cell {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
 .cell-overflow {
   display: inline-block;
   max-width: 140px;

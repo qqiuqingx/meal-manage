@@ -355,7 +355,7 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
     }
 
     /**
-     * 按白名单更新一个订单字段，校验页面提供的旧值并将实际变更状态追加到审计表。
+     * 按白名单更新进行中、暂停或已完成订单的单个字段，校验旧值并记录审计；已完成状态只读。
      *
      * @param id 订单主键
      * @param dto 单字段更新请求，包含字段键、新值和预期旧值；地址字段含槽位类型
@@ -380,8 +380,14 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             throw new BadRequestException("订单不存在");
         }
         if (!Integer.valueOf(CustomerOrderStatus.ACTIVE.getCode()).equals(order.getStatus())
-                && !Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()).equals(order.getStatus())) {
-            throw new BadRequestException("只有进行中或暂停订单可以行内修改");
+                && !Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()).equals(order.getStatus())
+                && !Integer.valueOf(CustomerOrderStatus.COMPLETED.getCode()).equals(order.getStatus())) {
+            throw new BadRequestException("只有进行中、暂停或已完成订单可以行内修改");
+        }
+
+        if (Integer.valueOf(CustomerOrderStatus.COMPLETED.getCode()).equals(order.getStatus())
+                && "status".equals(field)) {
+            throw new BadRequestException("已完成订单不能修改状态");
         }
 
         String addressType = inlineAddressType(field);

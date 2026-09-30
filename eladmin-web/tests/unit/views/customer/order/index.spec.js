@@ -210,8 +210,8 @@ describe('CustomerOrder edit flow', () => {
   test('order list shows scheduled count column', () => {
     const source = fs.readFileSync(path.resolve(__dirname, '../../../../../src/views/customer/order/index.vue'), 'utf8')
 
-    expect(source).toContain('<el-table-column label="已排餐" prop="scheduledCount" width="80" align="center" />')
-    expect(source).toContain('<el-table-column label="手机号" prop="phone" width="145">')
+    expect(source).toContain('<el-table-column label="已排餐" prop="scheduledCount" width="74" align="center" class-name="compact-column" label-class-name="compact-column" />')
+    expect(source).toContain('<el-table-column label="手机号" prop="phone" width="110" class-name="compact-column" label-class-name="compact-column">')
     expect(source).toContain("@click=\"beginInlineEdit(scope.row, 'phone')\"")
     expect(source).toContain('@click.native="beginInlineEdit(scope.row, addressInlineField(addr))"')
     expect(source).toContain("@keyup.enter.native=\"submitInlineDraft(scope.row, 'breakfastCount')\"")
@@ -635,11 +635,31 @@ describe('CustomerOrder edit flow', () => {
     expect(orderApi.updateInline).not.toHaveBeenCalled()
   })
 
-  test('shows terminal orders and rows without edit permission as read-only', () => {
+  test('keeps cancelled and refunded orders and rows without permission read-only', () => {
     const vm = createVm()
-    expect(vm.isInlineEditable({ id: 16, status: 2 })).toBe(false)
+    expect(vm.isInlineEditable({ id: 16, status: 0 })).toBe(false)
+    expect(vm.isInlineEditable({ id: 16, status: 3 })).toBe(false)
     vm.roles = ['customerOrder:list']
     expect(vm.isInlineEditable({ id: 17, status: 1 })).toBe(false)
+  })
+
+  test('allows completed order fields to be edited while keeping status read-only', async() => {
+    orderApi.updateInline.mockResolvedValue({})
+    const vm = createVm()
+    const row = { id: 162, status: 2, mainDishCount: 1 }
+    expect(vm.isInlineEditable(row)).toBe(true)
+    vm.beginInlineEdit(row, 'mainDishCount')
+    vm.setInlineDraft(row, 'mainDishCount', '2')
+    await vm.submitInlineDraft(row, 'mainDishCount')
+    expect(orderApi.updateInline).toHaveBeenCalledWith(162, {
+      field: 'mainDishCount', value: 2, expectedValue: 1
+    })
+    expect(row.status).toBe(2)
+    expect(vm.isInlineEditable(row, 'status')).toBe(false)
+    vm.beginInlineEdit(row, 'status')
+    expect(vm.activeInlineKey).toBeNull()
+    expect(await vm.saveInlineValue(row, 'status', 1, 2)).toBe(false)
+    expect(orderApi.updateInline).toHaveBeenCalledTimes(1)
   })
 
   test('refreshes the row and reports stale-value conflicts without keeping a draft', async() => {

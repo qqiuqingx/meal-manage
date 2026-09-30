@@ -38,6 +38,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -256,12 +258,13 @@ class CustomerOrderServiceImplTest {
         assertEquals("/file/avatar/menu-002.jpg", captor.getValue().getCustomMenuImage());
     }
 
-    @Test
-    void updateInline_updatesOnlyRequestedMealCountAndAuditsDerivedRemainingCount() {
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 4})
+    void updateInline_updatesOnlyRequestedMealCountAndAuditsDerivedRemainingCount(int status) {
         CustomerOrder existing = new CustomerOrder();
         existing.setId(70L);
         existing.setCustomerId(7L);
-        existing.setStatus(1);
+        existing.setStatus(status);
         existing.setBreakfastCount(2);
         existing.setLunchDinnerCount(3);
         existing.setVerifiedCount(2);
@@ -328,12 +331,13 @@ class CustomerOrderServiceImplTest {
         verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
     }
 
-    @Test
-    void updateInline_rejectsMealCountBelowVerifiedCount() {
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 4})
+    void updateInline_rejectsMealCountBelowVerifiedCount(int status) {
         CustomerOrder existing = new CustomerOrder();
         existing.setId(72L);
         existing.setCustomerId(7L);
-        existing.setStatus(1);
+        existing.setStatus(status);
         existing.setBreakfastCount(5);
         existing.setLunchDinnerCount(2);
         existing.setVerifiedCount(4);
@@ -349,6 +353,48 @@ class CustomerOrderServiceImplTest {
                 () -> orderService.updateInline(72L, dto));
 
         assertEquals("订单餐数不能小于已核销餐数（当前已核销：4）", ex.getMessage());
+        verify(orderMapper, never()).updateInlineField(any(Long.class), any(String.class), any(Integer.class),
+                any(String.class), any(Integer.class), any(LocalDate.class), any(String.class),
+                any(java.time.LocalDateTime.class));
+        verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 4})
+    void updateInline_rejectsChangingCompletedOrderStatus(int requestedStatus) {
+        CustomerOrder order = inlineOrder(172L, 7L);
+        order.setStatus(2);
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("status");
+        dto.setExpectedValue(2);
+        dto.setValue(requestedStatus);
+        when(orderMapper.selectInlineUpdateByIdForUpdate(172L)).thenReturn(order);
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> orderService.updateInline(172L, dto));
+
+        assertEquals("已完成订单不能修改状态", ex.getMessage());
+        verify(orderMapper, never()).updateInlineField(any(Long.class), any(String.class), any(Integer.class),
+                any(String.class), any(Integer.class), any(LocalDate.class), any(String.class),
+                any(java.time.LocalDateTime.class));
+        verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 3})
+    void updateInline_rejectsCancelledAndRefundedOrders(int status) {
+        CustomerOrder order = inlineOrder(173L, 7L);
+        order.setStatus(status);
+        CustomerOrderInlineUpdateDto dto = new CustomerOrderInlineUpdateDto();
+        dto.setField("mainDishCount");
+        dto.setExpectedValue(1);
+        dto.setValue(2);
+        when(orderMapper.selectInlineUpdateByIdForUpdate(173L)).thenReturn(order);
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> orderService.updateInline(173L, dto));
+
+        assertEquals("只有进行中、暂停或已完成订单可以行内修改", ex.getMessage());
         verify(orderMapper, never()).updateInlineField(any(Long.class), any(String.class), any(Integer.class),
                 any(String.class), any(Integer.class), any(LocalDate.class), any(String.class),
                 any(java.time.LocalDateTime.class));
@@ -586,12 +632,13 @@ class CustomerOrderServiceImplTest {
         verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
     }
 
-    @Test
-    void updateInline_updatesPhoneInCustomerProfileAndAuditsIt() {
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 4})
+    void updateInline_updatesPhoneInCustomerProfileAndAuditsIt(int status) {
         CustomerOrder order = new CustomerOrder();
         order.setId(80L);
         order.setCustomerId(9L);
-        order.setStatus(1);
+        order.setStatus(status);
         CustomerProfile profile = new CustomerProfile();
         profile.setId(9L);
         profile.setPhone("13800000000");

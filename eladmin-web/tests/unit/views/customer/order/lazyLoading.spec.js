@@ -101,6 +101,31 @@ describe('CustomerOrder lazy loading with real CRUD', () => {
     expect(vm.crud.selections).toEqual([])
   })
 
+  test('renders full long text and edits completed orders through the real table', async() => {
+    const specialRequirements = '特殊要求'.repeat(40) + '\n保留第二行'
+    const medicalRequirements = '基本情况'.repeat(40) + '\n保留第二行'
+    const completed = { ...orders(1, 1)[0], status: 2, specialRequirements, medicalRequirements }
+    getOrders.mockResolvedValueOnce({ content: [completed], totalElements: 1 })
+    await mountPage(true)
+    const columns = vm.$refs.table.store.states.columns
+    const cells = wrapper.findAll('.el-table__body-wrapper .el-table__body tbody tr:first-child td')
+    const specialIndex = columns.findIndex(column => column.property === 'specialRequirements')
+    const medicalIndex = columns.findIndex(column => column.property === 'medicalRequirements')
+    expect(columns[specialIndex].showOverflowTooltip).toBeFalsy()
+    expect(columns[medicalIndex].showOverflowTooltip).toBeFalsy()
+    expect(cells.at(specialIndex).find('.multiline-cell').text()).toBe(specialRequirements)
+    expect(cells.at(medicalIndex).find('.multiline-cell').text()).toBe(medicalRequirements)
+    await cells.at(specialIndex).find('.inline-value').trigger('click')
+    await cells.at(specialIndex).find('input').setValue('修改后的特殊要求')
+    getOrders.mockResolvedValueOnce({ content: [{ ...completed, specialRequirements: '修改后的特殊要求' }], totalElements: 1 })
+    await cells.at(specialIndex).find('input').trigger('blur')
+    await flush()
+    expect(updateInline).toHaveBeenCalledWith(1, {
+      field: 'specialRequirements', value: '修改后的特殊要求', expectedValue: specialRequirements
+    })
+    expect(vm.crud.data[0].status).toBe(2)
+  })
+
   test('uses submitted filters and ignores older responses after a search', async() => {
     await mountPage()
     const stale = deferred()

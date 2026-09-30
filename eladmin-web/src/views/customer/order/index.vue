@@ -47,10 +47,11 @@
       :data="crud.data"
       :height="tableHeight"
       row-key="id"
+      class="table-horizontal-scroll-table"
       @selection-change="crud.selectionChangeHandler"
     >
       <el-table-column :selectable="checkboxT" :reserve-selection="true" type="selection" width="55" />
-      <el-table-column label="手机号" prop="phone" width="145">
+      <el-table-column label="手机号" prop="phone" width="110" class-name="compact-column" label-class-name="compact-column">
         <template slot-scope="scope">
           <el-input
             v-if="isInlineEditing(scope.row, 'phone')"
@@ -93,7 +94,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="客户编号" prop="customerCode" width="130">
+      <el-table-column label="客户编号" prop="customerCode" width="70" class-name="compact-column" label-class-name="compact-column" show-overflow-tooltip>
         <template slot-scope="scope">
           <el-input
             v-if="isInlineEditing(scope.row, 'customerCode')"
@@ -110,8 +111,8 @@
           <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'customerCode')">{{ scope.row.customerCode || '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="客户姓名" prop="customerName" width="100" />
-      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip>
+      <el-table-column label="客户姓名" prop="customerName" width="70" class-name="compact-column" label-class-name="compact-column" show-overflow-tooltip />
+      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140">
         <template slot-scope="scope">
           <el-input
             v-if="isInlineEditing(scope.row, 'specialRequirements')"
@@ -126,7 +127,7 @@
             @keyup.enter.native="submitInlineDraft(scope.row, 'specialRequirements')"
             @keyup.esc.native="cancelInlineDraft(scope.row, 'specialRequirements', $event)"
           />
-          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'specialRequirements')">{{ scope.row.specialRequirements || '-' }}</span>
+          <span v-else class="inline-value multiline-cell" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'specialRequirements')">{{ scope.row.specialRequirements || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column column-key="scheduleMode" label="排餐模式" width="100">
@@ -262,8 +263,8 @@
           <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'lunchDinnerCount')">{{ scope.row.lunchDinnerCount }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="合计" prop="totalCount" width="60" align="center" />
-      <el-table-column label="核销" prop="verifiedCount" width="60" align="center">
+      <el-table-column label="合计" prop="totalCount" width="48" align="center" class-name="compact-column" label-class-name="compact-column" />
+      <el-table-column label="核销" prop="verifiedCount" width="60" align="center" class-name="compact-column" label-class-name="compact-column">
         <template slot-scope="scope">
           <el-tooltip
             v-if="scope.row.importedVerifiedCount > 0"
@@ -275,8 +276,8 @@
           <span v-else>{{ scope.row.verifiedCount }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="已排餐" prop="scheduledCount" width="80" align="center" />
-      <el-table-column label="剩余" prop="remainingCount" width="70" align="center">
+      <el-table-column label="已排餐" prop="scheduledCount" width="74" align="center" class-name="compact-column" label-class-name="compact-column" />
+      <el-table-column label="剩余" prop="remainingCount" width="60" align="center" class-name="compact-column" label-class-name="compact-column">
         <template slot="header">
           <span class="column-help">
             剩余
@@ -286,7 +287,7 @@
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="预计剩余" prop="estimatedRemainingCount" width="120" align="center">
+      <el-table-column label="预计剩余" prop="estimatedRemainingCount" width="90" align="center" class-name="compact-column" label-class-name="compact-column">
         <template slot="header">
           <span class="column-help">
             预计剩余
@@ -296,7 +297,7 @@
           </span>
         </template>
       </el-table-column>
-      <el-table-column column-key="status" label="状态" width="80" align="center">
+      <el-table-column column-key="status" label="状态" width="70" align="center" class-name="compact-column" label-class-name="compact-column">
         <template slot-scope="scope">
           <el-select
             v-if="isInlineEditing(scope.row, 'status')"
@@ -310,13 +311,13 @@
             <el-option label="进行中" :value="1" />
             <el-option label="暂停" :value="4" />
           </el-select>
-          <el-tag v-else :type="statusTagType(scope.row.status)" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click.native="beginInlineEdit(scope.row, 'status')">
+          <el-tag v-else :type="statusTagType(scope.row.status)" :class="{ 'is-editable': isInlineEditable(scope.row, 'status') }" @click.native="beginInlineEdit(scope.row, 'status')">
             {{ statusText(scope.row.status) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="基本情况" prop="medicalRequirements" min-width="150" show-overflow-tooltip>
-        <template slot-scope="{ row }">{{ row.medicalRequirements || '-' }}</template>
+      <el-table-column label="基本情况" prop="medicalRequirements" min-width="150">
+        <template slot-scope="{ row }"><div class="multiline-cell">{{ row.medicalRequirements || '-' }}</div></template>
       </el-table-column>
       <el-table-column label="成单时间" prop="dealTime" width="150" />
       <el-table-column label="术后天数" prop="postoperativeInfo" width="100" align="center">
@@ -497,6 +498,7 @@
         </template>
       </el-table-column>
     </el-table>
+    <TableHorizontalScroll :table="crud.props.table" />
 
     <div class="order-load-status" role="status">
       <span>已加载 {{ crud.data.length }} / {{ crud.page.total }} 条订单</span>
@@ -627,6 +629,7 @@ import { getToken } from '@/utils/auth'
 import { mapGetters } from 'vuex'
 import Sortable from 'sortablejs'
 import CustomerDietCell from '@/components/CustomerDietCell.vue'
+import TableHorizontalScroll from '@/components/TableHorizontalScroll.vue'
 
 const COLUMN_ORDER_STORAGE_KEY = 'customer-order-column-order-v2'
 
@@ -694,7 +697,7 @@ function cleanReplaceRules(rules) {
 
 export default {
   name: 'CustomerOrder',
-  components: { crudOperation, rrOperation, OrderForm, CustomerDietCell },
+  components: { crudOperation, rrOperation, OrderForm, CustomerDietCell, TableHorizontalScroll },
   mixins: [presenter(), header(), form(createOrderDefaultForm()), crud()],
   cruds() {
     return CRUD({ title: '订单', url: '/api/customer/order', idField: 'id', sort: 'id,desc', crudMethod: { ...orderApi }, queryOnPresenterCreated: false, query: { orderCode: '', customerCode: '', customerName: '', status: null, customerSource: null, scheduleDate: null }})
@@ -870,7 +873,7 @@ export default {
     updateTableHeight() {
       const table = this.$refs.table
       if (!table || !table.$el) return
-      this.tableHeight = Math.max(window.innerHeight - table.$el.getBoundingClientRect().top - 100, 300)
+      this.tableHeight = Math.max(window.innerHeight - table.$el.getBoundingClientRect().top - 100, 120)
       this.$nextTick(() => this.loadMoreWhenTableFits())
     },
     /** 返回订单表格的纵向滚动容器。 */
@@ -1134,16 +1137,22 @@ export default {
       if (path.startsWith('http://') || path.startsWith('https://')) return path
       return this.baseApi + path
     },
-    isInlineEditable(row) {
+    /** 判断是否可行内修改指定订单字段；已完成订单保留状态只读。
+     * @param {Object} row 订单行
+     * @param {string} field 可选字段键，状态字段需单独校验
+     * @returns {boolean} 当前账号是否可编辑该字段
+     */
+    isInlineEditable(row, field) {
       return (this.roles.includes('admin') || this.roles.includes('customerOrder:edit')) &&
-        (row.status === 1 || row.status === 4)
+        (row.status === 1 || row.status === 2 || row.status === 4) &&
+        !(row.status === 2 && field === 'status')
     },
     isInlineBusy(row) {
       return Boolean(this.savingRows[row.id] || this.uploadingRows[row.id])
     },
     /** 判断订单行的 field 是否为当前编辑字段，返回布尔值。 */
     isInlineEditing(row, field) {
-      return this.isInlineEditable(row) && this.activeInlineKey === this.inlineDraftKey(row, field)
+      return this.isInlineEditable(row, field) && this.activeInlineKey === this.inlineDraftKey(row, field)
     },
     /** 根据订单行和字段返回输入框的唯一引用名，用于点击数值后聚焦。 */
     inlineInputRef(row, field) {
@@ -1151,7 +1160,7 @@ export default {
     },
     /** 点击订单行的指定字段值时，只打开该字段的编辑控件。 */
     beginInlineEdit(row, field) {
-      if (!this.isInlineEditable(row) || this.isInlineBusy(row)) return
+      if (!this.isInlineEditable(row, field) || this.isInlineBusy(row)) return
       this.activeInlineKey = this.inlineDraftKey(row, field)
       this.$nextTick(() => {
         let input = this.$refs[this.inlineInputRef(row, field)]
@@ -1384,7 +1393,7 @@ export default {
     },
     /** 提交订单行单字段的新值和旧值 expectedValue，刷新列表并返回是否保存成功。 */
     async saveInlineValue(row, field, value, expectedValue) {
-      if (!this.isInlineEditable(row) || this.savingRows[row.id]) return false
+      if (!this.isInlineEditable(row, field) || this.savingRows[row.id]) return false
       const normalizedValue = value === undefined ? null : value
       const normalizedExpected = expectedValue === undefined ? null : expectedValue
       if (JSON.stringify(normalizedValue) === JSON.stringify(normalizedExpected)) {
@@ -1753,6 +1762,36 @@ export default {
 </script>
 
 <style scoped>
+
+.multiline-cell {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.5;
+}
+::v-deep .el-table .compact-column .cell {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+::v-deep .el-table .compact-column .el-input__inner {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+::v-deep .el-table .compact-column .el-select .el-input__inner {
+  padding-right: 18px;
+}
+::v-deep .el-table .compact-column .el-input__suffix {
+  right: 0;
+}
+::v-deep .el-table .compact-column .el-input__icon {
+  width: 18px;
+}
+::v-deep .el-table .compact-column .el-tag {
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
 .order-load-status {
   display: flex;
   align-items: center;
