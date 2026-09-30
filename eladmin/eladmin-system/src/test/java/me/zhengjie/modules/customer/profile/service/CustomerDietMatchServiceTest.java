@@ -104,6 +104,101 @@ class CustomerDietMatchServiceTest {
     }
 
     @Test
+    void shouldMatchAdjacentFoodsInAllergyListAndKeepFullSource() {
+        String raw = "干净，卫生，新鲜，煮熟煮透[偷笑]，吃了千万不要拉肚子[偷笑]！少油，味道合适\r\n过敏食物：芒果菠萝";
+        Fixture fixture = fixture(sourceRow("A100", null, raw));
+        fixture.options.add(option("INGREDIENT", 501L, "芒果"));
+        fixture.options.add(option("INGREDIENT", 502L, "菠萝"));
+        fixture.options.add(option("DISH", 503L, "芒果"));
+
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+        service.applyAllMatches(fixture.candidates);
+
+        CustomerDietImportData data = fixture.parsed.getDietImportData();
+        assertEquals(Collections.singletonList(raw), data.getDietaryRestrictionsRaw());
+        assertEquals(Arrays.asList("芒果", "芒果", "菠萝"), data.getDietaryRestrictions().stream()
+                .map(CustomerDietItemDto::getName).collect(java.util.stream.Collectors.toList()));
+        CustomerDietMatchDto mango = data.getMatches().stream()
+                .filter(match -> "芒果".equals(match.getLookupText())).findFirst().get();
+        assertEquals("MULTI", mango.getStatus());
+        assertEquals(raw, mango.getCellText());
+    }
+
+    @Test
+    void shouldKeepUnknownFoodInExplicitAllergyList() {
+        Fixture fixture = fixture(sourceRow("A100", null, "过敏食物：芒果菠萝"));
+        fixture.options.add(option("INGREDIENT", 501L, "芒果"));
+
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+        service.applyAllMatches(fixture.candidates);
+
+        CustomerDietImportData data = fixture.parsed.getDietImportData();
+        assertEquals(Arrays.asList("芒果", "菠萝"), data.getMatches().stream()
+                .map(CustomerDietMatchDto::getLookupText).collect(java.util.stream.Collectors.toList()));
+        assertEquals("UNMATCHED", data.getMatches().get(1).getStatus());
+        assertEquals(1, data.getDietaryRestrictions().size());
+        assertEquals("芒果", data.getDietaryRestrictions().get(0).getName());
+    }
+
+    @Test
+    void shouldRecognizeAdjacentFoodsWithoutMatchingInsideCompoundWords() {
+        Fixture fixture = fixture(sourceRow("A100", "香菜芹菜", "牛肉丸"));
+
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+        service.applyAllMatches(fixture.candidates);
+
+        CustomerDietImportData data = fixture.parsed.getDietImportData();
+        assertEquals(3, data.getDishRequirements().size());
+        assertTrue(data.getDietaryRestrictions().isEmpty());
+        assertEquals("牛肉丸", data.getMatches().get(2).getLookupText());
+        assertEquals("UNMATCHED", data.getMatches().get(2).getStatus());
+    }
+
+    @Test
+    void shouldPreferCompleteDictionaryNameOverItsParts() {
+        Fixture fixture = fixture(sourceRow("A100", null, "过敏食物：芒果菠萝"));
+        fixture.options.add(option("INGREDIENT", 501L, "芒果"));
+        fixture.options.add(option("INGREDIENT", 502L, "菠萝"));
+        fixture.options.add(option("DISH", 503L, "芒果菠萝"));
+
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+
+        List<CustomerDietMatchDto> matches = fixture.parsed.getDietImportData().getMatches();
+        assertEquals(1, matches.size());
+        assertEquals("芒果菠萝", matches.get(0).getLookupText());
+        assertEquals("DISH", matches.get(0).getSelectedItems().get(0).getType());
+    }
+
+    @Test
+    void shouldProtectCustomFoodNamesDuringSegmentation() {
+        Fixture fixture = fixture(sourceRow("A100", null, "不吃三月瓜芒果"));
+        fixture.options.add(option("INGREDIENT", 501L, "三月瓜"));
+        fixture.options.add(option("INGREDIENT", 502L, "芒果"));
+
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+        service.applyAllMatches(fixture.candidates);
+
+        assertEquals(Arrays.asList("三月瓜", "芒果"), fixture.parsed.getDietImportData()
+                .getDietaryRestrictions().stream().map(CustomerDietItemDto::getName)
+                .collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    void shouldNotReuseAnotherImportsDictionary() {
+        Fixture first = fixture(sourceRow("A100", null, "芒果菠萝"));
+        first.options.add(option("INGREDIENT", 501L, "芒果"));
+        service.attachDietRows(first.workbook, first.candidates, first.options);
+        service.applyAllMatches(first.candidates);
+        assertEquals(1, first.parsed.getDietImportData().getDietaryRestrictions().size());
+
+        Fixture second = fixture(sourceRow("A100", null, "芒果菠萝"));
+        service.attachDietRows(second.workbook, second.candidates, second.options);
+        service.applyAllMatches(second.candidates);
+        assertTrue(second.parsed.getDietImportData().getDietaryRestrictions().isEmpty());
+        assertEquals("芒果菠萝", second.parsed.getDietImportData().getMatches().get(0).getLookupText());
+    }
+
+    @Test
     void shouldNotFallBackToOldCodeWhenNewCodeDoesNotMatch() {
         CustomerDietSourceRow row = sourceRow("A999", "旧编号内容", null);
         row.setOriginalCodeA("A100");

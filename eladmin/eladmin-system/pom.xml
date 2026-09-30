@@ -17,6 +17,13 @@
     </properties>
 
     <dependencies>
+        <!-- 客户导入中文分词，Portable 版内置基础词库，无需部署外部分词服务 -->
+        <dependency>
+            <groupId>com.hankcs</groupId>
+            <artifactId>hanlp</artifactId>
+            <version>portable-1.8.6</version>
+        </dependency>
+
         <!-- 代码生成模块 -->
         <dependency>
             <groupId>me.zhengjie</groupId>

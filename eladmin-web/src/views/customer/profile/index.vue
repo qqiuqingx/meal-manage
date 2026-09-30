@@ -140,37 +140,9 @@
           <el-table-column v-if="!importDietOnly" label="订单状态" width="90">
             <template slot-scope="scope">{{ scope.row.lunchDinnerCount === 0 ? '-' : (scope.row.paused ? '暂停 / 待通知' : '进行中') }}</template>
           </el-table-column>
-          <el-table-column label="医嘱与饮食匹配" min-width="440">
+          <el-table-column label="医嘱与饮食匹配" min-width="320">
             <template slot-scope="scope">
-              <div class="customer-import-diet-field"><strong>C 医嘱：</strong>{{ scope.row.medicalRequirements || '—' }}</div>
-              <div class="customer-import-diet-field"><strong>F 成交时间：</strong>{{ scope.row.dealTimeSource || '空' }} → {{ importDietOnly ? '不修改历史订单' : (scope.row.dealTime || (scope.row.dealTimeAtConfirmation ? '确认时填入' : '—')) }}</div>
-              <div class="customer-import-diet-field"><strong>G 术后：</strong>{{ scope.row.postoperativeInfo || '—' }}</div>
-              <div class="customer-import-diet-field">
-                <strong>D 想吃原文：</strong>
-                <span v-if="scope.row.dishRequirementsRaw && scope.row.dishRequirementsRaw.length">{{ scope.row.dishRequirementsRaw.join(' ｜ ') }}</span>
-                <span v-else>—</span>
-              </div>
-              <div class="customer-import-diet-field">
-                <strong>E 禁忌原文：</strong>
-                <span v-if="scope.row.dietaryRestrictionsRaw && scope.row.dietaryRestrictionsRaw.length">{{ scope.row.dietaryRestrictionsRaw.join(' ｜ ') }}</span>
-                <span v-else>—</span>
-              </div>
-              <div v-for="match in (scope.row.dietMatches || [])" :key="match.sourceKey" class="customer-import-match">
-                <div>
-                  <strong>{{ match.side === 'DISH_REQUIREMENTS' ? 'D 想吃' : 'E 禁忌' }} 第{{ match.sourceRow }}行：</strong>
-                  <span>{{ match.rawText }}</span>
-                  <span v-if="match.lookupText !== match.rawText"> → {{ match.lookupText }}</span>
-                </div>
-                <div v-if="match.status === 'UNIQUE'" class="customer-import-match-result">唯一匹配：{{ dietOptionLabel(match.selectedItems && match.selectedItems[0]) }}</div>
-                <div v-else-if="match.status === 'MULTI'" class="customer-import-match-result">
-                  确认后将同时录入 {{ (match.selectedItems || []).length }} 个对象：
-                  <span v-for="(item, index) in (match.selectedItems || [])" :key="item.type + ':' + item.id">
-                    {{ index ? '、' : '' }}{{ dietOptionLabel(item) }}
-                  </span>
-                </div>
-                <div v-else-if="match.status === 'UNMATCHED'" class="customer-import-warning">未匹配到字典对象，完整原文仍会保存</div>
-              </div>
-              <div v-if="!(scope.row.dietMatches || []).length" class="customer-import-diet-field">D/E 原文为空，无需匹配</div>
+              <CustomerImportDietPreview :draft="scope.row" :diet-only="importDietOnly" :option-label="dietOptionLabel" />
             </template>
           </el-table-column>
           <el-table-column label="问题与提示" min-width="260">
@@ -654,6 +626,7 @@ import CRUD, { presenter, header, form, crud } from '@crud/crud'
 import rrOperation from '@crud/RR.operation'
 import crudOperation from '@crud/CRUD.operation'
 import OrderForm, { createFirstOrderDefaultForm } from '@/components/Order/OrderForm.vue'
+import CustomerImportDietPreview from './CustomerImportDietPreview.vue'
 import CustomerDetailDialog from './CustomerDetailDialog.vue'
 import { mapGetters } from 'vuex'
 
@@ -700,7 +673,7 @@ function cleanReplaceRules(rules) {
 
 export default {
   name: 'CustomerProfile',
-  components: { crudOperation, rrOperation, OrderForm, CustomerDetailDialog, MealScheduleCalendar },
+  components: { crudOperation, rrOperation, OrderForm, CustomerDetailDialog, MealScheduleCalendar, CustomerImportDietPreview },
   mixins: [presenter(), header(), form(defaultForm), crud()],
   cruds() {
     return CRUD({
@@ -1471,23 +1444,6 @@ export default {
 }
 .customer-import-error {
   color: #f56c6c;
-  line-height: 1.5;
-}
-.customer-import-diet-field {
-  margin-bottom: 4px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  line-height: 1.5;
-}
-.customer-import-match {
-  margin-top: 6px;
-  padding-top: 5px;
-  border-top: 1px solid #ebeef5;
-  overflow-wrap: anywhere;
-}
-.customer-import-match-result {
-  margin-top: 4px;
-  color: #67c23a;
   line-height: 1.5;
 }
 .customer-import-filter {

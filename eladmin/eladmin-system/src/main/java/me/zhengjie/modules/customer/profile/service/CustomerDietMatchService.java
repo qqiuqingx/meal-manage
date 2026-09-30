@@ -1,6 +1,14 @@
 package me.zhengjie.modules.customer.profile.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.hankcs.hanlp.collection.trie.DoubleArrayTrie;
+import com.hankcs.hanlp.collection.trie.bintrie.BinTrie;
+import com.hankcs.hanlp.corpus.tag.Nature;
+import com.hankcs.hanlp.dictionary.CoreDictionary;
+import com.hankcs.hanlp.dictionary.DynamicCustomDictionary;
+import com.hankcs.hanlp.seg.Segment;
+import com.hankcs.hanlp.seg.Viterbi.ViterbiSegment;
+import com.hankcs.hanlp.seg.common.Term;
 import lombok.RequiredArgsConstructor;
 import me.zhengjie.modules.customer.profile.domain.CustomerDietImportData;
 import me.zhengjie.modules.customer.profile.domain.ImportCandidate;
@@ -26,6 +34,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -125,9 +134,10 @@ public class CustomerDietMatchService {
         }
 
         Map<String, List<CustomerDietOptionDto>> index = buildIndex(options);
+        Segment segment = createSegment(index);
         for (Map.Entry<String, List<CustomerDietSourceRow>> entry : rowsByCode.entrySet()) {
             ImportCandidate candidate = byCode.get(entry.getKey());
-            CustomerDietImportData data = aggregate(entry.getValue(), index);
+            CustomerDietImportData data = aggregate(entry.getValue(), index, segment);
             candidate.getParsed().setDietImportData(data);
             mergeWithExisting(candidate, data);
         }
@@ -165,10 +175,11 @@ public class CustomerDietMatchService {
      *
      * @param rows 同一编号下按来源行排序的记录
      * @param index 按名称建好的字典索引
+     * @param segment 本次导入独立的领域分词器
      * @return 合并后的导入数据及词项匹配结果
      */
     private CustomerDietImportData aggregate(List<CustomerDietSourceRow> rows,
-                                             Map<String, List<CustomerDietOptionDto>> index) {
+                                             Map<String, List<CustomerDietOptionDto>> index, Segment segment) {
         CustomerDietImportData data = new CustomerDietImportData();
         Set<String> medical = new LinkedHashSet<>();
         Set<String> postoperative = new LinkedHashSet<>();
@@ -188,8 +199,8 @@ public class CustomerDietMatchService {
             for (String issue : row.getIssues()) {
                 data.getIssues().add(issue);
             }
-            data.getMatches().addAll(matchCell(row, 4, "DISH_REQUIREMENTS", row.getDishRequirementsRaw(), index));
-            data.getMatches().addAll(matchCell(row, 5, "DIETARY_RESTRICTIONS", row.getDietaryRestrictionsRaw(), index));
+            data.getMatches().addAll(matchCell(row, 4, "DISH_REQUIREMENTS", row.getDishRequirementsRaw(), index, segment));
+            data.getMatches().addAll(matchCell(row, 5, "DIETARY_RESTRICTIONS", row.getDietaryRestrictionsRaw(), index, segment));
         }
         data.setMedicalRequirements(singleNonBlank(medical));
         if (nonBlankValues(medical).size() > 1) {
@@ -209,7 +220,7 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 对 D/E 单元格先整段匹配，再清洗、拆词、判断肯定/否定方向后逐词精确匹配。
+     * 对 D/E 单元格先整段匹配，再清洗、拆词并逐词精确匹配，识别连写的字典名称。
      * <p>
      * 方向规则：D 列默认是客户想吃，E 列默认是客户不想吃/过敏。词项自带的前缀
      * （不要、不喜欢、喜欢吃、想吃…）或后缀（…过敏）优先于列默认值；前缀会延续到后面没有
@@ -220,11 +231,12 @@ public class CustomerDietMatchService {
      * @param side 所在列的默认方向
      * @param rawText 完整单元格原文
      * @param index 当前字典名称索引
+     * @param segment 本次导入独立的领域分词器
      * @return 逐词项匹配结果
      */
     private List<CustomerDietMatchDto> matchCell(CustomerDietSourceRow row, int sourceColumn,
                                                  String side, String rawText,
-                                                 Map<String, List<CustomerDietOptionDto>> index) {
+                                                 Map<String, List<CustomerDietOptionDto>> index, Segment segment) {
         if (isBlank(rawText)) {
             return new ArrayList<>();
         }
@@ -248,7 +260,10 @@ public class CustomerDietMatchService {
                 if (parsed.body.isEmpty()) {
                     continue;
                 }
-                List<String> pieces = splitConnectors(parsed.body, index);
+                List<String> pieces = new ArrayList<>();
+                for (String connected : splitConnectors(parsed.body, index)) {
+                    pieces.addAll(splitKnownFoods(refineLookup(connected, index), index, segment));
+                }
                 for (String piece : pieces) {
                     String lookup = refineLookup(piece, index);
                     String rawItem = pieces.size() == 1 ? expression : piece;
@@ -380,6 +395,60 @@ public class CustomerDietMatchService {
                 return Collections.singletonList(body);
             }
             result.add(trimmed);
+        }
+        return result;
+    }
+
+    /**
+     * 为本次导入建立独立的 HanLP 分词器，使用有效字典名称保护领域词，不修改全局词典。
+     *
+     * @param index 当前有效字典名称索引
+     * @return 使用内置基础词库与本次领域词典的分词器
+     */
+    private Segment createSegment(Map<String, List<CustomerDietOptionDto>> index) {
+        Segment segment = new ViterbiSegment().enableAllNamedEntityRecognize(false).enableOffset(true);
+        if (index.isEmpty()) {
+            return segment.enableCustomDictionary(false);
+        }
+        TreeMap<String, CoreDictionary.Attribute> words = new TreeMap<>();
+        for (String name : index.keySet()) {
+            if (!name.isEmpty()) {
+                words.put(name, new CoreDictionary.Attribute(Nature.nz, 1024));
+            }
+        }
+        DynamicCustomDictionary dictionary = new DynamicCustomDictionary(
+                new DoubleArrayTrie<>(words), new BinTrie<>(), null);
+        return segment.enableCustomDictionary(dictionary).enableCustomDictionaryForcing(true);
+    }
+
+    /**
+     * 使用 HanLP 识别食物词的边界；只关联与业务字典全等的分词结果，连续未知片段保持原样。
+     * 完整词项能查到字典时不再分词，避免将已有完整名称拆成更短的对象。
+     *
+     * @param body 已清洗的词项
+     * @param index 当前有效字典名称索引
+     * @param segment 本次导入独立的领域分词器
+     * @return 顺序不变的已知名称及未匹配片段
+     */
+    private List<String> splitKnownFoods(String body, Map<String, List<CustomerDietOptionDto>> index,
+                                        Segment segment) {
+        if (body.isEmpty() || index.isEmpty() || !findOptions(body, index).isEmpty()) {
+            return Collections.singletonList(body);
+        }
+        List<String> result = new ArrayList<>();
+        int remainderStart = 0;
+        for (Term term : segment.seg(body)) {
+            if (findOptions(term.word, index).isEmpty()) {
+                continue;
+            }
+            if (remainderStart < term.offset) {
+                result.add(body.substring(remainderStart, term.offset));
+            }
+            result.add(term.word);
+            remainderStart = term.offset + term.word.length();
+        }
+        if (remainderStart < body.length()) {
+            result.add(body.substring(remainderStart));
         }
         return result;
     }
