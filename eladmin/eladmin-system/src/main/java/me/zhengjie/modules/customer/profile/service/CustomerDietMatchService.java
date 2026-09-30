@@ -108,7 +108,7 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 将第二工作表来源行按月份客户编号关联、聚合字段并匹配 D/E 原文。
+     * 将第二工作表来源行按月份客户编号关联、聚合字段并匹配 D/F 原文。
      *
      * @param workbook 月份工作表及第二工作表解析结果
      * @param candidates 已解析的月份客户候选
@@ -200,7 +200,7 @@ public class CustomerDietMatchService {
                 data.getIssues().add(issue);
             }
             data.getMatches().addAll(matchCell(row, 4, "DISH_REQUIREMENTS", row.getDishRequirementsRaw(), index, segment));
-            data.getMatches().addAll(matchCell(row, 5, "DIETARY_RESTRICTIONS", row.getDietaryRestrictionsRaw(), index, segment));
+            data.getMatches().addAll(matchCell(row, 6, "DIETARY_RESTRICTIONS", row.getDietaryRestrictionsRaw(), index, segment));
         }
         data.setMedicalRequirements(singleNonBlank(medical));
         if (nonBlankValues(medical).size() > 1) {
@@ -220,15 +220,14 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 对 D/E 单元格先整段匹配，再清洗、拆词并逐词精确匹配，识别连写的字典名称。
+     * 对 D/F 单元格先整段匹配，再清洗、拆词并逐词精确匹配，识别连写的字典名称。
      * <p>
-     * 方向规则：D 列默认是客户想吃，E 列默认是客户不想吃/过敏。词项自带的前缀
-     * （不要、不喜欢、喜欢吃、想吃…）或后缀（…过敏）优先于列默认值；前缀会延续到后面没有
-     * 前缀的词项，直到出现新的前缀。词项最终方向与所在列相反时，归入相反方向并在提示里说明。
+     * 方向固定由来源列决定：D 列表示客户想吃，F 列表示客户禁忌。
+     * 饮食表达前缀只用于清洗查找文本，不改变匹配对象的归属方向。
      *
      * @param row 原始来源行
      * @param sourceColumn Excel 列号，1 基
-     * @param side 所在列的默认方向
+     * @param side 来源列对应的固定方向
      * @param rawText 完整单元格原文
      * @param index 当前字典名称索引
      * @param segment 本次导入独立的领域分词器
@@ -481,7 +480,7 @@ public class CustomerDietMatchService {
      *
      * @param row 来源行
      * @param sourceColumn Excel 列号
-     * @param side D/E 方向
+     * @param side D/F 方向
      * @param cellText 完整单元格原文
      * @param rawText 原词项
      * @param lookup 字典查找文本
@@ -588,13 +587,13 @@ public class CustomerDietMatchService {
             if (notBlank(oldMedical) && notBlank(data.getMedicalRequirements())
                     && !oldMedical.equals(data.getMedicalRequirements())) {
                 parsed.addIssue(me.zhengjie.modules.customer.profile.domain.dto.CustomerImportIssueCategory.PROFILE_ERROR,
-                        "已有客户医嘱与本次 C 列内容不同，未覆盖，请人工核对");
+                        "已有客户医嘱与本次 E 列内容不同，未覆盖，请人工核对");
             }
             String oldPostoperative = candidate.getExistingProfile().getPostoperativeInfo();
             if (notBlank(oldPostoperative) && notBlank(data.getPostoperativeInfo())
                     && !oldPostoperative.equals(data.getPostoperativeInfo())) {
                 parsed.addIssue(me.zhengjie.modules.customer.profile.domain.dto.CustomerImportIssueCategory.PROFILE_ERROR,
-                        "已有客户术后信息与本次 G 列内容不同，未覆盖，请人工核对");
+                        "已有客户术后信息与本次 H 列内容不同，未覆盖，请人工核对");
             }
         }
     }

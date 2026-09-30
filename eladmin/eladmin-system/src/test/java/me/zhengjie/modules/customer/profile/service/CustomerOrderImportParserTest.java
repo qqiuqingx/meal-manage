@@ -61,13 +61,13 @@ class CustomerOrderImportParserTest {
         byte[] content = buildWorkbook(sheet -> sheet.getRow(0).getCell(3).setCellValue("错误表头"), dietSheet -> {
             Row first = dietSheet.createRow(3);
             first.createCell(0).setCellValue("A100");
-            first.createCell(2).setCellValue("少盐");
+            first.createCell(4).setCellValue("少盐");
             Row second = dietSheet.createRow(4);
             second.createCell(0).setCellValue("A100");
-            second.createCell(4).setCellValue("香菜");
+            second.createCell(5).setCellValue("香菜");
             Row third = dietSheet.createRow(5);
             third.createCell(1).setCellValue("B200");
-            third.createCell(6).setCellValue("术后原文");
+            third.createCell(7).setCellValue("术后原文");
         });
 
         ParsedWorkbook workbook = parser.parseDietOnly(content, "hash", IMPORT_DATE);
@@ -89,6 +89,43 @@ class CustomerOrderImportParserTest {
     }
 
     @Test
+    void parseShouldAcceptMedicalHeaderAndIgnoreColumnC() throws IOException {
+        byte[] content = buildWorkbook(sheet -> {}, dietSheet -> {
+            dietSheet.getRow(1).getCell(4).setCellValue("医嘱");
+            dietSheet.getRow(1).createCell(2).setCellValue("其他备注");
+            dietSheet.createRow(3).createCell(2).setCellValue("仅C列有值，不是导入记录");
+            Row row = dietSheet.createRow(4);
+            row.createCell(0).setCellValue("A100");
+            row.createCell(2).setCellFormula("1+1");
+            row.createCell(4).setCellValue("少盐");
+        });
+
+        ParsedWorkbook workbook = parser.parseDietOnly(content, "hash", IMPORT_DATE);
+
+        assertTrue(workbook.isStructureValid(), workbook.getIssues().toString());
+        assertEquals(1, workbook.getDietRows().size());
+        assertEquals("少盐", workbook.getDietRows().get(0).getMedicalRequirements());
+        assertTrue(workbook.getDietRows().get(0).getIssues().isEmpty());
+    }
+
+    @Test
+    void parseShouldRejectOldDietColumnLayout() throws IOException {
+        byte[] content = buildWorkbook(sheet -> {}, dietSheet -> {
+            Row header = dietSheet.getRow(1);
+            header.getCell(4).setCellValue("禁忌明细");
+            header.getCell(5).setCellValue("成单时间");
+            header.getCell(6).setCellValue("术后");
+            header.removeCell(header.getCell(7));
+        });
+
+        ParsedWorkbook workbook = parser.parseDietOnly(content, "hash", IMPORT_DATE);
+
+        assertFalse(workbook.isStructureValid());
+        assertTrue(workbook.getIssues().stream().anyMatch(issue ->
+                issue.getMessage().contains("A～H 列")));
+    }
+
+    @Test
     void parseShouldReadDietSheetColumnsAndMonthDayDealTime() throws IOException {
         byte[] content = buildWorkbook(sheet -> {
             Row customer = dataRow(sheet, 3, "A100", null, "13800138100",
@@ -98,11 +135,12 @@ class CustomerOrderImportParserTest {
         }, dietSheet -> {
             Row row = dietSheet.createRow(3);
             row.createCell(0).setCellValue("A100");
-            row.createCell(2).setCellValue("少盐，保留\n原始换行");
+            row.createCell(2).setCellValue("C列备注，不导入医嘱");
+            row.createCell(4).setCellValue("少盐，保留\n原始换行");
             row.createCell(3).setCellValue("不吃香菜，芹菜");
-            row.createCell(4).setCellValue("鲈鱼（清蒸）");
-            row.createCell(5).setCellValue("6.11 9:30");
-            row.createCell(6).setCellValue("4个月");
+            row.createCell(5).setCellValue("鲈鱼（清蒸）");
+            row.createCell(6).setCellValue("6.11 9:30");
+            row.createCell(7).setCellValue("4个月");
         });
 
         ParsedWorkbook workbook = parser.parse(content, "hash", IMPORT_DATE);
@@ -124,7 +162,7 @@ class CustomerOrderImportParserTest {
             Row row = dietSheet.createRow(3);
             row.createCell(0).setCellValue("A100");
             row.createCell(1).setCellValue("A999");
-            row.createCell(4).setCellValue("忌口内容");
+            row.createCell(5).setCellValue("忌口内容");
         });
 
         ParsedWorkbook workbook = parser.parse(content, "hash", IMPORT_DATE);
@@ -138,9 +176,9 @@ class CustomerOrderImportParserTest {
         byte[] content = buildWorkbook(sheet -> {}, dietSheet -> {
             Row row = dietSheet.createRow(3);
             row.createCell(0).setCellValue("A100");
-            row.createCell(2).setCellValue("医嘱原文");
-            row.createCell(5).setCellValue("3.2");
-            row.createCell(6).setCellValue("5天");
+            row.createCell(4).setCellValue("医嘱原文");
+            row.createCell(6).setCellValue("3.2");
+            row.createCell(7).setCellValue("5天");
         });
 
         ParsedWorkbook workbook = parser.parse(content, "hash", IMPORT_DATE);
@@ -158,7 +196,7 @@ class CustomerOrderImportParserTest {
         byte[] content = buildWorkbook(sheet -> {}, dietSheet -> {
             Row row = dietSheet.createRow(3);
             row.createCell(0).setCellValue("A100");
-            row.createCell(5).setCellValue("下周某天");
+            row.createCell(6).setCellValue("下周某天");
         });
 
         ParsedWorkbook workbook = parser.parse(content, "hash", IMPORT_DATE);
@@ -166,7 +204,7 @@ class CustomerOrderImportParserTest {
 
         assertTrue(workbook.isStructureValid());
         assertNull(row.getDealTime());
-        assertTrue(row.getIssues().stream().anyMatch(issue -> issue.contains("F 列成交时间无法解析")));
+        assertTrue(row.getIssues().stream().anyMatch(issue -> issue.contains("G 列成交时间无法解析")));
     }
 
     @Test
@@ -632,9 +670,10 @@ class CustomerOrderImportParserTest {
                 Row dietHeader = dietSheet.createRow(1);
                 dietHeader.createCell(0).setCellValue("编号");
                 dietHeader.createCell(3).setCellValue("特殊需求");
-                dietHeader.createCell(4).setCellValue("禁忌明细");
-                dietHeader.createCell(5).setCellValue("成单时间");
-                dietHeader.createCell(6).setCellValue("术后");
+                dietHeader.createCell(4).setCellValue("基本情况描述");
+                dietHeader.createCell(5).setCellValue("禁忌明细");
+                dietHeader.createCell(6).setCellValue("成单时间");
+                dietHeader.createCell(7).setCellValue("术后");
                 dietSheet.createRow(2).createCell(0).setCellValue("注意：匿名样例说明，不是客户记录");
                 dietSheetCustomizer.accept(dietSheet);
             }

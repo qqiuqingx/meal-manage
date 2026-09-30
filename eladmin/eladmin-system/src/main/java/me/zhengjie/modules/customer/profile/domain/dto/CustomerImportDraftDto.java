@@ -145,28 +145,28 @@ public class CustomerImportDraftDto implements Serializable {
      */
     private String specialRequirements;
 
-    /** C 列医嘱原文及目标客户字段值。 */
+    /** E 列医嘱原文及目标客户字段值。 */
     private String medicalRequirements;
 
-    /** F 列来源成交时间原文。 */
+    /** G 列来源成交时间原文。 */
     private String dealTimeSource;
 
-    /** F 列解析成交时间，格式 yyyy-MM-dd HH:mm:ss。 */
+    /** G 列解析成交时间，格式 yyyy-MM-dd HH:mm:ss。 */
     private String dealTime;
 
     /** 成交时间为空时由确认请求开始时间补齐。 */
     private Boolean dealTimeAtConfirmation;
 
-    /** G 列术后原文。 */
+    /** H 列术后原文。 */
     private String postoperativeInfo;
 
     /** D 列完整原文块。 */
     private List<String> dishRequirementsRaw = new ArrayList<>();
 
-    /** E 列完整原文块。 */
+    /** F 列完整原文块。 */
     private List<String> dietaryRestrictionsRaw = new ArrayList<>();
 
-    /** D/E 列匹配词项、候选与状态。 */
+    /** D/F 列匹配词项、候选与状态。 */
     private List<CustomerDietMatchDto> dietMatches = new ArrayList<>();
 
     /** 本候选是否只补录已存在客户资料。 */

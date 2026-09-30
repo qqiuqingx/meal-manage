@@ -27,6 +27,20 @@ class CustomerDietMatchServiceTest {
     private final CustomerDietMatchService service = new CustomerDietMatchService();
 
     @Test
+    void shouldTraceRestrictionsToColumnF() {
+        Fixture fixture = fixture(sourceRow("A100", "香菜", "牛肉"));
+
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+
+        List<CustomerDietMatchDto> matches = fixture.parsed.getDietImportData().getMatches();
+        assertEquals(Integer.valueOf(4), matches.get(0).getSourceColumn());
+        assertEquals("DIET:4:4:0", matches.get(0).getSourceKey());
+        assertEquals(Integer.valueOf(6), matches.get(1).getSourceColumn());
+        assertEquals("DIET:4:6:0", matches.get(1).getSourceKey());
+        assertEquals("DIETARY_RESTRICTIONS", matches.get(1).getSide());
+    }
+
+    @Test
     void shouldKeepDirectionFromColumnAndApplyAllCrossTypeCandidates() {
         CustomerDietSourceRow row = sourceRow("A100", "不吃香菜，芹菜", "喜欢吃牛肉");
         Fixture fixture = fixture(row);

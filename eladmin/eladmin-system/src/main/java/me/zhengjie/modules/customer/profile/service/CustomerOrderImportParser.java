@@ -41,7 +41,7 @@ import java.util.regex.Pattern;
  * 客户与首单批量导入的工作簿解析器。
  *
  * <p>只做「读工作簿 → 聚合客户草稿 → 逐行校验」的纯解析工作，不访问数据库、不写任何数据，
- * 因此预览阶段可以安全地反复调用。可选的「客户禁忌」工作表按固定 A～G 列读取。
+ * 因此预览阶段可以安全地反复调用。可选的「客户禁忌」工作表按固定 A～H 列（跳过 C 列）读取。
  * 父套餐映射、编号池校验与重复建档判定由
  * {@link CustomerProfileImportService} 在只读校验阶段补齐。</p>
  *
@@ -314,7 +314,7 @@ public class CustomerOrderImportParser {
     }
 
     /**
-     * 校验并解析「客户禁忌」工作表固定 A～G 列中的客户信息。
+     * 校验并解析「客户禁忌」工作表固定 A～H 列（跳过 C 列）中的客户信息。
      *
      * @param sheet 客户禁忌工作表
      * @param calendarMonth 月份工作表所属年月，用于补齐成交时间年份
@@ -325,12 +325,12 @@ public class CustomerOrderImportParser {
         int headerRowIndex = findDietHeaderRow(sheet);
         if (headerRowIndex < 0) {
             result.getIssues().add(CustomerImportIssueDto.of(CustomerImportIssueCategory.WORKBOOK_ERROR,
-                    null, null, "「客户禁忌」工作表未找到 A～G 列饮食信息表头"));
+                    null, null, "「客户禁忌」工作表未找到 A～H 列（跳过 C 列）饮食信息表头"));
             return null;
         }
         Row header = sheet.getRow(headerRowIndex);
-        String[] expected = {"编号", "新编号", "医嘱", "特殊需求", "禁忌", "成单时间", "术后"};
-        int[] requiredColumns = {0, 3, 4, 5, 6};
+        String[] expected = {"编号", "新编号", null, "特殊需求", "医嘱", "禁忌", "成单时间", "术后"};
+        int[] requiredColumns = {0, 3, 4, 5, 6, 7};
         for (int column : requiredColumns) {
             if (!headerMatches(text(header.getCell(column)), expected[column])) {
                 result.getIssues().add(CustomerImportIssueDto.of(CustomerImportIssueCategory.WORKBOOK_ERROR,
@@ -345,13 +345,6 @@ public class CustomerOrderImportParser {
                     headerRowIndex + 1, null, "「客户禁忌」工作表 B 列表头应为空或「新编号」"));
             return null;
         }
-        String medicalHeader = text(header.getCell(2));
-        if (!medicalHeader.isEmpty() && !headerMatches(medicalHeader, "医嘱")) {
-            result.getIssues().add(CustomerImportIssueDto.of(CustomerImportIssueCategory.WORKBOOK_ERROR,
-                    headerRowIndex + 1, null, "「客户禁忌」工作表 C 列表头应为空或「医嘱」"));
-            return null;
-        }
-
         int firstDataRow = headerRowIndex + 1;
         Row following = sheet.getRow(firstDataRow);
         if (following != null) {
@@ -395,9 +388,10 @@ public class CustomerOrderImportParser {
             }
             if (headerMatches(text(row.getCell(0)), "编号")
                     && headerMatches(text(row.getCell(3)), "特殊需求")
-                    && headerMatches(text(row.getCell(4)), "禁忌")
-                    && headerMatches(text(row.getCell(5)), "成单时间")
-                    && headerMatches(text(row.getCell(6)), "术后")) {
+                    && headerMatches(text(row.getCell(4)), "医嘱")
+                    && headerMatches(text(row.getCell(5)), "禁忌")
+                    && headerMatches(text(row.getCell(6)), "成单时间")
+                    && headerMatches(text(row.getCell(7)), "术后")) {
                 return rowIndex;
             }
         }
@@ -422,7 +416,7 @@ public class CustomerOrderImportParser {
             return actual.contains("新编号");
         }
         if ("医嘱".equals(expected)) {
-            return actual.contains("医嘱") || actual.contains("医疗");
+            return actual.contains("医嘱") || actual.contains("医疗") || actual.contains("基本情况");
         }
         if ("特殊需求".equals(expected)) {
             return actual.contains("特殊需求") || actual.contains("想吃");
@@ -437,7 +431,7 @@ public class CustomerOrderImportParser {
     }
 
     /**
-     * 读取第二工作表 A～G 列并解析月日成交时间。
+     * 读取第二工作表 A～H 列（跳过 C 列）并解析月日成交时间。
      *
      * @param row 工作簿来源行
      * @param calendarMonth 月份工作表年月，用于成交时间补年
@@ -446,11 +440,11 @@ public class CustomerOrderImportParser {
     private CustomerDietSourceRow readDietSourceRow(Row row, YearMonth calendarMonth) {
         String codeA = plainCellText(row.getCell(0));
         String codeB = plainCellText(row.getCell(1));
-        String medical = dietCellText(row.getCell(2));
+        String medical = dietCellText(row.getCell(4));
         String wants = dietCellText(row.getCell(3));
-        String restrictions = dietCellText(row.getCell(4));
-        String dealTimeSource = dietCellText(row.getCell(5));
-        String postoperative = dietCellText(row.getCell(6));
+        String restrictions = dietCellText(row.getCell(5));
+        String dealTimeSource = dietCellText(row.getCell(6));
+        String postoperative = dietCellText(row.getCell(7));
         if (isBlank(codeA) && isBlank(codeB) && isBlank(medical) && isBlank(wants)
                 && isBlank(restrictions) && isBlank(dealTimeSource) && isBlank(postoperative)) {
             return null;
@@ -467,15 +461,15 @@ public class CustomerOrderImportParser {
         source.setDealTimeSource(nonBlankOriginal(dealTimeSource));
         source.setPostoperativeInfo(nonBlankOriginal(postoperative));
 
-        addFormulaReadIssue(row.getCell(2), "C", source);
         addFormulaReadIssue(row.getCell(3), "D", source);
         addFormulaReadIssue(row.getCell(4), "E", source);
         addFormulaReadIssue(row.getCell(5), "F", source);
         addFormulaReadIssue(row.getCell(6), "G", source);
+        addFormulaReadIssue(row.getCell(7), "H", source);
         if (!isBlank(dealTimeSource)) {
-            LocalDateTime dealTime = parseDealTime(row.getCell(5), dealTimeSource, calendarMonth);
+            LocalDateTime dealTime = parseDealTime(row.getCell(6), dealTimeSource, calendarMonth);
             if (dealTime == null) {
-                source.getIssues().add("第 " + source.getSourceRow() + " 行 F 列成交时间无法解析：「" + dealTimeSource + "」");
+                source.getIssues().add("第 " + source.getSourceRow() + " 行 G 列成交时间无法解析：「" + dealTimeSource + "」");
             } else {
                 source.setDealTime(dealTime);
             }
@@ -516,7 +510,7 @@ public class CustomerOrderImportParser {
     /**
      * 读取饮食信息单元格原文，跳过 DISPIMG 图片公式。
      *
-     * @param cell C～G 列单元格
+     * @param cell D～H 列单元格
      * @return 原文文本；图片公式和空单元格返回空字符串
      */
     private String dietCellText(Cell cell) {
