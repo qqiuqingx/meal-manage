@@ -55,6 +55,8 @@
         <result column="child_package_name" property="childPackageName"/>
         <result column="allergy_tags" property="allergyTags" typeHandler="me.zhengjie.modules.customer.profile.handler.AllergyTagsTypeHandler"/>
         <result column="special_requirements" property="specialRequirements"/>
+        <result column="medical_requirements" property="medicalRequirements"/>
+        <result column="postoperative_info" property="postoperativeInfo"/>
         <result column="dish_requirements" property="dishRequirements"
                 typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietItemsTypeHandler"/>
         <result column="dietary_restrictions" property="dietaryRestrictions"
@@ -103,9 +105,10 @@
         WHERE id = #{id}
     </update>
 
-    <!-- 条件查询订单列表(关联客户姓名、手机号、套餐名称和过敏标签) -->
+    <!-- 条件查询订单列表，关联客户资料、饮食要求、地址及套餐名称。 -->
     <select id="findAll" resultMap="JoinResultMap">
         SELECT o.*, cp.customer_name, cp.phone, cp.allergy_tags, cp.special_requirements,
+               cp.medical_requirements, cp.postoperative_info,
                cp.dish_requirements, cp.dietary_restrictions, cp.dish_requirements_raw, cp.dietary_restrictions_raw,
                pp.package_name as parent_package_name,
                sp.sub_package_name as child_package_name,

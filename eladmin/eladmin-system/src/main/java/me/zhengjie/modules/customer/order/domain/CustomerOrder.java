@@ -256,6 +256,14 @@ public class CustomerOrder implements Serializable {
     @TableField(exist = false)
     private String specialRequirements;
 
+    /** 客户基本情况（医嘱），读取当前客户档案，仅用于订单查询展示。 */
+    @TableField(exist = false)
+    private String medicalRequirements;
+
+    /** 客户术后情况原文，读取当前客户档案，不计算或转换天数。 */
+    @TableField(exist = false)
+    private String postoperativeInfo;
+
     /** 客户共享的菜品特殊要求结构化对象，只用于订单查询投影。 */
     @TableField(exist = false)
     private List<CustomerDietItemDto> dishRequirements;

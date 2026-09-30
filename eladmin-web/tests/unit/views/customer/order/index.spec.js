@@ -219,7 +219,7 @@ describe('CustomerOrder edit flow', () => {
     expect(source).toContain('@click="openCustomMenuDialog(scope.row)"')
     expect(source).toContain("{{ menuDialogRow.customMenuImage ? '替换菜单图片' : '上传菜单图片' }}")
     expect(source).toContain('<el-table-column column-key="dishRequirements" label="菜品特殊要求" min-width="240">')
-    expect(source).toContain('<el-table-column column-key="dietaryRestrictions" label="客户禁忌" min-width="240">')
+    expect(source).toContain('<el-table-column column-key="dietaryRestrictions" label="禁忌食物" min-width="240">')
     expect(source).toContain('<CustomerDietCell :raw="scope.row.dishRequirementsRaw" :items="scope.row.dishRequirements" />')
     expect(source).toContain('<CustomerDietCell :raw="scope.row.dietaryRestrictionsRaw" :items="scope.row.dietaryRestrictions" />')
     expect(source).toContain("@click=\"beginInlineDietEdit(scope.row, 'dishRequirements')\"")
@@ -229,6 +229,84 @@ describe('CustomerOrder edit flow', () => {
     expect(source).not.toContain('编辑对象')
     expect(source).not.toContain('inline-diet-actions')
     expect(source).not.toContain('<el-popover placement="left" width="380" trigger="click">')
+  })
+
+  test('defaults to meal plan columns and lets users restore hidden order columns', async() => {
+    const localVue = createLocalVue()
+    localVue.use(ElementUI)
+    const operation = jest.requireActual('@crud/CRUD.operation').default
+    window.localStorage.setItem('customer-order-column-order-v1', JSON.stringify(['orderCode', 'customerName', 'phone']))
+    window.localStorage.removeItem('customer-order-column-order-v2')
+    const wrapper = mount({
+      ...customerOrderPage,
+      components: {
+        ...customerOrderPage.components,
+        crudOperation: {
+          ...operation,
+          data() { return { ...operation.data.call(this), crud: this.$parent.crud } }
+        }
+      },
+      created() {
+        this.columnSorter = null
+        this.columnHeaderRow = null
+        this.columnOrderLoaded = false
+      },
+      mounted() {
+        this.crud.props.table = this.$refs.table
+        this.$nextTick(() => this.initializeColumnOrder())
+      },
+      data() {
+        return {
+          ...customerOrderPage.data.call(this),
+          roles: ['admin'],
+          query: {},
+          form: {},
+          crud: {
+            props: { searchToggle: false, table: null },
+            optShow: {},
+            status: { cu: 0, add: 0 },
+            page: { current: 1, size: 10, total: 1 },
+            data: [{ id: 1, status: 1, medicalRequirements: '少盐', postoperativeInfo: '4个月' }],
+            updateProp: jest.fn(),
+            getTable() { return this.props.table },
+            selectionChangeHandler: jest.fn(),
+            sizeChangeHandler: jest.fn(),
+            pageChangeHandler: jest.fn()
+          }
+        }
+      }
+    }, {
+      localVue,
+      mocks: { checkPer: () => true },
+      stubs: { 'el-pagination': true }
+    })
+
+    try {
+      await flushDietUi()
+      const labels = () => wrapper.vm.$refs.table.store.states.columns.filter(column => column.type === 'default').map(column => column.label)
+      const expected = [
+        '手机号', '地址', '客户编号', '客户姓名', '特殊要求', '排餐模式', '餐次', '规格', '含汤',
+        '早餐', '午晚', '合计', '核销', '已排餐', '剩余', '预计剩余', '状态', '基本情况',
+        '成单时间', '术后天数', '菜品特殊要求', '过敏食物', '禁忌食物', '自定义菜单'
+      ]
+      expect(labels()).toEqual(expected.concat('操作'))
+      expect(wrapper.find('.el-table__body').text()).toContain('少盐')
+      expect(wrapper.find('.el-table__body').text()).toContain('4个月')
+
+      const toolbar = wrapper.vm.$children.find(child => Array.isArray(child.tableColumns))
+      const hiddenColumns = toolbar.tableColumns.filter(column => !column.visible)
+      expect(hiddenColumns.map(column => column.label)).toEqual(['余额', '销售渠道', '订单期间', '定金', '总金额', '成交金额', '订单编号'])
+      hiddenColumns.forEach(column => {
+        column.visible = true
+        toolbar.handleCheckedTableColumnsChange(column)
+      })
+      await flushDietUi()
+      expect(labels()).toEqual(expected.concat(hiddenColumns.map(column => column.label), '操作'))
+    } finally {
+      wrapper.destroy()
+      window.localStorage.removeItem('customer-order-column-order-v1')
+      window.localStorage.removeItem('customer-order-column-order-v2')
+    }
   })
 
   test('loads active dictionary options and keeps selected historical references in the draft', async() => {

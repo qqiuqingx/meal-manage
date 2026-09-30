@@ -32,6 +32,7 @@
       <crudOperation
         :permission="permission"
         :ignore-columns="['actions']"
+        :hidden-columns="hiddenColumns"
         :column-order="columnOrder"
         @column-visibility-change="handleColumnVisibilityChange"
       >
@@ -47,128 +48,6 @@
       @selection-change="crud.selectionChangeHandler"
     >
       <el-table-column :selectable="checkboxT" type="selection" width="55" />
-      <el-table-column label="客户编号" prop="customerCode" width="130">
-        <template slot-scope="scope">
-          <el-input
-            v-if="isInlineEditing(scope.row, 'customerCode')"
-            :ref="inlineInputRef(scope.row, 'customerCode')"
-            :value="getInlineDraft(scope.row, 'customerCode')"
-            :disabled="isInlineBusy(scope.row)"
-            size="mini"
-            @input="setInlineDraft(scope.row, 'customerCode', $event)"
-            @blur="submitInlineDraft(scope.row, 'customerCode')"
-            @mouseleave.native="submitInlineDraft(scope.row, 'customerCode')"
-            @keyup.enter.native="submitInlineDraft(scope.row, 'customerCode')"
-            @keyup.esc.native="cancelInlineDraft(scope.row, 'customerCode', $event)"
-          />
-          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'customerCode')">{{ scope.row.customerCode || '-' }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="客户姓名" prop="customerName" width="100" />
-      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip>
-        <template slot-scope="scope">
-          <el-input
-            v-if="isInlineEditing(scope.row, 'specialRequirements')"
-            :ref="inlineInputRef(scope.row, 'specialRequirements')"
-            :value="getInlineDraft(scope.row, 'specialRequirements')"
-            :disabled="isInlineBusy(scope.row)"
-            size="mini"
-            placeholder="特殊要求"
-            @input="setInlineDraft(scope.row, 'specialRequirements', $event)"
-            @blur="submitInlineDraft(scope.row, 'specialRequirements')"
-            @mouseleave.native="submitInlineDraft(scope.row, 'specialRequirements')"
-            @keyup.enter.native="submitInlineDraft(scope.row, 'specialRequirements')"
-            @keyup.esc.native="cancelInlineDraft(scope.row, 'specialRequirements', $event)"
-          />
-          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'specialRequirements')">{{ scope.row.specialRequirements || '-' }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column column-key="dishRequirements" label="菜品特殊要求" min-width="240">
-        <template slot-scope="scope">
-          <div v-if="isInlineEditing(scope.row, 'dishRequirements')" class="inline-diet-editor">
-            <div class="customer-diet-cell__label">原文</div>
-            <div v-if="scope.row.dishRequirementsRaw && scope.row.dishRequirementsRaw.length">
-              <div v-for="(block, index) in scope.row.dishRequirementsRaw" :key="index" class="customer-diet-cell__text">{{ block }}</div>
-            </div>
-            <div v-else class="customer-diet-cell__text">—</div>
-            <div class="customer-diet-cell__label">已确认对象</div>
-            <el-select
-              :ref="inlineInputRef(scope.row, 'dishRequirements')"
-              :value="getInlineDietDraft(scope.row, 'dishRequirements')"
-              multiple
-              filterable
-              collapse-tags
-              size="mini"
-              placeholder="搜索并选择对象"
-              :disabled="isInlineBusy(scope.row)"
-              style="width: 100%;"
-              @input="setInlineDietDraft(scope.row, 'dishRequirements', $event)"
-              @visible-change="!$event && saveInlineDietDraft(scope.row, 'dishRequirements')"
-              @keydown.esc.native.capture.stop="cancelInlineDietDraft(scope.row, 'dishRequirements')"
-            >
-              <el-option
-                v-for="option in getInlineDietChoices(scope.row, 'dishRequirements')"
-                :key="option.selectionKey"
-                :label="dietOptionLabel(option)"
-                :value="option.selectionKey"
-                :disabled="option.historical && !isInlineDietSelected(scope.row, 'dishRequirements', option.selectionKey)"
-              />
-            </el-select>
-          </div>
-          <div
-            v-else
-            class="inline-diet-display"
-            :class="{ 'is-editable': isInlineEditable(scope.row) && !isInlineBusy(scope.row) && !dietOptionsLoading }"
-            :title="isInlineEditable(scope.row) ? '点击编辑，收起下拉框后自动保存，Esc 取消' : null"
-            @click="beginInlineDietEdit(scope.row, 'dishRequirements')"
-          >
-            <CustomerDietCell :raw="scope.row.dishRequirementsRaw" :items="scope.row.dishRequirements" />
-          </div>
-        </template>
-      </el-table-column>
-      <el-table-column column-key="dietaryRestrictions" label="客户禁忌" min-width="240">
-        <template slot-scope="scope">
-          <div v-if="isInlineEditing(scope.row, 'dietaryRestrictions')" class="inline-diet-editor">
-            <div class="customer-diet-cell__label">原文</div>
-            <div v-if="scope.row.dietaryRestrictionsRaw && scope.row.dietaryRestrictionsRaw.length">
-              <div v-for="(block, index) in scope.row.dietaryRestrictionsRaw" :key="index" class="customer-diet-cell__text">{{ block }}</div>
-            </div>
-            <div v-else class="customer-diet-cell__text">—</div>
-            <div class="customer-diet-cell__label">已确认对象</div>
-            <el-select
-              :ref="inlineInputRef(scope.row, 'dietaryRestrictions')"
-              :value="getInlineDietDraft(scope.row, 'dietaryRestrictions')"
-              multiple
-              filterable
-              collapse-tags
-              size="mini"
-              placeholder="搜索并选择对象"
-              :disabled="isInlineBusy(scope.row)"
-              style="width: 100%;"
-              @input="setInlineDietDraft(scope.row, 'dietaryRestrictions', $event)"
-              @visible-change="!$event && saveInlineDietDraft(scope.row, 'dietaryRestrictions')"
-              @keydown.esc.native.capture.stop="cancelInlineDietDraft(scope.row, 'dietaryRestrictions')"
-            >
-              <el-option
-                v-for="option in getInlineDietChoices(scope.row, 'dietaryRestrictions')"
-                :key="option.selectionKey"
-                :label="dietOptionLabel(option)"
-                :value="option.selectionKey"
-                :disabled="option.historical && !isInlineDietSelected(scope.row, 'dietaryRestrictions', option.selectionKey)"
-              />
-            </el-select>
-          </div>
-          <div
-            v-else
-            class="inline-diet-display"
-            :class="{ 'is-editable': isInlineEditable(scope.row) && !isInlineBusy(scope.row) && !dietOptionsLoading }"
-            :title="isInlineEditable(scope.row) ? '点击编辑，收起下拉框后自动保存，Esc 取消' : null"
-            @click="beginInlineDietEdit(scope.row, 'dietaryRestrictions')"
-          >
-            <CustomerDietCell :raw="scope.row.dietaryRestrictionsRaw" :items="scope.row.dietaryRestrictions" />
-          </div>
-        </template>
-      </el-table-column>
       <el-table-column label="手机号" prop="phone" width="145">
         <template slot-scope="scope">
           <el-input
@@ -210,6 +89,66 @@
               {{ addr.type }}: {{ addr.detail }}
             </el-tag>
           </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="客户编号" prop="customerCode" width="130">
+        <template slot-scope="scope">
+          <el-input
+            v-if="isInlineEditing(scope.row, 'customerCode')"
+            :ref="inlineInputRef(scope.row, 'customerCode')"
+            :value="getInlineDraft(scope.row, 'customerCode')"
+            :disabled="isInlineBusy(scope.row)"
+            size="mini"
+            @input="setInlineDraft(scope.row, 'customerCode', $event)"
+            @blur="submitInlineDraft(scope.row, 'customerCode')"
+            @mouseleave.native="submitInlineDraft(scope.row, 'customerCode')"
+            @keyup.enter.native="submitInlineDraft(scope.row, 'customerCode')"
+            @keyup.esc.native="cancelInlineDraft(scope.row, 'customerCode', $event)"
+          />
+          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'customerCode')">{{ scope.row.customerCode || '-' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="客户姓名" prop="customerName" width="100" />
+      <el-table-column label="特殊要求" prop="specialRequirements" min-width="140" show-overflow-tooltip>
+        <template slot-scope="scope">
+          <el-input
+            v-if="isInlineEditing(scope.row, 'specialRequirements')"
+            :ref="inlineInputRef(scope.row, 'specialRequirements')"
+            :value="getInlineDraft(scope.row, 'specialRequirements')"
+            :disabled="isInlineBusy(scope.row)"
+            size="mini"
+            placeholder="特殊要求"
+            @input="setInlineDraft(scope.row, 'specialRequirements', $event)"
+            @blur="submitInlineDraft(scope.row, 'specialRequirements')"
+            @mouseleave.native="submitInlineDraft(scope.row, 'specialRequirements')"
+            @keyup.enter.native="submitInlineDraft(scope.row, 'specialRequirements')"
+            @keyup.esc.native="cancelInlineDraft(scope.row, 'specialRequirements', $event)"
+          />
+          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'specialRequirements')">{{ scope.row.specialRequirements || '-' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column column-key="scheduleMode" label="排餐模式" width="100">
+        <template slot-scope="scope">
+          <el-select
+            v-if="isInlineEditing(scope.row, 'scheduleMode')"
+            :ref="inlineInputRef(scope.row, 'scheduleMode')"
+            :value="scope.row.scheduleMode"
+            :disabled="isInlineBusy(scope.row)"
+            size="mini"
+            @change="saveInlineSelection(scope.row, 'scheduleMode', $event)"
+            @visible-change="!$event && cancelInlineDraft(scope.row, 'scheduleMode')"
+          >
+            <el-option label="指定日期" value="SCHEDULE" />
+            <el-option label="每天送" value="DAILY" />
+            <el-option label="周末送" value="WEEKEND" />
+            <el-option label="工作日" value="WEEKDAY" />
+          </el-select>
+          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'scheduleMode')">{{ scheduleModeText(scope.row.scheduleMode) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column column-key="mealType" label="餐次" width="70" align="center">
+        <template slot-scope="scope">
+          {{ mealTypeText(scope.row.mealType, scope.row.status) }}
         </template>
       </el-table-column>
       <el-table-column column-key="specification" label="规格" width="180">
@@ -283,76 +222,6 @@
           <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'soupCount')">{{ scope.row.soupCount >= 1 ? '含汤' : '不含汤' }}</span>
         </template>
       </el-table-column>
-      <el-table-column column-key="scheduleMode" label="排餐模式" width="100">
-        <template slot-scope="scope">
-          <el-select
-            v-if="isInlineEditing(scope.row, 'scheduleMode')"
-            :ref="inlineInputRef(scope.row, 'scheduleMode')"
-            :value="scope.row.scheduleMode"
-            :disabled="isInlineBusy(scope.row)"
-            size="mini"
-            @change="saveInlineSelection(scope.row, 'scheduleMode', $event)"
-            @visible-change="!$event && cancelInlineDraft(scope.row, 'scheduleMode')"
-          >
-            <el-option label="指定日期" value="SCHEDULE" />
-            <el-option label="每天送" value="DAILY" />
-            <el-option label="周末送" value="WEEKEND" />
-            <el-option label="工作日" value="WEEKDAY" />
-          </el-select>
-          <span v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'scheduleMode')">{{ scheduleModeText(scope.row.scheduleMode) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column column-key="customMenuImage" label="自定义菜单" width="120" align="center">
-        <template slot-scope="scope">
-          <div
-            v-if="scope.row.customMenuImage || isInlineEditable(scope.row)"
-            class="inline-menu-cell"
-            @click="openCustomMenuDialog(scope.row)"
-          >
-            <el-image
-              v-if="scope.row.customMenuImage"
-              :src="getCustomMenuImageUrl(scope.row.customMenuImage)"
-              fit="contain"
-              style="width: 40px; height: 40px;"
-            />
-            <span v-else class="inline-value is-editable">上传菜单</span>
-          </div>
-          <span v-else>-</span>
-        </template>
-      </el-table-column>
-      <el-table-column column-key="allergyTags" label="过敏" width="190">
-        <template slot-scope="scope">
-          <div v-if="isInlineEditing(scope.row, 'allergyTags')" class="inline-allergy-cell" @mouseleave="cancelInlineDraft(scope.row, 'allergyTags')">
-            <el-tag
-              v-for="(tag, index) in (scope.row.allergyTags || [])"
-              :key="`${tag}-${index}`"
-              size="mini"
-              type="warning"
-              closable
-              :disable-transitions="true"
-              @close="removeAllergyTag(scope.row, tag)"
-            >{{ tag }}</el-tag>
-            <div class="inline-allergy-input">
-              <el-input
-                :value="getAllergyDraft(scope.row)"
-                :disabled="isInlineBusy(scope.row)"
-                size="mini"
-                placeholder="添加标签"
-                @input="setAllergyDraft(scope.row, $event)"
-                @keyup.enter.native="addAllergyTag(scope.row)"
-              />
-              <el-button size="mini" type="text" :disabled="isInlineBusy(scope.row)" @click="addAllergyTag(scope.row)">添加</el-button>
-              <el-button size="mini" type="text" @click="cancelInlineDraft(scope.row, 'allergyTags')">完成</el-button>
-            </div>
-          </div>
-          <div v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'allergyTags')">
-            <span v-if="!scope.row.allergyTags || scope.row.allergyTags.length === 0">-</span>
-            <el-tag v-for="(tag, index) in (scope.row.allergyTags || [])" :key="`${tag}-${index}`" size="mini" type="warning" style="margin-right: 4px;">
-              {{ tag }}
-            </el-tag>
-          </div>
-        </template>
-      </el-table-column>
       <el-table-column label="早餐" prop="breakfastCount" width="90" align="center">
         <template slot-scope="scope">
           <el-input
@@ -415,19 +284,14 @@
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="预计剩余餐数" prop="estimatedRemainingCount" width="120" align="center">
+      <el-table-column label="预计剩余" prop="estimatedRemainingCount" width="120" align="center">
         <template slot="header">
           <span class="column-help">
-            预计剩余餐数
+            预计剩余
             <el-tooltip content="预计剩余餐数 = 剩余餐数 - 今天已排餐但未核销餐数；今天已核销的餐不重复扣减。" placement="top">
               <i class="el-icon-question" />
             </el-tooltip>
           </span>
-        </template>
-      </el-table-column>
-      <el-table-column v-if="canViewAmount" label="余额" prop="mealBalance" width="90" align="right">
-        <template slot-scope="scope">
-          {{ formatMoney(scope.row.mealBalance) }}
         </template>
       </el-table-column>
       <el-table-column column-key="status" label="状态" width="80" align="center">
@@ -449,9 +313,153 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column column-key="mealType" label="餐次" width="70" align="center">
+      <el-table-column label="基本情况" prop="medicalRequirements" min-width="150" show-overflow-tooltip>
+        <template slot-scope="{ row }">{{ row.medicalRequirements || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="成单时间" prop="dealTime" width="150" />
+      <el-table-column label="术后天数" prop="postoperativeInfo" width="100" align="center">
+        <template slot-scope="{ row }">{{ row.postoperativeInfo || '-' }}</template>
+      </el-table-column>
+      <el-table-column column-key="dishRequirements" label="菜品特殊要求" min-width="240">
         <template slot-scope="scope">
-          {{ mealTypeText(scope.row.mealType, scope.row.status) }}
+          <div v-if="isInlineEditing(scope.row, 'dishRequirements')" class="inline-diet-editor">
+            <div class="customer-diet-cell__label">原文</div>
+            <div v-if="scope.row.dishRequirementsRaw && scope.row.dishRequirementsRaw.length">
+              <div v-for="(block, index) in scope.row.dishRequirementsRaw" :key="index" class="customer-diet-cell__text">{{ block }}</div>
+            </div>
+            <div v-else class="customer-diet-cell__text">—</div>
+            <div class="customer-diet-cell__label">已确认对象</div>
+            <el-select
+              :ref="inlineInputRef(scope.row, 'dishRequirements')"
+              :value="getInlineDietDraft(scope.row, 'dishRequirements')"
+              multiple
+              filterable
+              collapse-tags
+              size="mini"
+              placeholder="搜索并选择对象"
+              :disabled="isInlineBusy(scope.row)"
+              style="width: 100%;"
+              @input="setInlineDietDraft(scope.row, 'dishRequirements', $event)"
+              @visible-change="!$event && saveInlineDietDraft(scope.row, 'dishRequirements')"
+              @keydown.esc.native.capture.stop="cancelInlineDietDraft(scope.row, 'dishRequirements')"
+            >
+              <el-option
+                v-for="option in getInlineDietChoices(scope.row, 'dishRequirements')"
+                :key="option.selectionKey"
+                :label="dietOptionLabel(option)"
+                :value="option.selectionKey"
+                :disabled="option.historical && !isInlineDietSelected(scope.row, 'dishRequirements', option.selectionKey)"
+              />
+            </el-select>
+          </div>
+          <div
+            v-else
+            class="inline-diet-display"
+            :class="{ 'is-editable': isInlineEditable(scope.row) && !isInlineBusy(scope.row) && !dietOptionsLoading }"
+            :title="isInlineEditable(scope.row) ? '点击编辑，收起下拉框后自动保存，Esc 取消' : null"
+            @click="beginInlineDietEdit(scope.row, 'dishRequirements')"
+          >
+            <CustomerDietCell :raw="scope.row.dishRequirementsRaw" :items="scope.row.dishRequirements" />
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column column-key="allergyTags" label="过敏食物" width="190">
+        <template slot-scope="scope">
+          <div v-if="isInlineEditing(scope.row, 'allergyTags')" class="inline-allergy-cell" @mouseleave="cancelInlineDraft(scope.row, 'allergyTags')">
+            <el-tag
+              v-for="(tag, index) in (scope.row.allergyTags || [])"
+              :key="`${tag}-${index}`"
+              size="mini"
+              type="warning"
+              closable
+              :disable-transitions="true"
+              @close="removeAllergyTag(scope.row, tag)"
+            >{{ tag }}</el-tag>
+            <div class="inline-allergy-input">
+              <el-input
+                :value="getAllergyDraft(scope.row)"
+                :disabled="isInlineBusy(scope.row)"
+                size="mini"
+                placeholder="添加标签"
+                @input="setAllergyDraft(scope.row, $event)"
+                @keyup.enter.native="addAllergyTag(scope.row)"
+              />
+              <el-button size="mini" type="text" :disabled="isInlineBusy(scope.row)" @click="addAllergyTag(scope.row)">添加</el-button>
+              <el-button size="mini" type="text" @click="cancelInlineDraft(scope.row, 'allergyTags')">完成</el-button>
+            </div>
+          </div>
+          <div v-else class="inline-value" :class="{ 'is-editable': isInlineEditable(scope.row) }" @click="beginInlineEdit(scope.row, 'allergyTags')">
+            <span v-if="!scope.row.allergyTags || scope.row.allergyTags.length === 0">-</span>
+            <el-tag v-for="(tag, index) in (scope.row.allergyTags || [])" :key="`${tag}-${index}`" size="mini" type="warning" style="margin-right: 4px;">
+              {{ tag }}
+            </el-tag>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column column-key="dietaryRestrictions" label="禁忌食物" min-width="240">
+        <template slot-scope="scope">
+          <div v-if="isInlineEditing(scope.row, 'dietaryRestrictions')" class="inline-diet-editor">
+            <div class="customer-diet-cell__label">原文</div>
+            <div v-if="scope.row.dietaryRestrictionsRaw && scope.row.dietaryRestrictionsRaw.length">
+              <div v-for="(block, index) in scope.row.dietaryRestrictionsRaw" :key="index" class="customer-diet-cell__text">{{ block }}</div>
+            </div>
+            <div v-else class="customer-diet-cell__text">—</div>
+            <div class="customer-diet-cell__label">已确认对象</div>
+            <el-select
+              :ref="inlineInputRef(scope.row, 'dietaryRestrictions')"
+              :value="getInlineDietDraft(scope.row, 'dietaryRestrictions')"
+              multiple
+              filterable
+              collapse-tags
+              size="mini"
+              placeholder="搜索并选择对象"
+              :disabled="isInlineBusy(scope.row)"
+              style="width: 100%;"
+              @input="setInlineDietDraft(scope.row, 'dietaryRestrictions', $event)"
+              @visible-change="!$event && saveInlineDietDraft(scope.row, 'dietaryRestrictions')"
+              @keydown.esc.native.capture.stop="cancelInlineDietDraft(scope.row, 'dietaryRestrictions')"
+            >
+              <el-option
+                v-for="option in getInlineDietChoices(scope.row, 'dietaryRestrictions')"
+                :key="option.selectionKey"
+                :label="dietOptionLabel(option)"
+                :value="option.selectionKey"
+                :disabled="option.historical && !isInlineDietSelected(scope.row, 'dietaryRestrictions', option.selectionKey)"
+              />
+            </el-select>
+          </div>
+          <div
+            v-else
+            class="inline-diet-display"
+            :class="{ 'is-editable': isInlineEditable(scope.row) && !isInlineBusy(scope.row) && !dietOptionsLoading }"
+            :title="isInlineEditable(scope.row) ? '点击编辑，收起下拉框后自动保存，Esc 取消' : null"
+            @click="beginInlineDietEdit(scope.row, 'dietaryRestrictions')"
+          >
+            <CustomerDietCell :raw="scope.row.dietaryRestrictionsRaw" :items="scope.row.dietaryRestrictions" />
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column column-key="customMenuImage" label="自定义菜单" width="120" align="center">
+        <template slot-scope="scope">
+          <div
+            v-if="scope.row.customMenuImage || isInlineEditable(scope.row)"
+            class="inline-menu-cell"
+            @click="openCustomMenuDialog(scope.row)"
+          >
+            <el-image
+              v-if="scope.row.customMenuImage"
+              :src="getCustomMenuImageUrl(scope.row.customMenuImage)"
+              fit="contain"
+              style="width: 40px; height: 40px;"
+            />
+            <span v-else class="inline-value is-editable">上传菜单</span>
+          </div>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="canViewAmount" label="余额" prop="mealBalance" width="90" align="right">
+        <template slot-scope="scope">
+          {{ formatMoney(scope.row.mealBalance) }}
         </template>
       </el-table-column>
       <el-table-column column-key="customerSource" label="销售渠道" width="100">
@@ -464,7 +472,6 @@
           {{ formatOrderPeriod(row) }}
         </template>
       </el-table-column>
-      <el-table-column label="成交时间" prop="dealTime" width="150" />
       <el-table-column v-if="canViewAmount" label="定金" prop="depositAmount" width="90" align="right">
         <template slot-scope="scope">
           {{ formatMoney(scope.row.depositAmount) }}
@@ -621,7 +628,7 @@ import { mapGetters } from 'vuex'
 import Sortable from 'sortablejs'
 import CustomerDietCell from '@/components/CustomerDietCell.vue'
 
-const COLUMN_ORDER_STORAGE_KEY = 'customer-order-column-order-v1'
+const COLUMN_ORDER_STORAGE_KEY = 'customer-order-column-order-v2'
 
 /** 返回订单表格列的稳定标识。
  * @param {Object} column Element UI 列配置
@@ -726,6 +733,7 @@ export default {
       allergyInputDrafts: {},
       savingRows: {},
       uploadingRows: {},
+      hiddenColumns: ['mealBalance', 'customerSource', 'orderPeriod', 'depositAmount', 'totalAmount', 'finalAmount', 'orderCode'],
       columnOrder: [],
       defaultColumnOrder: [],
       rules: {
