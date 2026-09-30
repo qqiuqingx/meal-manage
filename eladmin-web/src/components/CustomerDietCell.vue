@@ -7,9 +7,7 @@
     <div v-else class="customer-diet-cell__text">—</div>
     <div class="customer-diet-cell__label">已确认对象</div>
     <div v-if="matchedGroups.length">
-      <div v-for="group in matchedGroups" :key="group.type" class="customer-diet-cell__text">
-        {{ typeLabel(group.type) }}：{{ group.names }}
-      </div>
+      <div v-for="group in matchedGroups" :key="group.type" class="customer-diet-cell__text">{{ typeLabel(group.type) }}：{{ group.names }}</div>
     </div>
     <div v-else class="customer-diet-cell__text">—</div>
   </div>
