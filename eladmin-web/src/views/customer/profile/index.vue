@@ -214,7 +214,7 @@
       @selection-change="crud.selectionChangeHandler"
     >
       <el-table-column :selectable="checkboxT" type="selection" width="55" />
-      <el-table-column label="客户编号" prop="customerCode" width="70" fixed="left" class-name="compact-column" label-class-name="compact-column" show-overflow-tooltip />
+      <el-table-column label="客户编号" prop="customerCode" width="70" fixed="left" class-name="compact-column customer-code-column" label-class-name="compact-column" show-overflow-tooltip />
       <el-table-column label="姓名" prop="customerName" width="70" fixed="left" class-name="compact-column" label-class-name="compact-column" show-overflow-tooltip />
       <el-table-column label="手机号" prop="phone" width="110" class-name="compact-column" label-class-name="compact-column" />
       <el-table-column label="地址" prop="defaultAddress" min-width="150" />

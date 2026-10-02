@@ -1,5 +1,14 @@
 // cover some element-ui styles
 
+// 客户编号列仅将内容设为红色，保留表头颜色和行内编辑行为。
+.el-table td.customer-code-column .cell {
+  &,
+  .inline-value,
+  .el-input__inner {
+    color: #f56c6c;
+  }
+}
+
 .el-breadcrumb__inner,
 .el-breadcrumb__inner a {
   font-weight: 400 !important;

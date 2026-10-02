@@ -80,7 +80,7 @@
       <el-table-column label="地址" prop="addressText" width="250" fixed="left">
         <template slot-scope="{ row }"><div class="multiline-cell">{{ row.addressText || '-' }}</div></template>
       </el-table-column>
-      <el-table-column label="客户编号" prop="customerCode" width="70" fixed="left" class-name="compact-column" label-class-name="compact-column" show-overflow-tooltip>
+      <el-table-column label="客户编号" prop="customerCode" width="70" fixed="left" class-name="compact-column customer-code-column" label-class-name="compact-column" show-overflow-tooltip>
         <template slot-scope="{ row }">{{ row.customerCode || '-' }}</template>
       </el-table-column>
       <el-table-column label="客户姓名" prop="customerName" width="70" fixed="left" class-name="compact-column" label-class-name="compact-column" show-overflow-tooltip>

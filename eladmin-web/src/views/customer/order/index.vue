@@ -106,7 +106,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="客户编号" prop="customerCode" width="70" class-name="compact-column" label-class-name="compact-column" show-overflow-tooltip>
+      <el-table-column label="客户编号" prop="customerCode" width="70" class-name="compact-column customer-code-column" label-class-name="compact-column" show-overflow-tooltip>
         <template slot-scope="scope">
           <el-input
             v-if="isInlineEditing(scope.row, 'customerCode')"
