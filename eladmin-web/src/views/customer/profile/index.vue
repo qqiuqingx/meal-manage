@@ -1019,8 +1019,8 @@ export default {
       try {
         await this.$confirm(
           this.importDietOnly
-            ? `将仅按“客户禁忌”工作表补录 ${this.importPreview.importableCount} 位数据库已有客户，不创建客户或订单。请核对同名候选对象将全部录入，并确认提交。`
-            : `将处理 ${this.importPreview.importableCount} 位新建或补录客户（其中已有客户 ${this.importPreview.supplementalCount || 0} 位）；已有客户将续导预览指定的原订单；旧月份不回退餐数与余额。同名候选对象将全部录入，请确认目标订单、余额变化、工作簿和业务备份。`,
+            ? `将仅按“客户禁忌”工作表补录 ${this.importPreview.importableCount} 位数据库已有客户，不创建客户或订单。菜品特殊需求仅保存原文，禁忌同名候选对象将全部录入，请核对并确认提交。`
+            : `将处理 ${this.importPreview.importableCount} 位新建或补录客户（其中已有客户 ${this.importPreview.supplementalCount || 0} 位）；已有客户将续导预览指定的原订单；旧月份不回退餐数与余额。菜品特殊需求仅保存原文，禁忌同名候选对象将全部录入，请确认目标订单、余额变化、工作簿和业务备份。`,
           '确认批量导入',
           { type: 'warning', confirmButtonText: '确认提交', cancelButtonText: '返回预览' }
         )

@@ -91,7 +91,10 @@ class CustomerProfileImportDietOnlyTest {
         ArgumentCaptor<ImportCandidate> candidate = ArgumentCaptor.forClass(ImportCandidate.class);
         verify(importWriter).writeDietOnly(candidate.capture());
         assertEquals(Arrays.asList("海鲜", "海鲜"), candidate.getValue().getParsed().getDietImportData()
-                .getDishRequirements().stream().map(item -> item.getName()).collect(java.util.stream.Collectors.toList()));
+                .getDietaryRestrictions().stream().map(item -> item.getName()).collect(java.util.stream.Collectors.toList()));
+        assertTrue(candidate.getValue().getParsed().getDietImportData().getDishRequirements().isEmpty());
+        assertEquals(Collections.singletonList("海鲜"), candidate.getValue().getParsed().getDietImportData()
+                .getDishRequirementsRaw());
         verify(importWriter, never()).write(any(ImportCandidate.class), any(LocalDate.class), any());
         verify(parentPackageMapper, never()).selectList(any(QueryWrapper.class));
     }
@@ -103,6 +106,13 @@ class CustomerProfileImportDietOnlyTest {
         CustomerProfile profile = new CustomerProfile();
         profile.setId(10L);
         profile.setCustomerCode("A100");
+        me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto existingItem =
+                new me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto();
+        existingItem.setType("DISH");
+        existingItem.setId(1L);
+        existingItem.setName("香菜");
+        profile.setDishRequirements(Collections.singletonList(existingItem));
+        profile.setDishRequirementsRaw(Collections.singletonList("已有特殊需求"));
         when(profileMapper.selectByIdForImportUpdate(10L)).thenReturn(profile);
         ImportCandidate candidate = new ImportCandidate();
         candidate.setSourceMonth(LocalDate.of(2026, 9, 1));
@@ -114,6 +124,8 @@ class CustomerProfileImportDietOnlyTest {
         me.zhengjie.modules.customer.profile.domain.CustomerDietImportData data =
                 new me.zhengjie.modules.customer.profile.domain.CustomerDietImportData();
         data.setMedicalRequirements("少盐");
+        String raw = " 香菜，少油\n煮熟煮透 ";
+        data.setDishRequirementsRaw(Collections.singletonList(raw));
         parsed.setDietImportData(data);
         candidate.setParsed(parsed);
         CustomerImportDraftDto draft = new CustomerImportDraftDto();
@@ -124,6 +136,10 @@ class CustomerProfileImportDietOnlyTest {
 
         assertEquals("UPDATED", result.getStatus());
         assertEquals("少盐", profile.getMedicalRequirements());
+        assertEquals(Collections.singletonList(existingItem), profile.getDishRequirements());
+        assertEquals(Arrays.asList("已有特殊需求", raw), profile.getDishRequirementsRaw());
+        assertEquals("ALREADY_EXISTS", writer.writeDietOnly(candidate).getStatus());
+        assertEquals(Arrays.asList("已有特殊需求", raw), profile.getDishRequirementsRaw());
         verify(profileMapper).updateById(profile);
         verify(profileMapper, never()).insert(any(CustomerProfile.class));
         verify(orderService, never()).createImportedFirstOrder(any());
@@ -143,6 +159,7 @@ class CustomerProfileImportDietOnlyTest {
         workbook.setDataRowCount(3);
         CustomerDietSourceRow first = dietRow("A100", 4);
         first.setDishRequirementsRaw("海鲜");
+        first.setDietaryRestrictionsRaw("海鲜");
         workbook.setDietRows(Arrays.asList(first, dietRow("A100", 5), dietRow("B200", 6)));
         return workbook;
     }

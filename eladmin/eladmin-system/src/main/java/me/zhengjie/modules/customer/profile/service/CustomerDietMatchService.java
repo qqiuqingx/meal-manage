@@ -108,7 +108,7 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 将第二工作表来源行按月份客户编号关联、聚合字段并匹配 D/F 原文。
+     * 将第二工作表来源行按客户编号关联，聚合 D 列原文并匹配 F 列禁忌。
      *
      * @param workbook 月份工作表及第二工作表解析结果
      * @param candidates 已解析的月份客户候选
@@ -144,7 +144,7 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 将每个饮食匹配项的全部候选对象写入对应结构化字段。
+     * 将 F 列禁忌匹配项的全部候选对象写入禁忌结构化字段，D 列只保存原文。
      *
      * @param candidates 工作簿全部客户候选
      */
@@ -161,10 +161,8 @@ public class CustomerDietMatchService {
             data.getDishRequirements().clear();
             data.getDietaryRestrictions().clear();
             for (CustomerDietMatchDto match : data.getMatches()) {
-                List<CustomerDietItemDto> target = "DISH_REQUIREMENTS".equals(match.getSide())
-                        ? data.getDishRequirements() : data.getDietaryRestrictions();
                 for (CustomerDietItemDto item : match.getSelectedItems()) {
-                    appendUnique(target, item);
+                    appendUnique(data.getDietaryRestrictions(), item);
                 }
             }
         }
@@ -199,8 +197,7 @@ public class CustomerDietMatchService {
             for (String issue : row.getIssues()) {
                 data.getIssues().add(issue);
             }
-            data.getMatches().addAll(matchCell(row, 4, "DISH_REQUIREMENTS", row.getDishRequirementsRaw(), index, segment));
-            data.getMatches().addAll(matchCell(row, 6, "DIETARY_RESTRICTIONS", row.getDietaryRestrictionsRaw(), index, segment));
+            data.getMatches().addAll(matchCell(row, row.getDietaryRestrictionsRaw(), index, segment));
         }
         data.setMedicalRequirements(singleNonBlank(medical));
         if (nonBlankValues(medical).size() > 1) {
@@ -220,28 +217,25 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 对 D/F 单元格先整段匹配，再清洗、拆词并逐词精确匹配，识别连写的字典名称。
+     * 对 F 列禁忌单元格先整段匹配，再清洗、拆词并逐词精确匹配，识别连写的字典名称。
      * <p>
-     * 方向固定由来源列决定：D 列表示客户想吃，F 列表示客户禁忌。
+     * F 列固定表示客户禁忌。
      * 饮食表达前缀只用于清洗查找文本，不改变匹配对象的归属方向。
      *
      * @param row 原始来源行
-     * @param sourceColumn Excel 列号，1 基
-     * @param side 来源列对应的固定方向
      * @param rawText 完整单元格原文
      * @param index 当前字典名称索引
      * @param segment 本次导入独立的领域分词器
      * @return 逐词项匹配结果
      */
-    private List<CustomerDietMatchDto> matchCell(CustomerDietSourceRow row, int sourceColumn,
-                                                 String side, String rawText,
+    private List<CustomerDietMatchDto> matchCell(CustomerDietSourceRow row, String rawText,
                                                  Map<String, List<CustomerDietOptionDto>> index, Segment segment) {
         if (isBlank(rawText)) {
             return new ArrayList<>();
         }
         List<CustomerDietOptionDto> exactWholeCell = findOptions(rawText, index);
         if (!exactWholeCell.isEmpty()) {
-            return new ArrayList<>(Arrays.asList(createMatch(row, sourceColumn, side, rawText,
+            return new ArrayList<>(Arrays.asList(createMatch(row, rawText,
                     rawText.trim(), rawText.trim(), 0, exactWholeCell)));
         }
         List<CustomerDietMatchDto> matches = new ArrayList<>();
@@ -266,7 +260,7 @@ public class CustomerDietMatchService {
                 for (String piece : pieces) {
                     String lookup = refineLookup(piece, index);
                     String rawItem = pieces.size() == 1 ? expression : piece;
-                    CustomerDietMatchDto match = createMatch(row, sourceColumn, side, rawText,
+                    CustomerDietMatchDto match = createMatch(row, rawText,
                             rawItem, lookup, termIndex++, findOptions(lookup, index));
                     matches.add(match);
                 }
@@ -476,11 +470,9 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 创建一个含稳定来源键、候选及自动录入对象的匹配项。
+     * 创建 F 列禁忌的匹配项，包含稳定来源键、候选及自动录入对象。
      *
      * @param row 来源行
-     * @param sourceColumn Excel 列号
-     * @param side D/F 方向
      * @param cellText 完整单元格原文
      * @param rawText 原词项
      * @param lookup 字典查找文本
@@ -488,14 +480,13 @@ public class CustomerDietMatchService {
      * @param candidates 名称完全匹配的全部候选
      * @return 匹配展示 DTO
      */
-    private CustomerDietMatchDto createMatch(CustomerDietSourceRow row, int sourceColumn,
-                                             String side, String cellText, String rawText, String lookup,
+    private CustomerDietMatchDto createMatch(CustomerDietSourceRow row, String cellText, String rawText, String lookup,
                                              int termIndex, List<CustomerDietOptionDto> candidates) {
         CustomerDietMatchDto match = new CustomerDietMatchDto();
-        match.setSourceKey("DIET:" + row.getSourceRow() + ":" + sourceColumn + ":" + termIndex);
+        match.setSourceKey("DIET:" + row.getSourceRow() + ":6:" + termIndex);
         match.setSourceRow(row.getSourceRow());
-        match.setSourceColumn(sourceColumn);
-        match.setSide(side);
+        match.setSourceColumn(6);
+        match.setSide("DIETARY_RESTRICTIONS");
         match.setRawText(rawText);
         match.setCellText(cellText);
         match.setLookupText(lookup);

@@ -66,6 +66,7 @@ class CustomerProfileImportDietFlowTest {
         dietRow.setOriginalCodeA("A004");
         dietRow.setEffectiveCode("A004");
         dietRow.setDishRequirementsRaw("香菜，牛肉");
+        dietRow.setDietaryRestrictionsRaw("香菜，牛肉");
 
         workbook = new ParsedWorkbook();
         workbook.setFileHash("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
@@ -93,6 +94,9 @@ class CustomerProfileImportDietFlowTest {
         assertNotNull(preview.getDictionaryHash());
         assertEquals(1, preview.getImportableCount());
         assertEquals(Boolean.TRUE, preview.getDrafts().get(0).getImportable());
+        assertEquals(Collections.singletonList("香菜，牛肉"), preview.getDrafts().get(0).getDishRequirementsRaw());
+        assertTrue(preview.getDrafts().get(0).getDietMatches().stream()
+                .allMatch(match -> Integer.valueOf(6).equals(match.getSourceColumn())));
         assertEquals("MULTI", preview.getDrafts().get(0).getDietMatches().get(0).getStatus());
         assertEquals(2, preview.getDrafts().get(0).getDietMatches().get(0).getSelectedItems().size());
         assertEquals("UNIQUE", preview.getDrafts().get(0).getDietMatches().get(1).getStatus());
@@ -122,7 +126,8 @@ class CustomerProfileImportDietFlowTest {
         ArgumentCaptor<ImportCandidate> candidate = ArgumentCaptor.forClass(ImportCandidate.class);
         verify(importWriter).write(candidate.capture(), any(LocalDate.class), any());
         assertEquals(Arrays.asList("香菜", "香菜", "牛肉"), candidate.getValue().getParsed().getDietImportData()
-                .getDishRequirements().stream().map(item -> item.getName()).collect(java.util.stream.Collectors.toList()));
+                .getDietaryRestrictions().stream().map(item -> item.getName()).collect(java.util.stream.Collectors.toList()));
+        assertTrue(candidate.getValue().getParsed().getDietImportData().getDishRequirements().isEmpty());
         assertEquals("香菜，牛肉", candidate.getValue().getParsed().getDietImportData()
                 .getDishRequirementsRaw().get(0));
         assertEquals("MULTI", candidate.getValue().getParsed().getDietImportData()

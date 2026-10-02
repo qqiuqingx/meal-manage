@@ -1,13 +1,14 @@
 <template>
   <div class="import-diet-preview">
     <div class="import-diet-preview__brief" :title="draft.medicalRequirements || '—'">医嘱：{{ draft.medicalRequirements || '—' }}</div>
+    <div v-if="requirementsRaw" class="import-diet-preview__brief" :title="requirementsRaw">菜品特殊需求原文：{{ requirementsRaw }}</div>
     <div v-if="matches.length" class="import-diet-preview__counts">
+      <span>禁忌匹配：</span>
       <span class="import-diet-preview__success">唯一匹配 {{ counts.unique }}</span>
       <span v-if="counts.multi" class="import-diet-preview__warning">同名多对象 {{ counts.multi }}</span>
       <span v-if="counts.unmatched" class="import-diet-preview__warning">未匹配 {{ counts.unmatched }}</span>
     </div>
-    <div v-else class="import-diet-preview__empty">想吃和禁忌原文为空，无需匹配</div>
-    <div v-if="wantedNames" class="import-diet-preview__brief" :title="wantedNames">想吃：{{ wantedNames }}</div>
+    <div v-else class="import-diet-preview__empty">禁忌无匹配项；菜品特殊需求仅保存原文</div>
     <div v-if="restrictedNames" class="import-diet-preview__brief" :title="restrictedNames">禁忌：{{ restrictedNames }}</div>
     <el-popover placement="left" width="600" trigger="click">
       <div class="import-diet-preview__details">
@@ -15,11 +16,11 @@
         <div class="import-diet-preview__field"><strong>医嘱：</strong>{{ draft.medicalRequirements || '—' }}</div>
         <div class="import-diet-preview__field"><strong>成交时间：</strong>{{ draft.dealTimeSource || '空' }} → {{ dietOnly ? '不修改历史订单' : (draft.dealTime || (draft.dealTimeAtConfirmation ? '确认时填入' : '—')) }}</div>
         <div class="import-diet-preview__field"><strong>术后：</strong>{{ draft.postoperativeInfo || '—' }}</div>
-        <div class="import-diet-preview__field"><strong>想吃原文：</strong>{{ (draft.dishRequirementsRaw || []).join(' ｜ ') || '—' }}</div>
+        <div class="import-diet-preview__field"><strong>菜品特殊需求原文（仅保存原文）：</strong>{{ requirementsRaw || '—' }}</div>
         <div class="import-diet-preview__field"><strong>禁忌原文：</strong>{{ (draft.dietaryRestrictionsRaw || []).join(' ｜ ') || '—' }}</div>
         <div v-for="match in matches" :key="match.sourceKey" class="import-diet-preview__match">
           <div>
-            <strong>{{ match.side === 'DISH_REQUIREMENTS' ? '想吃' : '禁忌' }} 第{{ match.sourceRow }}行：</strong>
+            <strong>禁忌 第{{ match.sourceRow }}行：</strong>
             <span>{{ match.rawText }}</span>
             <span v-if="match.lookupText !== match.rawText"> → {{ match.lookupText }}</span>
           </div>
@@ -45,7 +46,7 @@ export default {
     optionLabel: { type: Function, required: true }
   },
   computed: {
-    /** 返回当前客户的逐词匹配结果，无匹配数据时返回空数组。 */
+    /** 返回当前客户 F 列禁忌的逐词匹配结果，无匹配数据时返回空数组。 */
     matches() {
       return this.draft.dietMatches || []
     },
@@ -58,24 +59,23 @@ export default {
         return counts
       }, { unique: 0, multi: 0, unmatched: 0 })
     },
-    /** 返回想吃对象的名称摘要；详细类型和分类路径在明细中保留。 */
-    wantedNames() {
-      return this.selectedNames('DISH_REQUIREMENTS')
+    /** 返回 D 列完整原文摘要；导入不生成菜品特殊需求匹配对象。 */
+    requirementsRaw() {
+      return (this.draft.dishRequirementsRaw || []).join(' ｜ ')
     },
     /** 返回禁忌对象的名称摘要；详细类型和分类路径在明细中保留。 */
     restrictedNames() {
-      return this.selectedNames('DIETARY_RESTRICTIONS')
+      return this.selectedNames()
     }
   },
   methods: {
     /**
-     * 按指定方向汇总匹配对象的名称，同名对象只在摘要中展示一次。
-     * @param {string} side 想吃或禁忌方向
+     * 汇总禁忌匹配对象的名称，同名对象只在摘要中展示一次。
      * @returns {string} 用顿号连接的名称摘要
      */
-    selectedNames(side) {
+    selectedNames() {
       const names = new Set()
-      this.matches.filter(match => match.side === side).forEach(match => {
+      this.matches.forEach(match => {
         const items = match.selectedItems || []
         items.forEach(item => names.add(item.name || ('#' + item.id)))
       })

@@ -79,11 +79,29 @@ describe('customer import diet summary', () => {
         optionLabel
       }
     })
-    expect(wrapper.text()).toContain('想吃和禁忌原文为空，无需匹配')
+    expect(wrapper.text()).toContain('禁忌无匹配项；菜品特殊需求仅保存原文')
     wrapper.find('button').trigger('click')
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.import-diet-preview__details').text()).toContain('确认时填入')
     expect(wrapper.find('.import-diet-preview__details').text()).toContain('术后')
+    wrapper.destroy()
+  })
+
+  test('shows requirements verbatim when only column D has content', async() => {
+    const raw = '香菜，芹菜\n少油、煮熟煮透'
+    const wrapper = mount(CustomerImportDietPreview, {
+      localVue,
+      propsData: { draft: { dishRequirementsRaw: [raw], dietMatches: [] }, optionLabel }
+    })
+
+    expect(wrapper.findAll('.import-diet-preview__brief').at(1).attributes('title')).toBe(raw)
+    expect(wrapper.findAll('.import-diet-preview__brief').at(1).text()).toContain(raw)
+    expect(wrapper.find('.import-diet-preview__counts').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('原文为空')
+    wrapper.find('button').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.import-diet-preview__details').text()).toContain('菜品特殊需求原文（仅保存原文）：' + raw)
+    expect(wrapper.findAll('.import-diet-preview__match')).toHaveLength(0)
     wrapper.destroy()
   })
 })

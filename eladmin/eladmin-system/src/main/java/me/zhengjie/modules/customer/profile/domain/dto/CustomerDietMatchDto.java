@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 第二工作表饮食原文词项及其字典候选。
+ * 第二工作表 F 列禁忌原文词项及其字典候选。
  */
 @Data
 public class CustomerDietMatchDto implements Serializable {
@@ -19,10 +19,10 @@ public class CustomerDietMatchDto implements Serializable {
 
     private Integer sourceRow;
 
-    /** Excel 列号，1 基。 */
+    /** Excel 列号，1 基；禁忌来源为 F 列（6）。 */
     private Integer sourceColumn;
 
-    /** 列方向：DISH_REQUIREMENTS 或 DIETARY_RESTRICTIONS。 */
+    /** 列方向：DIETARY_RESTRICTIONS（客户禁忌）。 */
     private String side;
 
     /** 待匹配词项原文，保留该词项中的表达前缀。 */

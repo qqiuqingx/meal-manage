@@ -33,45 +33,42 @@ class CustomerDietMatchServiceTest {
         service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
 
         List<CustomerDietMatchDto> matches = fixture.parsed.getDietImportData().getMatches();
-        assertEquals(Integer.valueOf(4), matches.get(0).getSourceColumn());
-        assertEquals("DIET:4:4:0", matches.get(0).getSourceKey());
-        assertEquals(Integer.valueOf(6), matches.get(1).getSourceColumn());
-        assertEquals("DIET:4:6:0", matches.get(1).getSourceKey());
-        assertEquals("DIETARY_RESTRICTIONS", matches.get(1).getSide());
+        assertEquals(1, matches.size());
+        assertEquals(Integer.valueOf(6), matches.get(0).getSourceColumn());
+        assertEquals("DIET:4:6:0", matches.get(0).getSourceKey());
+        assertEquals("DIETARY_RESTRICTIONS", matches.get(0).getSide());
     }
 
     @Test
-    void shouldKeepDirectionFromColumnAndApplyAllCrossTypeCandidates() {
-        CustomerDietSourceRow row = sourceRow("A100", "不吃香菜，芹菜", "喜欢吃牛肉");
+    void shouldKeepRequirementsAsRawAndApplyAllRestrictionCandidates() {
+        CustomerDietSourceRow row = sourceRow("A100", "不吃香菜，芹菜", "喜欢吃香菜，牛肉");
         Fixture fixture = fixture(row);
 
         service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
 
         CustomerDietImportData data = fixture.parsed.getDietImportData();
-        assertEquals(3, data.getMatches().size());
+        assertEquals(2, data.getMatches().size());
         CustomerDietMatchDto multi = data.getMatches().get(0);
-        assertEquals("DIET:4:4:0", multi.getSourceKey());
-        assertEquals("DISH_REQUIREMENTS", multi.getSide());
-        assertEquals("不吃香菜", multi.getRawText());
+        assertEquals("DIET:4:6:0", multi.getSourceKey());
+        assertEquals("DIETARY_RESTRICTIONS", multi.getSide());
+        assertEquals("喜欢吃香菜", multi.getRawText());
         assertEquals("香菜", multi.getLookupText());
         assertEquals("MULTI", multi.getStatus());
         assertEquals(2, multi.getSelectedItems().size());
-        assertEquals("DIETARY_RESTRICTIONS", data.getMatches().get(2).getSide());
-        assertEquals("UNIQUE", data.getMatches().get(2).getStatus());
+        assertEquals("DIETARY_RESTRICTIONS", data.getMatches().get(1).getSide());
+        assertEquals("UNIQUE", data.getMatches().get(1).getStatus());
         assertEquals("不吃香菜，芹菜", data.getDishRequirementsRaw().get(0));
 
         service.applyAllMatches(fixture.candidates);
 
-        assertEquals(3, data.getDishRequirements().size());
-        assertEquals("香菜", data.getDishRequirements().get(0).getName());
-        assertEquals("香菜", data.getDishRequirements().get(1).getName());
-        assertEquals("芹菜", data.getDishRequirements().get(2).getName());
-        assertEquals("牛肉", data.getDietaryRestrictions().get(0).getName());
+        assertTrue(data.getDishRequirements().isEmpty());
+        assertEquals(Arrays.asList("香菜", "香菜", "牛肉"), data.getDietaryRestrictions().stream()
+                .map(CustomerDietItemDto::getName).collect(java.util.stream.Collectors.toList()));
     }
 
     @Test
     void shouldSerializeRepeatedCandidatesAsCompleteOptions() {
-        Fixture fixture = fixture(sourceRow("A100", "香菜，香菜", null));
+        Fixture fixture = fixture(sourceRow("A100", null, "香菜，香菜"));
         service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
 
         String json = JSON.toJSONString(fixture.parsed.getDietImportData(), JSONWriter.Feature.ReferenceDetection);
@@ -84,12 +81,12 @@ class CustomerDietMatchServiceTest {
                 .getJSONObject(0).getLong("id"));
 
         service.applyAllMatches(fixture.candidates);
-        assertEquals(2, fixture.parsed.getDietImportData().getDishRequirements().size());
+        assertEquals(2, fixture.parsed.getDietImportData().getDietaryRestrictions().size());
     }
 
     @Test
     void shouldApplyAllSameNameObjectsAndKeepRawText() {
-        Fixture fixture = fixture(sourceRow("A100", "香菜", null));
+        Fixture fixture = fixture(sourceRow("A100", null, "香菜"));
         fixture.options.add(option("INGREDIENT_TAG", 99L, "香菜"));
         service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
         CustomerDietImportData data = fixture.parsed.getDietImportData();
@@ -97,22 +94,26 @@ class CustomerDietMatchServiceTest {
         service.applyAllMatches(fixture.candidates);
 
         assertEquals("MULTI", data.getMatches().get(0).getStatus());
-        assertEquals(3, data.getDishRequirements().size());
+        assertEquals(3, data.getDietaryRestrictions().size());
         assertEquals(Arrays.asList("DISH", "INGREDIENT", "INGREDIENT_TAG"),
-                data.getDishRequirements().stream().map(CustomerDietItemDto::getType)
+                data.getDietaryRestrictions().stream().map(CustomerDietItemDto::getType)
                         .collect(java.util.stream.Collectors.toList()));
-        assertEquals(Collections.singletonList("香菜"), data.getDishRequirementsRaw());
+        assertEquals(Collections.singletonList("香菜"), data.getDietaryRestrictionsRaw());
     }
 
     @Test
-    void shouldLeaveUnmatchedTextAsNonBlockingRawSource() {
-        Fixture fixture = fixture(sourceRow("A100", "最近不太想吃有味道的东西", null));
+    void shouldSaveRequirementsVerbatimWithoutMatchingEvenKnownFoods() {
+        String raw = " 香菜，芹菜\r\n最近不太想吃有味道的东西 ";
+        Fixture fixture = fixture(sourceRow("A100", raw, null));
+        CustomerDietSourceRow repeated = sourceRow("A100", raw, null);
+        repeated.setSourceRow(5);
+        fixture.workbook.setDietRows(Arrays.asList(fixture.workbook.getDietRows().get(0), repeated));
         service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
         CustomerDietImportData data = fixture.parsed.getDietImportData();
 
         assertTrue(fixture.parsed.isImportable());
-        assertEquals("UNMATCHED", data.getMatches().get(0).getStatus());
-        assertEquals(Collections.singletonList("最近不太想吃有味道的东西"), data.getDishRequirementsRaw());
+        assertTrue(data.getMatches().isEmpty());
+        assertEquals(Collections.singletonList(raw), data.getDishRequirementsRaw());
         service.applyAllMatches(fixture.candidates);
         assertTrue(data.getDishRequirements().isEmpty());
     }
@@ -156,14 +157,14 @@ class CustomerDietMatchServiceTest {
 
     @Test
     void shouldRecognizeAdjacentFoodsWithoutMatchingInsideCompoundWords() {
-        Fixture fixture = fixture(sourceRow("A100", "香菜芹菜", "牛肉丸"));
+        Fixture fixture = fixture(sourceRow("A100", null, "香菜芹菜，牛肉丸"));
 
         service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
         service.applyAllMatches(fixture.candidates);
 
         CustomerDietImportData data = fixture.parsed.getDietImportData();
-        assertEquals(3, data.getDishRequirements().size());
-        assertTrue(data.getDietaryRestrictions().isEmpty());
+        assertTrue(data.getDishRequirements().isEmpty());
+        assertEquals(3, data.getDietaryRestrictions().size());
         assertEquals("牛肉丸", data.getMatches().get(2).getLookupText());
         assertEquals("UNMATCHED", data.getMatches().get(2).getStatus());
     }
