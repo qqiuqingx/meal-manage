@@ -20,11 +20,139 @@ import java.time.LocalDateTime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CustomerDietMatchServiceTest {
 
     private final CustomerDietMatchService service = new CustomerDietMatchService();
+
+    @Test
+    void shouldSkipIgnoredIngredientsAndCategoriesAndKeepFullRawText() {
+        for (String raw : Arrays.asList("花椒", "不吃花椒", "调料", "不吃调料", "花椒调料")) {
+            Fixture fixture = fixture(sourceRow("A100", null, raw));
+            CustomerDietOptionDto ingredient = option("INGREDIENT", 80L, "花椒");
+            ingredient.setIgnoreDietMatch(true);
+            CustomerDietOptionDto category = option("INGREDIENT_CATEGORY", 81L, "调料");
+            category.setIgnoreDietMatch(true);
+            fixture.options.addAll(Arrays.asList(ingredient, category));
+
+            service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+            service.applyAllMatches(fixture.candidates);
+
+            CustomerDietImportData data = fixture.parsed.getDietImportData();
+            assertTrue(data.getMatches().isEmpty(), raw);
+            assertTrue(data.getDietaryRestrictions().isEmpty(), raw);
+            assertEquals(Collections.singletonList(raw), data.getDietaryRestrictionsRaw());
+            assertTrue(fixture.parsed.isImportable());
+        }
+    }
+
+    @Test
+    void shouldRetainOrdinaryCandidatesWithSameNameAfterFiltering() {
+        Fixture fixture = fixture(sourceRow("A100", null, "香菜"));
+        fixture.options.get(1).setIgnoreDietMatch(true);
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+        CustomerDietMatchDto unique = fixture.parsed.getDietImportData().getMatches().get(0);
+        assertEquals("UNIQUE", unique.getStatus());
+        assertEquals(Collections.singletonList("DISH"), unique.getCandidates().stream()
+                .map(CustomerDietOptionDto::getType).collect(java.util.stream.Collectors.toList()));
+
+        fixture.options.add(option("INGREDIENT", 90L, "香菜"));
+        fixture.options.add(option("INGREDIENT_TAG", 91L, "香菜"));
+        fixture.options.add(option("DISH_TAG", 92L, "香菜"));
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+        service.applyAllMatches(fixture.candidates);
+        CustomerDietMatchDto multi = fixture.parsed.getDietImportData().getMatches().get(0);
+        assertEquals("MULTI", multi.getStatus());
+        assertEquals(Arrays.asList("DISH", "INGREDIENT", "INGREDIENT_TAG", "DISH_TAG"), multi.getCandidates().stream()
+                .map(CustomerDietOptionDto::getType).collect(java.util.stream.Collectors.toList()));
+        assertEquals(4, fixture.parsed.getDietImportData().getDietaryRestrictions().size());
+    }
+
+    @Test
+    void shouldKeepIgnoredNamesInSegmentationAndPreserveUnknownRemainder() {
+        String raw = "不吃花椒油牛肉，不吃花椒油不吃芹菜，未知食材";
+        Fixture fixture = fixture(sourceRow("A100", null, raw));
+        CustomerDietOptionDto seasoning = option("INGREDIENT", 80L, "花椒油");
+        seasoning.setIgnoreDietMatch(true);
+        fixture.options.addAll(Arrays.asList(seasoning, option("INGREDIENT", 81L, "花椒")));
+
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+        service.applyAllMatches(fixture.candidates);
+
+        CustomerDietImportData data = fixture.parsed.getDietImportData();
+        assertEquals(Arrays.asList("牛肉", "芹菜", "未知食材"), data.getMatches().stream()
+                .map(CustomerDietMatchDto::getLookupText).collect(java.util.stream.Collectors.toList()));
+        assertEquals(Arrays.asList("UNIQUE", "UNIQUE", "UNMATCHED"), data.getMatches().stream()
+                .map(CustomerDietMatchDto::getStatus).collect(java.util.stream.Collectors.toList()));
+        assertEquals(Arrays.asList("牛肉", "芹菜"), data.getDietaryRestrictions().stream()
+                .map(CustomerDietItemDto::getName).collect(java.util.stream.Collectors.toList()));
+        assertEquals(Collections.singletonList(raw), data.getDietaryRestrictionsRaw());
+    }
+
+    @Test
+    void shouldSkipWholeIgnoredNameRatherThanMatchItsShorterPart() {
+        for (String raw : Arrays.asList("花椒油", "不吃花椒油")) {
+            Fixture fixture = fixture(sourceRow("A100", null, raw));
+            CustomerDietOptionDto seasoning = option("INGREDIENT", 80L, "花椒油");
+            seasoning.setIgnoreDietMatch(true);
+            fixture.options.addAll(Arrays.asList(seasoning, option("INGREDIENT", 81L, "花椒")));
+            service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+            assertTrue(fixture.parsed.getDietImportData().getMatches().isEmpty(), raw);
+        }
+    }
+
+    @Test
+    void shouldExcludeSeasoningsFromBackgroundMatchAndReflectCategoryChanges() {
+        Fixture fixture = fixture(sourceRow("A100", null, null));
+        CustomerDietOptionDto seasoning = option("INGREDIENT", 80L, "花椒油");
+        seasoning.setIgnoreDietMatch(true);
+        fixture.options.add(seasoning);
+        List<String> raw = Arrays.asList("花椒油", "不吃花椒油牛肉", "牛肉");
+        assertEquals(Collections.singletonList("牛肉"), service.matchRestrictions(raw, service.snapshot(fixture.options))
+                .stream().map(CustomerDietItemDto::getName).collect(java.util.stream.Collectors.toList()));
+
+        seasoning.setIgnoreDietMatch(false);
+        assertEquals(Arrays.asList("花椒油", "牛肉"), service.matchRestrictions(raw, service.snapshot(fixture.options))
+                .stream().map(CustomerDietItemDto::getName).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    void shouldNotCountIgnoredCandidatesAsManualExclusions() {
+        Fixture fixture = fixture(sourceRow("A100", null, "香菜"));
+        fixture.options.get(1).setIgnoreDietMatch(true);
+        me.zhengjie.modules.customer.profile.domain.CustomerProfile existing =
+                new me.zhengjie.modules.customer.profile.domain.CustomerProfile();
+        existing.setDietaryRestrictionExclusions(Arrays.asList("DISH:1", "INGREDIENT:2"));
+        fixture.candidates.get(0).setExistingProfile(existing);
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+        CustomerDietMatchDto match = fixture.parsed.getDietImportData().getMatches().get(0);
+        assertEquals("EXCLUDED", match.getStatus());
+        assertEquals(1, match.getExcludedItemCount());
+        assertEquals(1, match.getCandidates().size());
+    }
+
+    @Test
+    void shouldHideInternalFlagButIncludeItInDictionaryHash() {
+        Fixture fixture = fixture(sourceRow("A100", null, "香菜"));
+        CustomerDietOptionDto ingredient = fixture.options.get(1);
+        String before = service.dictionaryHash(fixture.options);
+        ingredient.setIgnoreDietMatch(true);
+        assertNotEquals(before, service.dictionaryHash(fixture.options));
+        List<CustomerDietOptionDto> reversed = new java.util.ArrayList<>(fixture.options);
+        Collections.reverse(reversed);
+        assertEquals(service.dictionaryHash(fixture.options), service.dictionaryHash(reversed));
+        assertFalse(JSON.toJSONString(fixture.options).contains("ignoreDietMatch"));
+        assertFalse(JSON.parseObject("{\"type\":\"INGREDIENT\",\"id\":2,\"ignoreDietMatch\":true}",
+                CustomerDietOptionDto.class).isIgnoreDietMatch());
+
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+        assertFalse(JSON.toJSONString(fixture.parsed.getDietImportData()).contains("ignoreDietMatch"));
+        ingredient.setIgnoreDietMatch(false);
+        ingredient.setCategoryPath("普通 / 分类");
+        assertNotEquals(before, service.dictionaryHash(fixture.options));
+    }
 
     @Test
     void shouldRespectPartialAndCompleteManualExclusionsInImportPreview() {

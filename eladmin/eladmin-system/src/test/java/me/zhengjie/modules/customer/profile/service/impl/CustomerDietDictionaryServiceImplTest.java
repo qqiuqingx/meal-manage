@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -26,6 +27,24 @@ class CustomerDietDictionaryServiceImplTest {
 
     @InjectMocks
     private CustomerDietDictionaryServiceImpl service;
+
+    @Test
+    void shouldAllowManualSelectionOfIgnoredIngredientsAndCategories() {
+        CustomerDietOptionDto ingredient = option("INGREDIENT", 80L, "花椒油");
+        CustomerDietOptionDto category = option("INGREDIENT_CATEGORY", 81L, "调料");
+        ingredient.setIgnoreDietMatch(true);
+        category.setIgnoreDietMatch(true);
+        when(dictionaryMapper.selectActiveOptions()).thenReturn(Arrays.asList(ingredient, category));
+
+        List<CustomerDietOptionDto> active = service.listActiveOptions();
+        assertEquals(2, active.size());
+        List<CustomerDietItemDto> result = service.normalizeSelections(Arrays.asList(
+                item("INGREDIENT", 80L, "客户端名称"), item("INGREDIENT_CATEGORY", 81L, "客户端分类")), null, active);
+        assertEquals(Arrays.asList(item("INGREDIENT", 80L, "花椒油"), item("INGREDIENT_CATEGORY", 81L, "调料")), result);
+        assertEquals(Collections.singletonList(item("INGREDIENT", 80L, "历史名称")), service.normalizeSelections(
+                Collections.singletonList(item("INGREDIENT", 80L, "花椒油")),
+                Collections.singletonList(item("INGREDIENT", 80L, "历史名称")), active));
+    }
 
     @Test
     void shouldIgnoreClientNameDeduplicateAndPreserveExistingSnapshot() {

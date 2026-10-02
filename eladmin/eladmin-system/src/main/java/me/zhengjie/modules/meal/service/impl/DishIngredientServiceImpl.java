@@ -114,7 +114,7 @@ public class DishIngredientServiceImpl extends ServiceImpl<DishIngredientMapper,
 
     /**
      * 字典变化时发布事务内通知，提交成功后自动更新客户禁忌。
-     * 锁定配料行后更新配料，并按 null 保持、空数组清空的契约替换标签。
+     * 锁定配料行后更新配料，并按 null 保持、空数组清空的契约替换标签；分类归属变化也触发禁忌重匹配。
      * @param resources 配料字段及可选标签ID集合
      */
     @Override
@@ -130,6 +130,7 @@ public class DishIngredientServiceImpl extends ServiceImpl<DishIngredientMapper,
         List<Integer> requestedTagIds = resources.getTagIds();
         String oldName = existing.getName();
         Boolean oldEnabled = existing.getEnabled();
+        Integer oldCategoryId = existing.getCategoryId();
         existing.copy(resources);
         resolveCategory(existing);
         existing.setUpdateTime(new Timestamp(System.currentTimeMillis()));
@@ -137,7 +138,8 @@ public class DishIngredientServiceImpl extends ServiceImpl<DishIngredientMapper,
         if (requestedTagIds != null) {
             tagService.replaceIngredientTags(existing.getId(), requestedTagIds);
         }
-        if (!Objects.equals(oldName, existing.getName()) || !Objects.equals(oldEnabled, existing.getEnabled())) {
+        if (!Objects.equals(oldName, existing.getName()) || !Objects.equals(oldEnabled, existing.getEnabled())
+                || !Objects.equals(oldCategoryId, existing.getCategoryId())) {
             events.publishEvent(new DietDictionaryChangedEvent());
         }
     }

@@ -26,7 +26,6 @@ import java.security.NoSuchAlgorithmException;
 import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -120,7 +119,7 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 计算有序饮食字典快照摘要，确认时用于拒绝过期候选。
+     * 计算含内部忽略标记的有序饮食字典快照摘要，确认时用于拒绝过期候选。
      *
      * @param options 当前有效字典选项
      * @return 规范化 JSON 内容的 SHA-256
@@ -130,9 +129,19 @@ public class CustomerDietMatchService {
         sorted.sort(Comparator.comparing(CustomerDietOptionDto::getType)
                 .thenComparing(CustomerDietOptionDto::getName)
                 .thenComparing(CustomerDietOptionDto::getId));
+        List<Map<String, Object>> content = new ArrayList<>();
+        for (CustomerDietOptionDto option : sorted) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("type", option.getType());
+            entry.put("id", option.getId());
+            entry.put("name", option.getName());
+            entry.put("categoryPath", option.getCategoryPath());
+            entry.put("ignoreDietMatch", option.isIgnoreDietMatch());
+            content.add(entry);
+        }
         try {
             byte[] bytes = MessageDigest.getInstance("SHA-256")
-                    .digest(JSON.toJSONString(sorted).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    .digest(JSON.toJSONString(content).getBytes(java.nio.charset.StandardCharsets.UTF_8));
             StringBuilder result = new StringBuilder(bytes.length * 2);
             for (byte value : bytes) {
                 result.append(Character.forDigit((value >>> 4) & 0xF, 16));
@@ -269,7 +278,7 @@ public class CustomerDietMatchService {
      * @param rawText 完整单元格原文
      * @param index 当前字典名称索引
      * @param segment 本次导入独立的领域分词器
-     * @return 逐词项匹配结果
+     * @return 逐词项匹配结果；只有调料候选的词项不返回，完整名称仍参与分词边界判断
      */
     private List<CustomerDietMatchDto> matchCell(String rawText,
                                                  Map<String, List<CustomerDietOptionDto>> index, Segment segment) {
@@ -278,8 +287,8 @@ public class CustomerDietMatchService {
         }
         List<CustomerDietOptionDto> exactWholeCell = findOptions(rawText, index);
         if (!exactWholeCell.isEmpty()) {
-            return new ArrayList<>(Arrays.asList(createMatch(rawText,
-                    rawText.trim(), rawText.trim(), exactWholeCell)));
+            CustomerDietMatchDto match = createMatch(rawText, rawText.trim(), rawText.trim(), exactWholeCell);
+            return match == null ? new ArrayList<>() : new ArrayList<>(Collections.singletonList(match));
         }
         List<CustomerDietMatchDto> matches = new ArrayList<>();
         for (String rawTerm : ITEM_SEPARATOR.split(cleanCell(rawText))) {
@@ -304,7 +313,9 @@ public class CustomerDietMatchService {
                     String rawItem = pieces.size() == 1 ? expression : piece;
                     CustomerDietMatchDto match = createMatch(rawText,
                             rawItem, lookup, findOptions(lookup, index));
-                    matches.add(match);
+                    if (match != null) {
+                        matches.add(match);
+                    }
                 }
             }
         }
@@ -512,30 +523,37 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 创建禁忌词项、候选及自动录入对象；真实 Excel 来源键由导入聚合时附加。
+     * 过滤调料候选后创建禁忌词项及自动录入对象；真实 Excel 来源键由导入聚合时附加。
      *
      * @param cellText 完整单元格原文
      * @param rawText 原词项
      * @param lookup 字典查找文本
      * @param candidates 名称完全匹配的全部候选
-     * @return 匹配展示 DTO
+     * @return 匹配展示 DTO；原候选非空但全部被调料规则忽略时返回 null
      */
     private CustomerDietMatchDto createMatch(String cellText, String rawText, String lookup,
                                              List<CustomerDietOptionDto> candidates) {
+        List<CustomerDietOptionDto> allowed = candidates.stream()
+                .filter(option -> !option.isIgnoreDietMatch()
+                        || !("INGREDIENT".equals(option.getType()) || "INGREDIENT_CATEGORY".equals(option.getType())))
+                .collect(Collectors.toList());
+        if (!candidates.isEmpty() && allowed.isEmpty()) {
+            return null;
+        }
         CustomerDietMatchDto match = new CustomerDietMatchDto();
         match.setSourceColumn(6);
         match.setSide("DIETARY_RESTRICTIONS");
         match.setRawText(rawText);
         match.setCellText(cellText);
         match.setLookupText(lookup);
-        match.setCandidates(candidates.stream().map(this::copyOption).collect(Collectors.toList()));
-        if (candidates.size() == 1) {
+        match.setCandidates(allowed.stream().map(this::copyOption).collect(Collectors.toList()));
+        if (allowed.size() == 1) {
             match.setStatus("UNIQUE");
-            match.setSelectedItems(Collections.singletonList(toItem(candidates.get(0))));
-        } else if (candidates.size() > 1) {
+            match.setSelectedItems(Collections.singletonList(toItem(allowed.get(0))));
+        } else if (allowed.size() > 1) {
             match.setStatus("MULTI");
-            match.setSelectedItems(candidates.stream().map(this::toItem).collect(Collectors.toList()));
-            match.setMessage("同名对象 " + candidates.size() + " 个，确认后将全部录入");
+            match.setSelectedItems(allowed.stream().map(this::toItem).collect(Collectors.toList()));
+            match.setMessage("同名对象 " + allowed.size() + " 个，确认后将全部录入");
         } else {
             match.setStatus("UNMATCHED");
             match.setMessage("未匹配到字典对象，原文仍会保留");

@@ -43,6 +43,44 @@ class DishIngredientServiceImplTest {
     }
 
     @Test
+    void updateWithOnlyCategoryChangeTriggersDietRematch() {
+        DishIngredient existing = ingredient(6);
+        existing.setCategoryId(21);
+        when(ingredientMapper.selectByIdForUpdate(6)).thenReturn(existing);
+        DishIngredient request = ingredient(6);
+        request.setCategoryId(22);
+
+        service.update(request);
+
+        assertEquals(22, existing.getCategoryId());
+        verify(events).publishEvent(any(me.zhengjie.modules.meal.domain.event.DietDictionaryChangedEvent.class));
+    }
+
+    @Test
+    void updateWithUnchangedCategoryDoesNotTriggerDietRematch() {
+        DishIngredient existing = ingredient(6);
+        existing.setCategoryId(21);
+        when(ingredientMapper.selectByIdForUpdate(6)).thenReturn(existing);
+        DishIngredient request = ingredient(6);
+        request.setCategoryId(21);
+
+        service.update(request);
+
+        org.mockito.Mockito.verifyNoInteractions(events);
+    }
+
+    @Test
+    void updateWithPreviouslyMissingCategoryTriggersDietRematch() {
+        when(ingredientMapper.selectByIdForUpdate(6)).thenReturn(ingredient(6));
+        DishIngredient request = ingredient(6);
+        request.setCategoryId(22);
+
+        service.update(request);
+
+        verify(events).publishEvent(any(me.zhengjie.modules.meal.domain.event.DietDictionaryChangedEvent.class));
+    }
+
+    @Test
     void updateWithNullTagIdsKeepsCurrentRelations() {
         when(ingredientMapper.selectByIdForUpdate(6)).thenReturn(ingredient(6));
         DishIngredient request = ingredient(6);

@@ -3,33 +3,40 @@
 <mapper namespace="me.zhengjie.modules.customer.profile.mapper.CustomerDietDictionaryMapper">
 
     <select id="selectActiveOptions" resultType="me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto">
-        SELECT option_type AS type, option_id AS id, option_name AS name, category_path AS categoryPath
+        SELECT option_type AS type, option_id AS id, option_name AS name, category_path AS categoryPath,
+               ignore_diet_match AS ignoreDietMatch
         FROM (
             SELECT CONVERT('DISH' USING utf8mb4) COLLATE utf8mb4_unicode_ci AS option_type,
                    d.id AS option_id,
                    CONVERT(d.name USING utf8mb4) COLLATE utf8mb4_unicode_ci AS option_name,
-                   CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS category_path
+                   CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AS category_path,
+                   0 AS ignore_diet_match
             FROM dish d
             WHERE d.enabled = 1 AND d.name IS NOT NULL AND d.name != ''
             UNION ALL
             SELECT CONVERT('INGREDIENT' USING utf8mb4) COLLATE utf8mb4_unicode_ci,
                    i.id,
                    CONVERT(i.name USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                   CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+                   CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   CASE WHEN BINARY c.name = BINARY '调料' OR BINARY p.name = BINARY '调料' THEN 1 ELSE 0 END
             FROM dish_ingredient i
+            LEFT JOIN dish_ingredient_category c ON c.id = i.category_id
+            LEFT JOIN dish_ingredient_category p ON p.id = c.parent_id
             WHERE i.enabled = 1 AND i.name IS NOT NULL AND i.name != ''
             UNION ALL
             SELECT CONVERT('INGREDIENT_TAG' USING utf8mb4) COLLATE utf8mb4_unicode_ci,
                    t.id,
                    CONVERT(t.name USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                   CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+                   CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   0
             FROM dish_ingredient_tag t
             WHERE t.name IS NOT NULL AND t.name != ''
             UNION ALL
             SELECT CONVERT('INGREDIENT_CATEGORY' USING utf8mb4) COLLATE utf8mb4_unicode_ci,
                    c.id,
                    CONVERT(c.name USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                   CONVERT(CONCAT(p.name, ' / ', c.name) USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                   CONVERT(CONCAT(p.name, ' / ', c.name) USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   CASE WHEN BINARY c.name = BINARY '调料' OR BINARY p.name = BINARY '调料' THEN 1 ELSE 0 END
             FROM dish_ingredient_category c
             INNER JOIN dish_ingredient_category p ON p.id = c.parent_id
             WHERE c.level = 2 AND c.enabled = 1 AND p.enabled = 1
@@ -38,7 +45,8 @@
             SELECT CONVERT('DISH_TAG' USING utf8mb4) COLLATE utf8mb4_unicode_ci,
                    t.id,
                    CONVERT(t.name USING utf8mb4) COLLATE utf8mb4_unicode_ci,
-                   CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+                   CAST(NULL AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci,
+                   0
             FROM dish_tag t
             WHERE t.name IS NOT NULL AND t.name != ''
         ) options
