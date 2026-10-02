@@ -13,7 +13,8 @@ describe('CustomerDietCell', () => {
 
     expect(wrapper.text()).toContain('不吃花生，')
     expect(wrapper.text()).toContain('也不能吃虾\n少量鱼可以')
-    expect(wrapper.text().replace(/\s+/g, '')).toContain('配料：花生、菜品标签：虾类')
+    expect(wrapper.findAll('.customer-diet-cell__text').wrappers.map(item => item.text()).slice(-2))
+      .toEqual(['配料：花生', '菜品标签：虾类'])
     wrapper.destroy()
   })
 

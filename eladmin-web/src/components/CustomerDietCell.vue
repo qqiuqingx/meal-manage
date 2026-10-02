@@ -5,11 +5,13 @@
       <div v-for="(block, index) in rawBlocks" :key="index" class="customer-diet-cell__text">{{ block }}</div>
     </div>
     <div v-else class="customer-diet-cell__text">—</div>
-    <div class="customer-diet-cell__label">已确认对象</div>
-    <div v-if="matchedGroups.length">
-      <div v-for="group in matchedGroups" :key="group.type" class="customer-diet-cell__text">{{ typeLabel(group.type) }}：{{ group.names }}</div>
-    </div>
-    <div v-else class="customer-diet-cell__text">—</div>
+    <template v-if="showItems">
+      <div class="customer-diet-cell__label">已确认对象</div>
+      <div v-if="matchedGroups.length">
+        <div v-for="group in matchedGroups" :key="group.type" class="customer-diet-cell__text">{{ typeLabel(group.type) }}：{{ group.names }}</div>
+      </div>
+      <div v-else class="customer-diet-cell__text">—</div>
+    </template>
   </div>
 </template>
 
@@ -18,7 +20,9 @@ export default {
   name: 'CustomerDietCell',
   props: {
     raw: { type: Array, default: () => [] },
-    items: { type: Array, default: () => [] }
+    items: { type: Array, default: () => [] },
+    /** 是否展示结构化对象；菜品特殊要求只展示原文，禁忌保留对象分组。 */
+    showItems: { type: Boolean, default: true }
   },
   computed: {
     rawBlocks() {

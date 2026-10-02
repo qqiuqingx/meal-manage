@@ -240,7 +240,7 @@ describe('CustomerOrder edit flow', () => {
     expect(source).toContain("{{ menuDialogRow.customMenuImage ? '替换菜单图片' : '上传菜单图片' }}")
     expect(source).toContain('<el-table-column column-key="dishRequirements" label="菜品特殊要求" min-width="240">')
     expect(source).toContain('<el-table-column column-key="dietaryRestrictions" label="禁忌食物" min-width="240">')
-    expect(source).toContain('<CustomerDietCell :raw="scope.row.dishRequirementsRaw" :items="scope.row.dishRequirements" />')
+    expect(source).toContain('<CustomerDietCell :raw="scope.row.dishRequirementsRaw" :items="scope.row.dishRequirements" :show-items="false" />')
     expect(source).toContain('<CustomerDietCell :raw="scope.row.dietaryRestrictionsRaw" :items="scope.row.dietaryRestrictions" />')
     expect(source).toContain("@click=\"beginInlineDietEdit(scope.row, 'dishRequirements')\"")
     expect(source).toContain("@click=\"beginInlineDietEdit(scope.row, 'dietaryRestrictions')\"")

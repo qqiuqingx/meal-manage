@@ -376,7 +376,7 @@
             :title="isInlineEditable(scope.row) ? '点击编辑，收起下拉框后自动保存，Esc 取消' : null"
             @click="beginInlineDietEdit(scope.row, 'dishRequirements')"
           >
-            <CustomerDietCell :raw="scope.row.dishRequirementsRaw" :items="scope.row.dishRequirements" />
+            <CustomerDietCell :raw="scope.row.dishRequirementsRaw" :items="scope.row.dishRequirements" :show-items="false" />
           </div>
         </template>
       </el-table-column>
@@ -572,7 +572,7 @@
         <el-card v-if="form.id" shadow="never" class="order-diet-card">
           <div slot="header">客户饮食共享信息</div>
           <div class="order-diet-card__heading">菜品特殊要求</div>
-          <CustomerDietCell :raw="form.dishRequirementsRaw" :items="form.dishRequirements" />
+          <CustomerDietCell :raw="form.dishRequirementsRaw" :items="form.dishRequirements" :show-items="false" />
           <div class="order-diet-card__heading">客户禁忌</div>
           <CustomerDietCell :raw="form.dietaryRestrictionsRaw" :items="form.dietaryRestrictions" />
         </el-card>

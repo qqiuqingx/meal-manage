@@ -13,13 +13,6 @@
         </div>
         <div v-else class="customer-diet-info__text">—</div>
       </div>
-      <div class="customer-diet-info__group">
-        <div class="customer-diet-info__label">已确认对象</div>
-        <el-tag v-for="item in items(customer.dishRequirements)" :key="item.type + ':' + item.id" size="mini" class="customer-diet-info__tag">
-          {{ typeLabel(item.type) }}：{{ item.name || ('#' + item.id) }}
-        </el-tag>
-        <span v-if="!items(customer.dishRequirements).length" class="customer-diet-info__text">—</span>
-      </div>
     </el-collapse-item>
     <el-collapse-item name="restrictions">
       <template slot="title">禁忌食物</template>

@@ -153,7 +153,7 @@
       </el-table-column>
       <el-table-column label="菜品特殊要求" min-width="230">
         <template slot-scope="{ row }">
-          <CustomerDietCell :raw="row.dishRequirementsRaw" :items="row.dishRequirements" />
+          <CustomerDietCell :raw="row.dishRequirementsRaw" :items="row.dishRequirements" :show-items="false" />
         </template>
       </el-table-column>
       <el-table-column label="过敏食物" min-width="140">
