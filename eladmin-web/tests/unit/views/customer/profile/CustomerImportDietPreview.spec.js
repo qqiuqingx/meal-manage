@@ -10,6 +10,25 @@ localVue.component('el-popover', Popover)
 const optionLabel = item => `${item.type} · ${item.name}`
 
 describe('customer import diet summary', () => {
+  test('keeps manually excluded objects separate from unmatched text', () => {
+    const wrapper = mount(CustomerImportDietPreview, {
+      localVue,
+      propsData: {
+        draft: { dietMatches: [
+          { sourceKey: 'DIET:4:6:0', sourceRow: 4, status: 'EXCLUDED', excludedItemCount: 2, selectedItems: [], rawText: '香菜' },
+          { sourceKey: 'DIET:4:6:1', sourceRow: 4, status: 'UNIQUE', excludedItemCount: 1,
+            selectedItems: [{ type: 'INGREDIENT', id: 5, name: '芹菜' }], rawText: '芹菜' }
+        ] },
+        optionLabel
+      }
+    })
+    expect(wrapper.find('.import-diet-preview__counts').text()).toContain('人工排除 1')
+    expect(wrapper.find('.import-diet-preview__counts').text()).not.toContain('未匹配')
+    expect(wrapper.find('.import-diet-preview__details').text()).toContain('已人工排除，不会自动加回')
+    expect(wrapper.find('.import-diet-preview__details').text()).toContain('另有 1 个对象已人工排除')
+    expect(wrapper.vm.restrictedNames).toBe('芹菜')
+    wrapper.destroy()
+  })
   test('keeps long raw text and every candidate in click-to-open details', async() => {
     const draft = {
       customerCode: 'F1596',

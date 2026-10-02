@@ -553,7 +553,7 @@ class CustomerOrderServiceImplTest {
                 nullProfile.getDietaryRestrictions());
         when(orderMapper.selectInlineUpdateByIdForUpdate(93L)).thenReturn(nullOrder);
         when(profileMapper.selectByIdForInlineUpdate(9L)).thenReturn(nullProfile);
-        when(profileMapper.updateDietaryRestrictionsInline(eq(9L), eq("[]"), eq("tester"),
+        when(profileMapper.updateDietaryRestrictionsInline(eq(9L), eq("[]"), eq("[\"DISH:1\"]"), eq("tester"),
                 any(java.time.LocalDateTime.class))).thenReturn(1);
         when(inlineAuditMapper.insert(any(CustomerOrderInlineAudit.class))).thenReturn(1);
 
@@ -571,8 +571,9 @@ class CustomerOrderServiceImplTest {
 
         orderService.updateInline(94L, emptyDto);
 
-        verify(profileMapper).updateDietaryRestrictionsInline(eq(9L), eq("[]"), eq("tester"),
+        verify(profileMapper).updateDietaryRestrictionsInline(eq(9L), eq("[]"), eq("[\"DISH:1\"]"), eq("tester"),
                 any(java.time.LocalDateTime.class));
+        assertEquals(Collections.singletonList("DISH:1"), nullProfile.getDietaryRestrictionExclusions());
         verify(profileMapper).updateDishRequirementsInline(eq(10L), eq("[]"), eq("tester"),
                 any(java.time.LocalDateTime.class));
     }
@@ -628,7 +629,7 @@ class CustomerOrderServiceImplTest {
         assertThrows(BadRequestException.class, () -> orderService.updateInline(97L, dto));
 
         verify(profileMapper, never()).updateDietaryRestrictionsInline(any(Long.class), any(String.class),
-                any(String.class), any(java.time.LocalDateTime.class));
+                any(String.class), any(String.class), any(java.time.LocalDateTime.class));
         verify(inlineAuditMapper, never()).insert(any(CustomerOrderInlineAudit.class));
     }
 

@@ -1,5 +1,10 @@
 package me.zhengjie.modules.meal.service.impl;
 
+import java.util.Objects;
+
+import org.springframework.context.ApplicationEventPublisher;
+import me.zhengjie.modules.meal.domain.event.DietDictionaryChangedEvent;
+
 import me.zhengjie.modules.meal.domain.DishIngredientCategory;
 import me.zhengjie.modules.meal.domain.DishIngredient;
 import me.zhengjie.modules.meal.domain.dto.CategoryIngredientMappingRow;
@@ -39,6 +44,7 @@ public class DishIngredientCategoryServiceImpl
 
     private final DishIngredientCategoryMapper categoryMapper;
     private final DishIngredientMapper dishIngredientMapper;
+    private final ApplicationEventPublisher events;
 
     @Override
     public List<DishIngredientCategory> tree() {
@@ -67,6 +73,7 @@ public class DishIngredientCategoryServiceImpl
         return categoryMapper.selectByNameAndLevel(name, level, parentId);
     }
 
+    /** 保存字典变更并发布事务内通知，提交成功后自动更新客户禁忌。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public DishIngredientCategory create(DishIngredientCategory category) {
@@ -74,10 +81,12 @@ public class DishIngredientCategoryServiceImpl
         category.setEnabled(true);
         category.setCreateTime(new Timestamp(System.currentTimeMillis()));
         categoryMapper.insert(category);
+        events.publishEvent(new DietDictionaryChangedEvent());
         return category;
     }
 
     /**
+     * 字典变化时发布事务内通知，提交成功后自动更新客户禁忌。
      * 校验并新增分类；排序未指定时追加到同级分类末尾。
      * @param request 分类名称、层级、父分类和可选排序
      * @return 新建分类
@@ -122,10 +131,12 @@ public class DishIngredientCategoryServiceImpl
         } catch (DuplicateKeyException ex) {
             throw new BadRequestException("同级分类名称已存在");
         }
+        events.publishEvent(new DietDictionaryChangedEvent());
         return category;
     }
 
     /**
+     * 字典变化时发布事务内通知，提交成功后自动更新客户禁忌。
      * 更新分类名称和排序；层级和父分类由现有记录确定且不会改变。
      * @param id 分类ID
      * @param request 新名称和可选排序
@@ -148,6 +159,7 @@ public class DishIngredientCategoryServiceImpl
         if (countSameName(category.getLevel(), category.getParentId(), name, id) > 0) {
             throw new BadRequestException("同级分类名称已存在");
         }
+        String oldName = category.getName();
         category.setName(name);
         if (request.getSort() != null) {
             category.setSort(request.getSort());
@@ -160,8 +172,12 @@ public class DishIngredientCategoryServiceImpl
         } catch (DuplicateKeyException ex) {
             throw new BadRequestException("同级分类名称已存在");
         }
+        if (!Objects.equals(oldName, category.getName())) {
+            events.publishEvent(new DietDictionaryChangedEvent());
+        }
     }
 
+    /** 保存字典变更并发布事务内通知，提交成功后自动更新客户禁忌。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Integer id) {
@@ -186,6 +202,7 @@ public class DishIngredientCategoryServiceImpl
             }
         }
         removeById(id);
+        events.publishEvent(new DietDictionaryChangedEvent());
     }
 
     @Override

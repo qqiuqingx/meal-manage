@@ -27,6 +27,41 @@ class CustomerDietMatchServiceTest {
     private final CustomerDietMatchService service = new CustomerDietMatchService();
 
     @Test
+    void shouldRespectPartialAndCompleteManualExclusionsInImportPreview() {
+        Fixture fixture = fixture(sourceRow("A100", null, "香菜"));
+        me.zhengjie.modules.customer.profile.domain.CustomerProfile existing =
+                new me.zhengjie.modules.customer.profile.domain.CustomerProfile();
+        fixture.candidates.get(0).setExistingProfile(existing);
+        existing.setDietaryRestrictionExclusions(Collections.singletonList("DISH:1"));
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+        CustomerDietMatchDto partial = fixture.parsed.getDietImportData().getMatches().get(0);
+        assertEquals("UNIQUE", partial.getStatus());
+        assertEquals(1, partial.getExcludedItemCount());
+        assertEquals("INGREDIENT", partial.getSelectedItems().get(0).getType());
+
+        existing.setDietaryRestrictionExclusions(Arrays.asList("DISH:1", "INGREDIENT:2"));
+        service.attachDietRows(fixture.workbook, fixture.candidates, fixture.options);
+        CustomerDietMatchDto excluded = fixture.parsed.getDietImportData().getMatches().get(0);
+        assertEquals("EXCLUDED", excluded.getStatus());
+        assertEquals(2, excluded.getExcludedItemCount());
+        assertTrue(excluded.getSelectedItems().isEmpty());
+        assertTrue(fixture.parsed.isImportable());
+        service.applyAllMatches(fixture.candidates);
+        assertTrue(fixture.parsed.getDietImportData().getDietaryRestrictions().isEmpty());
+    }
+
+    @Test
+    void shouldMatchSavedRawBlocksWithoutImportCandidatesAndReuseSnapshot() {
+        Fixture fixture = fixture(sourceRow("A100", null, null));
+        CustomerDietMatchService.DictionarySnapshot snapshot = service.snapshot(fixture.options);
+        List<CustomerDietItemDto> items = service.matchRestrictions(Arrays.asList("不吃香菜", "香菜，牛肉"), snapshot);
+        assertEquals(Arrays.asList("DISH", "INGREDIENT", "INGREDIENT_CATEGORY"), items.stream()
+                .map(CustomerDietItemDto::getType).collect(java.util.stream.Collectors.toList()));
+        assertTrue(service.matchRestrictions(Collections.emptyList(), snapshot).isEmpty());
+        assertEquals(items, service.matchRestrictions(Collections.singletonList("香菜，牛肉"), snapshot));
+    }
+
+    @Test
     void shouldTraceRestrictionsToColumnF() {
         Fixture fixture = fixture(sourceRow("A100", "香菜", "牛肉"));
 

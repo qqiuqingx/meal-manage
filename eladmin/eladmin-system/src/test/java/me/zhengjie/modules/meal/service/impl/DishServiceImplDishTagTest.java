@@ -32,6 +32,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DishServiceImplDishTagTest {
+    @org.mockito.Mock
+    private org.springframework.context.ApplicationEventPublisher events;
 
     @Mock private DishMapper dishMapper;
     @Mock private CustomerDietaryRestrictionsMapper customerDietaryRestrictionsMapper;
@@ -68,6 +70,7 @@ class DishServiceImplDishTagTest {
         verify(dishMapper).selectByIdForUpdate(9);
         verify(dishMapper).updateById(stored);
         verifyNoInteractions(dishTagService);
+        org.mockito.Mockito.verify(events).publishEvent(org.mockito.ArgumentMatchers.any(me.zhengjie.modules.meal.domain.event.DietDictionaryChangedEvent.class));
     }
 
     @Test

@@ -34,8 +34,11 @@ public class CustomerDietMatchDto implements Serializable {
     /** 用于字典精确匹配的词项，不覆盖完整原文。 */
     private String lookupText;
 
-    /** UNIQUE / MULTI / UNMATCHED。 */
+    /** UNIQUE / MULTI / UNMATCHED / EXCLUDED（全部候选已人工排除）。 */
     private String status;
+
+    /** 本次命中但被客户人工排除的候选数量。 */
+    private int excludedItemCount;
 
     private List<CustomerDietOptionDto> candidates = new ArrayList<>();
 

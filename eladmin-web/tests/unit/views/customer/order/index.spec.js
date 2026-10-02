@@ -111,7 +111,6 @@ function mountDietPage(row) {
           pageChangeHandler: jest.fn(),
           refresh: jest.fn(() => Promise.resolve())
         },
-        dietOptionsLoaded: true,
         dietOptions: [
           { type: 'DISH', id: 2, name: '新菜' },
           { type: 'INGREDIENT', id: 3, name: '花生' }
@@ -154,6 +153,24 @@ describe('CustomerOrder edit flow', () => {
     orderApi.getOrder.mockReset()
     orderApi.updateInline.mockReset()
     profileApi.getDietOptions.mockReset()
+    profileApi.getDietOptions.mockResolvedValue({ data: [
+      { type: 'DISH', id: 2, name: '新菜' },
+      { type: 'INGREDIENT', id: 3, name: '花生' }
+    ] })
+  })
+
+  test('reloads diet choices on the next edit and shares concurrent pending requests', async() => {
+    const oldOptions = [{ type: 'DISH', id: 2, name: '新菜' }]
+    const newOptions = oldOptions.concat({ type: 'INGREDIENT', id: 501, name: '秋葵' })
+    profileApi.getDietOptions.mockResolvedValueOnce({ data: oldOptions }).mockResolvedValueOnce({ data: newOptions })
+    const vm = createVm()
+    const row = { id: 99, status: 1, dietaryRestrictions: [] }
+    const first = vm.loadInlineDietOptions()
+    expect(vm.loadInlineDietOptions()).toBe(first)
+    await first
+    await vm.beginInlineDietEdit(row, 'dietaryRestrictions')
+    expect(profileApi.getDietOptions).toHaveBeenCalledTimes(2)
+    expect(vm.getInlineDietChoices(row, 'dietaryRestrictions').some(option => option.name === '秋葵')).toBe(true)
   })
 
   test('loads order detail before entering edit mode', async() => {
@@ -355,9 +372,9 @@ describe('CustomerOrder edit flow', () => {
   })
 
   test('saves one complete diet selection array with its entry snapshot as expectedValue', async() => {
+    profileApi.getDietOptions.mockResolvedValue({ data: [{ type: 'DISH', id: 2, name: '服务端名称' }] })
     orderApi.updateInline.mockResolvedValue({})
     const vm = createVm({
-      dietOptionsLoaded: true,
       dietOptions: [{ type: 'DISH', id: 2, name: '服务端名称' }]
     })
     const oldItems = [{ type: 'INGREDIENT_TAG', id: 9, name: '历史名称' }]
@@ -434,7 +451,7 @@ describe('CustomerOrder edit flow', () => {
   })
 
   test('closing an unchanged diet selection skips updates even after reordering selections', async() => {
-    const vm = createVm({ dietOptionsLoaded: true })
+    const vm = createVm()
     const row = {
       id: 33,
       status: 1,
@@ -450,7 +467,7 @@ describe('CustomerOrder edit flow', () => {
 
   test('removing the last diet object submits an empty array with the original snapshot', async() => {
     orderApi.updateInline.mockResolvedValue({})
-    const vm = createVm({ dietOptionsLoaded: true })
+    const vm = createVm()
     const expectedValue = [{ type: 'INGREDIENT', id: 3, name: '花生' }]
     const row = { id: 34, status: 1, dietaryRestrictions: expectedValue }
     await vm.beginInlineDietEdit(row, 'dietaryRestrictions')
@@ -463,7 +480,7 @@ describe('CustomerOrder edit flow', () => {
   })
 
   test('cancelling a diet selection draft does not send an update', async() => {
-    const vm = createVm({ dietOptionsLoaded: true, dietOptions: [] })
+    const vm = createVm({ dietOptions: [] })
     const row = { id: 30, status: 1, dietaryRestrictions: [] }
     await vm.beginInlineDietEdit(row, 'dietaryRestrictions')
     vm.setInlineDietDraft(row, 'dietaryRestrictions', ['DISH:1'])

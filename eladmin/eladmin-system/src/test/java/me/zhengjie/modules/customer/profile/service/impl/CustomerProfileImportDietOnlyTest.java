@@ -113,6 +113,7 @@ class CustomerProfileImportDietOnlyTest {
         existingItem.setName("香菜");
         profile.setDishRequirements(Collections.singletonList(existingItem));
         profile.setDishRequirementsRaw(Collections.singletonList("已有特殊需求"));
+        profile.setDietaryRestrictionExclusions(Collections.singletonList("DISH:1"));
         when(profileMapper.selectByIdForImportUpdate(10L)).thenReturn(profile);
         ImportCandidate candidate = new ImportCandidate();
         candidate.setSourceMonth(LocalDate.of(2026, 9, 1));
@@ -124,6 +125,7 @@ class CustomerProfileImportDietOnlyTest {
         me.zhengjie.modules.customer.profile.domain.CustomerDietImportData data =
                 new me.zhengjie.modules.customer.profile.domain.CustomerDietImportData();
         data.setMedicalRequirements("少盐");
+        data.setDietaryRestrictions(Collections.singletonList(existingItem));
         String raw = " 香菜，少油\n煮熟煮透 ";
         data.setDishRequirementsRaw(Collections.singletonList(raw));
         parsed.setDietImportData(data);
@@ -137,6 +139,7 @@ class CustomerProfileImportDietOnlyTest {
         assertEquals("UPDATED", result.getStatus());
         assertEquals("少盐", profile.getMedicalRequirements());
         assertEquals(Collections.singletonList(existingItem), profile.getDishRequirements());
+        assertTrue(profile.getDietaryRestrictions() == null || profile.getDietaryRestrictions().isEmpty());
         assertEquals(Arrays.asList("已有特殊需求", raw), profile.getDishRequirementsRaw());
         assertEquals("ALREADY_EXISTS", writer.writeDietOnly(candidate).getStatus());
         assertEquals(Arrays.asList("已有特殊需求", raw), profile.getDishRequirementsRaw());

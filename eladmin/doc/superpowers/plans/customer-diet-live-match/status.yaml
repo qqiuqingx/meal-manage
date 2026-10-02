@@ -1,0 +1,34 @@
+feature: customer-diet-live-match
+design_status: approved
+implementation_allowed: true
+current_phase: complete
+phases:
+- id: phase-01
+  name: manual-exclusions
+  depends_on: []
+  status: complete
+- id: phase-02
+  name: matcher-import
+  depends_on:
+  - phase-01
+  status: complete
+- id: phase-03
+  name: dictionary-events
+  depends_on:
+  - phase-01
+  - phase-02
+  status: complete
+- id: phase-04
+  name: ui-verification
+  depends_on:
+  - phase-01
+  - phase-02
+  - phase-03
+  status: complete
+implementation_status: complete
+database_migration: not_executed
+validation:
+  backend_tests_passed: 185
+  frontend_tests_passed: 40
+  lint: passed
+  diff_check: passed

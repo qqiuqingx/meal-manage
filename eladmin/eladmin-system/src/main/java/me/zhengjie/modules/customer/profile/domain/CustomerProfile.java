@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.alibaba.fastjson2.annotation.JSONField;
+import me.zhengjie.modules.customer.profile.handler.CustomerDietExclusionsTypeHandler;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -141,6 +143,12 @@ public class CustomerProfile implements Serializable {
      */
     @TableField(value = "dietary_restrictions", typeHandler = CustomerDietItemsTypeHandler.class)
     private List<CustomerDietItemDto> dietaryRestrictions;
+
+    /** 人工移除的禁忌对象稳定键；只由服务端维护，自动匹配和补录不得加回。 */
+    @JSONField(serialize = false, deserialize = false)
+    @JsonIgnore
+    @TableField(value = "dietary_restriction_exclusions", typeHandler = CustomerDietExclusionsTypeHandler.class)
+    private List<String> dietaryRestrictionExclusions;
 
     /**
      * 导入来源中的想吃内容原文块，普通客户编辑不修改此字段。

@@ -27,6 +27,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class DishIngredientCategoryServiceImplTest {
+    private final org.springframework.context.ApplicationEventPublisher events =
+            org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class);
 
     private DishIngredientCategoryMapper categoryMapper;
     private DishIngredientMapper ingredientMapper;
@@ -36,7 +38,7 @@ class DishIngredientCategoryServiceImplTest {
     void setUp() {
         categoryMapper = mock(DishIngredientCategoryMapper.class);
         ingredientMapper = mock(DishIngredientMapper.class);
-        service = new DishIngredientCategoryServiceImpl(categoryMapper, ingredientMapper);
+        service = new DishIngredientCategoryServiceImpl(categoryMapper, ingredientMapper, events);
         when(categoryMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L);
         when(categoryMapper.selectMaxSort(anyInt(), nullable(Integer.class))).thenReturn(20);
     }
@@ -55,6 +57,7 @@ class DishIngredientCategoryServiceImplTest {
         assertEquals(30, created.getSort());
         assertEquals(true, created.getEnabled());
         assertNotNull(created.getCreateTime());
+        org.mockito.Mockito.verify(events).publishEvent(org.mockito.ArgumentMatchers.any(me.zhengjie.modules.meal.domain.event.DietDictionaryChangedEvent.class));
     }
 
     @Test

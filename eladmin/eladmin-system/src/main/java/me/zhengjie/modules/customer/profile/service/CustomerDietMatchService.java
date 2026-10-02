@@ -19,6 +19,7 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietMatchDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto;
 import org.springframework.stereotype.Service;
+import me.zhengjie.modules.customer.profile.util.CustomerDietRestrictionUtil;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -46,6 +47,42 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CustomerDietMatchService {
 
+    /** 一轮匹配复用的名称索引和分词器；仅在该轮的单个线程内使用。 */
+    public static final class DictionarySnapshot {
+        private final Map<String, List<CustomerDietOptionDto>> index;
+        private final Segment segment;
+
+        private DictionarySnapshot(Map<String, List<CustomerDietOptionDto>> index, Segment segment) {
+            this.index = index;
+            this.segment = segment;
+        }
+    }
+
+    /** 从当前有效字典建立一份快照，导入和后台批处理均在一轮内复用它。 */
+    public DictionarySnapshot snapshot(List<CustomerDietOptionDto> options) {
+        Map<String, List<CustomerDietOptionDto>> index = buildIndex(options);
+        return new DictionarySnapshot(index, createSegment(index));
+    }
+
+    /**
+     * 匹配已保存的禁忌原文块，不依赖 Excel 来源行或导入客户候选。
+     * @param rawBlocks 保留标点和换行的完整原文；空列表不生成对象
+     * @param snapshot 本轮只创建一次的有效字典快照
+     * @return 按类型和ID去重的全部命中对象，人工排除由保存时的最新客户决定
+     */
+    public List<CustomerDietItemDto> matchRestrictions(List<String> rawBlocks, DictionarySnapshot snapshot) {
+        List<CustomerDietItemDto> result = new ArrayList<>();
+        if (rawBlocks != null) {
+            for (String raw : rawBlocks) {
+                for (CustomerDietMatchDto match : matchCell(raw, snapshot.index, snapshot.segment)) {
+                    for (CustomerDietItemDto item : match.getSelectedItems()) {
+                        appendUnique(result, item);
+                    }
+                }
+            }
+        }
+        return result;
+    }
 
     /** 词项分隔符（文本已先做 NFKC 归一化，全角标点此时已是半角）。 */
     private static final Pattern ITEM_SEPARATOR = Pattern.compile("[、,;:。.·/\\s&+|!?()]+");
@@ -133,11 +170,13 @@ public class CustomerDietMatchService {
             rowsByCode.computeIfAbsent(sourceRow.getEffectiveCode(), key -> new ArrayList<>()).add(sourceRow);
         }
 
-        Map<String, List<CustomerDietOptionDto>> index = buildIndex(options);
-        Segment segment = createSegment(index);
+        DictionarySnapshot snapshot = snapshot(options);
         for (Map.Entry<String, List<CustomerDietSourceRow>> entry : rowsByCode.entrySet()) {
             ImportCandidate candidate = byCode.get(entry.getKey());
-            CustomerDietImportData data = aggregate(entry.getValue(), index, segment);
+            CustomerDietImportData data = aggregate(entry.getValue(), snapshot);
+            Set<String> excluded = candidate.getExistingProfile() == null ? Collections.emptySet()
+                    : CustomerDietRestrictionUtil.exclusions(candidate.getExistingProfile());
+            applyExclusions(data.getMatches(), excluded);
             candidate.getParsed().setDietImportData(data);
             mergeWithExisting(candidate, data);
         }
@@ -172,12 +211,11 @@ public class CustomerDietMatchService {
      * 合并客户第二工作表的医嘱、日期、术后文本及饮食原文块。
      *
      * @param rows 同一编号下按来源行排序的记录
-     * @param index 按名称建好的字典索引
-     * @param segment 本次导入独立的领域分词器
+     * @param snapshot 本次导入复用的有效字典快照
      * @return 合并后的导入数据及词项匹配结果
      */
     private CustomerDietImportData aggregate(List<CustomerDietSourceRow> rows,
-                                             Map<String, List<CustomerDietOptionDto>> index, Segment segment) {
+                                             DictionarySnapshot snapshot) {
         CustomerDietImportData data = new CustomerDietImportData();
         Set<String> medical = new LinkedHashSet<>();
         Set<String> postoperative = new LinkedHashSet<>();
@@ -197,7 +235,13 @@ public class CustomerDietMatchService {
             for (String issue : row.getIssues()) {
                 data.getIssues().add(issue);
             }
-            data.getMatches().addAll(matchCell(row, row.getDietaryRestrictionsRaw(), index, segment));
+            List<CustomerDietMatchDto> matches = matchCell(row.getDietaryRestrictionsRaw(), snapshot.index, snapshot.segment);
+            for (int term = 0; term < matches.size(); term++) {
+                CustomerDietMatchDto match = matches.get(term);
+                match.setSourceRow(row.getSourceRow());
+                match.setSourceKey("DIET:" + row.getSourceRow() + ":6:" + term);
+            }
+            data.getMatches().addAll(matches);
         }
         data.setMedicalRequirements(singleNonBlank(medical));
         if (nonBlankValues(medical).size() > 1) {
@@ -222,24 +266,22 @@ public class CustomerDietMatchService {
      * F 列固定表示客户禁忌。
      * 饮食表达前缀只用于清洗查找文本，不改变匹配对象的归属方向。
      *
-     * @param row 原始来源行
      * @param rawText 完整单元格原文
      * @param index 当前字典名称索引
      * @param segment 本次导入独立的领域分词器
      * @return 逐词项匹配结果
      */
-    private List<CustomerDietMatchDto> matchCell(CustomerDietSourceRow row, String rawText,
+    private List<CustomerDietMatchDto> matchCell(String rawText,
                                                  Map<String, List<CustomerDietOptionDto>> index, Segment segment) {
         if (isBlank(rawText)) {
             return new ArrayList<>();
         }
         List<CustomerDietOptionDto> exactWholeCell = findOptions(rawText, index);
         if (!exactWholeCell.isEmpty()) {
-            return new ArrayList<>(Arrays.asList(createMatch(row, rawText,
-                    rawText.trim(), rawText.trim(), 0, exactWholeCell)));
+            return new ArrayList<>(Arrays.asList(createMatch(rawText,
+                    rawText.trim(), rawText.trim(), exactWholeCell)));
         }
         List<CustomerDietMatchDto> matches = new ArrayList<>();
-        int termIndex = 0;
         for (String rawTerm : ITEM_SEPARATOR.split(cleanCell(rawText))) {
             String term = EDGE_PUNCTUATION.matcher(rawTerm).replaceAll("");
             if (term.isEmpty() || PURE_NUMBER.matcher(term).matches()) {
@@ -260,8 +302,8 @@ public class CustomerDietMatchService {
                 for (String piece : pieces) {
                     String lookup = refineLookup(piece, index);
                     String rawItem = pieces.size() == 1 ? expression : piece;
-                    CustomerDietMatchDto match = createMatch(row, rawText,
-                            rawItem, lookup, termIndex++, findOptions(lookup, index));
+                    CustomerDietMatchDto match = createMatch(rawText,
+                            rawItem, lookup, findOptions(lookup, index));
                     matches.add(match);
                 }
             }
@@ -470,21 +512,17 @@ public class CustomerDietMatchService {
     }
 
     /**
-     * 创建 F 列禁忌的匹配项，包含稳定来源键、候选及自动录入对象。
+     * 创建禁忌词项、候选及自动录入对象；真实 Excel 来源键由导入聚合时附加。
      *
-     * @param row 来源行
      * @param cellText 完整单元格原文
      * @param rawText 原词项
      * @param lookup 字典查找文本
-     * @param termIndex 单元格内词项序号
      * @param candidates 名称完全匹配的全部候选
      * @return 匹配展示 DTO
      */
-    private CustomerDietMatchDto createMatch(CustomerDietSourceRow row, String cellText, String rawText, String lookup,
-                                             int termIndex, List<CustomerDietOptionDto> candidates) {
+    private CustomerDietMatchDto createMatch(String cellText, String rawText, String lookup,
+                                             List<CustomerDietOptionDto> candidates) {
         CustomerDietMatchDto match = new CustomerDietMatchDto();
-        match.setSourceKey("DIET:" + row.getSourceRow() + ":6:" + termIndex);
-        match.setSourceRow(row.getSourceRow());
         match.setSourceColumn(6);
         match.setSide("DIETARY_RESTRICTIONS");
         match.setRawText(rawText);
@@ -503,6 +541,23 @@ public class CustomerDietMatchService {
             match.setMessage("未匹配到字典对象，原文仍会保留");
         }
         return match;
+    }
+
+    /** 过滤人工排除候选，预览状态和数量仅反映实际允许自动录入的对象。 */
+    private void applyExclusions(List<CustomerDietMatchDto> matches, Set<String> excluded) {
+        for (CustomerDietMatchDto match : matches) {
+            List<CustomerDietItemDto> selected = match.getSelectedItems().stream()
+                    .filter(item -> !excluded.contains(CustomerDietRestrictionUtil.key(item)))
+                    .collect(Collectors.toList());
+            int removed = match.getSelectedItems().size() - selected.size();
+            if (removed == 0) {
+                continue;
+            }
+            match.setSelectedItems(selected);
+            match.setExcludedItemCount(removed);
+            match.setStatus(selected.isEmpty() ? "EXCLUDED" : selected.size() == 1 ? "UNIQUE" : "MULTI");
+            match.setMessage("已人工排除 " + removed + " 个对象，本次自动录入 " + selected.size() + " 个");
+        }
     }
 
     /**

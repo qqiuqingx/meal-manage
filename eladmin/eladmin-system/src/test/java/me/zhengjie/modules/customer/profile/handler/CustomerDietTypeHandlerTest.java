@@ -15,6 +15,15 @@ class CustomerDietTypeHandlerTest {
     private final CustomerDietRawBlocksTypeHandler rawHandler = new CustomerDietRawBlocksTypeHandler();
 
     @Test
+    void shouldRoundTripExclusionKeysAndPreserveNullAsEmptyState() {
+        CustomerDietExclusionsTypeHandler handler = new CustomerDietExclusionsTypeHandler();
+        List<String> keys = Arrays.asList("INGREDIENT:501", "DISH_TAG:9");
+        assertEquals(keys, handler.parse(handler.toJson(keys)));
+        org.junit.jupiter.api.Assertions.assertNull(handler.parse("null"));
+        assertThrows(RuntimeException.class, () -> handler.parse("{\"id\":501}"));
+    }
+
+    @Test
     void shouldRoundTripTypedItemsAndKeepNameSnapshots() {
         CustomerDietItemDto item = new CustomerDietItemDto();
         item.setType("INGREDIENT_CATEGORY");

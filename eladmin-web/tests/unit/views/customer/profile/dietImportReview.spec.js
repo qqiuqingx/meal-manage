@@ -42,6 +42,25 @@ jest.mock('vuex', () => ({ mapGetters: () => ({}) }))
 const customerProfilePage = require('@/views/customer/profile/index.vue').default
 
 describe('customer diet import preview', () => {
+  test('refreshes profile diet choices after the dictionary changes', async() => {
+    const api = require('@/api/customer/profile')
+    api.getDietOptions.mockClear()
+    api.getDietOptions.mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: [{ type: 'INGREDIENT', id: 501, name: '秋葵' }] })
+    const context = {
+      dietOptionsPromise: null,
+      dietOptions: [],
+      $message: { error: jest.fn() },
+      toDietSelection: customerProfilePage.methods.toDietSelection
+    }
+    const load = customerProfilePage.methods.loadDietOptions
+    const pending = load.call(context)
+    expect(load.call(context)).toBe(pending)
+    await pending
+    await load.call(context)
+    expect(api.getDietOptions).toHaveBeenCalledTimes(2)
+    expect(context.dietOptions[0].selectionKey).toBe('INGREDIENT:501')
+  })
   test('allows confirmation when a same-name term will add every candidate', () => {
     const context = {
       importPreview: {

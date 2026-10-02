@@ -2,6 +2,15 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper">
 
+    <select id="findDietRematchIds" resultType="long">
+        SELECT id FROM customer_profile
+        WHERE id &gt; #{afterId}
+          AND dietary_restrictions_raw IS NOT NULL
+          AND JSON_LENGTH(dietary_restrictions_raw) &gt; 0
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+
     <resultMap id="BaseResultMap" type="me.zhengjie.modules.customer.profile.domain.CustomerProfile">
         <id column="id" property="id"/>
         <result column="customer_code" property="customerCode"/>
@@ -21,6 +30,8 @@
                 typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietItemsTypeHandler"/>
         <result column="dietary_restrictions" property="dietaryRestrictions"
                 typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietItemsTypeHandler"/>
+        <result column="dietary_restriction_exclusions" property="dietaryRestrictionExclusions"
+                typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietExclusionsTypeHandler"/>
         <result column="dish_requirements_raw" property="dishRequirementsRaw"
                 typeHandler="me.zhengjie.modules.customer.profile.handler.CustomerDietRawBlocksTypeHandler"/>
         <result column="dietary_restrictions_raw" property="dietaryRestrictionsRaw"
@@ -75,6 +86,7 @@
     <update id="updateDietaryRestrictionsInline">
         UPDATE customer_profile
         SET dietary_restrictions = #{json, jdbcType=VARCHAR, typeHandler=org.apache.ibatis.type.StringTypeHandler},
+            dietary_restriction_exclusions = #{exclusionsJson, jdbcType=VARCHAR, typeHandler=org.apache.ibatis.type.StringTypeHandler},
             update_by = #{updateBy, typeHandler=org.apache.ibatis.type.StringTypeHandler},
             update_time = #{updateTime, jdbcType=TIMESTAMP}
         WHERE id = #{id}

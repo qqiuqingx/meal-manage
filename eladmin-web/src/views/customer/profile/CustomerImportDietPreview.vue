@@ -7,6 +7,7 @@
       <span class="import-diet-preview__success">唯一匹配 {{ counts.unique }}</span>
       <span v-if="counts.multi" class="import-diet-preview__warning">同名多对象 {{ counts.multi }}</span>
       <span v-if="counts.unmatched" class="import-diet-preview__warning">未匹配 {{ counts.unmatched }}</span>
+      <span v-if="counts.excluded" class="import-diet-preview__warning">人工排除 {{ counts.excluded }}</span>
     </div>
     <div v-else class="import-diet-preview__empty">禁忌无匹配项；菜品特殊需求仅保存原文</div>
     <div v-if="restrictedNames" class="import-diet-preview__brief" :title="restrictedNames">禁忌：{{ restrictedNames }}</div>
@@ -29,7 +30,9 @@
             确认后将同时录入 {{ (match.selectedItems || []).length }} 个对象：
             <span v-for="(item, index) in (match.selectedItems || [])" :key="item.type + ':' + item.id">{{ index ? '、' : '' }}{{ optionLabel(item) }}</span>
           </div>
+          <div v-else-if="match.status === 'EXCLUDED'" class="import-diet-preview__warning">已人工排除，不会自动加回；完整原文仍会保存</div>
           <div v-else class="import-diet-preview__warning">未匹配到字典对象，完整原文仍会保存</div>
+          <div v-if="match.excludedItemCount && match.status !== 'EXCLUDED'" class="import-diet-preview__warning">另有 {{ match.excludedItemCount }} 个对象已人工排除，不会自动加回</div>
         </div>
       </div>
       <el-button slot="reference" type="text" size="mini">查看明细</el-button>
@@ -50,14 +53,15 @@ export default {
     matches() {
       return this.draft.dietMatches || []
     },
-    /** 汇总唯一、同名多对象和未匹配词项数量，便于在表格中直接核对。 */
+    /** 汇总实际录入匹配和人工排除词项数量，避免把已排除对象计为未匹配。 */
     counts() {
       return this.matches.reduce((counts, match) => {
         if (match.status === 'UNIQUE') counts.unique++
         else if (match.status === 'MULTI') counts.multi++
+        else if (match.status === 'EXCLUDED') counts.excluded++
         else counts.unmatched++
         return counts
-      }, { unique: 0, multi: 0, unmatched: 0 })
+      }, { unique: 0, multi: 0, unmatched: 0, excluded: 0 })
     },
     /** 返回 D 列完整原文摘要；导入不生成菜品特殊需求匹配对象。 */
     requirementsRaw() {

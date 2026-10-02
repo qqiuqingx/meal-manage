@@ -20,6 +20,7 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportDraftDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportItemResultDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportMealCellDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
+import me.zhengjie.modules.customer.profile.util.CustomerDietRestrictionUtil;
 import me.zhengjie.modules.customer.profile.mapper.CustomerMealScheduleAdditionMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileAddressMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
@@ -199,7 +200,7 @@ public class CustomerProfileImportWriter {
     }
 
     /**
-     * 仅在目标字段为空时补充医嘱和术后信息，并去重合并对象引用与来源原文。
+     * 补充空缺医嘱和术后信息，按最新人工排除去重合并禁忌，保留完整原文。
      *
      * @param profile 已锁定的客户档案
      * @param candidate 已完成来源和身份核验的导入候选
@@ -224,8 +225,8 @@ public class CustomerProfileImportWriter {
             profile.setDishRequirements(mergedDish);
             changed = true;
         }
-        List<CustomerDietItemDto> mergedRestrictions = mergeItems(
-                profile.getDietaryRestrictions(), data.getDietaryRestrictions());
+        List<CustomerDietItemDto> mergedRestrictions = CustomerDietRestrictionUtil.mergeAutomatic(
+                profile, data.getDietaryRestrictions());
         if (!mergedRestrictions.equals(nullToEmpty(profile.getDietaryRestrictions()))) {
             profile.setDietaryRestrictions(mergedRestrictions);
             changed = true;

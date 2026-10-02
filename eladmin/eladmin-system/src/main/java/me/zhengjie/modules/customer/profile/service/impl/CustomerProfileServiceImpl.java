@@ -32,6 +32,7 @@ import me.zhengjie.modules.customer.profile.mapper.CustomerProfileMapper;
 import me.zhengjie.modules.customer.profile.mapper.CustomerProfilePackageMapper;
 import me.zhengjie.modules.customer.profile.service.CustomerProfileService;
 import me.zhengjie.modules.customer.profile.service.CustomerDietDictionaryService;
+import me.zhengjie.modules.customer.profile.util.CustomerDietRestrictionUtil;
 import me.zhengjie.modules.customer.numberpool.domain.NumberPoolConfig;
 import me.zhengjie.modules.customer.numberpool.service.NumberPoolService;
 import me.zhengjie.modules.meal.domain.Dish;
@@ -185,7 +186,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
     }
 
     /**
-     * 更新客户基本资料、地址和可选饮食对象；只读导入原文不由此接口修改。
+     * 更新客户资料、地址和饮食对象，记住人工禁忌移除及主动恢复；导入原文只读。
      *
      * @param dto 客户资料更新请求；饮食对象字段的 null 表示保留
      */
@@ -198,7 +199,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
 
         normalizeAndValidate(dto, false);
 
-        CustomerProfile profile = profileMapper.selectById(dto.getId());
+        CustomerProfile profile = profileMapper.selectByIdForInlineUpdate(dto.getId());
         if (profile == null) {
             throw new BadRequestException("客户档案不存在");
         }
@@ -222,7 +223,7 @@ public class CustomerProfileServiceImpl implements CustomerProfileService {
                     dto.getDishRequirements(), profile.getDishRequirements(), activeDietOptions));
         }
         if (dto.getDietaryRestrictions() != null) {
-            profile.setDietaryRestrictions(dietDictionaryService.normalizeSelections(
+            CustomerDietRestrictionUtil.rememberManualSelection(profile, dietDictionaryService.normalizeSelections(
                     dto.getDietaryRestrictions(), profile.getDietaryRestrictions(), activeDietOptions));
         }
         if (dto.getPostoperativeInfo() != null) {

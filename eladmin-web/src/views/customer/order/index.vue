@@ -753,7 +753,6 @@ export default {
       inlineDrafts: {},
       inlineDietDrafts: {},
       dietOptions: [],
-      dietOptionsLoaded: false,
       dietOptionsPromise: null,
       dietOptionsLoading: false,
       allergyInputDrafts: {},
@@ -1257,15 +1256,13 @@ export default {
     inlineDraftKey(row, field) {
       return `${row.id}:${field}`
     },
-    /** 加载订单行饮食编辑所需的当前有效字典；同一时刻复用正在进行的请求。 */
+    /** 每次进入饮食编辑读取最新有效字典；同一时刻只复用正在进行的请求。 */
     loadInlineDietOptions() {
-      if (this.dietOptionsLoaded) return Promise.resolve(true)
       if (this.dietOptionsPromise) return this.dietOptionsPromise
       this.dietOptionsLoading = true
       this.dietOptionsPromise = profileApi.getDietOptions().then(response => {
         const result = response.data || response
         this.dietOptions = Array.isArray(result) ? result : []
-        this.dietOptionsLoaded = true
         return true
       }).catch(error => {
         this.$message.error((error && error.message) || '加载饮食对象选项失败')

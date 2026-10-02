@@ -1,5 +1,10 @@
 package me.zhengjie.modules.meal.service.impl;
 
+import java.util.Objects;
+
+import org.springframework.context.ApplicationEventPublisher;
+import me.zhengjie.modules.meal.domain.event.DietDictionaryChangedEvent;
+
 import me.zhengjie.modules.meal.domain.CustomerDietaryRestrictions;
 import me.zhengjie.modules.meal.domain.CustomerMenuRecord;
 import me.zhengjie.modules.meal.domain.Dish;
@@ -82,6 +87,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     private final MealPlanCustomerMapper mealPlanCustomerMapper;
     private final MealSchedulePlanMapper mealSchedulePlanMapper;
     private final DishTagService dishTagService;
+    private final ApplicationEventPublisher events;
 
     private static final String[] DISH_TYPES = {"MAIN", "SIDE", "SOUP", "VEGETABLE", "RICE"};
     private static final String[] MEAL_TYPES = {"LUNCH", "DINNER"};
@@ -376,6 +382,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         return dtoList;
     }
 
+    /** 保存字典变更并发布事务内通知，提交成功后自动更新客户禁忌。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void create(Dish resources) {
@@ -393,8 +400,10 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         if (resources.getTagIds() != null) {
             dishTagService.replaceDishTags(resources.getId(), resources.getTagIds());
         }
+        events.publishEvent(new DietDictionaryChangedEvent());
     }
 
+    /** 保存字典变更并发布事务内通知，提交成功后自动更新客户禁忌。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void update(Dish resources) {
@@ -402,6 +411,8 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         if (dish == null) {
             throw new BadRequestException("菜品不存在");
         }
+        String oldName = dish.getName();
+        Boolean oldEnabled = dish.getEnabled();
         dish.copy(resources);
         // 回填 ingredients 字符串字段（供兼容读取）
         // 若 ingredientList 为空则从关系表查询已有配料，避免误覆盖
@@ -424,8 +435,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         if (resources.getTagIds() != null) {
             dishTagService.replaceDishTags(resources.getId(), resources.getTagIds());
         }
+        if (!Objects.equals(oldName, dish.getName()) || !Objects.equals(oldEnabled, dish.getEnabled())) {
+            events.publishEvent(new DietDictionaryChangedEvent());
+        }
     }
 
+    /** 保存字典变更并发布事务内通知，提交成功后自动更新客户禁忌。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteAll(List<Integer> ids) {
@@ -451,6 +466,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         }
         dishTagService.deleteDishRelations(dishIds);
         dishMapper.deleteBatchIds(dishIds);
+        events.publishEvent(new DietDictionaryChangedEvent());
     }
 
     @Override

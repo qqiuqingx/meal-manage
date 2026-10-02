@@ -33,6 +33,14 @@ import java.util.Set;
 public interface CustomerProfileMapper extends BaseMapper<CustomerProfile> {
 
     /**
+     * 按主键游标读取有禁忌原文的客户，供后台逐客户重匹配。
+     * @param afterId 已完成批次的最后主键，首批为0
+     * @param limit 单批最多客户数
+     * @return 按主键升序排列的客户ID，不加载完整客户档案
+     */
+    List<Long> findDietRematchIds(@Param("afterId") long afterId, @Param("limit") int limit);
+
+    /**
      * 条件查询客户档案列表
      */
     List<CustomerProfile> findAll(@Param("criteria") CustomerProfileQueryCriteria criteria);
@@ -101,16 +109,18 @@ public interface CustomerProfileMapper extends BaseMapper<CustomerProfile> {
                                      @Param("updateTime") java.time.LocalDateTime updateTime);
 
     /**
-     * 定向更新客户禁忌对象引用 JSON。
+     * 原子更新客户禁忌对象与人工排除稳定键 JSON。
      *
      * @param id 客户主键
      * @param json 规范化后的对象引用 JSON 数组
+     * @param exclusionsJson 人工排除的 type:id 稳定键 JSON 数组
      * @param updateBy 最后修改人
      * @param updateTime 最后修改时间
      * @return 更新行数
      */
     int updateDietaryRestrictionsInline(@Param("id") Long id,
                                         @Param("json") String json,
+                                        @Param("exclusionsJson") String exclusionsJson,
                                         @Param("updateBy") String updateBy,
                                         @Param("updateTime") java.time.LocalDateTime updateTime);
 

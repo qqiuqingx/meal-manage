@@ -30,6 +30,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class DishTagServiceImplTest {
+    private final org.springframework.context.ApplicationEventPublisher events =
+            org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class);
 
     private DishTagMapper tagMapper;
     private DishTagRelationMapper relationMapper;
@@ -39,7 +41,7 @@ class DishTagServiceImplTest {
     void setUp() {
         tagMapper = mock(DishTagMapper.class);
         relationMapper = mock(DishTagRelationMapper.class);
-        service = new DishTagServiceImpl(tagMapper, relationMapper);
+        service = new DishTagServiceImpl(tagMapper, relationMapper, events);
     }
 
     @Test
@@ -55,6 +57,7 @@ class DishTagServiceImplTest {
 
         assertEquals(12, created.getId());
         assertEquals("清真", created.getName());
+        org.mockito.Mockito.verify(events).publishEvent(org.mockito.ArgumentMatchers.any(me.zhengjie.modules.meal.domain.event.DietDictionaryChangedEvent.class));
     }
 
     @Test

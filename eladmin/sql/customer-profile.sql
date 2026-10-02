@@ -39,6 +39,7 @@ CREATE TABLE customer_profile (
     gestational_week INT NULL COMMENT '孕周(正整数)',
     allergy_tags JSON NULL COMMENT '过敏食物标签(JSON数组)',
     medical_requirements VARCHAR(500) NULL COMMENT '医嘱要求',
+    dietary_restriction_exclusions JSON NULL COMMENT '人工移除的禁忌对象稳定键(type:id)',
     --
     remark VARCHAR(255) NULL COMMENT '备注',
     create_by VARCHAR(100) NULL COMMENT '创建人',

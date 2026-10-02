@@ -755,7 +755,6 @@ export default {
       allergyLoading: false,
       dietOptions: [],
       dietOptionsLoading: false,
-      dietOptionsLoaded: false,
       dietOptionsPromise: null,
       excludedDishOptions: [],
       excludedDishLoading: false,
@@ -890,14 +889,13 @@ export default {
     this.loadDietOptions()
   },
   methods: {
+    /** 编辑前重新读取有效字典，避免配料修改后仍使用页面最初加载的选项。 */
     loadDietOptions() {
-      if (this.dietOptionsLoaded) return Promise.resolve()
       if (this.dietOptionsPromise) return this.dietOptionsPromise
       this.dietOptionsLoading = true
       this.dietOptionsPromise = profileApi.getDietOptions().then(response => {
         const result = response.data || response
         this.dietOptions = Array.isArray(result) ? result.map(item => this.toDietSelection(item)) : []
-        this.dietOptionsLoaded = true
       }).catch(e => {
         this.$message.error((e.message || '') || '加载饮食对象选项失败')
       }).finally(() => {

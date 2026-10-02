@@ -1,5 +1,10 @@
 package me.zhengjie.modules.meal.service.impl;
 
+import java.util.Objects;
+
+import org.springframework.context.ApplicationEventPublisher;
+import me.zhengjie.modules.meal.domain.event.DietDictionaryChangedEvent;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +43,7 @@ public class DishTagServiceImpl implements DishTagService {
 
     private final DishTagMapper tagMapper;
     private final DishTagRelationMapper relationMapper;
+    private final ApplicationEventPublisher events;
 
     /**
      * 按标签名称分页查询标签。
@@ -63,6 +69,7 @@ public class DishTagServiceImpl implements DishTagService {
     }
 
     /**
+     * 字典变化时发布事务内通知，提交成功后自动更新客户禁忌。
      * 创建标签，数据库唯一索引负责并发重名兜底。
      * @param resources 标签名称
      * @return 包含数据库生成ID的标签
@@ -78,10 +85,12 @@ public class DishTagServiceImpl implements DishTagService {
         } catch (DuplicateKeyException ex) {
             throw new BadRequestException("标签名称已存在");
         }
+        events.publishEvent(new DietDictionaryChangedEvent());
         return tag;
     }
 
     /**
+     * 字典变化时发布事务内通知，提交成功后自动更新客户禁忌。
      * 锁定标签后更新名称，避免与菜品绑定或标签删除并发。
      * @param resources 标签ID和新名称
      */
@@ -95,6 +104,7 @@ public class DishTagServiceImpl implements DishTagService {
         if (tag == null) {
             throw new BadRequestException("标签不存在");
         }
+        String oldName = tag.getName();
         tag.setName(normalizeName(resources.getName()));
         tag.setUpdateTime(new Timestamp(System.currentTimeMillis()));
         try {
@@ -102,9 +112,13 @@ public class DishTagServiceImpl implements DishTagService {
         } catch (DuplicateKeyException ex) {
             throw new BadRequestException("标签名称已存在");
         }
+        if (!Objects.equals(oldName, tag.getName())) {
+            events.publishEvent(new DietDictionaryChangedEvent());
+        }
     }
 
     /**
+     * 字典变化时发布事务内通知，提交成功后自动更新客户禁忌。
      * 锁定标签并检查菜品引用后删除字典项。
      * @param id 标签ID
      */
@@ -122,6 +136,7 @@ public class DishTagServiceImpl implements DishTagService {
             throw new BadRequestException("标签正在被菜品使用，请先从菜品中移除并保存关联后再删除");
         }
         tagMapper.deleteById(id);
+        events.publishEvent(new DietDictionaryChangedEvent());
     }
 
     /**

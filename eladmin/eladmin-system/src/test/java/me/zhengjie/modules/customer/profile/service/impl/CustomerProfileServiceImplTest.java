@@ -1,5 +1,22 @@
 package me.zhengjie.modules.customer.profile.service.impl;
 
+import org.springframework.context.ApplicationContext;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.User;
+import me.zhengjie.utils.SpringBeanHolder;
+import me.zhengjie.utils.SecurityUtils;
+import org.springframework.mock.web.MockHttpServletRequest;
+import cn.hutool.jwt.JWT;
+import java.nio.charset.StandardCharsets;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import org.junit.jupiter.api.AfterEach;
+import org.mockito.Spy;
+import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.doReturn;
+
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
@@ -86,8 +103,10 @@ class CustomerProfileServiceImplTest {
     @Mock
     private MealVerificationLogMapper verificationLogMapper;
 
-    @Mock
-    private CustomerDietDictionaryService dietDictionaryService;
+    @Spy
+    private CustomerDietDictionaryService dietDictionaryService =
+            new CustomerDietDictionaryServiceImpl(mock(
+                    me.zhengjie.modules.customer.profile.mapper.CustomerDietDictionaryMapper.class));
 
     @Mock
     private NumberPoolService numberPoolService;
@@ -108,6 +127,19 @@ class CustomerProfileServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        ApplicationContext context = mock(ApplicationContext.class);
+        UserDetailsService users = mock(UserDetailsService.class);
+        lenient().when(context.getBean(UserDetailsService.class)).thenReturn(users);
+        lenient().when(users.loadUserByUsername("tester")).thenReturn(
+                new User("tester", "", Collections.emptyList()));
+        new SpringBeanHolder().setApplicationContext(context);
+        SecurityUtils.header = "Authorization";
+        SecurityUtils.tokenStartWith = "Bearer ";
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer " + JWT.create()
+                .setKey("test-key".getBytes(StandardCharsets.UTF_8)).setPayload("sub", "tester").sign());
+        RequestContextHolder.setRequestAttributes(
+                new ServletRequestAttributes(request));
         profile = new CustomerProfile();
         profile.setId(1L);
         profile.setCustomerName("张三");
@@ -136,6 +168,12 @@ class CustomerProfileServiceImplTest {
         address3.setAddressDetail("北京市西城区xxx胡同789号");
         address3.setContactName("王五");
         address3.setContactPhone("13700137000");
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        RequestContextHolder.resetRequestAttributes();
+        new SpringBeanHolder().destroy();
     }
 
     @Test
@@ -173,16 +211,30 @@ class CustomerProfileServiceImplTest {
         address.setAddressType("DEFAULT");
         address.setAddressDetail("示例路1号");
         dto.setAddresses(Collections.singletonList(address));
-        when(profileMapper.selectById(1L)).thenReturn(profile);
+        when(profileMapper.selectByIdForInlineUpdate(1L)).thenReturn(profile);
 
         customerProfileService.update(dto);
         assertEquals("13900139000\n13700137000", profile.getDeliveryPhoneInfo());
         assertEquals("5天", profile.getPostoperativeInfo());
         assertEquals(Collections.singletonList(savedDiet), profile.getDishRequirements());
 
+        profile.setDietaryRestrictions(Collections.singletonList(savedDiet));
         dto.setDishRequirements(Collections.emptyList());
+        dto.setDietaryRestrictions(Collections.emptyList());
         customerProfileService.update(dto);
+        assertEquals(Collections.singletonList("DISH:1"), profile.getDietaryRestrictionExclusions());
         assertTrue(profile.getDishRequirements().isEmpty());
+
+        CustomerDietOptionDto restored =
+                new CustomerDietOptionDto();
+        restored.setType("DISH");
+        restored.setId(1L);
+        restored.setName("当前菜名");
+        doReturn(Collections.singletonList(restored)).when(dietDictionaryService).listActiveOptions();
+        dto.setDietaryRestrictions(Collections.singletonList(savedDiet));
+        customerProfileService.update(dto);
+        assertTrue(profile.getDietaryRestrictionExclusions().isEmpty());
+        assertEquals("当前菜名", profile.getDietaryRestrictions().get(0).getName());
 
         dto.setDeliveryPhoneInfo("");
         customerProfileService.update(dto);

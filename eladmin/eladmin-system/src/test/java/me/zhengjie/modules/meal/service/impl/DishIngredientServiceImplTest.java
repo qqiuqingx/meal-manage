@@ -26,6 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class DishIngredientServiceImplTest {
+    private final org.springframework.context.ApplicationEventPublisher events =
+            org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class);
 
     private DishIngredientMapper ingredientMapper;
     private DishIngredientCategoryService categoryService;
@@ -37,7 +39,7 @@ class DishIngredientServiceImplTest {
         ingredientMapper = mock(DishIngredientMapper.class);
         categoryService = mock(DishIngredientCategoryService.class);
         tagService = mock(DishIngredientTagService.class);
-        service = new DishIngredientServiceImpl(ingredientMapper, categoryService, tagService);
+        service = new DishIngredientServiceImpl(ingredientMapper, categoryService, tagService, events);
     }
 
     @Test
@@ -50,6 +52,7 @@ class DishIngredientServiceImplTest {
 
         verify(ingredientMapper).updateById(any(DishIngredient.class));
         verify(tagService, never()).replaceIngredientTags(any(), any());
+        org.mockito.Mockito.verifyNoInteractions(events);
     }
 
     @Test
@@ -77,6 +80,7 @@ class DishIngredientServiceImplTest {
         org.mockito.InOrder order = inOrder(ingredientMapper, tagService);
         order.verify(ingredientMapper).insert(request);
         order.verify(tagService).replaceIngredientTags(14, Arrays.asList(2, 4));
+        org.mockito.Mockito.verify(events).publishEvent(org.mockito.ArgumentMatchers.any(me.zhengjie.modules.meal.domain.event.DietDictionaryChangedEvent.class));
     }
 
     @Test

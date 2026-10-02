@@ -1,5 +1,10 @@
 package me.zhengjie.modules.meal.service.impl;
 
+import java.util.Objects;
+
+import org.springframework.context.ApplicationEventPublisher;
+import me.zhengjie.modules.meal.domain.event.DietDictionaryChangedEvent;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import me.zhengjie.modules.meal.domain.DishIngredient;
 import me.zhengjie.modules.meal.domain.DishIngredientCategory;
@@ -37,6 +42,7 @@ public class DishIngredientServiceImpl extends ServiceImpl<DishIngredientMapper,
     private final DishIngredientMapper dishIngredientMapper;
     private final DishIngredientCategoryService categoryService;
     private final DishIngredientTagService tagService;
+    private final ApplicationEventPublisher events;
 
     /**
      * 分页查询配料并批量回填每条配料的标签。
@@ -92,6 +98,7 @@ public class DishIngredientServiceImpl extends ServiceImpl<DishIngredientMapper,
     }
 
     /**
+     * 字典变化时发布事务内通知，提交成功后自动更新客户禁忌。
      * 新增配料，并在同一事务中保存传入的标签关系。
      * @param resources 新配料；tagIds 未传或为空时不绑定标签
      */
@@ -102,9 +109,11 @@ public class DishIngredientServiceImpl extends ServiceImpl<DishIngredientMapper,
         resources.setCreateTime(new Timestamp(System.currentTimeMillis()));
         dishIngredientMapper.insert(resources);
         tagService.replaceIngredientTags(resources.getId(), resources.getTagIds());
+        events.publishEvent(new DietDictionaryChangedEvent());
     }
 
     /**
+     * 字典变化时发布事务内通知，提交成功后自动更新客户禁忌。
      * 锁定配料行后更新配料，并按 null 保持、空数组清空的契约替换标签。
      * @param resources 配料字段及可选标签ID集合
      */
@@ -119,6 +128,8 @@ public class DishIngredientServiceImpl extends ServiceImpl<DishIngredientMapper,
             throw new BadRequestException("配料不存在");
         }
         List<Integer> requestedTagIds = resources.getTagIds();
+        String oldName = existing.getName();
+        Boolean oldEnabled = existing.getEnabled();
         existing.copy(resources);
         resolveCategory(existing);
         existing.setUpdateTime(new Timestamp(System.currentTimeMillis()));
@@ -126,9 +137,13 @@ public class DishIngredientServiceImpl extends ServiceImpl<DishIngredientMapper,
         if (requestedTagIds != null) {
             tagService.replaceIngredientTags(existing.getId(), requestedTagIds);
         }
+        if (!Objects.equals(oldName, existing.getName()) || !Objects.equals(oldEnabled, existing.getEnabled())) {
+            events.publishEvent(new DietDictionaryChangedEvent());
+        }
     }
 
     /**
+     * 字典变化时发布事务内通知，提交成功后自动更新客户禁忌。
      * 按ID锁定并删除配料，同时限定清理其标签关联。
      * @param ids 待删除配料ID集合
      */
@@ -151,6 +166,7 @@ public class DishIngredientServiceImpl extends ServiceImpl<DishIngredientMapper,
         }
         tagService.deleteIngredientRelations(ingredientIds);
         dishIngredientMapper.deleteBatchIds(ingredientIds);
+        events.publishEvent(new DietDictionaryChangedEvent());
     }
 
     /**

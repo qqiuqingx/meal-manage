@@ -21,6 +21,7 @@ import me.zhengjie.modules.customer.pkg.domain.SubPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.pkg.mapper.SubPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.util.CustomerDietRestrictionUtil;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfileAddress;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietItemDto;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerDietOptionDto;
@@ -854,8 +855,12 @@ public class CustomerOrderServiceImpl implements CustomerOrderService {
             updated = profileMapper.updateDishRequirementsInline(profile.getId(),
                     JSON.toJSONString(requestedValue), operator, updateTime);
         } else if ("dietaryRestrictions".equals(field)) {
+            beforeState.put("dietaryRestrictionExclusions", profile.getDietaryRestrictionExclusions());
+            CustomerDietRestrictionUtil.rememberManualSelection(profile, parseInlineDietItems(requestedValue));
+            afterState.put("dietaryRestrictionExclusions", profile.getDietaryRestrictionExclusions());
             updated = profileMapper.updateDietaryRestrictionsInline(profile.getId(),
-                    JSON.toJSONString(requestedValue), operator, updateTime);
+                    JSON.toJSONString(requestedValue), JSON.toJSONString(profile.getDietaryRestrictionExclusions()),
+                    operator, updateTime);
         } else {
             updated = profileMapper.updateSpecialRequirementsInline(profile.getId(),
                     (String) requestedValue, operator, updateTime);
