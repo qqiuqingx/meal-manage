@@ -151,6 +151,150 @@ class CustomerOrderMonthlyImportServiceTest {
     }
 
     @Test
+    void shouldImportLegacyHistoryThenKeepItsBaselineWhenOlderMonthIsBackfilled() {
+        order.setImportMonth(null);
+        order.setImportDate(null);
+        order.setStartDate(LocalDate.of(2026, 10, 1));
+        order.setImportedVerifiedCount(155);
+        order.setVerifiedCount(155);
+        order.setRemainingCount(3);
+        ImportCandidate september = candidate(9, 158, 4);
+        for (int day = 1; day <= 30; day++) {
+            september.getDraft().getHistoricalMealCells().add(cell(LocalDate.of(2026, 9, day).toString(), 1));
+        }
+
+        service.prepare(september, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 10, 2));
+        assertTrue(september.getParsed().isImportable(), september.getParsed().getIssues().toString());
+        assertNull(september.getDraft().getCurrentImportMonth());
+        assertEquals(20L, september.getDraft().getTargetOrderId());
+        assertEquals(4, september.getDraft().getAfterRemainingCount());
+        assertNull(order.getImportMonth());
+        assertTrue(records.isEmpty());
+        assertTrue(service.apply(september, service.lockOrder(september), LocalDate.of(2026, 10, 2)));
+        assertEquals(LocalDate.of(2026, 9, 1), order.getImportMonth());
+        assertEquals(LocalDate.of(2026, 10, 2), order.getImportDate());
+        assertEquals(LocalDate.of(2026, 10, 1), order.getStartDate());
+        assertEquals(4, order.getRemainingCount());
+        assertEquals(154, order.getImportedVerifiedCount());
+        assertEquals(154, order.getVerifiedCount());
+        assertEquals(30, records.size());
+        assertTrue(records.stream().allMatch(CustomerMealScheduleAddition::isImportedHistory));
+
+        service.prepare(september, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 10, 2));
+        assertFalse(service.apply(september, order, LocalDate.of(2026, 10, 2)));
+        ImportCandidate august = candidate(8, 99, 0, cell("2026-08-01", 1));
+        prepare(august, 8, 20);
+        assertEquals("BACKFILL_MONTH", august.getDraft().getImportAction());
+        assertTrue(service.apply(august, order, LocalDate.of(2026, 8, 20)));
+        assertEquals(LocalDate.of(2026, 9, 1), order.getImportMonth());
+        assertEquals(LocalDate.of(2026, 10, 2), order.getImportDate());
+        assertEquals(158, order.getLunchDinnerCount());
+        assertEquals(4, order.getRemainingCount());
+        assertEquals(154, order.getImportedVerifiedCount());
+        verify(orderMapper, times(1)).updateById(any(CustomerOrder.class));
+    }
+
+    @Test
+    void shouldPreservePostSnapshotConsumptionWhenLegacyMonthIsEstablished() {
+        order.setImportMonth(null);
+        order.setImportDate(null);
+        actualVerified = 1;
+        actualVerificationDate = LocalDate.of(2026, 10, 2);
+        order.setImportedVerifiedCount(155);
+        order.setVerifiedCount(156);
+        order.setRemainingCount(2);
+        ImportCandidate september = candidate(9, 158, 4, cell("2026-09-01", 1));
+        service.prepare(september, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 10, 2));
+        assertTrue(september.getParsed().isImportable(), september.getParsed().getIssues().toString());
+        assertEquals(3, september.getDraft().getAfterRemainingCount());
+        assertEquals(1, september.getDraft().getPostSnapshotVerifiedCount());
+        service.apply(september, order, LocalDate.of(2026, 10, 2));
+        assertEquals(3, order.getRemainingCount());
+        assertEquals(154, order.getImportedVerifiedCount());
+        assertEquals(155, order.getVerifiedCount());
+    }
+
+    @Test
+    void shouldEstablishLegacyMonthEvenWithoutCalendarAndKeepPausedStatus() {
+        order.setImportMonth(null);
+        order.setImportDate(null);
+        order.setStatus(4);
+        ImportCandidate september = candidate(9, 158, 4);
+        prepare(september, 9, 20);
+        assertTrue(september.getParsed().isImportable(), september.getParsed().getIssues().toString());
+        service.apply(september, order, LocalDate.of(2026, 9, 20));
+        assertEquals(LocalDate.of(2026, 9, 1), order.getImportMonth());
+        assertEquals(4, order.getStatus());
+        assertTrue(records.isEmpty());
+        ImportCandidate august = candidate(8, 99, 0);
+        prepare(august, 8, 20);
+        assertFalse(service.apply(august, order, LocalDate.of(2026, 8, 20)));
+        assertEquals(158, order.getLunchDinnerCount());
+        assertEquals(4, order.getRemainingCount());
+    }
+
+    @Test
+    void shouldStillRejectLegacyVerificationConflictBeforeWriting() {
+        order.setImportMonth(null);
+        order.setImportDate(null);
+        order.setVerifiedCount(129);
+        ImportCandidate incoming = candidate(9, 158, 4, cell("2026-09-01", 1));
+        prepare(incoming, 9, 20);
+        assertFalse(incoming.getParsed().isImportable());
+        assertTrue(incoming.getParsed().getIssues().stream().anyMatch(issue -> issue.getMessage().contains("核销事实")));
+        assertThrows(BadRequestException.class, () -> service.apply(incoming, order, LocalDate.of(2026, 9, 20)));
+        verify(orderMapper, never()).updateById(any(CustomerOrder.class));
+        assertTrue(records.isEmpty());
+    }
+
+    @Test
+    void shouldStillProtectManualCalendarWhenLegacyMonthIsEstablished() {
+        order.setImportMonth(null);
+        order.setImportDate(null);
+        CustomerMealScheduleAddition manual = add("2026-09-01", 1, false);
+        manual.setRemark("人工调整");
+        ImportCandidate incoming = candidate(9, 158, 4, cell("2026-09-01", 1));
+        prepare(incoming, 9, 20);
+        assertFalse(incoming.getParsed().isImportable());
+        assertTrue(incoming.getParsed().getIssues().stream().anyMatch(issue -> issue.getMessage().contains("人工来源")));
+        assertThrows(BadRequestException.class, () -> service.apply(incoming, order, LocalDate.of(2026, 9, 20)));
+        assertEquals("人工调整", manual.getRemark());
+        assertNull(order.getImportMonth());
+        verify(orderMapper, never()).updateById(any(CustomerOrder.class));
+    }
+
+    @Test
+    void shouldStillProtectKnownLegacyImportDateWithoutMonth() {
+        order.setImportMonth(null);
+        ImportCandidate incoming = candidate(9, 158, 4);
+        prepare(incoming, 9, 19);
+        assertFalse(incoming.getParsed().isImportable());
+        assertThrows(BadRequestException.class, () -> service.apply(incoming, order, LocalDate.of(2026, 9, 19)));
+        assertEquals(LocalDate.of(2026, 9, 20), order.getImportDate());
+        verify(orderMapper, never()).updateById(any(CustomerOrder.class));
+    }
+
+    @Test
+    void shouldEstablishLegacyMonthThroughPreviewAndConfirmWithoutCreatingOrder() {
+        order.setImportMonth(null);
+        order.setImportDate(null);
+        CustomerProfileImportServiceImpl imports = imports();
+        CustomerImportPreviewDto preview = imports.preview(new byte[]{1}, "anonymous.xlsx", LocalDate.of(2026, 10, 20));
+        assertEquals(1, preview.getImportableCount());
+        assertNull(preview.getDrafts().get(0).getCurrentImportMonth());
+        assertNull(order.getImportMonth());
+        CustomerImportResultDto result = imports.importCustomers(new byte[]{1}, "anonymous.xlsx", preview.getFileHash(),
+                null, LocalDate.of(2026, 10, 20), preview.getOrderStateHash());
+        assertEquals(1, result.getUpdatedCount());
+        assertEquals(20L, result.getResults().get(0).getOrderId());
+        assertEquals(LocalDate.of(2026, 10, 1), order.getImportMonth());
+        assertEquals(LocalDate.of(2026, 10, 20), order.getImportDate());
+        assertEquals(25, order.getRemainingCount());
+        assertEquals(5, records.size());
+        verify(orderService, never()).createImportedFirstOrder(any());
+    }
+
+    @Test
     void shouldContinueOctoberOnSameOrderKeepSeptemberAndUseTwentyPlusFive() {
         add("2026-09-01", 1, true);
         CustomerMealScheduleAddition lateSeptember = add("2026-09-25", 1, false);

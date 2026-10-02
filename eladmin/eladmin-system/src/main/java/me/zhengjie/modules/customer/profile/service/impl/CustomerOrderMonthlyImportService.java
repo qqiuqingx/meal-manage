@@ -169,7 +169,7 @@ public class CustomerOrderMonthlyImportService {
         }
         check(candidate, facts, importDate);
         LocalDate currentMonth = currentMonth(facts);
-        boolean countsApply = !candidate.getSourceMonth().isBefore(currentMonth);
+        boolean countsApply = currentMonth == null || !candidate.getSourceMonth().isBefore(currentMonth);
         Map<String, CustomerImportMealCellDto> wanted = wanted(candidate);
         Map<String, CustomerMealScheduleAddition> saved = index(facts.additions);
         List<Long> removed = new ArrayList<>();
@@ -311,20 +311,24 @@ public class CustomerOrderMonthlyImportService {
         return facts;
     }
 
-    /** 优先采用明确月份；既有导入只能由明确导入来源的日格推断，不能猜创建月份。 */
+    /**
+     * 读取既有来源月份，缺少元数据时从导入日格推断，不使用订单创建日期。
+     * @param facts 已定位导入订单及其有效数量记录
+     * @return 已采用的来源月；旧导入订单尚无月份基线时返回空，由首次通过校验的文件建立
+     */
     private LocalDate currentMonth(Facts facts) {
         if (facts.order.getImportMonth() != null) {
             return facts.order.getImportMonth();
         }
         return facts.additions.stream().filter(CustomerMealScheduleAddition::isImported)
                 .map(addition -> addition.getRecordDate().withDayOfMonth(1)).max(LocalDate::compareTo)
-                .orElseThrow(() -> new BadRequestException("已有导入订单缺少来源月份且没有可复核的导入日格，请核对来源月份"));
+                .orElse(null);
     }
 
     /** 校验月份、累计真实核销及本月已核销份数下限，不通过时禁止该客户续导。 */
     private void check(ImportCandidate candidate, Facts facts, LocalDate importDate) {
         LocalDate month = currentMonth(facts);
-        boolean latest = !candidate.getSourceMonth().isBefore(month);
+        boolean latest = month == null || !candidate.getSourceMonth().isBefore(month);
         CustomerOrder order = facts.order;
         if (latest) {
             if (order.getImportDate() != null && importDate.isBefore(order.getImportDate())) {
@@ -399,11 +403,11 @@ public class CustomerOrderMonthlyImportService {
     private void describe(ImportCandidate candidate, Facts facts, LocalDate importDate) {
         CustomerImportDraftDto draft = candidate.getDraft();
         LocalDate current = currentMonth(facts);
-        boolean oldMonth = candidate.getSourceMonth().isBefore(current);
+        boolean oldMonth = current != null && candidate.getSourceMonth().isBefore(current);
         draft.setImportAction(oldMonth ? "BACKFILL_MONTH" : candidate.getSourceMonth().equals(current) ? "UPDATE_SAME_MONTH" : "UPDATE_MONTH");
         draft.setTargetOrderId(facts.order.getId());
         draft.setTargetOrderCode(facts.order.getOrderCode());
-        draft.setCurrentImportMonth(YearMonth.from(current).toString());
+        draft.setCurrentImportMonth(current == null ? null : YearMonth.from(current).toString());
         draft.setCurrentMealCount(safe(facts.order.getLunchDinnerCount()));
         draft.setCurrentRemainingCount(safe(facts.order.getRemainingCount()));
         draft.setAfterMealCount(oldMonth ? safe(facts.order.getLunchDinnerCount()) : safe(draft.getLunchDinnerCount()));
@@ -453,7 +457,7 @@ public class CustomerOrderMonthlyImportService {
     /** 月末之后重复修订同月，不把已有后续月份履约区间重新推成导入历史。 */
     private LocalDate acceptedImportDate(ImportCandidate candidate, Facts facts, LocalDate importDate) {
         LocalDate current = currentMonth(facts);
-        if (candidate.getSourceMonth().isBefore(current)) {
+        if (current != null && candidate.getSourceMonth().isBefore(current)) {
             return facts.order.getImportDate();
         }
         LocalDate end = YearMonth.from(candidate.getSourceMonth()).atEndOfMonth();
