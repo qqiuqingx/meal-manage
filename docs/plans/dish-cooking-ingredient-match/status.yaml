@@ -1,0 +1,23 @@
+feature: dish-cooking-ingredient-match
+created_at: 2026-10-02
+status: completed
+current_phase: phase-03
+phases:
+  - id: phase-01
+    name: 名称识别接口闭环
+    file: phase-01-recognition.md
+    depends_on: []
+    status: completed
+  - id: phase-02
+    name: 制作流程到配料表与保存闭环
+    file: phase-02-form.md
+    depends_on:
+      - phase-01
+    status: completed
+  - id: phase-03
+    name: 场景验收、文档与交付
+    file: phase-03-acceptance.md
+    depends_on:
+      - phase-01
+      - phase-02
+    status: completed

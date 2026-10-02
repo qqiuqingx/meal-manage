@@ -1,13 +1,8 @@
 package me.zhengjie.modules.customer.profile.service;
 
 import com.alibaba.fastjson2.JSON;
-import com.hankcs.hanlp.collection.trie.DoubleArrayTrie;
-import com.hankcs.hanlp.collection.trie.bintrie.BinTrie;
-import com.hankcs.hanlp.corpus.tag.Nature;
-import com.hankcs.hanlp.dictionary.CoreDictionary;
-import com.hankcs.hanlp.dictionary.DynamicCustomDictionary;
 import com.hankcs.hanlp.seg.Segment;
-import com.hankcs.hanlp.seg.Viterbi.ViterbiSegment;
+import me.zhengjie.modules.meal.util.DietDictionarySegmenter;
 import com.hankcs.hanlp.seg.common.Term;
 import lombok.RequiredArgsConstructor;
 import me.zhengjie.modules.customer.profile.domain.CustomerDietImportData;
@@ -34,7 +29,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -60,7 +54,7 @@ public class CustomerDietMatchService {
     /** 从当前有效字典建立一份快照，导入和后台批处理均在一轮内复用它。 */
     public DictionarySnapshot snapshot(List<CustomerDietOptionDto> options) {
         Map<String, List<CustomerDietOptionDto>> index = buildIndex(options);
-        return new DictionarySnapshot(index, createSegment(index));
+        return new DictionarySnapshot(index, DietDictionarySegmenter.create(index.keySet()));
     }
 
     /**
@@ -443,28 +437,6 @@ public class CustomerDietMatchService {
             result.add(trimmed);
         }
         return result;
-    }
-
-    /**
-     * 为本次导入建立独立的 HanLP 分词器，使用有效字典名称保护领域词，不修改全局词典。
-     *
-     * @param index 当前有效字典名称索引
-     * @return 使用内置基础词库与本次领域词典的分词器
-     */
-    private Segment createSegment(Map<String, List<CustomerDietOptionDto>> index) {
-        Segment segment = new ViterbiSegment().enableAllNamedEntityRecognize(false).enableOffset(true);
-        if (index.isEmpty()) {
-            return segment.enableCustomDictionary(false);
-        }
-        TreeMap<String, CoreDictionary.Attribute> words = new TreeMap<>();
-        for (String name : index.keySet()) {
-            if (!name.isEmpty()) {
-                words.put(name, new CoreDictionary.Attribute(Nature.nz, 1024));
-            }
-        }
-        DynamicCustomDictionary dictionary = new DynamicCustomDictionary(
-                new DoubleArrayTrie<>(words), new BinTrie<>(), null);
-        return segment.enableCustomDictionary(dictionary).enableCustomDictionaryForcing(true);
     }
 
     /**

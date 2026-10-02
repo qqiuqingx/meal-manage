@@ -18,6 +18,9 @@ package me.zhengjie.modules.meal.rest;
 import me.zhengjie.annotation.Log;
 import me.zhengjie.modules.meal.domain.Dish;
 import me.zhengjie.modules.meal.service.DishService;
+import me.zhengjie.modules.meal.service.impl.DishIngredientRecognitionService;
+import me.zhengjie.modules.meal.domain.dto.DishIngredientDto;
+import me.zhengjie.modules.meal.domain.dto.DishIngredientRecognizeRequest;
 import me.zhengjie.modules.meal.domain.dto.DishQueryCriteria;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleResult;
 import me.zhengjie.modules.meal.domain.dto.DishScheduleStats;
@@ -53,6 +56,7 @@ public class DishController {
 
     private final DishService dishService;
     private final ParentPackageService parentPackageService;
+    private final DishIngredientRecognitionService ingredientRecognitionService;
 
     @GetMapping("/packages")
     @ApiOperation("获取套餐选项列表（用于菜品关联）")
@@ -81,6 +85,19 @@ public class DishController {
     @PreAuthorize("@el.check('dish:list')")
     public ResponseEntity<Dish> queryDishById(@PathVariable Integer id){
         return new ResponseEntity<>(dishService.getById(id),HttpStatus.OK);
+    }
+
+    /**
+     * 只读识别制作流程中的启用配料名称，不保存菜品或修改配料字典。
+     * @param request 最多10000字符的制作流程；空文本允许识别
+     * @return 按首次出现顺序返回配料ID、原名和单位，用量为空
+     */
+    @PostMapping("/recognize-ingredients")
+    @ApiOperation("识别制作流程中的配料名称（只读）")
+    @PreAuthorize("@el.check('dish:add','dish:edit')")
+    public ResponseEntity<List<DishIngredientDto>> recognizeIngredients(
+            @Validated @RequestBody DishIngredientRecognizeRequest request) {
+        return new ResponseEntity<>(ingredientRecognitionService.recognize(request.getCookingMethod()), HttpStatus.OK);
     }
 
     @PostMapping

@@ -13,7 +13,7 @@
 
     <!-- Modal Content -->
     <div class="dialog-body custom-scrollbar">
-      <el-form ref="form" :model="form" :rules="rules" label-position="top" class="editorial-form">
+      <el-form ref="form" v-loading="dishLoading" :model="form" :rules="rules" label-position="top" class="editorial-form">
         <el-row :gutter="40">
           <!-- Left Column: Basic Info & Instructions -->
           <el-col :span="9" class="form-col-left">
@@ -51,7 +51,10 @@
             </el-form-item>
 
             <el-form-item label="制作流程" prop="cookingMethod">
-              <el-input v-model="form.cookingMethod" type="textarea" :rows="4" placeholder="输入菜品的具体制作流程..." class="editorial-textarea" />
+              <el-input v-model="form.cookingMethod" type="textarea" :rows="4" placeholder="输入菜品的具体制作流程..." :maxlength="10000" class="editorial-textarea" @input="onCookingMethodInput" />
+              <p class="text-xs text-secondary">自动追加配料库中的已有配料，用量和备注请手动填写。</p>
+              <p v-if="recognitionLoading" class="text-xs text-secondary">正在识别配料…</p>
+              <p v-if="recognitionError" class="text-xs text-secondary" role="alert">配料识别失败，请点击保存重试。</p>
             </el-form-item>
 
             <el-form-item label="切配信息" prop="cuttingInfo">
@@ -112,12 +115,13 @@
                   <el-table-column label="用量" align="left" width="100">
                     <template slot-scope="scope">
                       <el-input-number
-                        v-model="scope.row.quantity"
+                        :value="scope.row.quantity == null ? undefined : scope.row.quantity"
                         :min="0"
                         size="small"
                         :controls="false"
                         class="quantity-input"
                         placeholder="数量"
+                        @input="updateIngredientQuantity(scope.row, $event)"
                       />
                     </template>
                   </el-table-column>
@@ -149,13 +153,13 @@
     <!-- Modal Footer -->
     <div slot="footer" class="dialog-footer editorial-footer flex items-center justify-end gap-4 px-8 py-6">
       <button class="btn-cancel text-secondary font-bold hover-bg-highest transition-colors rounded-lg px-6 py-3" @click="cancel">取消</button>
-      <button class="btn-primary shadow-lg font-bold rounded-lg px-8 py-3" @click="submitForm">保存菜品修改</button>
+      <button class="btn-primary shadow-lg font-bold rounded-lg px-8 py-3" :disabled="saving || dishLoading" @click="submitForm">{{ saving ? '保存中…' : '保存菜品修改' }}</button>
     </div>
   </el-dialog>
 </template>
 
 <script>
-import { addDish, editDish, queryPackages, getDish } from '@/api/dish'
+import { addDish, editDish, queryPackages, getDish, recognizeIngredients } from '@/api/dish'
 import { queryIngredients } from '@/api/dishIngredient'
 import DishTagEditor from './components/DishTagEditor'
 
@@ -165,6 +169,18 @@ export default {
   data() {
     return {
       dialogVisible: false,
+      dishLoading: false,
+      saving: false,
+      recognitionSession: 0,
+      recognitionSequence: 0,
+      recognitionTimer: null,
+      recognitionRequest: null,
+      recognitionLoading: false,
+      recognitionError: false,
+      initialCookingMethod: '',
+      lastCookingMethodInput: '',
+      recognizedCookingMethod: null,
+      excludedIngredientIds: new Set(),
       title: '',
       showImageInput: false,
       packageOptions: [],
@@ -196,6 +212,10 @@ export default {
     }
   },
 
+  beforeDestroy() {
+    this.resetIngredientRecognition()
+  },
+
   methods: {
     loadPackages() {
       queryPackages().then(response => {
@@ -209,12 +229,18 @@ export default {
       this.loadPackages()
       this.dialogVisible = true
     },
+    /** 读取选中菜品详情并建立识别基线，切换菜品后丢弃前一个详情响应。 */
     handleUpdate(row) {
       this.title = '编辑/新增菜品'
       this.showImageInput = false
+      this.resetForm()
+      const session = this.recognitionSession
+      this.dishLoading = true
       this.loadPackages()
 
-      getDish(row.id).then(fullDish => {
+      return getDish(row.id).then(fullDish => {
+        if (session !== this.recognitionSession) return
+
         this.form = JSON.parse(JSON.stringify(fullDish))
 
         // 补充被后端 @JsonIgnore 或历史剥离导致丢失的字段，避免 Vue 双向绑定失效 (使用 $set)
@@ -232,29 +258,53 @@ export default {
         } else {
           this.$set(this.form, 'mealPackages', [])
         }
+        this.initialCookingMethod = this.form.cookingMethod || ''
+        this.lastCookingMethodInput = this.initialCookingMethod
         this.dialogVisible = true
+      }).finally(() => {
+        if (session === this.recognitionSession) this.dishLoading = false
       })
     },
-    submitForm() {
-      this.$refs.form.validate(valid => {
-        if (valid) {
-          const action = this.form.id ? editDish : addDish
-          action(this.form).then(() => {
-            this.$message.success('保存成功')
-            this.dialogVisible = false
-            this.$emit('saved', { ...this.form, isEdit: !!this.form.id })
-            this.$emit('refresh')
-          })
+    /** 校验草稿并等待最新制作流程识别完成后，沿用菜品新增/修改接口保存。 */
+    async submitForm() {
+      if (this.saving || this.dishLoading || !this.dialogVisible) return
+      const session = this.recognitionSession
+      this.saving = true
+      try {
+        const valid = await new Promise(resolve => this.$refs.form.validate(resolve))
+        if (!valid) return
+        while (this.dialogVisible && session === this.recognitionSession) {
+          const sequence = this.recognitionSequence
+          const recognized = await this.recognizeLatestIngredients()
+          if (!this.dialogVisible || session !== this.recognitionSession) return
+          // 等待期间继续输入时，保存必须再等待新文本，旧成功/失败都不能决定本次提交。
+          if (sequence !== this.recognitionSequence) continue
+          if (!recognized) return
+          const payload = JSON.parse(JSON.stringify(this.form))
+          const action = payload.id ? editDish : addDish
+          const saved = await action(payload).then(() => true, () => false)
+          if (!saved || !this.dialogVisible || session !== this.recognitionSession) return
+          this.$message.success('保存成功')
+          this.$emit('saved', { ...payload, isEdit: !!payload.id })
+          this.cancel()
+          this.$emit('refresh')
+          return
         }
-      })
+      } finally {
+        if (session === this.recognitionSession) this.saving = false
+      }
     },
+    /** 关闭弹窗并立即使当前识别及待保存动作失效。 */
     cancel() {
       this.dialogVisible = false
+      this.resetIngredientRecognition()
     },
     dialogClose() {
       this.resetForm()
     },
+    /** 重置草稿、识别会话及标签选择，取消编辑不写入菜品数据。 */
     resetForm() {
+      this.resetIngredientRecognition()
       this.form = {
         id: null,
         name: '',
@@ -280,6 +330,88 @@ export default {
       }
     },
 
+    /** 结束当前编辑识别会话，清理定时器和人工排除，使所有旧响应失效。 */
+    resetIngredientRecognition() {
+      clearTimeout(this.recognitionTimer)
+      this.recognitionSession++
+      this.recognitionSequence = 0
+      this.recognitionTimer = null
+      this.recognitionRequest = null
+      this.recognitionLoading = false
+      this.recognitionError = false
+      this.initialCookingMethod = ''
+      this.lastCookingMethodInput = ''
+      this.recognizedCookingMethod = null
+      this.excludedIngredientIds = new Set()
+      this.saving = false
+      this.dishLoading = false
+    },
+    /** 仅响应实际输入/粘贴，详情回填不触发；500ms内的连续修改只识别最新文本。 */
+    onCookingMethodInput(text) {
+      if (this.dishLoading || !this.dialogVisible || text === this.lastCookingMethodInput) return
+      this.lastCookingMethodInput = text
+      this.recognitionSequence++
+      clearTimeout(this.recognitionTimer)
+      this.recognitionTimer = null
+      this.recognitionRequest = null
+      this.recognitionLoading = false
+      this.recognitionError = false
+      if (text !== this.initialCookingMethod && text !== this.recognizedCookingMethod) {
+        this.recognitionTimer = setTimeout(() => this.recognizeLatestIngredients(), 500)
+      }
+    },
+    /** 判断结果是否属于当前弹窗、最新输入及当前文本；关闭/切换/乱序结果均被丢弃。 */
+    isCurrentRecognition(session, sequence, text) {
+      return this.dialogVisible && session === this.recognitionSession &&
+        sequence === this.recognitionSequence && text === (this.form.cookingMethod || '')
+    },
+    /** 立即执行或复用最新识别；成功只追加，失败返回false让保存中止并允许重试。 */
+    recognizeLatestIngredients() {
+      clearTimeout(this.recognitionTimer)
+      this.recognitionTimer = null
+      const text = this.form.cookingMethod || ''
+      if (!this.dialogVisible) return Promise.resolve(false)
+      if (text === this.initialCookingMethod || text === this.recognizedCookingMethod) return Promise.resolve(true)
+      const session = this.recognitionSession
+      const sequence = this.recognitionSequence
+      const pending = this.recognitionRequest
+      if (pending && pending.session === session && pending.sequence === sequence && pending.text === text) {
+        return pending.promise
+      }
+      this.recognitionLoading = true
+      this.recognitionError = false
+      const request = { session, sequence, text, promise: null }
+      request.promise = recognizeIngredients({ cookingMethod: text }).then(candidates => {
+        if (!this.isCurrentRecognition(session, sequence, text)) return false
+        const existing = new Set(this.form.ingredientList.map(item => item.ingredientId))
+        candidates.forEach(item => {
+          if (!existing.has(item.ingredientId) && !this.excludedIngredientIds.has(item.ingredientId)) {
+            this.form.ingredientList.push({
+              ingredientId: item.ingredientId,
+              ingredientName: item.ingredientName,
+              quantity: null,
+              unit: item.unit,
+              remark: ''
+            })
+            existing.add(item.ingredientId)
+          }
+        })
+        this.recognizedCookingMethod = text
+        return true
+      }).catch(() => {
+        if (this.isCurrentRecognition(session, sequence, text)) {
+          this.recognitionError = true
+          this.$message.error('配料识别失败，已保留当前编辑内容，请重试')
+        }
+        return false
+      }).finally(() => {
+        if (this.isCurrentRecognition(session, sequence, text)) this.recognitionLoading = false
+        if (this.recognitionRequest === request) this.recognitionRequest = null
+      })
+      this.recognitionRequest = request
+      return request.promise
+    },
+
     searchIngredients(query) {
       if (query !== '') {
         this.ingredientLoading = true
@@ -294,6 +426,7 @@ export default {
         this.ingredientOptions = []
       }
     },
+    /** 手动追加已选配料并解除其本次人工排除，沿用既有默认用量。 */
     addIngredientRow() {
       if (!this.selectIngredientId) {
         this.$message.warning('请先选择配料')
@@ -310,6 +443,7 @@ export default {
         this.$message.warning('该配料已存在列表中')
         return
       }
+      this.excludedIngredientIds.delete(ingredient.id)
       this.form.ingredientList.push({
         ingredientId: ingredient.id,
         ingredientName: ingredient.name,
@@ -319,7 +453,14 @@ export default {
       })
       this.selectIngredientId = null
     },
+    /** Element UI使用undefined展示空数值，草稿统一保留null供后端保存空用量。 */
+    updateIngredientQuantity(row, quantity) {
+      this.$set(row, 'quantity', quantity === undefined ? null : quantity)
+    },
+    /** 记住本次编辑中人工删除的ID，后续识别不加回；手动添加可解除排除。 */
     removeIngredientRow(index) {
+      const removed = this.form.ingredientList[index]
+      if (removed) this.excludedIngredientIds.add(removed.ingredientId)
       this.form.ingredientList.splice(index, 1)
     }
   }

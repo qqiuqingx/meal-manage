@@ -31,6 +31,15 @@ export function editDish(data) {
   })
 }
 
+/** 只读识别制作流程中的配料名称，返回可追加到当前草稿的配料行。 */
+export function recognizeIngredients(data) {
+  return request({
+    url: 'api/dishes/recognize-ingredients',
+    method: 'post',
+    data
+  })
+}
+
 export function delDish(ids) {
   return request({
     url: 'api/dishes/',

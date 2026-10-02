@@ -403,7 +403,10 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         events.publishEvent(new DietDictionaryChangedEvent());
     }
 
-    /** 保存字典变更并发布事务内通知，提交成功后自动更新客户禁忌。 */
+    /**
+     * 更新菜品及显式提交的配料关系；未传配料列表保留，空数组清空关联与展示文本。
+     * @param resources 菜品ID及待更新字段，配料列表为null时不替换关系
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void update(Dish resources) {
@@ -415,13 +418,15 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         Boolean oldEnabled = dish.getEnabled();
         dish.copy(resources);
         // 回填 ingredients 字符串字段（供兼容读取）
-        // 若 ingredientList 为空则从关系表查询已有配料，避免误覆盖
+        // 仅未传列表时读取原关联；显式空数组必须清空展示文本与关系
         List<DishIngredientDto> dtoList = resources.getIngredientList();
-        if (dtoList == null || dtoList.isEmpty()) {
+        if (dtoList == null) {
             List<DishIngredientRelation> existing = dishIngredientMapper.findRelationsByDishId(resources.getId());
             dtoList = convertToDtoList(existing);
         }
-        dish.setIngredients(buildIngredientsStr(dtoList));
+        // 使用空字符串参与 MyBatis-Plus update，避免null字段被默认更新策略忽略。
+        dish.setIngredients(resources.getIngredientList() != null && resources.getIngredientList().isEmpty()
+                ? "" : buildIngredientsStr(dtoList));
         dish.setUpdateTime(new Timestamp(System.currentTimeMillis()));
         dishMapper.updateById(dish);
 

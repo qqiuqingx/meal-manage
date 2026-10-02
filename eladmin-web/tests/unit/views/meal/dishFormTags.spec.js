@@ -2,7 +2,8 @@ jest.mock('@/api/dish', () => ({
   addDish: jest.fn(),
   editDish: jest.fn(),
   queryPackages: jest.fn(),
-  getDish: jest.fn()
+  getDish: jest.fn(),
+  recognizeIngredients: jest.fn()
 }))
 
 jest.mock('@/api/dishIngredient', () => ({
@@ -83,6 +84,7 @@ describe('dish form tags', () => {
   test('submits selected tag IDs through the existing dish save action', async() => {
     editDish.mockResolvedValue({})
     const vm = createVm()
+    vm.dialogVisible = true
     vm.form.id = 12
     vm.form.name = '清蒸鲈鱼'
     vm.form.tagIds = [2, 8]
