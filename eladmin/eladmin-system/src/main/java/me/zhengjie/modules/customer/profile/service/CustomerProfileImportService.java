@@ -6,7 +6,7 @@ import me.zhengjie.modules.customer.profile.domain.dto.CustomerImportResultDto;
 import java.time.LocalDate;
 
 /**
- * 客户与首单批量导入服务。
+ * 客户与订单月度导入服务。
  *
  * @author qqx
  * @date 2026-09-24
@@ -44,11 +44,12 @@ public interface CustomerProfileImportService {
      * @param expectedFileHash 预览返回的 SHA-256
      * @param expectedDictionaryHash 预览饮食字典摘要；含客户禁忌工作表时必填
      * @param importDate 预览使用的导入日期
+     * @param expectedOrderStateHash 预览订单状态摘要，续导时必填
      * @return 逐位导入结果
      */
     CustomerImportResultDto importCustomers(byte[] content, String fileName, String expectedFileHash,
                                             String expectedDictionaryHash,
-                                            LocalDate importDate);
+                                            LocalDate importDate, String expectedOrderStateHash);
 
     /**
      * 仅将「客户禁忌」工作表内容补录到数据库已有客户档案。

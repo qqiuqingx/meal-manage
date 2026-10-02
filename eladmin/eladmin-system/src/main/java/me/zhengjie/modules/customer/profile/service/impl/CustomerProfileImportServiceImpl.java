@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
@@ -65,6 +66,7 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
     private final CustomerProfileImportWriter importWriter;
     private final CustomerDietDictionaryService dietDictionaryService;
     private final CustomerDietMatchService dietMatchService;
+    private final CustomerOrderMonthlyImportService monthlyImportService;
 
     /**
      * 允许上传的最大字节数，第三版工作簿约 24MB
@@ -102,13 +104,14 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
      * @param expectedFileHash 操作人确认的预览 SHA-256
      * @param expectedDictionaryHash 第二工作表使用的饮食字典摘要
      * @param importDate 预览时使用的导入日期
+     * @param expectedOrderStateHash 预览订单修订摘要，已有订单续导时必须回传
      * @return 逐位导入结果及重新解析的预览
      */
     @Override
     public CustomerImportResultDto importCustomers(byte[] content, String fileName, String expectedFileHash,
                                                    String expectedDictionaryHash,
-                                                   LocalDate importDate) {
-        return importResolved(content, fileName, expectedFileHash, expectedDictionaryHash, importDate, false);
+                                                   LocalDate importDate, String expectedOrderStateHash) {
+        return importResolved(content, fileName, expectedFileHash, expectedDictionaryHash, importDate, false, expectedOrderStateHash);
     }
 
     /**
@@ -125,7 +128,7 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
     public CustomerImportResultDto importDietOnly(byte[] content, String fileName, String expectedFileHash,
                                                   String expectedDictionaryHash,
                                                   LocalDate importDate) {
-        return importResolved(content, fileName, expectedFileHash, expectedDictionaryHash, importDate, true);
+        return importResolved(content, fileName, expectedFileHash, expectedDictionaryHash, importDate, true, null);
     }
 
     /**
@@ -137,11 +140,12 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
      * @param expectedDictionaryHash 预览字典摘要
      * @param importDate 导入日期
      * @param dietOnly 是否仅补录第二工作表
+     * @param expectedOrderStateHash 操作人预览的订单状态摘要
      * @return 逐客户结果
      */
     private CustomerImportResultDto importResolved(byte[] content, String fileName, String expectedFileHash,
                                                    String expectedDictionaryHash,
-                                                   LocalDate importDate, boolean dietOnly) {
+                                                   LocalDate importDate, boolean dietOnly, String expectedOrderStateHash) {
         LocalDateTime confirmedAt = LocalDateTime.now();
         validateUpload(content);
         if (isBlank(expectedFileHash)) {
@@ -162,11 +166,11 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
             throw new BadRequestException("饮食字典已变化或摘要缺失，请重新预览后确认");
         }
         dietMatchService.applyAllMatches(resolution.getCandidates());
-        for (ImportCandidate candidate : resolution.getCandidates()) {
-            candidate.setDraft(buildDraft(candidate.getParsed(), candidate.getParentPackage(), candidate.isSupplemental()));
-            candidate.setImportable(isCandidateImportable(candidate));
-        }
 
+        if (!dietOnly && ((!isBlank(expectedOrderStateHash) && !expectedOrderStateHash.equals(orderStateHash(resolution)))
+                || (isBlank(expectedOrderStateHash) && resolution.getCandidates().stream().anyMatch(c -> c.getExistingOrder() != null)))) {
+            throw new BadRequestException("订单预览状态已变化或缺少状态摘要，请重新预览后确认");
+        }
         CustomerImportResultDto result = new CustomerImportResultDto();
         result.setFileHash(workbook.getFileHash());
         result.setImportDate(resolvedImportDate.toString());
@@ -312,11 +316,44 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
             dietMatchService.attachDietRows(workbook, candidates, dietOptions);
         }
         for (ImportCandidate candidate : candidates) {
-            candidate.setDraft(buildDraft(candidate.getParsed(), candidate.getParentPackage(), candidate.isSupplemental()));
-            candidate.setImportable(isCandidateImportable(candidate));
+            completeCandidate(candidate, workbook, dietOnly);
         }
         resolution.setCandidates(candidates);
         return resolution;
+    }
+
+    /**
+     * 将解析草稿、饮食匹配和月度续导复核统一填入预览与确认候选。
+     * @param candidate 客户候选
+     * @param workbook 文件解析结果，包含来源月份和日期边界
+     * @param dietOnly 是否仅补录第二页
+     */
+    private void completeCandidate(ImportCandidate candidate, ParsedWorkbook workbook, boolean dietOnly) {
+        candidate.setDraft(buildDraft(candidate.getParsed(), candidate.getParentPackage(), candidate.isSupplemental()));
+        if (!dietOnly) {
+            candidate.setSourceMonth(workbook.getCalendarMonthStart());
+            monthlyImportService.prepare(candidate, workbook.getCalendarMonthStart(), workbook.getImportDate());
+        }
+        candidate.getDraft().setErrors(candidate.getParsed().getIssues().stream()
+                .map(CustomerImportIssueDto::getMessage).collect(Collectors.toList()));
+        candidate.getDraft().setImportable(candidate.getParsed().isImportable());
+        candidate.setImportable(isCandidateImportable(candidate));
+    }
+
+    /**
+     * 聚合目标订单及独立修订摘要，确认请求不能在核销变化后静默重算。
+     * @param resolution 当前全量解析和定位结果
+     * @return 仅含不可逆摘要的订单状态标记
+     */
+    private String orderStateHash(ImportResolution resolution) {
+        String state = resolution.getCandidates().stream().map(candidate ->
+                candidate.getParsed().getEffectiveCode() + ":" +
+                        (candidate.getExistingProfile() == null ? "NEW" : candidate.getExistingProfile().getId()) + ":" +
+                        (candidate.isImportable()
+                                ? (candidate.getExistingOrder() == null ? "NONE" : candidate.getExistingOrder().getId()) + ":" + candidate.getOrderRevision()
+                                : "BLOCKED")).collect(Collectors.joining("\n"));
+        String dates = resolution.getWorkbook().getCalendarMonthStart() + "@" + resolution.getWorkbook().getImportDate();
+        return sha256((dates + "\n" + state).getBytes(StandardCharsets.UTF_8));
     }
 
     /**
@@ -402,7 +439,7 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
     }
 
     /**
-     * 把解析草稿转换为面向操作人的客户草稿，保留来源购买数并计算导入前历史核销基数。
+     * 将解析草稿转换为预览草稿，保留历史与未来格、来源购买数并计算历史核销基数。
      *
      * @param parsed 解析草稿
      * @param parentPackage 匹配到的父套餐
@@ -453,6 +490,7 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
             draft.setDietMatches(new ArrayList<>(dietData.getMatches()));
         }
         draft.setMealCells(new ArrayList<>(parsed.getFutureMealCells()));
+        draft.setHistoricalMealCells(new ArrayList<>(parsed.getHistoricalMealCells()));
         draft.setWarnings(new ArrayList<>(parsed.getWarnings()));
         draft.setSheetRemainingCount(parsed.getSheetRemainingCount());
 
@@ -652,6 +690,9 @@ public class CustomerProfileImportServiceImpl implements CustomerProfileImportSe
         CustomerImportPreviewDto preview = new CustomerImportPreviewDto();
         preview.setFileHash(workbook.getFileHash());
         preview.setDictionaryHash(workbook.getDictionaryHash());
+        if (workbook.getCalendarMonthStart() != null) {
+            preview.setOrderStateHash(orderStateHash(resolution));
+        }
         preview.setDietSheetPresent(workbook.isDietSheetPresent());
         preview.setSheetName(workbook.getSheetName());
         preview.setCalendarMonth(workbook.getCalendarMonthStart() == null

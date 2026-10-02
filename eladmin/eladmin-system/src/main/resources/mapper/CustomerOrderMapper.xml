@@ -24,6 +24,8 @@
         <result column="deal_time" property="dealTime"/>
         <result column="first_delivery_time" property="firstDeliveryTime"/>
         <result column="start_date" property="startDate"/>
+        <result column="import_date" property="importDate"/>
+        <result column="import_month" property="importMonth"/>
         <result column="start_meal_type" property="startMealType"/>
         <result column="end_date" property="endDate"/>
         <result column="pause_effective_date" property="pauseEffectiveDate"/>
@@ -290,11 +292,23 @@
         SELECT o.*
         FROM customer_order o
         LEFT JOIN customer_profile cp ON cp.id = o.customer_id
-        WHERE o.status IN (1, 4)
-          AND COALESCE(o.remaining_count, 0) &gt; 0
-        <if test="startedBeforeDate != null">
-          AND o.start_date &lt; #{startedBeforeDate}
-        </if>
+        WHERE (
+            (o.status IN (1, 4) AND COALESCE(o.remaining_count, 0) &gt; 0
+                <if test="startedBeforeDate != null">
+                    AND o.start_date &lt; #{startedBeforeDate}
+                </if>
+            )
+            OR EXISTS (
+                SELECT 1 FROM customer_meal_schedule_addition history
+                WHERE history.order_id = o.id
+                  AND history.deleted = 0
+                  AND history.remark = #{historyRemark}
+                <if test="monthStartDate != null">
+                    AND history.record_date &gt;= #{monthStartDate}
+                    AND history.record_date &lt; #{startedBeforeDate}
+                </if>
+            )
+        )
         <if test="criteria != null and criteria.customerCode != null and criteria.customerCode != ''">
           AND o.customer_code LIKE CONCAT('%', #{criteria.customerCode}, '%')
         </if>
@@ -469,6 +483,42 @@
         </foreach>
           AND (deleted = 0 OR deleted IS NULL)
         GROUP BY order_id, meal_type
+    </select>
+
+    <select id="sumVerifiedCountByOrderDate" resultType="me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto">
+        SELECT order_id AS orderId, record_date AS recordDate, meal_type AS mealType,
+               SUM(verification_count) AS verifiedCount
+        FROM meal_verification_log
+        WHERE order_id = #{orderId} AND meal_type IN ('LUNCH', 'DINNER')
+          AND (deleted = 0 OR deleted IS NULL)
+        GROUP BY order_id, record_date, meal_type
+        ORDER BY record_date, meal_type
+    </select>
+
+    <select id="countAllocatedBeforeImport" resultType="me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto">
+        SELECT allocation.order_id AS orderId, SUM(allocation.quantity) AS scheduledCount
+        FROM (
+            SELECT v.order_id, SUM(v.verification_count) AS quantity
+            FROM meal_verification_log v JOIN customer_order o ON o.id = v.order_id
+            WHERE o.import_date IS NOT NULL AND v.record_date &lt;= o.import_date
+              AND v.meal_type IN ('LUNCH', 'DINNER') AND (v.deleted = 0 OR v.deleted IS NULL)
+              AND v.order_id IN
+            <foreach collection="orderIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+            GROUP BY v.order_id
+            UNION ALL
+            SELECT c.order_id, COUNT(*) AS quantity
+            FROM meal_plan_customer c JOIN meal_plan p ON p.id = c.meal_plan_id
+                 JOIN customer_order o ON o.id = c.order_id
+            WHERE o.import_date IS NOT NULL AND c.deleted = 0 AND p.deleted = 0
+              AND c.status = 1 AND (c.is_verified = 0 OR c.is_verified IS NULL)
+              AND p.meal_type IN ('LUNCH', 'DINNER') AND p.record_date &lt;= o.import_date
+              AND p.record_date &gt; CASE WHEN o.import_month IS NOT NULL AND LAST_DAY(o.import_month) &lt; o.import_date
+                                        THEN LAST_DAY(o.import_month) ELSE o.import_date END
+              AND c.order_id IN
+            <foreach collection="orderIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+            GROUP BY c.order_id
+        ) allocation
+        GROUP BY allocation.order_id
     </select>
 
     <!-- 回退核销状态（删除核销日志时调用） -->

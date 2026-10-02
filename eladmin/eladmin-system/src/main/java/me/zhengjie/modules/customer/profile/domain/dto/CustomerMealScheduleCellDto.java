@@ -42,6 +42,12 @@ public class CustomerMealScheduleCellDto implements Serializable {
     /** 当前已核销份数 */
     private Integer verifiedCount;
 
+    /** 是否为工作簿导入的只读历史数量；不表示生成或逐餐核销事实。 */
+    private Boolean importedHistory;
+
+    /** 数量已归档或在有效排餐区间之前，只能查看；不改变真实核销状态。 */
+    private Boolean readOnly;
+
     /** 是否存在人工数量覆盖 */
     private Boolean manualOverride;
 

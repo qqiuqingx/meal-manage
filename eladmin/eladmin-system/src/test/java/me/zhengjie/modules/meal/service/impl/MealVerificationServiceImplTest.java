@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -101,6 +102,33 @@ class MealVerificationServiceImplTest {
                 logs.getAllValues().get(1).getVerificationCount()));
         verify(mealPlanCustomerMapper, times(2)).markVerifiedIfPending(anyLong(), any(Date.class), eq("tester"));
         verify(customerOrderMapper, times(2)).incrementVerifiedCountAndAmount(10L, new BigDecimal("45.00"));
+    }
+
+    @Test
+    void shouldNotDeductMealAlreadyCoveredByImportSnapshot() {
+        MealPlanCustomer serving = buildServing(101L, 1);
+        MealPlan plan = new MealPlan();
+        plan.setId(20L);
+        plan.setRecordDate(LocalDate.of(2026, 9, 25));
+        plan.setMealType("LUNCH");
+        CustomerOrder order = new CustomerOrder();
+        order.setId(10L);
+        order.setStatus(1);
+        order.setRemainingCount(25);
+        order.setImportMonth(LocalDate.of(2026, 9, 1));
+        order.setImportDate(LocalDate.of(2026, 10, 1));
+        when(mealPlanCustomerMapper.selectById(101L)).thenReturn(serving);
+        when(mealPlanMapper.selectById(20L)).thenReturn(plan);
+        when(customerOrderMapper.selectInlineUpdateByIdForUpdate(10L)).thenReturn(order);
+        MealVerificationDto request = new MealVerificationDto();
+        request.setCustomerPlanIds(java.util.Collections.singletonList(101L));
+        MealVerificationResultDto result = service.verify(request, "tester");
+        assertEquals(0, result.getSuccessCount());
+        assertEquals(1, result.getFailCount());
+        assertEquals(25, order.getRemainingCount());
+        verify(mealPlanCustomerMapper, never()).markVerifiedIfPending(anyLong(), any(Date.class), any());
+        verify(customerOrderMapper, never()).incrementVerifiedCountAndAmount(anyLong(), any());
+        verify(verificationLogMapper, never()).insert(any(MealVerificationLog.class));
     }
 
     /**

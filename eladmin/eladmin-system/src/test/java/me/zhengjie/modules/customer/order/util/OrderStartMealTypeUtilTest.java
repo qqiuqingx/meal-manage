@@ -1,6 +1,7 @@
 package me.zhengjie.modules.customer.order.util;
 
 import org.junit.jupiter.api.Test;
+import me.zhengjie.modules.customer.order.domain.CustomerOrder;
 
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -10,6 +11,23 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OrderStartMealTypeUtilTest {
+
+    @Test
+    void shouldKeepNormalOrderScheduleStartDate() {
+        CustomerOrder order = new CustomerOrder();
+        order.setStartDate(LocalDate.of(2026, 6, 2));
+        assertEquals(LocalDate.of(2026, 6, 2), OrderStartMealTypeUtil.resolveScheduleStartDate(order));
+    }
+
+    @Test
+    void shouldApplyImportBoundaryWithoutMovingLaterOrderStartBackward() {
+        CustomerOrder order = new CustomerOrder();
+        order.setStartDate(LocalDate.of(2026, 6, 2));
+        order.setImportDate(LocalDate.of(2026, 10, 1));
+        assertEquals(LocalDate.of(2026, 10, 2), OrderStartMealTypeUtil.resolveScheduleStartDate(order));
+        order.setStartDate(LocalDate.of(2026, 11, 1));
+        assertEquals(LocalDate.of(2026, 11, 1), OrderStartMealTypeUtil.resolveScheduleStartDate(order));
+    }
 
     @Test
     void shouldReturnDefaultStartMealTypeByOrderMealType() {

@@ -69,15 +69,19 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
     List<CustomerOrder> findAll(@Param("criteria") CustomerOrderQueryCriteria criteria, @Param("page") Page<CustomerOrder> page);
 
     /**
-     * 按客户用餐统计筛选条件对订单分页，避免按客户整月聚合后再内存切片。
+     * 按客户条件对剩余订单或所选月份有历史导入数量的订单分页。
      *
      * @param criteria 客户编号、姓名、手机号和月份筛选条件
-     * @param startedBeforeDate 订单开始日期上界（不含），为空时不按月份限制
+     * @param monthStartDate 历史记录月份下界（含），为空时不按月份限制
+     * @param startedBeforeDate 月份上界（不含），用于订单开始日期及历史记录日期筛选
+     * @param historyRemark 历史导入数量的来源标识
      * @param page MyBatis-Plus 分页对象
      * @return 当前页订单及符合条件的总数
      */
     Page<CustomerOrder> findMealStatsOrders(@Param("criteria") CustomerMealStatsQueryCriteria criteria,
+                                            @Param("monthStartDate") LocalDate monthStartDate,
                                             @Param("startedBeforeDate") LocalDate startedBeforeDate,
+                                            @Param("historyRemark") String historyRemark,
                                             @Param("page") Page<CustomerOrder> page);
 
     /**
@@ -194,6 +198,20 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
      * 批量统计订单各餐次已核销餐数
      */
     List<OrderMealVerifiedCountDto> sumVerifiedCountByOrderIds(@Param("orderIds") List<Long> orderIds);
+
+    /**
+     * 按实际核销日志日期和餐次查询订单真实核销，包含已删除排餐所对应的有效日志。
+     * @param orderId 目标订单
+     * @return 真实午晚餐核销日期统计
+     */
+    List<OrderMealVerifiedCountDto> sumVerifiedCountByOrderDate(@Param("orderId") Long orderId);
+
+    /**
+     * 查询导入规划区间之前已使用或预占的数量，避免跨月续导重新分配历史实绩。
+     * @param orderIds 订单主键的非空集合
+     * @return 每单占用数量，使用 scheduledCount 表示已使用及成功未核销预留之和
+     */
+    List<me.zhengjie.modules.meal.domain.dto.OrderScheduledCountDto> countAllocatedBeforeImport(@Param("orderIds") List<Long> orderIds);
 
     /**
      * 回退核销状态（删除核销日志时调用）

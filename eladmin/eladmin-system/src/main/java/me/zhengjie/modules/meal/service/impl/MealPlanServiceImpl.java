@@ -423,7 +423,7 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
-     * 查询满足日期、餐次和配送规则的订单候选，并验证目标份数不会超过订单购买数。
+     * 按有效排餐日期、餐次和配送规则筛选订单，避免导入历史期间占用未来份数。
      *
      * @param targetDate 排餐日期
      * @param mealType 餐次
@@ -502,9 +502,10 @@ public class MealPlanServiceImpl implements MealPlanService {
 
         List<CustomerOrder> validOrders = new ArrayList<>();
         for (CustomerOrder order : candidateOrders) {
+            LocalDate scheduleStartDate = OrderStartMealTypeUtil.resolveScheduleStartDate(order);
             if (order.getStatus() == null || order.getStatus() != 1
                     || order.getRemainingCount() == null || order.getRemainingCount() <= 0
-                    || order.getStartDate() == null || targetDate.isBefore(order.getStartDate())
+                    || scheduleStartDate == null || targetDate.isBefore(scheduleStartDate)
                     || order.getEndDate() != null && targetDate.isAfter(order.getEndDate())) {
                 continue;
             }
@@ -663,7 +664,11 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
-     * 判断人工新增记录绑定的订单在生成日期仍可用，且餐次已明确。
+     * 判断人工数量覆盖绑定订单在有效排餐日期仍可用，且餐次已明确。
+     *
+     * @param order 绑定订单
+     * @param targetDate 本次生成日期
+     * @return 状态、余额、有效排餐日期和餐次均满足时为 true
      */
     private boolean isManualAdditionOrderAvailable(CustomerOrder order, LocalDate targetDate) {
         if (order == null || order.getStatus() == null || order.getStatus() != 1) {
@@ -675,14 +680,15 @@ public class MealPlanServiceImpl implements MealPlanService {
         if (order.getRemainingCount() == null || order.getRemainingCount() <= 0) {
             return false;
         }
-        if (order.getStartDate() != null && targetDate.isBefore(order.getStartDate())) {
+        LocalDate scheduleStartDate = OrderStartMealTypeUtil.resolveScheduleStartDate(order);
+        if (scheduleStartDate != null && targetDate.isBefore(scheduleStartDate)) {
             return false;
         }
         return order.getEndDate() == null || !targetDate.isAfter(order.getEndDate());
     }
 
     /**
-     * 查询候选订单开始以来到本次生成日的人工数量覆盖，供购买餐数顺序分配复用。
+     * 查询候选订单有效排餐开始日到生成日的数量覆盖，避免从历史成单日分配未来餐数。
      *
      * @param orders 当前日期的候选订单
      * @param endDate 本次生成日期
@@ -693,7 +699,15 @@ public class MealPlanServiceImpl implements MealPlanService {
         if (orders == null || orders.isEmpty()) {
             return Collections.emptyMap();
         }
-        LocalDate startDate = orders.stream().map(CustomerOrder::getStartDate)
+        List<Long> importedIds = orders.stream().filter(order -> order.getImportDate() != null)
+                .map(CustomerOrder::getId).collect(Collectors.toList());
+        if (!importedIds.isEmpty()) {
+            List<OrderScheduledCountDto> occupied = customerOrderMapper.countAllocatedBeforeImport(importedIds);
+            Map<Long, Integer> quantities = occupied == null ? Collections.emptyMap() : occupied.stream()
+                    .collect(Collectors.toMap(OrderScheduledCountDto::getOrderId, OrderScheduledCountDto::getScheduledCount));
+            orders.forEach(order -> order.setQuantityAllocatedBeforeImport(quantities.getOrDefault(order.getId(), 0)));
+        }
+        LocalDate startDate = orders.stream().map(OrderStartMealTypeUtil::resolveScheduleStartDate)
                 .filter(Objects::nonNull).min(LocalDate::compareTo).orElse(null);
         if (startDate == null || endDate == null || startDate.isAfter(endDate)) {
             return Collections.emptyMap();
@@ -710,7 +724,7 @@ public class MealPlanServiceImpl implements MealPlanService {
     }
 
     /**
-     * 查询指定日期餐次的有效人工数量覆盖，并按订单ID索引。
+     * 查询指定日期餐次的有效人工数量覆盖，排除只读历史导入并按订单ID索引。
      *
      * @param targetDate 排餐日期
      * @param mealType 餐次
@@ -724,7 +738,7 @@ public class MealPlanServiceImpl implements MealPlanService {
         }
         Map<Long, CustomerMealScheduleAddition> result = new LinkedHashMap<>();
         for (CustomerMealScheduleAddition addition : additions) {
-            if (addition != null && addition.getOrderId() != null) {
+            if (addition != null && addition.getOrderId() != null && !addition.isImportedHistory()) {
                 result.put(addition.getOrderId(), addition);
             }
         }
@@ -817,6 +831,14 @@ public class MealPlanServiceImpl implements MealPlanService {
         return servingNo > quantity - addition.getSoupQuantity();
     }
 
+    /**
+     * 按订单业务开始日检查首次餐次；导入日界线不重新施加原来的开始餐次。
+     *
+     * @param order 当前订单
+     * @param targetMealType 生成餐次
+     * @param targetDate 生成日期
+     * @return 尚未开始时的原因；已开始返回 null
+     */
     private String getStartMealTypeMismatchReason(CustomerOrder order, String targetMealType, LocalDate targetDate) {
         String normalizedStartMealType = OrderStartMealTypeUtil.normalizeStartMealType(order.getMealType(), order.getStartMealType());
         if (OrderStartMealTypeUtil.hasStartedForMeal(order.getStartDate(), normalizedStartMealType, targetDate, targetMealType)) {

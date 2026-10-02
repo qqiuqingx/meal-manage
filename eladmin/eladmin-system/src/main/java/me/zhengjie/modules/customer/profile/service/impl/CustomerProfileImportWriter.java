@@ -54,34 +54,30 @@ public class CustomerProfileImportWriter {
     private final CustomerMealScheduleAdditionMapper scheduleAdditionMapper;
     private final NumberPoolMapper numberPoolMapper;
     private final CustomerOrderService customerOrderService;
+    private final CustomerOrderMonthlyImportService monthlyImportService;
 
     /**
-     * 原子写入一位客户；有待导入餐数时一并创建首单和未来日期餐次。
+     * 在逐客户事务中首次建档或续导原订单，保存历史与未来数量并保护真实核销。
      *
      * @param candidate 已重新解析并完成只读校验的客户候选
-     * @param importDate 实际订单开始日期
+     * @param importDate 实际导入日期，用于区分历史与未来数量
      * @param confirmedAt 确认请求开始时间，用于缺省成交时间
      * @return CREATED/UPDATED/ALREADY_EXISTS 结果；补录和无餐数建档的订单主键为空
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public CustomerImportItemResultDto write(ImportCandidate candidate, LocalDate importDate, LocalDateTime confirmedAt) {
         CustomerImportDraftDto draft = candidate.getDraft();
+        if (candidate.getSourceMonth() == null) {
+            throw new BadRequestException("缺少来源月份，请重新预览");
+        }
         if (candidate.isSupplemental()) {
-            return updateExistingCustomer(candidate, true);
+            return writeExistingMonthly(candidate, importDate, confirmedAt);
         }
         ParentPackage parent = lockAndValidatePackage(candidate);
         CustomerProfile existing = profileMapper.selectOne(
                 new QueryWrapper<CustomerProfile>().eq("customer_code", draft.getCustomerCode()));
         if (existing != null) {
-            if (draft.getCustomerCode().equals(existing.getCustomerCode())
-                    && sameNormalizedPhone(existing.getPhone(), candidate.getParsed().getPhoneNormalized())) {
-                CustomerProfile locked = profileMapper.selectByIdForImportUpdate(existing.getId());
-                boolean updated = mergeSupplementalFields(locked, candidate);
-                return result(candidate, updated ? "UPDATED" : "ALREADY_EXISTS",
-                        updated ? "客户饮食信息已补录" : "客户已存在且无新增资料；未修改历史订单成交时间",
-                        locked.getId(), null);
-            }
-            throw new BadRequestException("客户编号已存在且身份信息不一致，本次跳过");
+            throw new BadRequestException("客户档案已变化，请重新预览后定位续导订单");
         }
 
         CustomerProfile profile = new CustomerProfile();
@@ -118,10 +114,52 @@ public class CustomerProfileImportWriter {
             return result(candidate, "CREATED", "客户档案已创建", profile.getId(), null);
         }
         CustomerOrder order = buildFirstOrder(profile, parent, draft, importDate, confirmedAt,
-                candidate.getParsed().getDietImportData());
+                candidate.getParsed().getDietImportData(), candidate.getSourceMonth());
         Long orderId = customerOrderService.createImportedFirstOrder(order);
-        saveFutureMealCells(profile.getId(), orderId, draft.getMealCells());
-        return result(candidate, "CREATED", "客户档案、首单和未来逐餐计划已创建", profile.getId(), orderId);
+        saveMealCells(profile.getId(), orderId, draft.getHistoricalMealCells(), CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK);
+        saveMealCells(profile.getId(), orderId, draft.getMealCells(), CustomerMealScheduleAddition.IMPORTED_PLAN_REMARK);
+        return result(candidate, "CREATED", "客户档案、首单和逐餐数量记录已创建", profile.getId(), orderId);
+    }
+
+    /**
+     * 对已有客户续导原订单；订单锁先于客户锁，金额、开始日期和客户地址不由续导覆盖。
+     * @param candidate 已定位目标订单的候选
+     * @param importDate 本次确认的日级边界
+     * @param confirmedAt 首单缺省成单时间
+     * @return 已更新、无变化或已有客户首次建单的处理结果
+     */
+    private CustomerImportItemResultDto writeExistingMonthly(ImportCandidate candidate, LocalDate importDate,
+                                                             LocalDateTime confirmedAt) {
+        CustomerOrder order = monthlyImportService.lockOrder(candidate);
+        CustomerImportDraftDto draft = candidate.getDraft();
+        boolean needsFirstOrder = order == null && draft.getLunchDinnerCount() != null && draft.getLunchDinnerCount() > 0;
+        ParentPackage parent = needsFirstOrder ? lockAndValidatePackage(candidate) : null;
+        Long customerId = candidate.getExistingProfile().getId();
+        CustomerProfile profile = profileMapper.selectByIdForImportUpdate(customerId);
+        if (profile == null || !candidate.getParsed().getEffectiveCode().equals(profile.getCustomerCode())
+                || !sameNormalizedPhone(profile.getPhone(), candidate.getParsed().getPhoneNormalized())) {
+            throw new BadRequestException("已有客户身份已变化，请重新预览后续导");
+        }
+        boolean updated = mergeSupplementalFields(profile, candidate);
+        if (order != null) {
+            updated |= monthlyImportService.apply(candidate, order, importDate);
+            return result(candidate, updated ? "UPDATED" : "ALREADY_EXISTS",
+                    updated ? ("BACKFILL_MONTH".equals(draft.getImportAction())
+                            ? "旧月份日历已补录，餐数与余额保持最新月份" : "订单月度数量与日历已更新")
+                            : "该月份数据一致，未重复累计餐数",
+                    profile.getId(), order.getId());
+        }
+        monthlyImportService.checkNoOrder(candidate);
+        if (!needsFirstOrder) {
+            return result(candidate, updated ? "UPDATED" : "ALREADY_EXISTS",
+                    updated ? "客户饮食资料已补录" : "客户已有档案且无待创建首单", profile.getId(), null);
+        }
+        CustomerOrder firstOrder = buildFirstOrder(profile, parent, draft, importDate, confirmedAt,
+                candidate.getParsed().getDietImportData(), candidate.getSourceMonth());
+        Long orderId = customerOrderService.createImportedFirstOrder(firstOrder);
+        saveMealCells(profile.getId(), orderId, draft.getHistoricalMealCells(), CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK);
+        saveMealCells(profile.getId(), orderId, draft.getMealCells(), CustomerMealScheduleAddition.IMPORTED_PLAN_REMARK);
+        return result(candidate, "UPDATED", "已有客户首单和逐餐数量已创建", profile.getId(), orderId);
     }
 
     /**
@@ -325,14 +363,15 @@ public class CustomerProfileImportWriter {
      * @param profile 新建客户
      * @param parent 唯一匹配父套餐
      * @param draft 已通过预览的客户草稿
-     * @param importDate 实际导入日期；订单从次日开始承接未来计划
+     * @param importDate 实际导入日期；未来排餐从次日开始，业务开始日取成交日期
      * @param confirmedAt 确认请求开始时间，成交时间为空时使用
      * @param dietData 第二工作表解析结果，用于设置成交时间
+     * @param sourceMonth 来源月份，以月首日保存
      * @return 可交由订单服务保存的首单
      */
     private CustomerOrder buildFirstOrder(CustomerProfile profile, ParentPackage parent,
                                           CustomerImportDraftDto draft, LocalDate importDate,
-                                          LocalDateTime confirmedAt, CustomerDietImportData dietData) {
+                                          LocalDateTime confirmedAt, CustomerDietImportData dietData, LocalDate sourceMonth) {
         int importedVerified = draft.getImportedVerifiedCount() == null ? 0 : draft.getImportedVerifiedCount();
         CustomerOrder order = new CustomerOrder();
         order.setCustomerId(profile.getId());
@@ -352,7 +391,9 @@ public class CustomerProfileImportWriter {
         order.setRemainingCount(draft.getLunchDinnerCount() - importedVerified);
         order.setDealTime(dietData != null && dietData.getDealTime() != null
                 ? dietData.getDealTime() : confirmedAt);
-        order.setStartDate(importDate.plusDays(1));
+        order.setStartDate(order.getDealTime().toLocalDate());
+        order.setImportDate(importDate);
+        order.setImportMonth(sourceMonth);
         order.setStartMealType(draft.getMealType() == null ? null
                 : OrderStartMealTypeUtil.normalizeStartMealType(draft.getMealType(), null));
         order.setPauseEffectiveDate(Boolean.TRUE.equals(draft.getPaused()) ? importDate : null);
@@ -375,13 +416,14 @@ public class CustomerProfileImportWriter {
     }
 
     /**
-     * 将工作簿中的未来午晚餐格写入数量日历人工覆盖表。
+     * 将工作簿中的午晚餐格写入数量日历表；历史格不晚于导入日期，不参与未来排餐。
      *
      * @param customerId 新建客户主键
      * @param orderId 新建首单主键
-     * @param cells 已解析未来逐餐计划
+     * @param cells 已解析逐餐数量
+     * @param remark 来源说明，区分历史记录和未来计划
      */
-    private void saveFutureMealCells(Long customerId, Long orderId, List<CustomerImportMealCellDto> cells) {
+    private void saveMealCells(Long customerId, Long orderId, List<CustomerImportMealCellDto> cells, String remark) {
         if (cells == null) {
             return;
         }
@@ -393,7 +435,7 @@ public class CustomerProfileImportWriter {
             addition.setMealType(cell.getMealType());
             addition.setQuantity(cell.getQuantity());
             addition.setSoupQuantity(cell.getSoupQuantity());
-            addition.setRemark("客户用餐计划表导入");
+            addition.setRemark(remark);
             addition.setDeleted(false);
             addition.setCreateBy(currentUser());
             scheduleAdditionMapper.insert(addition);

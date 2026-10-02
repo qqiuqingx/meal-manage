@@ -75,6 +75,14 @@ public interface CustomerMealScheduleAdditionMapper extends BaseMapper<CustomerM
                                                @Param("keepIds") List<Long> keepIds);
 
     /**
+     * 按明确主键清理当前订单的导入来源格，不影响人工来源或其他订单。
+     * @param orderId 目标订单
+     * @param ids 待软删除的非空主键集合
+     * @return 实际软删除行数
+     */
+    int softDeleteImportedByIds(@Param("orderId") Long orderId, @Param("ids") List<Long> ids);
+
+    /**
      * 更新当前订单的有效覆盖，显式写入 NULL 含汤数以清除旧值。
      */
     int updateOrderCalendarOverride(@Param("id") Long id,

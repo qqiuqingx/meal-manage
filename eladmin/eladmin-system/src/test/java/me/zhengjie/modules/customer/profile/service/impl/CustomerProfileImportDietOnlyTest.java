@@ -41,6 +41,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CustomerProfileImportDietOnlyTest {
 
+    @Mock private CustomerOrderMonthlyImportService monthlyImportService;
     @Mock private CustomerOrderImportParser parser;
     @Mock private CustomerProfileMapper profileMapper;
     @Mock private ParentPackageMapper parentPackageMapper;
@@ -63,7 +64,7 @@ class CustomerProfileImportDietOnlyTest {
         when(dictionaryService.listActiveOptions()).thenReturn(Arrays.asList(
                 option("DISH", 1L, "海鲜"), option("INGREDIENT", 2L, "海鲜")));
         CustomerProfileImportServiceImpl service = new CustomerProfileImportServiceImpl(
-                parser, profileMapper, parentPackageMapper, importWriter, dictionaryService, new CustomerDietMatchService());
+                parser, profileMapper, parentPackageMapper, importWriter, dictionaryService, new CustomerDietMatchService(), monthlyImportService);
 
         CustomerImportPreviewDto preview = service.previewDietOnly(new byte[]{1}, "sample.xlsx", LocalDate.of(2026, 9, 29));
 
@@ -98,12 +99,13 @@ class CustomerProfileImportDietOnlyTest {
     @Test
     void writerShouldOnlyCheckCodeAndNeverCreateOrderInDietOnlyMode() {
         CustomerProfileImportWriter writer = new CustomerProfileImportWriter(profileMapper, addressMapper,
-                scheduleAdditionMapper, numberPoolMapper, orderService);
+                scheduleAdditionMapper, numberPoolMapper, orderService, monthlyImportService);
         CustomerProfile profile = new CustomerProfile();
         profile.setId(10L);
         profile.setCustomerCode("A100");
         when(profileMapper.selectByIdForImportUpdate(10L)).thenReturn(profile);
         ImportCandidate candidate = new ImportCandidate();
+        candidate.setSourceMonth(LocalDate.of(2026, 9, 1));
         candidate.setSupplemental(true);
         candidate.setExistingProfile(profile);
         ParsedCustomer parsed = new ParsedCustomer();
@@ -131,6 +133,8 @@ class CustomerProfileImportDietOnlyTest {
         ParsedWorkbook workbook = new ParsedWorkbook();
         workbook.setFileHash("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
         workbook.setStructureValid(true);
+        workbook.setCalendarMonthStart(LocalDate.of(2026, 9, 1));
+        workbook.setImportDate(LocalDate.of(2026, 9, 25));
         workbook.setDietSheetPresent(true);
         workbook.setSheetName("客户禁忌");
         workbook.setCalendarMonthStart(LocalDate.of(2026, 9, 1));

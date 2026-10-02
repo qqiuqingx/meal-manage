@@ -152,7 +152,7 @@ public class CustomerOrderImportParser {
      *
      * @param content 工作簿字节内容
      * @param fileHash 工作簿 SHA-256 摘要，由调用方计算，用于预览与提交之间的一致性校验
-     * @param importDate 计划导入日期，晚于该日期的非零午晚餐格视为未来计划；为空时取当天
+     * @param importDate 计划导入日期；当天及之前的午晚餐格保存为历史数量，之后保存为未来计划；为空取当天
      * @return 解析结果；结构校验失败时 {@code structureValid=false}，可选饮食工作表按名称解析
      */
     public ParsedWorkbook parse(byte[] content, String fileHash, LocalDate importDate) {
@@ -1067,7 +1067,7 @@ public class CustomerOrderImportParser {
     }
 
     /**
-     * 核对公式缓存并累计待导入餐数与未来逐餐计划。
+     * 核对公式缓存，累计待导入餐数，并分别保存历史和未来逐餐数量。
      *
      * <p>只有含午晚餐的明细行才贡献餐数，早餐行即使有剩余餐数也不导入。</p>
      *
@@ -1085,6 +1085,7 @@ public class CustomerOrderImportParser {
         boolean sawTwoPortion = false;
         int remainingSum = 0;
         Set<String> futureCellKeys = new LinkedHashSet<>();
+        Set<String> historicalCellKeys = new LinkedHashSet<>();
 
         for (RawRow row : rows) {
             for (String gridIssue : row.gridIssues) {
@@ -1132,10 +1133,14 @@ public class CustomerOrderImportParser {
             }
             for (Map.Entry<LocalDate, int[]> entry : row.dayCells.entrySet()) {
                 LocalDate date = entry.getKey();
+                int[] quantities = entry.getValue();
                 if (!date.isAfter(result.getImportDate())) {
+                    appendHistoricalMealCell(customer, historicalCellKeys, row.sourceRow, date, "LUNCH",
+                            quantities[OFFSET_LUNCH], hasTwoPortionMarker, soupAbsent);
+                    appendHistoricalMealCell(customer, historicalCellKeys, row.sourceRow, date, "DINNER",
+                            quantities[OFFSET_DINNER], hasTwoPortionMarker, soupAbsent);
                     continue;
                 }
-                int[] quantities = entry.getValue();
                 boolean lunchTwo = appendUniqueMealCell(customer, futureCellKeys, row.sourceRow, date, "LUNCH",
                         quantities[OFFSET_LUNCH], hasTwoPortionMarker, soupAbsent);
                 boolean dinnerTwo = appendUniqueMealCell(customer, futureCellKeys, row.sourceRow, date, "DINNER",
@@ -1153,7 +1158,8 @@ public class CustomerOrderImportParser {
             customer.addWarning("特殊要求描述了「" + twoPortionMarker + "」，但没有份数为 2 的未来日格");
         }
         boolean multiPortionText = MULTI_PORTION_PATTERN.matcher(customer.getSpecialRequirements()).find();
-        if (multiPortionText && !sawTwoPortion) {
+        if (multiPortionText && !sawTwoPortion
+                && (customer.isHasFutureMealCell() || customer.getHistoricalMealCells().isEmpty())) {
             customer.addIssue(CustomerImportIssueCategory.PROFILE_ERROR,
                     "特殊要求包含多份配送描述，但无法确定每餐份数与含汤份数，请业务拆分为明确的日格份数");
         }
@@ -1193,6 +1199,41 @@ public class CustomerOrderImportParser {
             }
         }
         return any ? sum : null;
+    }
+
+    /**
+     * 保存历史非零午晚餐格，拒绝重复日期餐次；无法确定的含汤份数沿用订单配置。
+     *
+     * @param customer 客户草稿
+     * @param existingKeys 已保存历史日期餐次键
+     * @param sourceRow 来源行号
+     * @param date 历史日期，包含导入当天
+     * @param mealType 午餐或晚餐
+     * @param quantity 历史配送份数，零份不保存
+     * @param hasTwoPortionMarker 是否明确第二份含汤
+     * @param soupAbsent 订单是否默认不含汤
+     */
+    private void appendHistoricalMealCell(ParsedCustomer customer, Set<String> existingKeys, int sourceRow,
+                                          LocalDate date, String mealType, int quantity,
+                                          boolean hasTwoPortionMarker, boolean soupAbsent) {
+        if (quantity <= 0) {
+            return;
+        }
+        if (!existingKeys.add(date + "#" + mealType)) {
+            customer.addIssue(CustomerImportIssueCategory.PROFILE_ERROR,
+                    "第 " + sourceRow + " 行重复提供 " + date + " " + mealTypeName(mealType)
+                            + " 日格，无法确认是否应累计份数");
+            return;
+        }
+        CustomerImportMealCellDto cell = new CustomerImportMealCellDto();
+        cell.setSourceRow(sourceRow);
+        cell.setDate(date.toString());
+        cell.setMealType(mealType);
+        cell.setQuantity(quantity);
+        if (quantity == 2 && hasTwoPortionMarker && soupAbsent) {
+            cell.setSoupQuantity(1);
+        }
+        customer.getHistoricalMealCells().add(cell);
     }
 
     /**

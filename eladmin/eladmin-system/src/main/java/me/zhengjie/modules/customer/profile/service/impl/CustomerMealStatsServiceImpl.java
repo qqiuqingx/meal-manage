@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.domain.CustomerOrderStatus;
 import me.zhengjie.modules.customer.order.domain.dto.OrderMealVerifiedCountDto;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
@@ -77,7 +78,7 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
     private final MealPlanService mealPlanService;
 
     /**
-     * 对订单分页后批量补充共享客户资料、地址和排餐统计，只处理当前页记录。
+     * 按剩余订单或同月历史导入订单分页，批量补充当前页客户资料、地址和统计。
      *
      * @param criteria 客户编号、姓名、手机号和统计月份筛选
      * @param page 从 1 开始的页码
@@ -90,12 +91,14 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
                                                               Integer page,
                                                               Integer size) {
         CustomerMealStatsQueryCriteria query = criteria == null ? new CustomerMealStatsQueryCriteria() : criteria;
-        LocalDate startedBeforeDate = StringUtils.isBlank(query.getStatsMonth())
-                ? null : parseMonth(query.getStatsMonth()).plusMonths(1).atDay(1);
+        YearMonth statsMonth = StringUtils.isBlank(query.getStatsMonth()) ? null : parseMonth(query.getStatsMonth());
+        LocalDate monthStartDate = statsMonth == null ? null : statsMonth.atDay(1);
+        LocalDate startedBeforeDate = statsMonth == null ? null : statsMonth.plusMonths(1).atDay(1);
         int currentPage = page == null || page < 1 ? 1 : page;
         int pageSize = size == null || size < 1 ? 20 : size;
         Page<CustomerOrder> orderPage = new Page<>(currentPage, pageSize);
-        Page<CustomerOrder> pageResult = customerOrderMapper.findMealStatsOrders(query, startedBeforeDate, orderPage);
+        Page<CustomerOrder> pageResult = customerOrderMapper.findMealStatsOrders(query, monthStartDate, startedBeforeDate,
+                CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK, orderPage);
         if (pageResult == null) {
             return new PageResult<>(Collections.emptyList(), 0L);
         }
@@ -302,14 +305,15 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
                 + " / 素" + safeInt(order.getVegCount());
     }
 
+    /**
+     * 使用统一订单状态名称，包含因历史导入记录可见的已完成或已退餐订单。
+     *
+     * @param status 订单状态码
+     * @return 状态名称；未知状态显示不可排餐
+     */
     private String statusLabel(Integer status) {
-        if (Integer.valueOf(1).equals(status)) {
-            return "进行中";
-        }
-        if (Integer.valueOf(4).equals(status)) {
-            return "暂停";
-        }
-        return "不可排餐";
+        CustomerOrderStatus orderStatus = CustomerOrderStatus.fromCode(status);
+        return orderStatus == null ? "不可排餐" : orderStatus.getDescription();
     }
 
     private String formatDealTime(LocalDateTime dealTime) {
@@ -321,7 +325,7 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
      *
      * @param orderId 订单ID
      * @param statsMonth 查询月份，格式 yyyy-MM
-     * @return 当前订单的日历、覆盖、进度和编辑状态
+     * @return 当前订单的日历、可编辑覆盖、只读历史导入数量、进度和编辑状态
      */
     @Override
     @Transactional(readOnly = true)
@@ -338,7 +342,7 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
     }
 
     /**
-     * 事务化保存单笔订单某月的完整数量覆盖快照，并清理超出目标数的未核销排餐。
+     * 事务化保存单笔订单某月的完整可编辑数量覆盖快照，保留只读历史导入并清理超额未核销排餐。
      *
      * @param orderId URL 指定的订单ID
      * @param request 当前月份、修订标记和完整覆盖快照
@@ -372,8 +376,23 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
         }
 
         Map<String, CustomerMealScheduleAddition> savedMonthOverrides = indexMonthOverrides(facts.additions, month);
-        Map<String, CustomerOrderMealCalendarOverrideDto> requestedOverrides = validateAndNormalizeOverrides(
+        for (CustomerOrderMealCalendarOverrideDto override : request.getOverrides()) {
+            if (override != null) {
+                CustomerMealScheduleAddition saved = savedMonthOverrides.get(cellKey(override.getDate(), override.getMealType()));
+                if (saved != null && isReadOnlyAddition(order, saved)) {
+                    throw new BadRequestException(saved.isImportedHistory() ? "历史导入数量只读，不能通过排餐日历修改"
+                            : "该日期数量已归档为只读，请重新加载日历");
+                }
+            }
+        }
+        Map<String, CustomerOrderMealCalendarOverrideDto> editableOverrides = validateAndNormalizeOverrides(
                 order, month, request.getOverrides());
+        Map<String, CustomerOrderMealCalendarOverrideDto> requestedOverrides = new LinkedHashMap<>(editableOverrides);
+        for (Map.Entry<String, CustomerMealScheduleAddition> entry : savedMonthOverrides.entrySet()) {
+            if (isReadOnlyAddition(order, entry.getValue())) {
+                requestedOverrides.put(entry.getKey(), toOverrideDto(entry.getValue()));
+            }
+        }
         validateGlobalExclusionPreservation(profile, savedMonthOverrides, requestedOverrides);
 
         List<CustomerMealScheduleAddition> nextAdditions = replaceMonthOverrides(
@@ -382,7 +401,7 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
                 facts.additions, facts.monthProgress);
         Map<String, CustomerMealScheduleCellDto> nextCells = buildCellMap(order, profile, month,
                 nextAdditions, facts.monthProgress);
-        validateRequestedQuantities(profile, requestedOverrides, nextCells);
+        validateRequestedQuantities(profile, editableOverrides, nextCells);
         validateVerifiedMinimum(currentCells, nextCells, facts.monthProgress);
         validateMonthBudgets(order, currentCells, nextCells, facts);
 
@@ -403,8 +422,21 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
         return result;
     }
 
+    /**
+     * 批量读取订单当前数量、真实进度与规划区间前的已使用/预占额度。
+     * @param order 查询订单
+     * @param profile 当前客户档案
+     * @param month 查询月份
+     * @return 日历数量、核销、生成事实，已使用额度不会重新分配到未来
+     */
     private CalendarFacts loadCalendarFacts(CustomerOrder order, CustomerProfile profile, YearMonth month) {
         CalendarFacts facts = new CalendarFacts();
+        if (order.getImportDate() != null) {
+            List<OrderScheduledCountDto> occupied = customerOrderMapper.countAllocatedBeforeImport(Collections.singletonList(order.getId()));
+            order.setQuantityAllocatedBeforeImport(occupied == null ? 0 : occupied.stream()
+                    .filter(value -> Objects.equals(value.getOrderId(), order.getId()))
+                    .mapToInt(value -> safeInt(value.getScheduledCount())).sum());
+        }
         facts.additions = additionMapper.selectActiveByOrderIdAndDateRange(
                 order.getId(), EARLIEST_ORDER_CALENDAR_DATE, month.atEndOfMonth());
         if (facts.additions == null) {
@@ -450,6 +482,10 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
             cellsByKey.put(cellKey(cell.getDate(), cell.getMealType()), cell);
         }
         mergeProgressCells(order, profile, facts.monthProgress, cellsByKey);
+        mergeImportedHistoryCells(order, monthOverrides, cellsByKey);
+        LocalDate scheduleStart = OrderStartMealTypeUtil.resolveScheduleStartDate(order);
+        cellsByKey.values().forEach(cell -> cell.setReadOnly(Boolean.TRUE.equals(cell.getImportedHistory())
+                || scheduleStart == null || LocalDate.parse(cell.getDate()).isBefore(scheduleStart)));
         cells = new ArrayList<>(cellsByKey.values());
         cells.sort(Comparator.comparing(CustomerMealScheduleCellDto::getDate)
                 .thenComparingInt(cell -> mealTypeOrder(cell.getMealType())));
@@ -475,8 +511,44 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
         response.setReadOnlyReason(readOnlyReason(order));
         response.setRevision(buildRevision(order, profile, month, facts));
         response.setCells(cells);
-        response.setOverrides(monthOverrides.stream().map(this::toOverrideDto).collect(Collectors.toList()));
+        response.setOverrides(monthOverrides.stream()
+                .filter(addition -> !isReadOnlyAddition(order, addition))
+                .map(this::toOverrideDto).collect(Collectors.toList()));
         return response;
+    }
+
+    /**
+     * 将历史导入数量加入只读日历，保留同格已存在的真实生成与核销进度。
+     *
+     * @param order 当前订单
+     * @param additions 本月已保存的数量记录
+     * @param cellsByKey 按日期餐次聚合的日历格
+     */
+    private void mergeImportedHistoryCells(CustomerOrder order,
+                                           List<CustomerMealScheduleAddition> additions,
+                                           Map<String, CustomerMealScheduleCellDto> cellsByKey) {
+        for (CustomerMealScheduleAddition addition : additions) {
+            if (!addition.isImportedHistory()) {
+                continue;
+            }
+            CustomerMealScheduleCellDto previous = cellsByKey.get(cellKey(addition.getRecordDate().toString(), addition.getMealType()));
+            CustomerMealScheduleCellDto cell = new CustomerMealScheduleCellDto();
+            cell.setOrderId(order.getId());
+            cell.setDate(addition.getRecordDate().toString());
+            cell.setMealType(addition.getMealType());
+            cell.setBaseQuantity(0);
+            cell.setQuantity(addition.getQuantity() == null ? 1 : addition.getQuantity());
+            cell.setSoupQuantity(addition.getSoupQuantity());
+            cell.setDefaultIncludesSoup(safeInt(order.getSoupCount()) > 0);
+            cell.setGeneratedCount(previous == null ? 0 : safeInt(previous.getGeneratedCount()));
+            cell.setFailedCount(previous == null ? 0 : safeInt(previous.getFailedCount()));
+            cell.setVerifiedCount(previous == null ? 0 : safeInt(previous.getVerifiedCount()));
+            cell.setManualOverride(false);
+            cell.setCustomerExcluded(false);
+            cell.setOrderExcluded(false);
+            cell.setImportedHistory(true);
+            cellsByKey.put(cellKey(cell.getDate(), cell.getMealType()), cell);
+        }
     }
 
     private void mergeProgressCells(CustomerOrder order,
@@ -511,6 +583,12 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
         }
     }
 
+    /** 保留导入历史及有效排餐区间之前的覆盖，不能被当前月份快照误删。 */
+    private boolean isReadOnlyAddition(CustomerOrder order, CustomerMealScheduleAddition addition) {
+        LocalDate start = OrderStartMealTypeUtil.resolveScheduleStartDate(order);
+        return addition.isImportedHistory() || start == null || addition.getRecordDate().isBefore(start);
+    }
+
     private CustomerOrderMealCalendarOverrideDto toOverrideDto(CustomerMealScheduleAddition addition) {
         CustomerOrderMealCalendarOverrideDto dto = new CustomerOrderMealCalendarOverrideDto();
         dto.setDate(addition.getRecordDate().toString());
@@ -534,6 +612,14 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
         return result;
     }
 
+    /**
+     * 按有效排餐边界校验可编辑覆盖的日期、餐次和数量，不允许伪造历史导入来源标识。
+     *
+     * @param order 当前订单
+     * @param month 编辑月份
+     * @param overrides 客户端提交的完整可编辑覆盖
+     * @return 按日期餐次索引的规范化覆盖；历史记录由保存流程独立保留
+     */
     private Map<String, CustomerOrderMealCalendarOverrideDto> validateAndNormalizeOverrides(
             CustomerOrder order,
             YearMonth month,
@@ -548,6 +634,9 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
             if (!YearMonth.from(date).equals(month)) {
                 throw new BadRequestException("排餐日历覆盖日期不在当前编辑月份");
             }
+            if (CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK.equals(source.getRemark())) {
+                throw new BadRequestException("历史导入来源标识不能用于可编辑排餐覆盖");
+            }
             String mealType = source.getMealType();
             if (!MEAL_TYPES.contains(mealType)) {
                 throw new BadRequestException("不支持的餐次：" + mealType);
@@ -555,7 +644,8 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
             if (!isOrderMealTypeSupported(order, mealType)) {
                 throw new BadRequestException("该餐次不属于当前订单购买餐池");
             }
-            if (order.getStartDate() == null || date.isBefore(order.getStartDate())
+            LocalDate scheduleStartDate = OrderStartMealTypeUtil.resolveScheduleStartDate(order);
+            if (scheduleStartDate == null || date.isBefore(scheduleStartDate)
                     || order.getEndDate() != null && date.isAfter(order.getEndDate())) {
                 throw new BadRequestException("排餐日期不在当前订单有效期内");
             }
@@ -924,6 +1014,8 @@ public class CustomerMealStatsServiceImpl implements CustomerMealStatsService {
         fields.put("scheduleMode", order.getScheduleMode());
         fields.put("deliveryDates", order.getDeliveryDates());
         fields.put("startDate", order.getStartDate());
+        fields.put("importDate", order.getImportDate());
+        fields.put("importMonth", order.getImportMonth());
         fields.put("startMealType", order.getStartMealType());
         fields.put("endDate", order.getEndDate());
         fields.put("pauseEffectiveDate", order.getPauseEffectiveDate());

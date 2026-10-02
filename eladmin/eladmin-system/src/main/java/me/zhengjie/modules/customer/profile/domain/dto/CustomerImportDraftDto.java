@@ -20,6 +20,30 @@ public class CustomerImportDraftDto implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    /** CREATE/PROFILE_ONLY/NEW_ORDER/UPDATE_MONTH/UPDATE_SAME_MONTH/BACKFILL_MONTH。 */
+    private String importAction;
+    /** 目标订单ID，首次创建时为空。 */
+    private Long targetOrderId;
+    /** 面向操作人的目标订单编号。 */
+    private String targetOrderCode;
+    /** 本表所属月份与当前已采用月份，格式 yyyy-MM。 */
+    private String sourceMonth;
+    private String currentImportMonth;
+    /** 订单更新前与确认后购买数、可用餐数，旧月份不改余额。 */
+    private Integer currentMealCount;
+    private Integer currentRemainingCount;
+    private Integer afterMealCount;
+    private Integer afterRemainingCount;
+    /** 真实消费发生在本表覆盖期之后，保留其扣减而不因重传返还。 */
+    private Integer postSnapshotVerifiedCount;
+    /** 当前与导入后的订单状态，暂停/取消/退餐不由续导自动改变。 */
+    private Integer currentOrderStatus;
+    private Integer afterOrderStatus;
+    /** 本月非零日格的新增、变更与移除数量。 */
+    private Integer addedMealCellCount;
+    private Integer changedMealCellCount;
+    private Integer removedMealCellCount;
+
     /**
      * 来源工作表行号（1 基），按升序排列；续行会包含多个行号
      */
@@ -81,7 +105,7 @@ public class CustomerImportDraftDto implements Serializable {
     private Integer lunchDinnerCount;
 
     /**
-     * 导入日期及之前的历史已核销餐数 = 购买数 - (来源剩余餐数 + 未来日格份数)
+     * 本次采用的历史核销基数：首单=购买数-(J+未来)，续导还扣除已有真实核销；旧月沿用原基数
      */
     private Integer importedVerifiedCount;
 
@@ -176,6 +200,9 @@ public class CustomerImportDraftDto implements Serializable {
      * 未来逐餐计划
      */
     private List<CustomerImportMealCellDto> mealCells = new ArrayList<>();
+
+    /** 导入日期及之前的逐餐历史数量，不参与未来餐数计算。 */
+    private List<CustomerImportMealCellDto> historicalMealCells = new ArrayList<>();
 
     /**
      * 非阻塞提示

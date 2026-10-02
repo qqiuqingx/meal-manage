@@ -15,7 +15,7 @@ public class CustomerMealStatsQueryCriteria {
     private String phone;
 
     /**
-     * 统计月份，格式：yyyy-MM。用于筛选开始送餐时间早于该月下一月月初的剩余订单。
+     * 统计月份，格式 yyyy-MM；筛选次月前开始的剩余订单，或该月有历史导入数量的订单。
      */
     private String statsMonth;
 }

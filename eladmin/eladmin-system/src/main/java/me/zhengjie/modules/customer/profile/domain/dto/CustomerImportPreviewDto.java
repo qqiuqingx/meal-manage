@@ -27,6 +27,9 @@ public class CustomerImportPreviewDto implements Serializable {
     /** 当前饮食字典快照摘要，确认请求必须回传以防止候选过期。 */
     private String dictionaryHash;
 
+    /** 订单续导预览状态摘要；完整导入确认时回传，防止核销或订单变化后覆盖旧预览。 */
+    private String orderStateHash;
+
     /** 是否包含可选的客户禁忌工作表。 */
     private boolean dietSheetPresent;
 

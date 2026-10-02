@@ -87,6 +87,7 @@ public class CustomerProfileImportController {
      * @param dictionaryHash 预览饮食字典摘要
      * @param importDate 预览时的计划导入日期
      * @param dietOnly 是否仅补录「客户禁忌」工作表到已有客户
+     * @param orderStateHash 续导预览状态摘要，防止订单或核销变化后覆盖
      * @return 含创建、跳过、失败原因的逐位处理结果
      */
     @Log("客户批量导入提交")
@@ -99,7 +100,8 @@ public class CustomerProfileImportController {
             @RequestParam(value = "dictionaryHash", required = false) String dictionaryHash,
             @RequestParam(value = "importDate", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate importDate,
-            @RequestParam(value = "dietOnly", defaultValue = "false") boolean dietOnly) throws IOException {
+            @RequestParam(value = "dietOnly", defaultValue = "false") boolean dietOnly,
+            @RequestParam(value = "orderStateHash", required = false) String orderStateHash) throws IOException {
         try {
             if (file == null || file.isEmpty()) {
                 throw new BadRequestException("请上传客户用餐计划表文件");
@@ -109,7 +111,7 @@ public class CustomerProfileImportController {
                     ? importService.importDietOnly(file.getBytes(), file.getOriginalFilename(), fileHash,
                     dictionaryHash, importDate)
                     : importService.importCustomers(file.getBytes(), file.getOriginalFilename(), fileHash,
-                    dictionaryHash, importDate);
+                    dictionaryHash, importDate, orderStateHash);
             return ResponseEntity.ok(result);
         } catch (BadRequestException e) {
             log.warn("客户批量导入提交校验失败: reason={}", e.getMessage());

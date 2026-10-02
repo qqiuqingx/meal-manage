@@ -77,6 +77,44 @@ describe('CustomerMealQuantityGrid', () => {
     wrapper.destroy()
   })
 
+  test('shows historical quantities as read-only without claiming meal verification', async() => {
+    const historicalLunch = { ...lunchCell, quantity: 2, importedHistory: true }
+    const historicalDinner = { ...lunchCell, mealType: 'DINNER', importedHistory: true }
+    const wrapper = mount(CustomerMealQuantityGrid, {
+      propsData: {
+        order,
+        cells: [historicalLunch, historicalDinner],
+        overrides: [],
+        statsMonth: '2026-09',
+        editable: true
+      }
+    })
+
+    const historyButtons = wrapper.findAll('.quantity-cell--history')
+    expect(historyButtons.length).toBeGreaterThanOrEqual(2)
+    expect(historyButtons.at(0).text()).toContain('2 份')
+    expect(historyButtons.at(0).text()).toContain('历史导入（只读）')
+    expect(historyButtons.at(0).text()).not.toContain('核 2')
+    expect(historyButtons.at(0).attributes('disabled')).toBe('disabled')
+    expect(historyButtons.wrappers.every(button => button.attributes('disabled') === 'disabled')).toBe(true)
+    await historyButtons.at(0).trigger('click')
+    expect(wrapper.find('.quantity-cell-editor').exists()).toBe(false)
+    expect(wrapper.emitted('override-upsert')).toBeUndefined()
+    wrapper.destroy()
+  })
+
+  test('shows archived real progress without allowing quantity edits', () => {
+    const wrapper = mount(CustomerMealQuantityGrid, {
+      propsData: {
+        order, cells: [{ ...lunchCell, quantity: 0, generatedCount: 1, readOnly: true }],
+        overrides: [], statsMonth: '2026-09', editable: true
+      }
+    })
+    expect(wrapper.text()).toContain('1 份（已排）')
+    expect(wrapper.vm.isEditable(lunchCell.date, 'LUNCH')).toBe(false)
+    wrapper.destroy()
+  })
+
   test('keeps customer-wide stop visible and non-editable', () => {
     const wrapper = mount(CustomerMealQuantityGrid, {
       propsData: {

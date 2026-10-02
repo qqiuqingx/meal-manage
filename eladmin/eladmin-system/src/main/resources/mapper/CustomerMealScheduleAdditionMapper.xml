@@ -63,6 +63,15 @@
         </if>
     </update>
 
+    <update id="softDeleteImportedByIds">
+        update customer_meal_schedule_addition
+        set deleted = 1, update_time = now()
+        where order_id = #{orderId} and deleted = 0
+          and remark in ('客户用餐计划表导入', '客户用餐计划表历史导入')
+          and id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </update>
+
     <update id="updateOrderCalendarOverride">
         update customer_meal_schedule_addition
         set quantity = #{quantity, jdbcType=INTEGER},

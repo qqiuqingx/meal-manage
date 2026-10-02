@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import me.zhengjie.exception.BadRequestException;
 import me.zhengjie.modules.customer.order.domain.CustomerOrder;
+import me.zhengjie.modules.customer.order.util.OrderStartMealTypeUtil;
 import me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper;
 import me.zhengjie.modules.meal.domain.MealPlan;
 import me.zhengjie.modules.meal.domain.MealPlanCustomer;
@@ -95,7 +96,9 @@ public class MealVerificationServiceImpl implements MealVerificationService {
     }
 
     /**
-     * 单个核销
+     * 核销一份真实配送；导入快照已对账的历史期间不得再次扣减余额。
+     * @param customerPlanId 客户排餐记录主键
+     * @param remark 本次核销备注
      * @param operator 操作人，如果为空则尝试从 SecurityContext 获取
      */
     private void verifySingle(Long customerPlanId, String remark, String operator) {
@@ -127,6 +130,12 @@ public class MealVerificationServiceImpl implements MealVerificationService {
         // 5. 只允许进行中的订单继续核销，避免已退餐订单被重复消费
         if (order.getStatus() == null || order.getStatus() != 1) {
             throw new BadRequestException("只有进行中的订单可以核销，当前状态：" + getStatusDesc(order.getStatus()));
+        }
+
+        LocalDate coveredByImport = OrderStartMealTypeUtil.resolveImportCoverageEnd(order);
+        if (coveredByImport != null && mealPlan.getRecordDate() != null
+                && !mealPlan.getRecordDate().isAfter(coveredByImport)) {
+            throw new BadRequestException("该用餐日期已由导入历史汇总对账，不允许再次扣减餐数");
         }
 
         // 6. 检查订单剩余餐数

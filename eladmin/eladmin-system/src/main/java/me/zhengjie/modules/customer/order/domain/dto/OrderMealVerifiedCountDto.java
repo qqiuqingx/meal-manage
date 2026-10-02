@@ -13,4 +13,7 @@ public class OrderMealVerifiedCountDto {
     private String mealType;
 
     private Integer verifiedCount;
+
+    /** 按核销日志日期分组时的送餐日期；仅按餐次汇总时为空。 */
+    private java.time.LocalDate recordDate;
 }

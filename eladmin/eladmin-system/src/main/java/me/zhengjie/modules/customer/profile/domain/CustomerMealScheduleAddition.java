@@ -18,6 +18,29 @@ public class CustomerMealScheduleAddition implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    /** 工作簿历史数量来源标识，不作为未来人工计划。 */
+    public static final String IMPORTED_HISTORY_REMARK = "客户用餐计划表历史导入";
+
+    /** 工作簿未来数量的来源标识。 */
+    public static final String IMPORTED_PLAN_REMARK = "客户用餐计划表导入";
+
+    /**
+     * 判断日格是否由导入维护，避免续导夺取人工来源的数量覆盖。
+     * @return 历史或未来导入来源时为 true
+     */
+    public boolean isImported() {
+        return isImportedHistory() || IMPORTED_PLAN_REMARK.equals(remark);
+    }
+
+    /**
+     * 判断数量记录是否来自客户工作簿历史格，用于只读展示及保存保护。
+     *
+     * @return 历史导入记录为 true
+     */
+    public boolean isImportedHistory() {
+        return IMPORTED_HISTORY_REMARK.equals(remark);
+    }
+
     /**
      * 主键ID
      */

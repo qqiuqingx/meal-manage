@@ -8,6 +8,7 @@ import me.zhengjie.modules.customer.order.service.CustomerOrderService;
 import me.zhengjie.modules.customer.pkg.domain.ParentPackage;
 import me.zhengjie.modules.customer.pkg.mapper.ParentPackageMapper;
 import me.zhengjie.modules.customer.profile.domain.CustomerProfile;
+import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.CustomerDietImportData;
 import me.zhengjie.modules.customer.profile.domain.ImportCandidate;
 import me.zhengjie.modules.customer.profile.domain.ParsedCustomer;
@@ -39,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,6 +50,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CustomerProfileImportFlowTest {
 
+    @Mock private CustomerOrderMonthlyImportService monthlyImportService;
     @Mock private CustomerOrderImportParser parser;
     @Mock private CustomerProfileMapper profileMapper;
     @Mock private ParentPackageMapper parentPackageMapper;
@@ -68,6 +71,8 @@ class CustomerProfileImportFlowTest {
         ParsedWorkbook workbook = new ParsedWorkbook();
         workbook.setFileHash("hash");
         workbook.setStructureValid(true);
+        workbook.setCalendarMonthStart(LocalDate.of(2026, 9, 1));
+        workbook.setImportDate(LocalDate.of(2026, 9, 25));
         workbook.setCustomerCount(1);
         workbook.setCustomers(Collections.singletonList(parsed));
         when(parser.parse(any(byte[].class), any(String.class), any(LocalDate.class))).thenReturn(workbook);
@@ -90,6 +95,11 @@ class CustomerProfileImportFlowTest {
     void previewShouldKeepSourceMealCountAndImportedHistory() {
         ParsedCustomer parsed = parsedCustomer();
         parsed.setSheetMealCount(7);
+        CustomerImportMealCellDto history = new CustomerImportMealCellDto();
+        history.setDate("2026-09-25");
+        history.setMealType("LUNCH");
+        history.setQuantity(3);
+        parsed.setHistoricalMealCells(Collections.singletonList(history));
         CustomerImportMealCellDto lunch = new CustomerImportMealCellDto();
         lunch.setDate("2026-09-26");
         lunch.setMealType("LUNCH");
@@ -102,6 +112,8 @@ class CustomerProfileImportFlowTest {
         ParsedWorkbook workbook = new ParsedWorkbook();
         workbook.setFileHash("hash");
         workbook.setStructureValid(true);
+        workbook.setCalendarMonthStart(LocalDate.of(2026, 9, 1));
+        workbook.setImportDate(LocalDate.of(2026, 9, 25));
         workbook.setCustomerCount(1);
         workbook.setCustomers(Collections.singletonList(parsed));
         when(parser.parse(any(byte[].class), any(String.class), any(LocalDate.class))).thenReturn(workbook);
@@ -115,6 +127,9 @@ class CustomerProfileImportFlowTest {
         assertEquals(Integer.valueOf(7), preview.getDrafts().get(0).getLunchDinnerCount());
         assertEquals(Integer.valueOf(3), preview.getDrafts().get(0).getImportedVerifiedCount());
         assertEquals(Integer.valueOf(4), preview.getDrafts().get(0).getFutureMealCount());
+        assertEquals(1, preview.getDrafts().get(0).getHistoricalMealCells().size());
+        assertEquals("2026-09-25", preview.getDrafts().get(0).getHistoricalMealCells().get(0).getDate());
+        assertEquals(2, preview.getDrafts().get(0).getMealCells().size());
     }
 
     /**
@@ -129,6 +144,7 @@ class CustomerProfileImportFlowTest {
         draft.setLunchDinnerCount(0);
         ParsedCustomer parsed = parsedCustomer();
         ImportCandidate candidate = new ImportCandidate();
+        candidate.setSourceMonth(LocalDate.of(2026, 9, 1));
         candidate.setParsed(parsed);
         candidate.setDraft(draft);
         when(numberPoolMapper.selectForUpdate(parent.getId())).thenReturn(parent);
@@ -138,7 +154,7 @@ class CustomerProfileImportFlowTest {
             return 1;
         }).when(profileMapper).insert(any(CustomerProfile.class));
         CustomerProfileImportWriter writer = new CustomerProfileImportWriter(profileMapper, addressMapper,
-                scheduleAdditionMapper, numberPoolMapper, customerOrderService);
+                scheduleAdditionMapper, numberPoolMapper, customerOrderService, monthlyImportService);
 
         CustomerImportItemResultDto result = writer.write(candidate, LocalDate.of(2026, 9, 25),
                 LocalDateTime.of(2026, 9, 25, 10, 30));
@@ -161,8 +177,19 @@ class CustomerProfileImportFlowTest {
         draft.setParentPackageId(parent.getId());
         draft.setLunchDinnerCount(7);
         draft.setImportedVerifiedCount(3);
+        CustomerImportMealCellDto history = new CustomerImportMealCellDto();
+        history.setDate("2026-09-25");
+        history.setMealType("DINNER");
+        history.setQuantity(3);
+        draft.setHistoricalMealCells(Collections.singletonList(history));
+        CustomerImportMealCellDto future = new CustomerImportMealCellDto();
+        future.setDate("2026-09-26");
+        future.setMealType("LUNCH");
+        future.setQuantity(1);
+        draft.setMealCells(Collections.singletonList(future));
         draft.setPaused(true);
         ImportCandidate candidate = new ImportCandidate();
+        candidate.setSourceMonth(LocalDate.of(2026, 9, 1));
         ParsedCustomer parsed = parsedCustomer();
         parsed.setDeliveryPhoneInfo("13900139018、13700137018\n13600136018");
         candidate.setParsed(parsed);
@@ -175,7 +202,7 @@ class CustomerProfileImportFlowTest {
         }).when(profileMapper).insert(any(CustomerProfile.class));
         when(customerOrderService.createImportedFirstOrder(any(CustomerOrder.class))).thenReturn(456L);
         CustomerProfileImportWriter writer = new CustomerProfileImportWriter(profileMapper, addressMapper,
-                scheduleAdditionMapper, numberPoolMapper, customerOrderService);
+                scheduleAdditionMapper, numberPoolMapper, customerOrderService, monthlyImportService);
 
         CustomerImportItemResultDto result = writer.write(candidate, LocalDate.of(2026, 9, 25),
                 LocalDateTime.of(2026, 9, 25, 10, 30));
@@ -192,15 +219,27 @@ class CustomerProfileImportFlowTest {
         assertEquals(Integer.valueOf(3), orderCaptor.getValue().getImportedVerifiedCount());
         assertEquals(Integer.valueOf(3), orderCaptor.getValue().getVerifiedCount());
         assertEquals(Integer.valueOf(4), orderCaptor.getValue().getRemainingCount());
-        assertEquals(LocalDate.of(2026, 9, 26), orderCaptor.getValue().getStartDate());
+        assertEquals(LocalDate.of(2026, 9, 25), orderCaptor.getValue().getStartDate());
+        assertEquals(LocalDate.of(2026, 9, 25), orderCaptor.getValue().getImportDate());
         assertEquals(Integer.valueOf(CustomerOrderStatus.PAUSED.getCode()), orderCaptor.getValue().getStatus());
         assertEquals(LocalDateTime.of(2026, 9, 25, 10, 30), orderCaptor.getValue().getDealTime());
         assertEquals(Long.valueOf(456L), result.getOrderId());
         assertEquals("CREATED", result.getStatus());
+        ArgumentCaptor<CustomerMealScheduleAddition> cellCaptor = ArgumentCaptor.forClass(CustomerMealScheduleAddition.class);
+        verify(scheduleAdditionMapper, times(2)).insert(cellCaptor.capture());
+        CustomerMealScheduleAddition savedHistory = cellCaptor.getAllValues().get(0);
+        assertEquals(Long.valueOf(123L), savedHistory.getCustomerId());
+        assertEquals(Long.valueOf(456L), savedHistory.getOrderId());
+        assertEquals(LocalDate.of(2026, 9, 25), savedHistory.getRecordDate());
+        assertEquals("DINNER", savedHistory.getMealType());
+        assertEquals(Integer.valueOf(3), savedHistory.getQuantity());
+        assertEquals("客户用餐计划表历史导入", savedHistory.getRemark());
+        assertEquals(LocalDate.of(2026, 9, 26), cellCaptor.getAllValues().get(1).getRecordDate());
+        assertEquals("[{\"date\":\"2026-09-26\",\"mealTypes\":[\"LUNCH\"]}]", orderCaptor.getValue().getDeliveryDates());
     }
 
     @Test
-    void writerShouldUseSpreadsheetDealTimeWhenCreatingOrder() {
+    void writerShouldUseSpreadsheetDealDateAsOrderStartDate() {
         ParentPackage parent = parentPackage();
         CustomerImportDraftDto draft = new CustomerImportDraftDto();
         draft.setCustomerCode("A004");
@@ -208,9 +247,10 @@ class CustomerProfileImportFlowTest {
         draft.setLunchDinnerCount(1);
         ParsedCustomer parsed = parsedCustomer();
         CustomerDietImportData dietData = new CustomerDietImportData();
-        dietData.setDealTime(LocalDateTime.of(2026, 6, 11, 9, 30));
+        dietData.setDealTime(LocalDateTime.of(2026, 6, 2, 0, 0));
         parsed.setDietImportData(dietData);
         ImportCandidate candidate = new ImportCandidate();
+        candidate.setSourceMonth(LocalDate.of(2026, 9, 1));
         candidate.setParsed(parsed);
         candidate.setDraft(draft);
         when(numberPoolMapper.selectForUpdate(parent.getId())).thenReturn(parent);
@@ -221,13 +261,15 @@ class CustomerProfileImportFlowTest {
         }).when(profileMapper).insert(any(CustomerProfile.class));
         when(customerOrderService.createImportedFirstOrder(any(CustomerOrder.class))).thenReturn(456L);
         CustomerProfileImportWriter writer = new CustomerProfileImportWriter(profileMapper, addressMapper,
-                scheduleAdditionMapper, numberPoolMapper, customerOrderService);
+                scheduleAdditionMapper, numberPoolMapper, customerOrderService, monthlyImportService);
 
         writer.write(candidate, LocalDate.of(2026, 9, 25), LocalDateTime.of(2026, 9, 28, 10, 30));
 
         ArgumentCaptor<CustomerOrder> orderCaptor = ArgumentCaptor.forClass(CustomerOrder.class);
         verify(customerOrderService).createImportedFirstOrder(orderCaptor.capture());
-        assertEquals(LocalDateTime.of(2026, 6, 11, 9, 30), orderCaptor.getValue().getDealTime());
+        assertEquals(LocalDateTime.of(2026, 6, 2, 0, 0), orderCaptor.getValue().getDealTime());
+        assertEquals(LocalDate.of(2026, 6, 2), orderCaptor.getValue().getStartDate());
+        assertEquals(LocalDate.of(2026, 9, 25), orderCaptor.getValue().getImportDate());
     }
 
     @Test
@@ -249,6 +291,7 @@ class CustomerProfileImportFlowTest {
         ParsedCustomer parsed = parsedCustomer();
         parsed.setDietImportData(data);
         ImportCandidate candidate = new ImportCandidate();
+        candidate.setSourceMonth(LocalDate.of(2026, 9, 1));
         candidate.setParsed(parsed);
         CustomerImportDraftDto draft = new CustomerImportDraftDto();
         draft.setCustomerCode("A004");
@@ -262,7 +305,7 @@ class CustomerProfileImportFlowTest {
         locked.setSpecialRequirements("原有普通特殊要求");
         when(profileMapper.selectByIdForImportUpdate(88L)).thenReturn(locked);
         CustomerProfileImportWriter writer = new CustomerProfileImportWriter(profileMapper, addressMapper,
-                scheduleAdditionMapper, numberPoolMapper, customerOrderService);
+                scheduleAdditionMapper, numberPoolMapper, customerOrderService, monthlyImportService);
 
         CustomerImportItemResultDto result = writer.write(candidate, LocalDate.of(2026, 9, 25),
                 LocalDateTime.of(2026, 9, 25, 10, 30));
@@ -293,7 +336,13 @@ class CustomerProfileImportFlowTest {
         draft.setLunchDinnerCount(3);
         draft.setImportedVerifiedCount(3);
         draft.setMealType("LUNCH");
+        CustomerImportMealCellDto history = new CustomerImportMealCellDto();
+        history.setDate("2026-09-25");
+        history.setMealType("LUNCH");
+        history.setQuantity(3);
+        draft.setHistoricalMealCells(Collections.singletonList(history));
         ImportCandidate candidate = new ImportCandidate();
+        candidate.setSourceMonth(LocalDate.of(2026, 9, 1));
         candidate.setParsed(parsedCustomer());
         candidate.setDraft(draft);
         when(numberPoolMapper.selectForUpdate(parent.getId())).thenReturn(parent);
@@ -304,7 +353,7 @@ class CustomerProfileImportFlowTest {
         }).when(profileMapper).insert(any(CustomerProfile.class));
         when(customerOrderService.createImportedFirstOrder(any(CustomerOrder.class))).thenReturn(456L);
         CustomerProfileImportWriter writer = new CustomerProfileImportWriter(profileMapper, addressMapper,
-                scheduleAdditionMapper, numberPoolMapper, customerOrderService);
+                scheduleAdditionMapper, numberPoolMapper, customerOrderService, monthlyImportService);
 
         writer.write(candidate, LocalDate.of(2026, 9, 25), LocalDateTime.of(2026, 9, 25, 10, 30));
 
@@ -313,6 +362,11 @@ class CustomerProfileImportFlowTest {
         assertEquals(Integer.valueOf(3), orderCaptor.getValue().getVerifiedCount());
         assertEquals(Integer.valueOf(0), orderCaptor.getValue().getRemainingCount());
         assertEquals(Integer.valueOf(CustomerOrderStatus.COMPLETED.getCode()), orderCaptor.getValue().getStatus());
+        ArgumentCaptor<CustomerMealScheduleAddition> historyCaptor = ArgumentCaptor.forClass(CustomerMealScheduleAddition.class);
+        verify(scheduleAdditionMapper).insert(historyCaptor.capture());
+        assertEquals(LocalDate.of(2026, 9, 25), historyCaptor.getValue().getRecordDate());
+        assertEquals(Integer.valueOf(3), historyCaptor.getValue().getQuantity());
+        assertTrue(historyCaptor.getValue().isImportedHistory());
     }
 
     /**
@@ -325,6 +379,8 @@ class CustomerProfileImportFlowTest {
         ParsedWorkbook workbook = new ParsedWorkbook();
         workbook.setFileHash("hash");
         workbook.setStructureValid(true);
+        workbook.setCalendarMonthStart(LocalDate.of(2026, 9, 1));
+        workbook.setImportDate(LocalDate.of(2026, 9, 25));
         workbook.setCustomerCount(1);
         workbook.setCustomers(Collections.singletonList(parsed));
         when(parser.parse(any(byte[].class), any(String.class), any(LocalDate.class))).thenReturn(workbook);
@@ -352,6 +408,8 @@ class CustomerProfileImportFlowTest {
         ParsedWorkbook workbook = new ParsedWorkbook();
         workbook.setFileHash("hash");
         workbook.setStructureValid(true);
+        workbook.setCalendarMonthStart(LocalDate.of(2026, 9, 1));
+        workbook.setImportDate(LocalDate.of(2026, 9, 25));
         workbook.setCustomerCount(1);
         workbook.setCustomers(Collections.singletonList(parsed));
         when(parser.parse(any(byte[].class), any(String.class), any(LocalDate.class))).thenReturn(workbook);
@@ -376,6 +434,8 @@ class CustomerProfileImportFlowTest {
         ParsedWorkbook workbook = new ParsedWorkbook();
         workbook.setFileHash("hash");
         workbook.setStructureValid(true);
+        workbook.setCalendarMonthStart(LocalDate.of(2026, 9, 1));
+        workbook.setImportDate(LocalDate.of(2026, 9, 25));
         workbook.setCustomerCount(1);
         workbook.setCustomers(Collections.singletonList(parsed));
         when(parser.parse(any(byte[].class), any(String.class), any(LocalDate.class))).thenReturn(workbook);

@@ -140,6 +140,9 @@ public class ParsedCustomer implements Serializable {
      */
     private List<CustomerImportMealCellDto> futureMealCells = new ArrayList<>();
 
+    /** 导入日期及之前的非零午晚餐历史格，只保存数量，不生成核销日志。 */
+    private List<CustomerImportMealCellDto> historicalMealCells = new ArrayList<>();
+
     /**
      * 是否有非零的未来午晚餐格
      */

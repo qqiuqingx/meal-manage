@@ -33,7 +33,7 @@ public final class CustomerMealStatsScheduleUtil {
     }
 
     /**
-     * 按订单、日期和午晚餐生成数量日历单元格，并应用购买餐数顺序分配。
+     * 从有效排餐开始日生成数量日历单元格，并应用购买餐数顺序分配；历史格由日历服务只读补入。
      *
      * @param order 客户订单
      * @param excludedDates 客户排除日期
@@ -49,7 +49,8 @@ public final class CustomerMealStatsScheduleUtil {
             return Collections.emptyList();
         }
         YearMonth month = parseMonth(statsMonth);
-        LocalDate start = maxDate(month.atDay(1), order.getStartDate());
+        LocalDate scheduleStartDate = OrderStartMealTypeUtil.resolveScheduleStartDate(order);
+        LocalDate start = maxDate(month.atDay(1), scheduleStartDate);
         LocalDate end = minDate(month.atEndOfMonth(), order.getEndDate());
         if (start == null || end == null || start.isAfter(end)) {
             return Collections.emptyList();
@@ -133,7 +134,7 @@ public final class CustomerMealStatsScheduleUtil {
     }
 
     /**
-     * 从首次送餐起按早餐和午晚餐两个购买池顺序分配目标份数，午晚餐池先扣除导入前历史核销基数。
+     * 从有效排餐开始日按两个餐池分配目标份数，跳过导入历史期间及历史格，不提前占用未来余额。
      *
      * @param order 来源订单
      * @param excludedDates 客户完整排除日期
@@ -145,12 +146,13 @@ public final class CustomerMealStatsScheduleUtil {
                                                             List<ExcludedDateDto> excludedDates,
                                                             List<CustomerMealScheduleAddition> additions,
                                                             LocalDate endDate) {
-        if (order == null || order.getStartDate() == null || endDate == null) {
+        LocalDate scheduleStartDate = OrderStartMealTypeUtil.resolveScheduleStartDate(order);
+        if (scheduleStartDate == null || endDate == null) {
             return Collections.emptyMap();
         }
         LocalDate lastDate = minDate(endDate, order.getEndDate());
         boolean paused = Integer.valueOf(4).equals(order.getStatus());
-        if (lastDate.isBefore(order.getStartDate())) {
+        if (lastDate.isBefore(scheduleStartDate)) {
             return Collections.emptyMap();
         }
         Map<String, CustomerMealScheduleAddition> additionByCell = new LinkedHashMap<>();
@@ -172,9 +174,10 @@ public final class CustomerMealStatsScheduleUtil {
         }
         int breakfastRemaining = safeInt(order.getBreakfastCount());
         int lunchDinnerRemaining = Math.max(safeInt(order.getLunchDinnerCount())
-                - safeInt(order.getImportedVerifiedCount()), 0);
+                - safeInt(order.getImportedVerifiedCount())
+                - (order.getImportDate() == null ? 0 : safeInt(order.getQuantityAllocatedBeforeImport())), 0);
         Map<String, Integer> result = new LinkedHashMap<>();
-        for (LocalDate date = order.getStartDate(); !date.isAfter(lastDate); date = date.plusDays(1)) {
+        for (LocalDate date = scheduleStartDate; !date.isAfter(lastDate); date = date.plusDays(1)) {
             for (String mealType : ALL_MEAL_TYPES) {
                 if (!orderContainsMealType(order, mealType) || !OrderStartMealTypeUtil.hasStartedForMeal(
                         order.getStartDate(), OrderStartMealTypeUtil.normalizeStartMealType(
@@ -183,6 +186,9 @@ public final class CustomerMealStatsScheduleUtil {
                     continue;
                 }
                 CustomerMealScheduleAddition addition = additionByCell.get(cellKey(date, mealType));
+                if (addition != null && addition.isImportedHistory()) {
+                    continue;
+                }
                 boolean baseScheduleActive = !paused || order.getPauseEffectiveDate() != null
                         && !date.isAfter(order.getPauseEffectiveDate().minusDays(1));
                 boolean baseScheduled = baseScheduleActive && scheduleModeMatches(order, date)

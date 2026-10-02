@@ -28,7 +28,7 @@
       :close-on-click-modal="false"
     >
       <el-alert
-        :title="importDietOnly ? '仅处理“客户禁忌”工作表：按编号补录数据库已有客户的医嘱、饮食和术后资料，不创建客户或订单。请先核对预览，再确认提交。' : '先预览并核对编号池、地址和逐餐计划。原审计快照截至 2026-09-24；导入日期晚于快照或 9 月 25—30 日已有送餐时，必须使用更新后的业务工作簿重新预览。确认提交会真实创建客户；有待导入餐数时还会创建首单及未来计划。导入前请完成业务备份。'"
+        :title="importDietOnly ? '仅处理“客户禁忌”工作表：按编号补录数据库已有客户的医嘱、饮食和术后资料，不创建客户或订单。请先核对预览，再确认提交。' : '按月份导入或续导原订单，保留其他月份日历。餐数以来源月份最大的表为准，剩余为J列加未来份数。请核对目标订单、余额变化和业务备份后确认。'"
         type="warning"
         :closable="false"
         show-icon
@@ -36,7 +36,7 @@
       />
       <el-radio-group v-model="importDietOnly" size="small" style="margin-bottom: 14px;" @change="resetImportPreview">
         <el-radio-button :label="true">仅导入客户禁忌（第二页）</el-radio-button>
-        <el-radio-button :label="false">完整工作簿导入</el-radio-button>
+        <el-radio-button :label="false">客户与订单月度导入</el-radio-button>
       </el-radio-group>
       <el-row :gutter="16" type="flex" align="middle" style="margin-bottom: 14px;">
         <el-col :span="10">
@@ -129,16 +129,33 @@
           </el-table-column>
           <el-table-column label="客户编号" prop="customerCode" width="110" />
           <el-table-column label="手机号" prop="phoneMasked" width="120" />
-          <el-table-column label="处理" width="75">
-            <template slot-scope="scope">{{ importDietOnly ? (scope.row.supplemental ? '补录' : '跳过') : (scope.row.supplemental ? '补录' : '新建') }}</template>
+          <el-table-column label="处理" width="135">
+            <template slot-scope="scope">{{ importDietOnly ? (scope.row.supplemental ? '补录' : '跳过') : importActionText(scope.row) }}</template>
+          </el-table-column>
+          <el-table-column v-if="!importDietOnly" label="目标订单 / 来源月份" min-width="180">
+            <template slot-scope="scope">
+              <div>{{ scope.row.targetOrderCode || (scope.row.targetOrderId ? '订单 ' + scope.row.targetOrderId : scope.row.importAction === 'PROFILE_ONLY' ? '仅客户档案' : '新建首单') }}</div>
+              <div>{{ scope.row.sourceMonth || importPreview.calendarMonth }} · 当前 {{ scope.row.currentImportMonth || '-' }}</div>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="!importDietOnly" label="订单餐数 / 剩余变化" min-width="170">
+            <template slot-scope="scope">
+              <div>餐数 {{ scope.row.currentMealCount == null ? '-' : scope.row.currentMealCount }} → {{ scope.row.afterMealCount }}</div>
+              <div>剩余 {{ scope.row.currentRemainingCount == null ? '-' : scope.row.currentRemainingCount }} → {{ scope.row.afterRemainingCount }}</div>
+              <small v-if="scope.row.importAction === 'BACKFILL_MONTH'">旧月份，余额不更新</small>
+              <small v-else-if="scope.row.postSnapshotVerifiedCount">表期后已核销 {{ scope.row.postSnapshotVerifiedCount }} 份，保留扣减</small>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="!importDietOnly" label="日格差异" width="140">
+            <template slot-scope="scope">新增 {{ scope.row.addedMealCellCount || 0 }} / 修改 {{ scope.row.changedMealCellCount || 0 }} / 移除 {{ scope.row.removedMealCellCount || 0 }}</template>
           </el-table-column>
           <el-table-column v-if="!importDietOnly" label="父套餐" prop="parentPackageName" width="120" />
-          <el-table-column v-if="!importDietOnly" label="午晚餐数" prop="lunchDinnerCount" width="95" />
+          <el-table-column v-if="!importDietOnly" label="来源餐数" prop="lunchDinnerCount" width="95" />
           <el-table-column v-if="!importDietOnly" label="未来计划" width="90">
             <template slot-scope="scope">{{ scope.row.futureMealCount || 0 }} 份</template>
           </el-table-column>
           <el-table-column v-if="!importDietOnly" label="订单状态" width="90">
-            <template slot-scope="scope">{{ scope.row.lunchDinnerCount === 0 ? '-' : (scope.row.paused ? '暂停 / 待通知' : '进行中') }}</template>
+            <template slot-scope="scope">{{ importOrderStatusText(scope.row) }}</template>
           </el-table-column>
           <el-table-column label="医嘱与饮食匹配" min-width="320">
             <template slot-scope="scope">
@@ -790,12 +807,16 @@ export default {
         this.currentFirstOrderParentPackage.packageName &&
         this.currentFirstOrderParentPackage.packageName.includes('试餐')
     },
+    /** 确认前要求文件/字典有效；已有订单续导必须携带预览状态摘要。 */
     canConfirmImport() {
+      const continuation = !this.importDietOnly && this.importPreview &&
+        (this.importPreview.drafts || []).some(draft => draft.targetOrderId != null && draft.importable !== false)
       return Boolean(
         this.importPreview &&
         this.importPreview.structureValid &&
         Number(this.importPreview.importableCount) > 0 &&
         (!this.importPreview.dietSheetPresent || this.importPreview.dictionaryHash) &&
+        (!continuation || this.importPreview.orderStateHash) &&
         this.importFile &&
         this.importDate &&
         !this.importLoading &&
@@ -975,13 +996,31 @@ export default {
         this.importLoading = false
       }
     },
+    /** 将预览中的月份操作转换为提交前可核对的业务说明。 */
+    importActionText(draft) {
+      if (!draft || draft.importable === false) return '跳过'
+      const labels = {
+        CREATE: '新建客户与首单',
+        PROFILE_ONLY: '仅客户资料',
+        NEW_ORDER: '已有客户创建首单',
+        UPDATE_MONTH: '新月份续导',
+        UPDATE_SAME_MONTH: '同月更新',
+        BACKFILL_MONTH: '旧月份补录'
+      }
+      return labels[draft.importAction] || '新建'
+    },
+    /** 显示服务端复核后的订单状态，续导不会按文件描述自动解除暂停。 */
+    importOrderStatusText(draft) {
+      if (!draft || draft.afterOrderStatus == null) return '-'
+      return ({ 0: '已取消', 1: '进行中', 2: '已完成', 3: '已退餐', 4: '暂停' })[draft.afterOrderStatus] || '-'
+    },
     async confirmCustomerImport() {
       if (!this.canConfirmImport) return
       try {
         await this.$confirm(
           this.importDietOnly
             ? `将仅按“客户禁忌”工作表补录 ${this.importPreview.importableCount} 位数据库已有客户，不创建客户或订单。请核对同名候选对象将全部录入，并确认提交。`
-            : `将处理 ${this.importPreview.importableCount} 位新建或补录客户（其中已有客户 ${this.importPreview.supplementalCount || 0} 位）；只有新客户会按餐数创建首单。同名候选对象将全部录入，请确认工作簿、编号池和业务备份。`,
+            : `将处理 ${this.importPreview.importableCount} 位新建或补录客户（其中已有客户 ${this.importPreview.supplementalCount || 0} 位）；已有客户将续导预览指定的原订单；旧月份不回退餐数与余额。同名候选对象将全部录入，请确认目标订单、余额变化、工作簿和业务备份。`,
           '确认批量导入',
           { type: 'warning', confirmButtonText: '确认提交', cancelButtonText: '返回预览' }
         )
@@ -992,13 +1031,13 @@ export default {
       try {
         const response = await profileApi.confirmCustomerImport(
           this.importFile, this.importPreview.fileHash, this.importPreview.dictionaryHash,
-          this.importDate, this.importDietOnly)
+          this.importDate, this.importDietOnly, this.importPreview.orderStateHash)
         this.importResult = response.data || response
         this.importPreview = this.importResult.preview || this.importPreview
         if (Number(this.importResult.createdCount) > 0 || Number(this.importResult.updatedCount) > 0) {
           this.crud.refresh()
         }
-        this.$message.success(`导入处理完成：新建 ${this.importResult.createdCount} 位，补录 ${this.importResult.updatedCount || 0} 位，失败 ${this.importResult.failedCount} 位`)
+        this.$message.success(`导入处理完成：新建 ${this.importResult.createdCount} 位，更新 ${this.importResult.updatedCount || 0} 位，失败 ${this.importResult.failedCount} 位`)
       } catch (e) {
         this.$message.error((e.message || '') || '客户批量导入失败')
       } finally {

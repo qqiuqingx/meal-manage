@@ -1,6 +1,7 @@
 package me.zhengjie.modules.customer.order.domain;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.alibaba.fastjson2.annotation.JSONField;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -126,6 +127,14 @@ public class CustomerOrder implements Serializable {
     private LocalDate startDate;
 
     /**
+     * 当前数量快照采用的导入日界线；未来规划从次日承接，完整结束月份同月重传保留原区间。普通订单为空。
+     */
+    private LocalDate importDate;
+
+    /** 当前餐数与余额采用的导入工作表月份，以月首日保存；普通订单为空。 */
+    private LocalDate importMonth;
+
+    /**
      * 开始餐次(BREAKFAST/LUNCH/DINNER)
      */
     private String startMealType;
@@ -201,6 +210,12 @@ public class CustomerOrder implements Serializable {
     private LocalDateTime updateTime;
 
     // ========== 非数据库字段 ==========
+
+    /** 有效排餐日期之前已使用或预占的份数，日历与生成批量加载，不再分配给未来。 */
+    @TableField(exist = false)
+    @JSONField(serialize = false)
+    private Integer quantityAllocatedBeforeImport;
+
 
     /**
      * 客户姓名(查询时填充)

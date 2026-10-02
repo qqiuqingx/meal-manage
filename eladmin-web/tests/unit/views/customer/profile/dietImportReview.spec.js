@@ -72,3 +72,38 @@ describe('customer diet import preview', () => {
     expect(context.importPreview.drafts[0].dietMatches[0].selectedItems).toHaveLength(3)
   })
 })
+
+describe('monthly customer order continuation preview', () => {
+  test('labels new, same and older month actions without confusing an old month with a balance update', () => {
+    const text = customerProfilePage.methods.importActionText
+    expect(text({ importable: true, importAction: 'UPDATE_MONTH' })).toBe('新月份续导')
+    expect(text({ importable: true, importAction: 'UPDATE_SAME_MONTH' })).toBe('同月更新')
+    expect(text({ importable: true, importAction: 'BACKFILL_MONTH' })).toBe('旧月份补录')
+    expect(text({ importable: false, importAction: 'UPDATE_MONTH' })).toBe('跳过')
+    expect(customerProfilePage.methods.importOrderStatusText({ afterOrderStatus: 4, paused: false })).toBe('暂停')
+  })
+
+  test('requires the order revision marker for a continuation and sends it on confirmation', async() => {
+    const api = require('@/api/customer/profile')
+    const context = {
+      importPreview: {
+        structureValid: true, importableCount: 1, fileHash: 'file-hash', dictionaryHash: 'dictionary-hash',
+        drafts: [{ targetOrderId: 20, importable: true, afterRemainingCount: 25 }]
+      },
+      importFile: {}, importDate: '2026-10-20', importDietOnly: false,
+      importLoading: false, importConfirmLoading: false, importResult: null,
+      $confirm: jest.fn(() => Promise.resolve()),
+      $message: { success: jest.fn(), error: jest.fn() },
+      crud: { refresh: jest.fn() }
+    }
+    expect(customerProfilePage.computed.canConfirmImport.call(context)).toBe(false)
+    context.importPreview.orderStateHash = 'order-state-hash'
+    context.canConfirmImport = customerProfilePage.computed.canConfirmImport.call(context)
+    expect(context.canConfirmImport).toBe(true)
+    api.confirmCustomerImport.mockResolvedValue({ data: { updatedCount: 1, createdCount: 0, failedCount: 0 }})
+    await customerProfilePage.methods.confirmCustomerImport.call(context)
+    expect(api.confirmCustomerImport).toHaveBeenCalledWith(context.importFile, 'file-hash', 'dictionary-hash',
+      '2026-10-20', false, 'order-state-hash')
+    expect(context.crud.refresh).toHaveBeenCalledTimes(1)
+  })
+})

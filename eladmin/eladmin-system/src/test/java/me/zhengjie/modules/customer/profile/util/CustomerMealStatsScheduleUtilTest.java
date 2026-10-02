@@ -45,6 +45,83 @@ class CustomerMealStatsScheduleUtilTest {
     }
 
     @Test
+    void shouldNeverAllocateFutureMealPoolToImportedHistoryEvenIfOrderStartMovesEarlier() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(11L);
+        order.setLunchDinnerCount(4);
+        order.setImportedVerifiedCount(2);
+        order.setStartDate(LocalDate.of(2026, 9, 20));
+        order.setMealType("LUNCH_DINNER");
+        order.setScheduleMode("DAILY");
+        CustomerMealScheduleAddition lunch = new CustomerMealScheduleAddition();
+        lunch.setOrderId(11L);
+        lunch.setRecordDate(LocalDate.of(2026, 9, 20));
+        lunch.setMealType("LUNCH");
+        lunch.setQuantity(1);
+        lunch.setRemark(CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK);
+        CustomerMealScheduleAddition dinner = new CustomerMealScheduleAddition();
+        dinner.setOrderId(11L);
+        dinner.setRecordDate(LocalDate.of(2026, 9, 20));
+        dinner.setMealType("DINNER");
+        dinner.setQuantity(1);
+        dinner.setRemark(CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK);
+
+        java.util.Map<String, Integer> quantities = CustomerMealStatsScheduleUtil.buildOrderQuantities(
+                order, Collections.emptyList(), Arrays.asList(lunch, dinner), LocalDate.of(2026, 9, 21));
+
+        assertEquals(2, quantities.size());
+        assertFalse(quantities.containsKey("2026-09-20#LUNCH"));
+        assertFalse(quantities.containsKey("2026-09-20#DINNER"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-09-21#LUNCH"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-09-21#DINNER"));
+    }
+
+    @Test
+    void shouldNotAllocateFutureBalanceInUnrecordedMonthsBeforeImport() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(11L);
+        order.setStartDate(LocalDate.of(2026, 6, 2));
+        order.setImportDate(LocalDate.of(2026, 10, 1));
+        order.setBreakfastCount(0);
+        order.setLunchDinnerCount(7);
+        order.setImportedVerifiedCount(3);
+        order.setRemainingCount(4);
+        order.setMealType("LUNCH_DINNER");
+        order.setScheduleMode("DAILY");
+
+        java.util.Map<String, Integer> history = CustomerMealStatsScheduleUtil.buildOrderQuantities(
+                order, Collections.emptyList(), Collections.emptyList(), LocalDate.of(2026, 10, 1));
+        java.util.Map<String, Integer> future = CustomerMealStatsScheduleUtil.buildOrderQuantities(
+                order, Collections.emptyList(), Collections.emptyList(), LocalDate.of(2026, 10, 3));
+
+        assertTrue(history.isEmpty());
+        assertTrue(CustomerMealStatsScheduleUtil.buildMonthMealScheduleCells(order, Collections.emptyList(),
+                "2026-09", Collections.emptyList()).isEmpty());
+        assertEquals(4, future.size());
+        assertEquals(Integer.valueOf(1), future.get("2026-10-02#LUNCH"));
+        assertEquals(Integer.valueOf(1), future.get("2026-10-02#DINNER"));
+        assertEquals(Integer.valueOf(1), future.get("2026-10-03#LUNCH"));
+        assertEquals(Integer.valueOf(1), future.get("2026-10-03#DINNER"));
+    }
+
+    @Test
+    void shouldNotReapplyOriginalDinnerStartOnFirstDateAfterImportBoundary() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(11L);
+        order.setStartDate(LocalDate.of(2026, 6, 2));
+        order.setStartMealType("DINNER");
+        order.setImportDate(LocalDate.of(2026, 10, 20));
+        order.setLunchDinnerCount(4);
+        order.setImportedVerifiedCount(2);
+        order.setMealType("LUNCH_DINNER");
+        order.setScheduleMode("DAILY");
+        java.util.Map<String, Integer> quantities = CustomerMealStatsScheduleUtil.buildOrderQuantities(
+                order, Collections.emptyList(), Collections.emptyList(), LocalDate.of(2026, 10, 21));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-10-21#LUNCH"));
+        assertEquals(Integer.valueOf(1), quantities.get("2026-10-21#DINNER"));
+    }
+
+    @Test
     void shouldBuildQuantityCellsWithBaseExcludedAndOffScheduleValues() {
         CustomerOrder order = new CustomerOrder();
         order.setId(4L);

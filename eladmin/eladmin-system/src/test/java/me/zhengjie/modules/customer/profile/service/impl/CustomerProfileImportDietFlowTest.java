@@ -40,6 +40,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CustomerProfileImportDietFlowTest {
 
+    @Mock private CustomerOrderMonthlyImportService monthlyImportService;
     @Mock private CustomerOrderImportParser parser;
     @Mock private CustomerProfileMapper profileMapper;
     @Mock private ParentPackageMapper parentPackageMapper;
@@ -52,7 +53,7 @@ class CustomerProfileImportDietFlowTest {
     @BeforeEach
     void setUp() {
         importService = new CustomerProfileImportServiceImpl(parser, profileMapper, parentPackageMapper,
-                importWriter, dictionaryService, new CustomerDietMatchService());
+                importWriter, dictionaryService, new CustomerDietMatchService(), monthlyImportService);
 
         ParsedCustomer customer = new ParsedCustomer();
         customer.setSourceRows(Collections.singletonList(4));
@@ -69,6 +70,8 @@ class CustomerProfileImportDietFlowTest {
         workbook = new ParsedWorkbook();
         workbook.setFileHash("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
         workbook.setStructureValid(true);
+        workbook.setCalendarMonthStart(LocalDate.of(2026, 9, 1));
+        workbook.setImportDate(LocalDate.of(2026, 9, 25));
         workbook.setDietSheetPresent(true);
         workbook.setCalendarMonthStart(LocalDate.of(2026, 9, 1));
         workbook.setCustomerCount(1);
@@ -96,7 +99,7 @@ class CustomerProfileImportDietFlowTest {
 
         assertThrows(BadRequestException.class, () -> importService.importCustomers(
                 new byte[]{1}, "anonymous.xlsx", preview.getFileHash(), "stale-dictionary-hash",
-                LocalDate.of(2026, 9, 25)));
+                LocalDate.of(2026, 9, 25), null));
 
         verify(importWriter, never()).write(any(ImportCandidate.class), any(LocalDate.class), any());
     }
@@ -113,7 +116,7 @@ class CustomerProfileImportDietFlowTest {
 
         CustomerImportResultDto result = importService.importCustomers(
                 new byte[]{1}, "anonymous.xlsx", preview.getFileHash(), preview.getDictionaryHash(),
-                LocalDate.of(2026, 9, 25));
+                LocalDate.of(2026, 9, 25), null);
 
         assertEquals(1, result.getCreatedCount());
         ArgumentCaptor<ImportCandidate> candidate = ArgumentCaptor.forClass(ImportCandidate.class);
@@ -147,7 +150,7 @@ class CustomerProfileImportDietFlowTest {
 
         CustomerImportResultDto result = importService.importCustomers(
                 new byte[]{1}, "anonymous.xlsx", preview.getFileHash(), preview.getDictionaryHash(),
-                LocalDate.of(2026, 9, 25));
+                LocalDate.of(2026, 9, 25), null);
 
         assertEquals(0, result.getCreatedCount());
         assertEquals(1, result.getUpdatedCount());

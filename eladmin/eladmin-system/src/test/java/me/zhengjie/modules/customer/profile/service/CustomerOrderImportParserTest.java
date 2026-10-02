@@ -590,17 +590,18 @@ class CustomerOrderImportParserTest {
     }
 
     @Test
-    void parseShouldOnlyRegisterFutureLunchAndDinnerCells() throws IOException {
+    void parseShouldSeparateHistoricalAndFutureLunchAndDinnerCells() throws IOException {
         byte[] content = buildWorkbook(sheet -> {
             Row row = dataRow(sheet, 3, null, "A003", "13800138003",
                     "联系人：A003\n电话：13800138003\n地址：示例路1号", null, null, "含汤",
-                    "每日/午餐/晚餐", 20, 11);
+                    "每日/午餐/晚餐", 20, 10);
+            setGridCell(row, 23, "DINNER", 1);
             setGridCell(row, 24, "LUNCH", 1);
             setGridCell(row, 24, "DINNER", 1);
             setGridCell(row, 25, "BREAKFAST", 5);
             setGridCell(row, 25, "LUNCH", 1);
             setGridCell(row, 30, "DINNER", 1);
-            setGridTotal(row, 9);
+            setGridTotal(row, 10);
         });
 
         ParsedWorkbook workbook = parser.parse(content, "hash", IMPORT_DATE);
@@ -610,6 +611,68 @@ class CustomerOrderImportParserTest {
                 .map(cell -> cell.getDate() + "#" + cell.getMealType())
                 .collect(Collectors.toList());
         assertEquals(Arrays.asList("2026-09-25#LUNCH", "2026-09-30#DINNER"), cells);
+        List<String> history = customer.getHistoricalMealCells().stream()
+                .map(cell -> cell.getDate() + "#" + cell.getMealType())
+                .collect(Collectors.toList());
+        assertEquals(Arrays.asList("2026-09-23#DINNER", "2026-09-24#LUNCH", "2026-09-24#DINNER"), history);
+        assertTrue(customer.isImportable(), customer.getIssues().toString());
+    }
+
+    @Test
+    void parseShouldKeepEntireSeptemberAsHistoryWhenImportedOnOctoberFirst() throws IOException {
+        byte[] content = buildWorkbook(sheet -> {
+            Row row = dataRow(sheet, 3, null, "A003", "13800138003",
+                    "地址：示例路1号", null, null, "含汤", "每日/午餐/晚餐", 8, 5);
+            setGridCell(row, 1, "LUNCH", 1);
+            setGridCell(row, 20, "DINNER", 1);
+            setGridCell(row, 30, "LUNCH", 1);
+            setGridTotal(row, 3);
+        });
+
+        ParsedCustomer customer = parser.parse(content, "hash", LocalDate.of(2026, 10, 1)).getCustomers().get(0);
+
+        assertTrue(customer.isImportable(), customer.getIssues().toString());
+        assertTrue(customer.getFutureMealCells().isEmpty());
+        assertEquals(3, customer.getHistoricalMealCells().size());
+        assertEquals("2026-09-01", customer.getHistoricalMealCells().get(0).getDate());
+        assertEquals("2026-09-30", customer.getHistoricalMealCells().get(2).getDate());
+    }
+
+    @Test
+    void parseShouldKeepHistoricalMultiplePortionsWithoutRequiringFutureSoupRules() throws IOException {
+        byte[] content = buildWorkbook(sheet -> {
+            Row row = dataRow(sheet, 3, null, "A003", "13800138003",
+                    "地址：示例路1号", null, "每餐三份", "含汤", "每日/午餐", 3, 0);
+            setGridCell(row, 24, "DINNER", 3);
+            setGridTotal(row, 3);
+        });
+
+        ParsedCustomer customer = parser.parse(content, "hash", IMPORT_DATE).getCustomers().get(0);
+
+        assertTrue(customer.isImportable(), customer.getIssues().toString());
+        assertTrue(customer.getFutureMealCells().isEmpty());
+        assertEquals(1, customer.getHistoricalMealCells().size());
+        assertEquals(Integer.valueOf(3), customer.getHistoricalMealCells().get(0).getQuantity());
+        assertNull(customer.getHistoricalMealCells().get(0).getSoupQuantity());
+    }
+
+    @Test
+    void parseShouldRejectDuplicateHistoricalMealCells() throws IOException {
+        byte[] content = buildWorkbook(sheet -> {
+            Row first = dataRow(sheet, 3, null, "A003", "13800138003",
+                    "地址：示例路1号", null, null, "含汤", "每日/午餐", 1, 0);
+            Row second = dataRow(sheet, 4, null, "A003", "13800138003",
+                    "地址：示例路1号", null, null, "含汤", "每日/午餐", 1, 0);
+            setGridCell(first, 24, "LUNCH", 1);
+            setGridCell(second, 24, "LUNCH", 1);
+            setGridTotal(first, 1);
+            setGridTotal(second, 1);
+        });
+
+        ParsedCustomer customer = parser.parse(content, "hash", IMPORT_DATE).getCustomers().get(0);
+
+        assertFalse(customer.isImportable());
+        assertTrue(customer.getIssues().stream().anyMatch(issue -> issue.getMessage().contains("重复提供")));
     }
 
     @Test

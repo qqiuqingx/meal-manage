@@ -612,6 +612,107 @@ class MealPlanServiceImplTest {
     }
 
     @Test
+    void shouldNotGenerateImportedHistoryAsManualAddition() {
+        LocalDate date = LocalDate.of(2026, 9, 20);
+        CustomerOrder order = buildOrder();
+        order.setStartDate(LocalDate.of(2026, 9, 21));
+        order.setEndDate(null);
+        CustomerMealScheduleAddition history = new CustomerMealScheduleAddition();
+        history.setCustomerId(order.getCustomerId());
+        history.setOrderId(order.getId());
+        history.setRecordDate(date);
+        history.setMealType("LUNCH");
+        history.setQuantity(1);
+        history.setRemark(CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK);
+        when(customerMealScheduleAdditionMapper.selectActiveByDateMeal(date, "LUNCH"))
+                .thenReturn(Collections.singletonList(history));
+        when(customerOrderMapper.findMealPlanOrders(date, "LUNCH")).thenReturn(Collections.emptyList());
+        when(customerOrderMapper.selectById(order.getId())).thenReturn(order);
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(invocation -> {
+            MealPlan plan = invocation.getArgument(0);
+            plan.setId(100L);
+            return 1;
+        });
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-09-20", "LUNCH", null);
+
+        assertEquals(0, result.getTotalCount());
+        assertEquals(0, result.getSuccessCount());
+        assertEquals(0, result.getFailCount());
+        verify(mealPlanCustomerMapper, never()).insert(any(MealPlanCustomer.class));
+        verify(customerOrderMapper, never()).selectInlineUpdateByIdForUpdate(order.getId());
+    }
+
+    @Test
+    void shouldGenerateAfterImportUsingActualEarlierConsumptionOnlyOnce() {
+        LocalDate date = LocalDate.of(2026, 10, 21);
+        CustomerOrder order = buildOrder();
+        order.setStartDate(LocalDate.of(2026, 6, 2));
+        order.setImportDate(LocalDate.of(2026, 10, 20));
+        order.setImportMonth(LocalDate.of(2026, 10, 1));
+        order.setEndDate(null);
+        order.setBreakfastCount(0);
+        order.setLunchDinnerCount(158);
+        order.setImportedVerifiedCount(131);
+        order.setVerifiedCount(133);
+        order.setRemainingCount(25);
+        when(customerOrderMapper.findMealPlanOrders(date, "LUNCH")).thenReturn(Collections.singletonList(order));
+        OrderScheduledCountDto occupied = new OrderScheduledCountDto();
+        occupied.setOrderId(10L);
+        occupied.setScheduledCount(2);
+        when(customerOrderMapper.countAllocatedBeforeImport(Collections.singletonList(10L)))
+                .thenReturn(Collections.singletonList(occupied));
+        when(customerProfileMapper.findByIds(anySet())).thenReturn(Collections.singletonList(buildCustomer()));
+        when(parentPackageMapper.selectBatchIds(any())).thenReturn(Collections.singletonList(buildParentPackage()));
+        Dish main = buildDish(11, "匿名主菜", "MAIN", Collections.singletonList("LUNCH"),
+                Collections.singletonList("1"), Collections.singletonList("1-3"), 1);
+        when(mealSchedulePlanMapper.findBySchedule(1, 3, "LUNCH")).thenReturn(Collections.singletonList(main));
+        when(dishIngredientMapper.findRelationsByDishIds(anyList()))
+                .thenReturn(Collections.singletonList(buildIngredient(11, "匿名配料")));
+        java.util.concurrent.atomic.AtomicReference<MealPlan> storedPlan = new java.util.concurrent.atomic.AtomicReference<>();
+        when(mealPlanMapper.selectById(100L)).thenAnswer(invocation -> storedPlan.get());
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(invocation -> {
+            MealPlan plan = invocation.getArgument(0);
+            plan.setId(100L);
+            storedPlan.set(plan);
+            return 1;
+        });
+        when(mealPlanCustomerMapper.insert(any(MealPlanCustomer.class))).thenAnswer(invocation -> {
+            MealPlanCustomer row = invocation.getArgument(0);
+            row.setId(200L);
+            return 1;
+        });
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-10-21", "LUNCH", null, 1, 3);
+        assertEquals(1, result.getTotalCount());
+        assertEquals(1, result.getSuccessCount());
+        assertEquals(2, order.getQuantityAllocatedBeforeImport());
+        assertEquals(25, order.getRemainingCount());
+        verify(customerOrderMapper).countAllocatedBeforeImport(Collections.singletonList(10L));
+    }
+
+    @Test
+    void shouldNotGenerateBeforeImportBoundaryDespiteEarlierDealDate() {
+        LocalDate date = LocalDate.of(2026, 9, 20);
+        CustomerOrder order = buildOrder();
+        order.setStartDate(LocalDate.of(2026, 6, 2));
+        order.setImportDate(LocalDate.of(2026, 10, 1));
+        order.setEndDate(null);
+        when(customerOrderMapper.findMealPlanOrders(date, "LUNCH")).thenReturn(Collections.singletonList(order));
+        when(mealPlanMapper.insert(any(MealPlan.class))).thenAnswer(invocation -> {
+            MealPlan plan = invocation.getArgument(0);
+            plan.setId(100L);
+            return 1;
+        });
+
+        MealPlanGenerateResult result = mealPlanService.generateMealPlan("2026-09-20", "LUNCH", null);
+
+        assertEquals(0, result.getTotalCount());
+        assertEquals(0, result.getSuccessCount());
+        assertEquals(0, result.getFailCount());
+        verify(mealPlanCustomerMapper, never()).insert(any(MealPlanCustomer.class));
+    }
+
+    @Test
     void shouldIncludeManualAdditionOrderWhenScheduleModeDoesNotMatch() {
         CustomerOrder order = buildOrder();
         order.setScheduleMode("WEEKEND");

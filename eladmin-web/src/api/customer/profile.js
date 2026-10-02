@@ -74,11 +74,12 @@ export function previewCustomerImport(file, importDate, dietOnly = false) {
   })
 }
 
-export function confirmCustomerImport(file, fileHash, dictionaryHash, importDate, dietOnly = false) {
+export function confirmCustomerImport(file, fileHash, dictionaryHash, importDate, dietOnly = false, orderStateHash = null) {
   const data = new FormData()
   data.append('file', file)
   data.append('fileHash', fileHash)
   if (dictionaryHash) data.append('dictionaryHash', dictionaryHash)
+  if (orderStateHash) data.append('orderStateHash', orderStateHash)
   if (importDate) data.append('importDate', importDate)
   data.append('dietOnly', String(dietOnly))
   return axios({

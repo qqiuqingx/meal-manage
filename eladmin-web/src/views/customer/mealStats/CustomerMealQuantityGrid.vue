@@ -4,6 +4,7 @@
       <div class="quantity-grid-toolbar__month">{{ monthLabel }} · 午餐 / 晚餐</div>
       <div class="quantity-grid-legend">
         <span><i class="legend-dot legend-dot--base" />基础计划</span>
+        <span><i class="legend-dot legend-dot--history" />历史导入（只读）</span>
         <span><i class="legend-dot legend-dot--manual" />订单覆盖</span>
         <span><i class="legend-dot legend-dot--generated" />已生成</span>
         <span><i class="legend-dot legend-dot--verified" />已核销</span>
@@ -69,7 +70,8 @@
                     排 {{ getCell(day.date, 'LUNCH').generatedCount || 0 }}<span v-if="getCell(day.date, 'LUNCH').failedCount"> / 失败 {{ getCell(day.date, 'LUNCH').failedCount }}</span>
                   </small>
                   <small v-if="getCell(day.date, 'LUNCH').verifiedCount">核 {{ getCell(day.date, 'LUNCH').verifiedCount }}</small>
-                  <small v-if="stopReason(getCell(day.date, 'LUNCH'))">{{ stopReason(getCell(day.date, 'LUNCH')) }}</small>
+                  <small v-if="getCell(day.date, 'LUNCH').importedHistory">历史导入（只读）</small>
+                  <small v-else-if="stopReason(getCell(day.date, 'LUNCH'))">{{ stopReason(getCell(day.date, 'LUNCH')) }}</small>
                   <small v-else-if="getCell(day.date, 'LUNCH').manualOverride">订单覆盖</small>
                 </template>
                 <span v-else>—</span>
@@ -92,7 +94,8 @@
                     排 {{ getCell(day.date, 'DINNER').generatedCount || 0 }}<span v-if="getCell(day.date, 'DINNER').failedCount"> / 失败 {{ getCell(day.date, 'DINNER').failedCount }}</span>
                   </small>
                   <small v-if="getCell(day.date, 'DINNER').verifiedCount">核 {{ getCell(day.date, 'DINNER').verifiedCount }}</small>
-                  <small v-if="stopReason(getCell(day.date, 'DINNER'))">{{ stopReason(getCell(day.date, 'DINNER')) }}</small>
+                  <small v-if="getCell(day.date, 'DINNER').importedHistory">历史导入（只读）</small>
+                  <small v-else-if="stopReason(getCell(day.date, 'DINNER'))">{{ stopReason(getCell(day.date, 'DINNER')) }}</small>
                   <small v-else-if="getCell(day.date, 'DINNER').manualOverride">订单覆盖</small>
                 </template>
                 <span v-else>—</span>
@@ -182,10 +185,10 @@ export default {
     getCell(date, mealType) {
       return this.cellMap[this.cellKey(date, mealType)] || null
     },
-    /** 叠加订单状态、权限和客户统一停餐判断当前格是否可编辑。 */
+    /** 叠加订单状态、权限、历史只读和客户统一停餐判断当前格是否可编辑。 */
     isEditable(date, mealType) {
       const cell = this.getCell(date, mealType)
-      return Boolean(cell && this.editable && !cell.customerExcluded)
+      return Boolean(cell && this.editable && !cell.readOnly && !cell.importedHistory && !cell.customerExcluded)
     },
     /** 为基础计划、订单覆盖及两种停餐来源设置格子样式。 */
     cellClass(date, mealType) {
@@ -193,7 +196,8 @@ export default {
       return {
         'quantity-cell--selected': Boolean(this.editingCell && this.cellKey(this.editingCell.date, this.editingCell.mealType) === this.cellKey(date, mealType)),
         'quantity-cell--empty': !cell,
-        'quantity-cell--base': Boolean(cell && !cell.manualOverride && Number(cell.quantity) > 0),
+        'quantity-cell--history': Boolean(cell && cell.importedHistory),
+        'quantity-cell--base': Boolean(cell && !cell.importedHistory && !cell.manualOverride && Number(cell.quantity) > 0),
         'quantity-cell--manual': Boolean(cell && cell.manualOverride && !cell.customerExcluded),
         'quantity-cell--generated': Boolean(cell && Number(cell.generatedCount) > 0),
         'quantity-cell--verified': Boolean(cell && Number(cell.verifiedCount) > 0),
@@ -203,6 +207,9 @@ export default {
     },
     /** 显示计划份数或客户/订单停餐来源。 */
     quantityText(cell) {
+      if (cell.readOnly && !cell.importedHistory && Number(cell.quantity) === 0 && Number(cell.generatedCount) > 0) {
+        return `${cell.generatedCount} 份（已排）`
+      }
       if (cell.customerExcluded) return '统一停餐'
       if (cell.orderExcluded) return '订单停餐'
       if (Number(cell.quantity) === 0) return '未排'
@@ -293,6 +300,7 @@ export default {
 .quantity-grid-legend span { white-space: nowrap; }
 .legend-dot { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 50%; }
 .legend-dot--base { background: #6a9ce0; }
+.legend-dot--history { background: #8b7db4; }
 .legend-dot--manual { background: #31a779; }
 .legend-dot--generated { background: #5eae88; }
 .legend-dot--verified { background: #8e6cc2; }
@@ -308,6 +316,7 @@ export default {
 .quantity-cell { display: flex; min-height: 90px; width: 100%; padding: 6px 4px; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #dbe4ef; border-radius: 5px; background: #fff; color: #42566e; cursor: pointer; line-height: 1.45; }
 .quantity-cell strong { color: #2f72ba; font-size: 15px; font-weight: 700; }
 .quantity-cell small { color: #8391a2; font-size: 10px; white-space: nowrap; }
+.quantity-cell--history { background: #f3f0f8; border-color: #d7cee8; color: #6f618e; }
 .quantity-cell--base { background: #f1f7ff; border-color: #c9def7; }
 .quantity-cell--manual { background: #eff9f4; border-color: #8dcab0; }
 .quantity-cell--generated { box-shadow: inset 0 0 0 1px #6eb48f; }

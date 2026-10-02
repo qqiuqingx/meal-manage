@@ -29,6 +29,8 @@ CREATE TABLE customer_order (
     deal_time DATETIME NULL COMMENT '成交时间',
     first_delivery_time DATETIME NULL COMMENT '第一次送餐时间',
     start_date DATE NULL COMMENT '订单开始日期',
+    import_date DATE NULL COMMENT '采用数量快照的导入日界线，未来规划从次日承接；普通订单为空',
+    import_month DATE NULL COMMENT '当前餐数与余额采用的来源月份，以月首日保存；普通订单为空',
     start_meal_type VARCHAR(20) NULL COMMENT '开始餐次(BREAKFAST/LUNCH/DINNER)',
     end_date DATE NULL COMMENT '订单结束日期',
     pause_effective_date DATE NULL COMMENT '订单首次从进行中转为暂停的生效日期',

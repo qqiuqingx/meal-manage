@@ -133,6 +133,154 @@ class CustomerMealStatsServiceImplTest {
     }
 
     @Test
+    void shouldShowImportedHistoryBeforeOrderStartWithoutConsumingFutureBudget() {
+        order.setStartDate(LocalDate.of(2026, 10, 21));
+        order.setEndDate(null);
+        order.setMealType("LUNCH_DINNER");
+        order.setStartMealType("LUNCH");
+        order.setBreakfastCount(0);
+        order.setLunchDinnerCount(7);
+        order.setImportedVerifiedCount(3);
+        order.setVerifiedCount(3);
+        order.setRemainingCount(4);
+        storedOverrides.add(overrideEntity(61L, "2026-10-19", "LUNCH", 1, null,
+                CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK));
+        storedOverrides.add(overrideEntity(62L, "2026-10-20", "DINNER", 2, 1,
+                CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK));
+        storedOverrides.add(overrideEntity(63L, "2026-10-21", "LUNCH", 2, null, "客户用餐计划表导入"));
+
+        CustomerOrderMealCalendarDto calendar = service.getOrderCalendar(ORDER_ID, MONTH);
+
+        List<CustomerMealScheduleCellDto> history = calendar.getCells().stream()
+                .filter(cell -> Boolean.TRUE.equals(cell.getImportedHistory()))
+                .collect(java.util.stream.Collectors.toList());
+        assertEquals(2, history.size());
+        assertEquals("2026-10-19", history.get(0).getDate());
+        assertEquals("2026-10-20", history.get(1).getDate());
+        assertEquals(2, history.get(1).getQuantity());
+        assertEquals(1, history.get(1).getSoupQuantity());
+        assertTrue(history.stream().allMatch(cell -> cell.getGeneratedCount() == 0 && cell.getVerifiedCount() == 0));
+        assertEquals(4, calendar.getAvailableLunchDinnerCount());
+        assertEquals(4, calendar.getCells().stream()
+                .filter(cell -> !Boolean.TRUE.equals(cell.getImportedHistory()))
+                .mapToInt(CustomerMealScheduleCellDto::getQuantity).sum());
+        assertEquals(1, calendar.getOverrides().size());
+        assertEquals("2026-10-21", calendar.getOverrides().get(0).getDate());
+
+        order.setStatus(2);
+        order.setImportedVerifiedCount(7);
+        order.setVerifiedCount(7);
+        order.setRemainingCount(0);
+        CustomerOrderMealCalendarDto completed = service.getOrderCalendar(ORDER_ID, MONTH);
+        assertFalse(completed.getEditable());
+        assertEquals(2, completed.getCells().stream()
+                .filter(cell -> Boolean.TRUE.equals(cell.getImportedHistory())).count());
+    }
+
+    @Test
+    void shouldLoadConsumedQuantityBeforeNewPlanningWindow() {
+        order.setBreakfastCount(0);
+        order.setLunchDinnerCount(158);
+        order.setImportedVerifiedCount(131);
+        order.setVerifiedCount(133);
+        order.setRemainingCount(25);
+        order.setMealType("LUNCH_DINNER");
+        order.setStartDate(LocalDate.of(2026, 6, 2));
+        order.setImportDate(LocalDate.of(2026, 10, 20));
+        order.setEndDate(null);
+        when(customerOrderMapper.countAllocatedBeforeImport(Collections.singletonList(ORDER_ID)))
+                .thenReturn(Collections.singletonList(poolCount("LUNCH", 2)));
+        CustomerOrderMealCalendarDto calendar = service.getOrderCalendar(ORDER_ID, "2026-11");
+        assertEquals(3, calendar.getCells().stream().mapToInt(CustomerMealScheduleCellDto::getQuantity).sum());
+        assertEquals(2, order.getQuantityAllocatedBeforeImport());
+    }
+
+    @Test
+    void shouldArchiveEarlierManualStopsWithoutBreakingCurrentMonthSave() {
+        order.setStartDate(LocalDate.of(2026, 6, 2));
+        order.setImportDate(LocalDate.of(2026, 10, 20));
+        order.setEndDate(null);
+        order.setBreakfastCount(0);
+        storedOverrides.add(overrideEntity(91L, "2026-10-15", "LUNCH", 0, null, "人工停餐"));
+        CustomerOrderMealCalendarDto calendar = service.getOrderCalendar(ORDER_ID, MONTH);
+        assertTrue(calendar.getOverrides().isEmpty());
+        service.saveOrderCalendar(ORDER_ID, saveRequest(calendar.getRevision(), Collections.emptyList()));
+        verify(additionMapper, never()).softDeleteMissingByOrderIdAndDateRange(any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldKeepRealProgressWhenEarlierFuturePlanBecomesImportedHistory() {
+        order.setStartDate(LocalDate.of(2026, 6, 2));
+        order.setImportDate(LocalDate.of(2026, 10, 20));
+        order.setEndDate(null);
+        storedOverrides.add(overrideEntity(81L, "2026-10-19", "LUNCH", 2, null,
+                CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK));
+        when(mealPlanCustomerMapper.selectScheduledMealsByOrderIdAndDateRange(ORDER_ID, MONTH_START, MONTH_END))
+                .thenReturn(Collections.singletonList(progress("2026-10-19", "LUNCH", 2, 0, 1)));
+        CustomerOrderMealCalendarDto calendar = service.getOrderCalendar(ORDER_ID, MONTH);
+        CustomerMealScheduleCellDto cell = calendar.getCells().stream()
+                .filter(value -> "2026-10-19".equals(value.getDate()) && "LUNCH".equals(value.getMealType()))
+                .findFirst().orElseThrow(AssertionError::new);
+        assertTrue(cell.getImportedHistory());
+        assertEquals(2, cell.getQuantity());
+        assertEquals(2, cell.getGeneratedCount());
+        assertEquals(1, cell.getVerifiedCount());
+        assertTrue(calendar.getOverrides().isEmpty());
+    }
+
+    @Test
+    void shouldPreserveImportedHistoryWhenClearingEditableMonthOverrides() {
+        order.setStartDate(LocalDate.of(2026, 10, 21));
+        order.setEndDate(null);
+        order.setMealType("LUNCH_DINNER");
+        order.setStartMealType("LUNCH");
+        order.setBreakfastCount(0);
+        order.setImportedVerifiedCount(1);
+        storedOverrides.add(overrideEntity(61L, "2026-10-20", "LUNCH", 1, null,
+                CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK));
+        storedOverrides.add(overrideEntity(62L, "2026-10-21", "LUNCH", 0, null, "停餐"));
+
+        CustomerOrderMealCalendarDto calendar = service.getOrderCalendar(ORDER_ID, MONTH);
+        service.saveOrderCalendar(ORDER_ID, saveRequest(calendar.getRevision(), Collections.emptyList()));
+
+        verify(additionMapper).softDeleteMissingByOrderIdAndDateRange(
+                ORDER_ID, MONTH_START, MONTH_END, Collections.singletonList(61L));
+        verify(additionMapper, never()).updateOrderCalendarOverride(eq(61L), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectEditingOrForgingImportedHistory() {
+        order.setStartDate(LocalDate.of(2026, 6, 2));
+        order.setImportDate(LocalDate.of(2026, 10, 20));
+        order.setEndDate(null);
+        order.setMealType("LUNCH_DINNER");
+        order.setStartMealType("LUNCH");
+        order.setBreakfastCount(0);
+        storedOverrides.add(overrideEntity(61L, "2026-10-20", "LUNCH", 1, null,
+                CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK));
+        CustomerOrderMealCalendarDto calendar = service.getOrderCalendar(ORDER_ID, MONTH);
+        CustomerOrderMealCalendarOverrideDto changed = override("2026-10-20", "LUNCH", 0, null, "改历史");
+
+        BadRequestException error = assertThrows(BadRequestException.class,
+                () -> service.saveOrderCalendar(ORDER_ID,
+                        saveRequest(calendar.getRevision(), Collections.singletonList(changed))));
+
+        assertTrue(error.getMessage().contains("历史导入数量只读"));
+        CustomerOrderMealCalendarOverrideDto forged = override("2026-10-21", "LUNCH", 1, null,
+                CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK);
+        BadRequestException forgedError = assertThrows(BadRequestException.class,
+                () -> service.saveOrderCalendar(ORDER_ID,
+                        saveRequest(calendar.getRevision(), Collections.singletonList(forged))));
+        assertTrue(forgedError.getMessage().contains("历史导入来源标识"));
+        CustomerOrderMealCalendarOverrideDto beforeImport = override("2026-10-19", "LUNCH", 1, null, "不能补排历史缺格");
+        BadRequestException beforeImportError = assertThrows(BadRequestException.class,
+                () -> service.saveOrderCalendar(ORDER_ID,
+                        saveRequest(calendar.getRevision(), Collections.singletonList(beforeImport))));
+        assertTrue(beforeImportError.getMessage().contains("排餐日期不在当前订单有效期内"));
+        verify(additionMapper, never()).softDeleteMissingByOrderIdAndDateRange(any(), any(), any(), any());
+    }
+
+    @Test
     void shouldReturnOneAccuratelyMappedRowPerPagedOrderAndUseCurrentPageBatchCounts() {
         CustomerOrder first = buildOrder();
         first.setOrderCode("ORD-10");
@@ -162,7 +310,8 @@ class CustomerMealStatsServiceImplTest {
         orderPage.setRecords(Arrays.asList(first, second));
         orderPage.setTotal(2);
         when(customerOrderMapper.findMealStatsOrders(any(CustomerMealStatsQueryCriteria.class),
-                eq(LocalDate.of(2026, 11, 1)), any(Page.class))).thenReturn(orderPage);
+                eq(LocalDate.of(2026, 10, 1)), eq(LocalDate.of(2026, 11, 1)),
+                eq(CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK), any(Page.class))).thenReturn(orderPage);
         profile.setSpecialRequirements("米饭加量");
         profile.setMedicalRequirements("少盐");
         profile.setPostoperativeInfo("4个月");
@@ -207,7 +356,54 @@ class CustomerMealStatsServiceImplTest {
         assertEquals("2026-09-12 13:45:00", firstRow.getDealTime());
         assertEquals(Collections.singletonList("花生"), firstRow.getAllergyTags());
         assertEquals("/uploads/menu-a.png", firstRow.getCustomMenuImage());
-        verify(customerOrderMapper).findMealStatsOrders(eq(criteria), eq(LocalDate.of(2026, 11, 1)), any(Page.class));
+        verify(customerOrderMapper).findMealStatsOrders(eq(criteria), eq(LocalDate.of(2026, 10, 1)),
+                eq(LocalDate.of(2026, 11, 1)), eq(CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK), any(Page.class));
+    }
+
+    @Test
+    void shouldExposeSeptemberHistoryAndCalendarForCompletedOrderImportedOnOctoberFirst() {
+        order.setStartDate(LocalDate.of(2026, 6, 2));
+        order.setImportDate(LocalDate.of(2026, 10, 1));
+        order.setEndDate(null);
+        order.setBreakfastCount(0);
+        order.setLunchDinnerCount(3);
+        order.setImportedVerifiedCount(3);
+        order.setVerifiedCount(3);
+        order.setRemainingCount(0);
+        order.setStatus(2);
+        order.setMealType("LUNCH_DINNER");
+        order.setStartMealType("LUNCH");
+        Page<CustomerOrder> orderPage = new Page<>(1, 20);
+        orderPage.setRecords(Collections.singletonList(order));
+        orderPage.setTotal(1);
+        CustomerMealStatsQueryCriteria criteria = new CustomerMealStatsQueryCriteria();
+        criteria.setStatsMonth("2026-09");
+        when(customerOrderMapper.findMealStatsOrders(eq(criteria), eq(LocalDate.of(2026, 9, 1)),
+                eq(LocalDate.of(2026, 10, 1)), eq(CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK), any(Page.class)))
+                .thenReturn(orderPage);
+        when(customerProfileMapper.findByIds(Collections.singleton(CUSTOMER_ID)))
+                .thenReturn(Collections.singletonList(profile));
+        storedOverrides.add(overrideEntity(71L, "2026-09-01", "LUNCH", 1, null,
+                CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK));
+        storedOverrides.add(overrideEntity(72L, "2026-09-30", "DINNER", 2, null,
+                CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK));
+        when(additionMapper.selectActiveByOrderIdAndDateRange(ORDER_ID, EARLIEST_DATE, LocalDate.of(2026, 9, 30)))
+                .thenReturn(storedOverrides);
+
+        PageResult<CustomerMealStatsRowDto> result = service.queryMealStats(criteria, 1, 20);
+        CustomerOrderMealCalendarDto calendar = service.getOrderCalendar(result.getContent().get(0).getOrderId(), "2026-09");
+
+        assertEquals(1L, result.getTotalElements());
+        assertEquals("已完成", result.getContent().get(0).getStatusLabel());
+        assertEquals(0, result.getContent().get(0).getRemainingCount());
+        assertFalse(calendar.getEditable());
+        assertEquals(LocalDate.of(2026, 6, 2), calendar.getStartDate());
+        assertEquals(2, calendar.getCells().size());
+        assertEquals(3, calendar.getCells().stream().mapToInt(CustomerMealScheduleCellDto::getQuantity).sum());
+        assertTrue(calendar.getCells().stream().allMatch(cell -> Boolean.TRUE.equals(cell.getImportedHistory())));
+        assertTrue(calendar.getOverrides().isEmpty());
+        verify(customerOrderMapper).findMealStatsOrders(eq(criteria), eq(LocalDate.of(2026, 9, 1)),
+                eq(LocalDate.of(2026, 10, 1)), eq(CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK), any(Page.class));
     }
 
     @Test
