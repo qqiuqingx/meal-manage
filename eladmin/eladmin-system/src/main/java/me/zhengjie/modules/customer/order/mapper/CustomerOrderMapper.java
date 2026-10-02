@@ -64,12 +64,17 @@ public interface CustomerOrderMapper extends BaseMapper<CustomerOrder> {
                                  @Param("updateTime") java.time.LocalDateTime updateTime);
 
     /**
-     * 多条件查询订单列表（数据库分页）
+     * 多条件查询订单列表，分页前按父套餐字母前缀升序，同前缀内按订单ID倒序。
+     *
+     * @param criteria 订单与客户筛选条件
+     * @param page 数据库分页参数
+     * @return 当前页订单；未配置套餐前缀的订单排在最后
      */
     List<CustomerOrder> findAll(@Param("criteria") CustomerOrderQueryCriteria criteria, @Param("page") Page<CustomerOrder> page);
 
     /**
      * 按客户条件对剩余订单或所选月份有历史导入数量的订单分页。
+     * 分页前按父套餐字母前缀升序，缺失前缀排最后；同前缀内保留客户编号和日期顺序。
      *
      * @param criteria 客户编号、姓名、手机号和月份筛选条件
      * @param monthStartDate 历史记录月份下界（含），为空时不按月份限制

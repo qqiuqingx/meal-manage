@@ -6,6 +6,7 @@ import org.apache.ibatis.mapping.BoundSql;
 import org.apache.ibatis.mapping.ParameterMapping;
 import me.zhengjie.modules.customer.profile.domain.CustomerMealScheduleAddition;
 import me.zhengjie.modules.customer.profile.domain.dto.CustomerMealStatsQueryCriteria;
+import me.zhengjie.modules.customer.order.domain.dto.CustomerOrderQueryCriteria;
 import org.apache.ibatis.mapping.ResultMapping;
 import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,38 @@ import static org.mockito.Mockito.when;
  * 订单列表结果映射测试。
  */
 class CustomerOrderMapperMappingTest {
+
+    /** 验证两个分页查询都优先按套餐前缀分组，保留组内顺序与唯一订单ID作为稳定排序键。 */
+    @Test
+    void sortsOrderAndMealStatsPagesByPackagePrefixBeforeExistingOrder() throws Exception {
+        Configuration configuration = new Configuration();
+        String resource = "mapper/CustomerOrderMapper.xml";
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream(resource)) {
+            new XMLMapperBuilder(input, configuration, resource, configuration.getSqlFragments()).parse();
+        }
+        String[] queries = {"findAll", "findMealStatsOrders"};
+        Object[] criteria = {new CustomerOrderQueryCriteria(), new CustomerMealStatsQueryCriteria()};
+        String[] withinPrefixOrder = {
+                "o.id DESC",
+                "(o.customer_code IS NULL) ASC, o.customer_code ASC, "
+                        + "(o.start_date IS NULL) ASC, o.start_date ASC, "
+                        + "(o.deal_time IS NULL) ASC, o.deal_time ASC, o.id ASC"
+        };
+        for (int index = 0; index < queries.length; index++) {
+            Map<String, Object> parameters = new HashMap<>();
+            parameters.put("criteria", criteria[index]);
+            parameters.put("monthStartDate", null);
+            parameters.put("startedBeforeDate", null);
+            parameters.put("historyRemark", CustomerMealScheduleAddition.IMPORTED_HISTORY_REMARK);
+            String sql = configuration.getMappedStatement(
+                    "me.zhengjie.modules.customer.order.mapper.CustomerOrderMapper." + queries[index])
+                    .getBoundSql(parameters).getSql().replaceAll("\\s+", " ").trim();
+
+            assertTrue(sql.contains("LEFT JOIN parent_package pp ON o.parent_package_id = pp.id"), queries[index]);
+            assertTrue(sql.endsWith("ORDER BY (NULLIF(pp.prefix, '') IS NULL) ASC, pp.prefix ASC, "
+                    + withinPrefixOrder[index]), queries[index]);
+        }
+    }
 
     /**
      * 验证订单、客户档案和排餐地址查询均把两种 JSON 形态解析为标签列表。

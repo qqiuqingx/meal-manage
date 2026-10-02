@@ -107,7 +107,7 @@
         WHERE id = #{id}
     </update>
 
-    <!-- 条件查询订单列表，关联客户资料、饮食要求、地址及套餐名称。 -->
+    <!-- 条件查询订单列表，分页前按父套餐字母前缀升序，同前缀内按订单ID倒序。 -->
     <select id="findAll" resultMap="JoinResultMap">
         SELECT o.*, cp.customer_name, cp.phone, cp.allergy_tags, cp.special_requirements,
                cp.medical_requirements, cp.postoperative_info,
@@ -160,7 +160,7 @@
                 </foreach>
             </if>
         </where>
-        ORDER BY o.id DESC
+        ORDER BY (NULLIF(pp.prefix, '') IS NULL) ASC, pp.prefix ASC, o.id DESC
     </select>
 
     <!-- 多条件统计总数 -->
@@ -287,11 +287,12 @@
     </select>
 
 
-
+    <!-- 排餐计划分页前按父套餐字母前缀升序，同前缀内保留客户编号和订单日期顺序。 -->
     <select id="findMealStatsOrders" resultMap="BaseResultMap">
         SELECT o.*
         FROM customer_order o
         LEFT JOIN customer_profile cp ON cp.id = o.customer_id
+        LEFT JOIN parent_package pp ON o.parent_package_id = pp.id
         WHERE (
             (o.status IN (1, 4) AND COALESCE(o.remaining_count, 0) &gt; 0
                 <if test="startedBeforeDate != null">
@@ -318,7 +319,8 @@
         <if test="criteria != null and criteria.phone != null and criteria.phone != ''">
           AND cp.phone LIKE CONCAT('%', #{criteria.phone}, '%')
         </if>
-        ORDER BY (o.customer_code IS NULL) ASC, o.customer_code ASC,
+        ORDER BY (NULLIF(pp.prefix, '') IS NULL) ASC, pp.prefix ASC,
+                 (o.customer_code IS NULL) ASC, o.customer_code ASC,
                  (o.start_date IS NULL) ASC, o.start_date ASC,
                  (o.deal_time IS NULL) ASC, o.deal_time ASC, o.id ASC
     </select>
