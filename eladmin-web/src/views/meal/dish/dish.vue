@@ -12,11 +12,11 @@
     </div>
 
     <!-- Modal Content -->
-    <div class="dialog-body custom-scrollbar">
+    <div class="dialog-body">
       <el-form ref="form" v-loading="dishLoading" :model="form" :rules="rules" label-position="top" class="editorial-form">
-        <el-row :gutter="40">
+        <el-row :gutter="40" class="form-columns">
           <!-- Left Column: Basic Info & Instructions -->
-          <el-col :span="9" class="form-col-left">
+          <el-col :span="9" class="form-col-left form-column custom-scrollbar">
             <el-form-item label="菜品名称" prop="name">
               <el-input v-model="form.name" placeholder="例如：清蒸鲈鱼" class="editorial-input-line" />
             </el-form-item>
@@ -72,8 +72,8 @@
           </el-col>
 
           <!-- Right Column: Ingredients -->
-          <el-col :span="15">
-            <div class="bg-surface-container-low rounded-xl p-6 border-none shadow-sm ingredient-panel h-full">
+          <el-col :span="15" class="form-col-right form-column custom-scrollbar">
+            <div class="bg-surface-container-low rounded-xl p-6 border-none shadow-sm ingredient-panel">
               <div class="flex-between mb-8">
                 <h3 class="font-headline text-lg font-bold text-on-surface tracking-tight">配料管理</h3>
                 <div class="flex gap-3">
@@ -586,8 +586,16 @@ export default {
 /* Form Elements */
 .dialog-body {
   padding: 32px;
-  max-height: 70vh;
+  overflow: hidden;
+}
+.form-columns {
+  display: flex;
+}
+/* 两栏分别滚动，编辑左侧制作流程时保留右侧配料列表的位置。 */
+.form-column {
+  max-height: calc(70vh - 64px);
   overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 ::v-deep .editorial-form .el-form-item__label {
   font-family: 'Manrope', sans-serif;

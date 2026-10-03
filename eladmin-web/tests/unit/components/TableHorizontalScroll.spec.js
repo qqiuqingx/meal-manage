@@ -79,6 +79,18 @@ describe('TableHorizontalScroll', () => {
     expect(target.headerWrapper.scrollLeft).toBe(0)
   })
 
+  test('reserves the visible vertical scrollbar width for the header and fixed columns', async() => {
+    const target = table()
+    dimensions(target.bodyWrapper, { offsetWidth: 312 })
+    target.layout = { scrollY: true, gutterWidth: 0 }
+    target.doLayout = jest.fn()
+    await create(target)
+    expect(target.layout.gutterWidth).toBe(12)
+    expect(target.doLayout).toHaveBeenCalledTimes(1)
+    observers[0].callback()
+    expect(target.doLayout).toHaveBeenCalledTimes(1)
+  })
+
   test('rebinds when the table changes and releases listeners when leaving the page', async() => {
     const oldTable = table()
     const remove = jest.spyOn(oldTable.bodyWrapper, 'removeEventListener')

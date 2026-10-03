@@ -89,7 +89,7 @@ export default {
       this.scrollBody = null
       this.resizeObserver = null
     },
-    /** 按表格内容与可见宽度计算可滚动距离；无溢出时保留禁用轨道。 */
+    /** 同步常显纵向滚动条占宽，再计算横向范围；无横向溢出时保留禁用轨道。 */
     updateMetrics() {
       if (!this.scrollActive) return
       const body = this.scrollBody
@@ -98,6 +98,13 @@ export default {
         this.maxScroll = 0
         this.scrollPosition = 0
         return
+      }
+      // macOS 默认滚动条不占宽，常显样式占宽后需同步表头和固定列的预留空间。
+      const layout = this.table && this.table.layout
+      const gutterWidth = Math.max(body.offsetWidth - body.clientWidth, 0)
+      if (layout && layout.scrollY && layout.gutterWidth !== gutterWidth) {
+        layout.gutterWidth = gutterWidth
+        this.table.doLayout()
       }
       this.maxScroll = Math.max(body.scrollWidth - body.clientWidth, 0)
       const ratio = body.scrollWidth > 0 ? Math.min(body.clientWidth / body.scrollWidth, 1) : 1
@@ -129,9 +136,30 @@ export default {
 </script>
 
 <style>
-/* 主体仍支持触控板滚动，由常显控件承担横向拖动入口。 */
+/* 两个业务表格的纵向滑块常显，横向拖动继续由下方控件承担。 */
 .table-horizontal-scroll-table .el-table__body-wrapper::-webkit-scrollbar {
+  width: 12px;
   height: 0;
+}
+.table-horizontal-scroll-table .el-table__body-wrapper::-webkit-scrollbar-track {
+  background: #f0f2f5;
+}
+.table-horizontal-scroll-table .el-table__body-wrapper::-webkit-scrollbar-thumb {
+  border: 2px solid #f0f2f5;
+  border-radius: 6px;
+  background: #909399;
+}
+.table-horizontal-scroll-table .el-table__body-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #606266;
+}
+/* 原生横向轨道已隐藏，固定列不再为该轨道预留底部高度。 */
+.table-horizontal-scroll-table .el-table__fixed,
+.table-horizontal-scroll-table .el-table__fixed-right {
+  height: 100% !important;
+}
+.table-horizontal-scroll-table .el-table__fixed-body-wrapper {
+  bottom: 0;
+  height: auto !important;
 }
 .table-horizontal-scroll {
   position: sticky;
