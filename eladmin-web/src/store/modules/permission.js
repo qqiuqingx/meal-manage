@@ -30,6 +30,11 @@ const permission = {
 export const filterAsyncRouter = (routers, lastRouter = false, type = false) => { // 遍历后台传来的路由字符串，转换为组件对象
   return routers.filter(router => {
     const isIngredientPage = router.component === 'meal/dishIngredient/index'
+    // 订单列表必须缓存已加载范围与滚动位置；名称需与组件一致才能命中 keep-alive。
+    if (router.component === 'customer/order/index') {
+      router.name = 'CustomerOrder'
+      router.meta = { ...router.meta, noCache: false }
+    }
     // 配料父路由本身就是可访问页面，不能跳转到后台目录占位地址。
     if (isIngredientPage && router.redirect === 'noredirect') {
       delete router.redirect

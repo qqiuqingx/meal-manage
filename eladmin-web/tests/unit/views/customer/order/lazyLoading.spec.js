@@ -1,8 +1,12 @@
 /* eslint-env jest */
 import { createLocalVue, shallowMount, mount } from '@vue/test-utils'
 import Vuex from 'vuex'
+import VueRouter from 'vue-router'
 import ElementUI from 'element-ui'
 import CustomerOrder from '@/views/customer/order/index.vue'
+import AppMain from '@/layout/components/AppMain.vue'
+import { filterAsyncRouter } from '@/store/modules/permission'
+import tagsView from '@/store/modules/tagsView'
 import { getOrders, updateInline } from '@/api/customer/order'
 import { get } from '@/api/system/dictDetail'
 
@@ -13,9 +17,13 @@ jest.mock('@/api/mealRefund', () => ({ refundMeal: jest.fn() }))
 jest.mock('@/api/data', () => ({ initData: jest.fn(), download: jest.fn() }))
 jest.mock('@/utils/auth', () => ({ getToken: () => '' }))
 jest.mock('@/utils/request', () => jest.fn())
+jest.mock('@/layout/index', () => ({}))
+jest.mock('@/components/ParentView', () => ({}))
+jest.mock('@/router/routers', () => ({ constantRouterMap: [] }))
 
 const localVue = createLocalVue()
 localVue.use(Vuex)
+localVue.use(VueRouter)
 localVue.use(ElementUI)
 localVue.directive('loading', {})
 const flush = () => new Promise(resolve => setTimeout(resolve, 0))
@@ -38,9 +46,19 @@ const tableStub = {
     }
     this.headerWrapper = { scrollLeft: 0 }
   },
-  methods: { clearSelection: jest.fn() },
+  methods: {
+    clearSelection: jest.fn(),
+    doLayout: jest.fn(),
+    syncPostion() { this.headerWrapper.scrollLeft = this.bodyWrapper.scrollLeft }
+  },
   render(h) { return h('div') }
 }
+const horizontalScrollStub = {
+  methods: { updateMetrics: jest.fn() },
+  render(h) { return h('div') }
+}
+// 仅省略过渡动画，保留 AppMain 内原始 keep-alive 节点及其缓存键。
+const transitionStub = { functional: true, render: (h, context) => context.children[0] }
 
 describe('CustomerOrder lazy loading with real CRUD', () => {
   let wrapper
@@ -60,11 +78,179 @@ describe('CustomerOrder lazy loading with real CRUD', () => {
       sync: false,
       store: new Vuex.Store({ getters: { roles: () => ['admin'], baseApi: () => '', imagesUploadApi: () => '' }}),
       mocks: { checkPer: () => true, $message: { success: jest.fn(), warning: jest.fn(), error: jest.fn() }},
-      stubs: realTable ? { crudOperation: true, rrOperation: true, OrderForm: true, 'el-dialog': true } : { 'el-table': tableStub, 'el-table-column': true, 'el-dialog': true }
+      stubs: realTable ? { crudOperation: true, rrOperation: true, OrderForm: true, 'el-dialog': true } : { 'el-table': tableStub, 'el-table-column': true, 'el-dialog': true, TableHorizontalScroll: horizontalScrollStub }
     })
     vm = wrapper.vm
     await flush()
   }
+
+  async function mountCachedPage(realTable = false) {
+    const routes = filterAsyncRouter([{
+      path: '/', component: 'Layout', children: [
+        { path: 'orders', name: 'CustomerOrder', component: 'customer/order/index', meta: { title: '订单管理', noCache: true }},
+        { path: 'other', name: 'Dish', component: 'meal/dish/index', meta: { title: '菜品管理', noCache: true }}
+      ]
+    }])
+    routes[0].component = { render: h => h(AppMain) }
+    routes[0].children[0].component = CustomerOrder
+    routes[0].children[1].component = {
+      data: () => ({ edited: false }),
+      render(h) { return h('button', { on: { click: () => { this.edited = true } }}, this.edited ? '菜品编辑完成' : '编辑菜品') }
+    }
+    const store = new Vuex.Store({
+      state: { settings: { showFooter: false }},
+      getters: { roles: () => ['admin'], baseApi: () => '', imagesUploadApi: () => '' },
+      modules: { tagsView: { ...tagsView, state: { visitedViews: [], cachedViews: [] }}}
+    })
+    const router = new VueRouter({
+      routes
+    })
+    router.afterEach(route => store.dispatch('tagsView/addView', route))
+    router.push('/orders')
+    wrapper = mount({
+      template: '<router-view />'
+    }, {
+      localVue,
+      router,
+      sync: false,
+      store,
+      mocks: { checkPer: () => true, $message: { success: jest.fn(), warning: jest.fn(), error: jest.fn() }},
+      stubs: realTable ? { transition: transitionStub, 'el-dialog': true, crudOperation: true, rrOperation: true, OrderForm: true } : { transition: transitionStub, 'el-table': tableStub, 'el-table-column': true, 'el-dialog': true, crudOperation: true, rrOperation: true, OrderForm: true, TableHorizontalScroll: horizontalScrollStub }
+    })
+    await flush()
+    vm = wrapper.find(CustomerOrder).vm
+    return router
+  }
+
+  test('restores table position and loaded state after switching cached tabs repeatedly', async() => {
+    const router = await mountCachedPage()
+    getOrders.mockResolvedValueOnce({ content: orders(21), totalElements: 60 })
+    await vm.loadNextPage()
+    vm.crud.selectionChangeHandler([vm.crud.data[30]])
+    vm.query.customerName = '未提交的筛选'
+    const body = vm.getTableScrollContainer()
+    for (const top of [800, 500]) {
+      body.scrollTop = top
+      body.scrollLeft = 240
+      router.push('/other')
+      await flush()
+      await wrapper.find('button').trigger('click')
+      expect(wrapper.find('button').text()).toBe('菜品编辑完成')
+      expect(vm.listActive).toBe(false)
+      // 模拟表格 DOM 离开文档后浏览器丢失滚动位置。
+      body.scrollTop = 0
+      body.scrollLeft = 0
+      router.push('/orders')
+      await flush()
+      expect(wrapper.find(CustomerOrder).vm === vm).toBe(true)
+      expect(body.scrollTop).toBe(top)
+      expect(body.scrollLeft).toBe(240)
+      expect(vm.$refs.table.headerWrapper.scrollLeft).toBe(240)
+    }
+    expect(vm.crud.data).toHaveLength(40)
+    expect(vm.crud.page.page).toBe(2)
+    expect(vm.crud.selections.map(row => row.id)).toEqual([31])
+    expect(vm.query.customerName).toBe('未提交的筛选')
+    expect(getOrders).toHaveBeenCalledTimes(2)
+  })
+
+  test('destroys the cached order page when its tag closes and loads fresh data on reopening', async() => {
+    const router = await mountCachedPage()
+    const originalVm = vm
+    vm.getTableScrollContainer().scrollTop = 300
+    router.push('/other')
+    await flush()
+    const orderTag = wrapper.vm.$store.state.tagsView.visitedViews.find(view => view.path === '/orders')
+    await wrapper.vm.$store.dispatch('tagsView/delView', orderTag)
+    await flush()
+    expect(originalVm._isDestroyed).toBe(true)
+    getOrders.mockResolvedValueOnce({ content: orders(100), totalElements: 60 })
+    router.push('/orders')
+    await flush()
+    const reopenedVm = wrapper.find(CustomerOrder).vm
+    expect(reopenedVm === originalVm).toBe(false)
+    expect(reopenedVm.getTableScrollContainer().scrollTop).toBe(0)
+    expect(reopenedVm.crud.data[0].id).toBe(100)
+    expect(getOrders).toHaveBeenCalledTimes(2)
+  })
+
+  test('waits for the table body layout before restoring position or loading more', async() => {
+    const router = await mountCachedPage()
+    getOrders.mockResolvedValueOnce({ content: orders(21), totalElements: 60 })
+    await vm.loadNextPage()
+    const table = vm.$refs.table
+    const body = table.bodyWrapper
+    let scrollTop = 0
+    Object.defineProperty(body, 'scrollTop', {
+      configurable: true,
+      get: () => scrollTop,
+      set: value => { scrollTop = Math.max(0, Math.min(value, body.scrollHeight - body.clientHeight)) }
+    })
+    body.scrollTop = 800
+    router.push('/other')
+    await flush()
+    // 从下滑的长页面返回时，Element UI 主体会暂时按内容高度展开。
+    body.clientHeight = body.scrollHeight
+    body.scrollTop = 0
+    table.doLayout = jest.fn(() => {
+      vm.$nextTick(() => { body.clientHeight = 400 })
+    })
+    router.push('/orders')
+    await flush()
+    expect(wrapper.find(CustomerOrder).vm === vm).toBe(true)
+    expect(body.scrollTop).toBe(800)
+    expect(body.clientHeight).toBe(400)
+    expect(vm.crud.data).toHaveLength(40)
+    expect(getOrders).toHaveBeenCalledTimes(2)
+  })
+
+  test('does not restore an old vertical position after refreshing an inactive cached list', async() => {
+    const router = await mountCachedPage()
+    const body = vm.getTableScrollContainer()
+    body.scrollTop = 300
+    router.push('/other')
+    await flush()
+    getOrders.mockResolvedValueOnce({ content: orders(100), totalElements: 60 })
+    vm.crud.refresh()
+    await flush()
+    router.push('/orders')
+    await flush()
+    expect(body.scrollTop).toBe(0)
+    expect(vm.crud.data[0].id).toBe(100)
+    expect(getOrders).toHaveBeenCalledTimes(2)
+  })
+
+  test('keeps real Element UI fixed columns and the horizontal slider aligned on return', async() => {
+    window.localStorage.setItem('customer-order-fixed-column-count', '2')
+    try {
+      const router = await mountCachedPage(true)
+      const table = vm.$refs.table
+      const body = table.bodyWrapper
+      Object.defineProperties(body, {
+        scrollHeight: { configurable: true, value: 1600 },
+        clientHeight: { configurable: true, value: 400 },
+        scrollWidth: { configurable: true, value: 1200 },
+        clientWidth: { configurable: true, value: 600 }
+      })
+      body.scrollTop = 300
+      body.scrollLeft = 240
+      router.push('/other')
+      await flush()
+      body.scrollTop = 0
+      body.scrollLeft = 0
+      router.push('/orders')
+      await flush()
+      expect(body.scrollTop).toBe(300)
+      expect(body.scrollLeft).toBe(240)
+      expect(table.$refs.headerWrapper.scrollLeft).toBe(240)
+      expect(table.$refs.fixedBodyWrapper.scrollTop).toBe(300)
+      expect(vm.$refs.horizontalScroll.scrollPosition).toBe(240)
+      expect(vm.$refs.horizontalScroll.$refs.range.value).toBe('240')
+      expect(getOrders).toHaveBeenCalledTimes(1)
+    } finally {
+      window.localStorage.removeItem('customer-order-fixed-column-count')
+    }
+  })
 
   test('loads once and appends on scroll without duplicate requests or lost selection', async() => {
     await mountPage()

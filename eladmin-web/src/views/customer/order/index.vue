@@ -512,7 +512,7 @@
         </template>
       </el-table-column>
     </el-table>
-    <TableHorizontalScroll :table="crud.props.table" />
+    <TableHorizontalScroll ref="horizontalScroll" :table="crud.props.table" />
 
     <div class="order-load-status" role="status">
       <span>已加载 {{ crud.data.length }} / {{ crud.page.total }} 条订单</span>
@@ -732,6 +732,8 @@ export default {
       listQueryParams: {},
       failedLoad: null,
       listActive: true,
+      restoringTableScroll: false,
+      tableScrollPosition: { top: 0, left: 0 },
       submitLoading: false,
       refundLoading: false,
       refundDialogVisible: false,
@@ -879,6 +881,12 @@ export default {
   activated() {
     this.activateOrderList()
   },
+  /** 路由离开前保存表格位置，避免缓存 DOM 移出文档后位置被浏览器重置。 */
+  beforeRouteLeave(to, from, next) {
+    const body = this.getTableScrollContainer()
+    if (body && !this.restoringTableScroll) this.tableScrollPosition = { top: body.scrollTop, left: body.scrollLeft }
+    next()
+  },
   deactivated() {
     this.deactivateOrderList()
     this.destroyColumnSortable()
@@ -894,21 +902,46 @@ export default {
       this.loadOrders(true)
       return false
     },
-    /** 恢复表格滚动监听和高度计算，适用于首次挂载与缓存页面重新激活。 */
+    /** 恢复表格布局与滚动位置，再开启监听及懒加载，适用于挂载与缓存页激活。 */
     activateOrderList() {
       this.listActive = true
+      this.restoringTableScroll = true
       window.addEventListener('resize', this.updateTableHeight)
       this.$nextTick(() => {
         if (!this.listActive) return
         this.initializeColumnOrder()
         this.updateTableHeight()
-        this.bindTableScroll()
-        this.loadMoreWhenTableFits()
+        this.$nextTick(async() => {
+          if (!this.listActive) return
+          await this.restoreTableScrollPosition()
+          if (!this.listActive) return
+          this.restoringTableScroll = false
+          this.bindTableScroll()
+          this.loadMoreWhenTableFits()
+        })
       })
+    },
+    /** 等待 Element UI 布局结果写入 DOM 后恢复纵横位置，并同步表头、固定列及滑块。
+     * @returns {Promise<void>} 表格布局与位置恢复完成
+     */
+    async restoreTableScrollPosition() {
+      const table = this.$refs.table
+      const body = this.getTableScrollContainer()
+      if (!body) return
+      table.doLayout()
+      // doLayout 会响应式更新主体高度；旧 DOM 可能尚无滚动范围，不能立即写入位置。
+      await this.$nextTick()
+      if (!this.listActive) return
+      body.scrollTop = this.tableScrollPosition.top
+      body.scrollLeft = this.tableScrollPosition.left
+      table.syncPostion()
+      const horizontalScroll = this.$refs.horizontalScroll
+      if (horizontalScroll) horizontalScroll.updateMetrics()
     },
     /** 页面离开时移除监听，停止自动追加请求。 */
     deactivateOrderList() {
       this.listActive = false
+      this.restoringTableScroll = false
       window.removeEventListener('resize', this.updateTableHeight)
       if (this.orderScrollBody) this.orderScrollBody.removeEventListener('scroll', this.handleTableScroll)
       this.orderScrollBody = null
@@ -946,7 +979,7 @@ export default {
     },
     /** 加载当前已提交筛选条件的下一页；加载中、失败或结束时停止自动请求。 */
     loadNextPage() {
-      if (!this.listActive || this.crud.loading || this.loadingMore || this.loadError || !this.hasMoreOrders) return
+      if (!this.listActive || this.restoringTableScroll || this.crud.loading || this.loadingMore || this.loadError || !this.hasMoreOrders) return
       return this.loadOrders(false)
     },
     /** 重试失败的首批、追加或行内编辑刷新请求。 */
@@ -976,6 +1009,7 @@ export default {
         const table = this.$refs.table
         if (table && table.clearSelection) table.clearSelection()
         if (!preserveLoaded) {
+          this.tableScrollPosition.top = 0
           this.crud.data = []
           this.crud.page.page = 0
           this.crud.page.total = 0
